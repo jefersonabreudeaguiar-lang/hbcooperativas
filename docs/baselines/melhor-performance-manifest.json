@@ -65,7 +65,7 @@
       "Sem polling agressivo de release na abertura; ClientReleaseShield defer no cooperado pós-interactive"
     ],
     "pwa": [
-      "Badge permanente v{build} no header (CooperadoMobileBuildBadge) — sem CooperadoMobileReleaseBar / Atualizar na shell",
+      "Badge permanente v{build} no header (CooperadoMobileBuildBadge); CooperadoMobileReleaseBar só com snapshots financeiros vazios",
       "Início card: latch recibo + leituraSomentePwa; refresh por evento após materializar caches",
       "Entregas PWA leve: pull notas no anexar/enviar (cooperadoPwaEntregasEnvioSync); sync pós-envio em idle (build 292)",
       "cooperadoEntregaFlowGuard: adia reload SW/release durante câmera/anexar/enviar",
@@ -92,7 +92,7 @@
     ]
   },
   "prohibitedRegressions": [
-    "CooperadoMobileReleaseBar ou botão Atualizar na shell mobile cooperado (use CooperadoMobileBuildBadge)",
+    "CooperadoMobileReleaseBar permanente ou Atualizar duplicado na shell (ReleaseBar só snapshots vazios; Atualizar só no CooperadoMobileBuildBadge)",
     "Financeiro/Início/Entregas no mensageiro assinando AppData a cada sync (cooperadoPwaUiSubscribesAppData false)",
     "Reativar Financeiro ao vivo no PWA sem dormant + snapshot",
     "Polling periódico de /api/client-release no cold start cooperado",

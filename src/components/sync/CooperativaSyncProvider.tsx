@@ -137,6 +137,7 @@ import {
 } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
+import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
 import { cooperadoPwaMessengerPrecisaSyncOperacionalInicial } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
@@ -924,6 +925,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         if (completed && userRef.current?.role === "cooperado" && isCooperadoPwaMobileLeveUi()) {
           cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(userRef.current);
           persistOperacionalSyncedAppBuild();
+          if (isCooperadoPwaMessengerMode()) {
+            clearCooperadoPwaDadosDesatualizados();
+          }
         }
       }
     }

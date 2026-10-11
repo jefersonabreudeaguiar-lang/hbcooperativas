@@ -2581,6 +2581,36 @@ export async function syncCooperadoAtualizarFromCloud(
   }
 }
 
+/** PWA mensageiro — só operacional (sem notas/contratos); após revisão do responsável. */
+export async function syncCooperadoMessengerOperacionalLightFromCloud(
+  cnpj: string,
+  preferredCoopId: string,
+  opts?: SyncCooperativaBackgroundOpts
+): Promise<void> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return;
+
+  const session = opts?.sessionLease ?? acquireCooperativaSyncSessionLease(digits);
+
+  beginCloudSync();
+  try {
+    await ensureCloudOperationalResetApplied(digits, preferredCoopId, session);
+    await runWithBatchedSaveAsync(
+      async () => {
+        await syncOperacionalFromCloud(digits, { sessionLease: session });
+        const operacionalCloud = (await fetchSyncBundle(digits))?.operacional ?? null;
+        saveAppDataIfSyncLeaseCurrent(
+          session,
+          finalizeOperacionalPullLocalState(getData(), operacionalCloud, digits)
+        );
+      },
+      { shouldPersistBatch: () => session.isCurrent() }
+    );
+  } finally {
+    endCloudSync();
+  }
+}
+
 /**
  * Repara desalinhamento ficha↔notas (delta vazio, relogin no celular) para qualquer cooperado.
  */

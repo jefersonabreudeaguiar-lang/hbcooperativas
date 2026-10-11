@@ -12,11 +12,22 @@ import {
 } from "@/lib/performance/cooperadoEventDrivenSync";
 import { isCooperadoManualOperacionalSync } from "@/lib/performance/cooperadoColdStart";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
-import { cooperadoPwaFinanceiroSnapshotsAusentes } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
+import {
+  cooperadoPwaFinanceiroSnapshotsAusentes,
+  rematerializarCooperadoPwaSnapshotsSeNecessario,
+} from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
+import {
+  cooperadoCloudRevisionNotasInSyncWithApplied,
+  clearCooperadoPwaDadosDesatualizados,
+  markCooperadoPwaRevisaoNuvemAdiantada,
+} from "@/lib/cooperado/cooperadoPwaDadosFreshness";
+import { runCooperadoMessengerOperacionalLightPull } from "@/lib/cooperado/cooperadoMessengerOperacionalLightPull";
 import {
   requestCooperadoFinanceiroRecoverySync,
   requestCooperadoStaffRevisionSync,
 } from "@/services/syncRequest";
+import type { CooperativaCloudRevision } from "@/lib/performance/cooperadoEventDrivenSync";
+import { getSession, isAppDataWarm } from "@/services/dataStore";
 
 export type CooperadoForegroundPullReason =
   | "revision_changed"
@@ -24,6 +35,11 @@ export type CooperadoForegroundPullReason =
   | "stale_local_sync"
   | "financeiro_desatualizado"
   | "snapshots_ausentes";
+
+export type CooperadoForegroundPullEvaluation = {
+  reason: CooperadoForegroundPullReason;
+  remote: CooperativaCloudRevision | null;
+};
 
 /** Decide se deve disparar pull silencioso (checagem leve de revisão na nuvem). */
 export async function evaluateCooperadoForegroundOperacionalPull(
@@ -33,12 +49,14 @@ export async function evaluateCooperadoForegroundOperacionalPull(
     cooperadoId?: string;
     cooperativaId?: string;
   }
-): Promise<CooperadoForegroundPullReason | null> {
+): Promise<CooperadoForegroundPullEvaluation | null> {
   if (!isCooperadoEventDrivenSync() || !isCooperadoManualOperacionalSync()) return null;
   const digits = normalizeCnpj(cnpj ?? "");
   if (digits.length !== 14) return null;
 
-  if (opts?.financeiroDesatualizado) return "financeiro_desatualizado";
+  if (opts?.financeiroDesatualizado) {
+    return { reason: "financeiro_desatualizado", remote: null };
+  }
 
   if (
     isCooperadoPwaMessengerMode() &&
@@ -46,20 +64,23 @@ export async function evaluateCooperadoForegroundOperacionalPull(
     opts?.cooperativaId &&
     cooperadoPwaFinanceiroSnapshotsAusentes(opts.cooperadoId, opts.cooperativaId)
   ) {
-    return "snapshots_ausentes";
+    return { reason: "snapshots_ausentes", remote: null };
   }
 
   const remote = await fetchCooperativaCloudRevision(digits);
   if (!remote) return null;
 
   if (cloudRevisionChangedSinceApplied(digits, remote)) {
-    return readAppliedCooperativaCloudRevision(digits)
-      ? "revision_changed"
-      : "never_applied_revision";
+    return {
+      reason: readAppliedCooperativaCloudRevision(digits)
+        ? "revision_changed"
+        : "never_applied_revision",
+      remote,
+    };
   }
 
   if (!isCooperadoPwaMessengerMode() && cooperadoOperacionalSyncStale()) {
-    return "stale_local_sync";
+    return { reason: "stale_local_sync", remote };
   }
 
   return null;
@@ -73,12 +94,52 @@ export async function runCooperadoForegroundOperacionalCheck(
     cooperativaId?: string;
   }
 ): Promise<boolean> {
-  const reason = await evaluateCooperadoForegroundOperacionalPull(cnpj, opts);
-  if (!reason) return false;
+  const evaluation = await evaluateCooperadoForegroundOperacionalPull(cnpj, opts);
+  if (!evaluation) return false;
+
+  const digits = normalizeCnpj(cnpj ?? "");
+  const { reason, remote } = evaluation;
+
+  if (isCooperadoPwaMessengerMode()) {
+    markCooperadoPwaRevisaoNuvemAdiantada();
+  }
+
   if (reason === "financeiro_desatualizado") {
     requestCooperadoFinanceiroRecoverySync();
     return true;
   }
+
+  if (
+    isCooperadoPwaMessengerMode() &&
+    reason === "snapshots_ausentes" &&
+    isAppDataWarm()
+  ) {
+    const session = getSession();
+    if (session?.role === "cooperado" && rematerializarCooperadoPwaSnapshotsSeNecessario(session)) {
+      clearCooperadoPwaDadosDesatualizados();
+      return true;
+    }
+  }
+
+  if (
+    isCooperadoPwaMessengerMode() &&
+    reason === "revision_changed" &&
+    remote &&
+    opts?.cooperativaId &&
+    cooperadoCloudRevisionNotasInSyncWithApplied(digits, remote)
+  ) {
+    const session = getSession();
+    if (session?.role === "cooperado") {
+      void runCooperadoMessengerOperacionalLightPull({
+        cnpj: digits,
+        cooperativaId: opts.cooperativaId,
+        user: session,
+        remote,
+      });
+      return true;
+    }
+  }
+
   requestCooperadoStaffRevisionSync();
   return true;
 }

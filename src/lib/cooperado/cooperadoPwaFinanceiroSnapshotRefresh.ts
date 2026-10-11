@@ -18,6 +18,7 @@ import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooper
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
+import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
 
 /** PWA mensageiro — ao voltar ao app, checa revisão na nuvem (lançamento do responsável). */
 export function scheduleCooperadoMessengerStaffRevisionPull(
@@ -49,6 +50,7 @@ export function cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(
   if (!user || user.role !== "cooperado") return;
   if (isCooperadoPwaMessengerMode()) {
     persistirCooperadoPwaMessengerCaches(user);
+    clearCooperadoPwaDadosDesatualizados();
     return;
   }
   if (!isCooperadoPwaMobileLeveUi()) return;

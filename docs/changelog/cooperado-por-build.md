@@ -6,7 +6,17 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
-## v294 (atual)
+## v305 (atual)
+
+- **Dados:** badge “desatualizado” no header quando snapshots faltam ou a nuvem está à frente; após lançamento do responsável, pull só operacional (sem notas) e rematerializa A receber/Financeiro.
+- **UX:** faixa inferior “busque dados — Atualizar” só com cache financeiro vazio (ex.: limpar dados do PWA).
+- **Performance:** sem sync completa automática quando só operacional mudou; vigia de revisão existente reutilizada (sem poll novo na UI).
+
+## v304
+
+- **Dados:** PWA mensageiro detecta lançamento do responsável (~45s) e rematerializa snapshots após sync silenciosa.
+
+## v294
 
 - **HB Créditos:** com a receber zerado, “utilizado” e totais do dashboard passam a 0 (Orlando/casos sem `hbTransactionId` no PIX); heal do novo ciclo em toda leitura de limites/dashboard.
 

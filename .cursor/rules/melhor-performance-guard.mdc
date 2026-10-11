@@ -21,7 +21,7 @@ Alterações em **tempo de resposta, abertura, abas, sync, release ou entregas**
 
 ## Proibido reintroduzir (regressões conhecidas)
 
-- **`CooperadoMobileReleaseBar`** ou botão **Atualizar na shell** do cooperado mobile (usar **`CooperadoMobileBuildBadge`** apenas).
+- **`CooperadoMobileReleaseBar` permanente** ou **Atualizar duplicado** na shell (ReleaseBar só com snapshots vazios; **`CooperadoMobileBuildBadge`** no header).
 - **Financeiro / Início / Entregas** no **modo mensageiro** com `useAppData` / subscribe amplo ao vivo (`cooperadoPwaUiSubscribesAppData()` deve permanecer `false` no mensageiro).
 - **Financeiro “vivo”** no PWA cooperado sem **dormant AppData** + snapshot/revision.
 - **Polling** de release na abertura do cooperado; reload automático no **browser** do responsável.
