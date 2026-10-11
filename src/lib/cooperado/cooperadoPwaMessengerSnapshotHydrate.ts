@@ -12,6 +12,26 @@ import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { cooperadoAppReleaseNeedsOperacionalSync } from "@/lib/performance/cooperadoEventDrivenSync";
+import {
+  filtrarInicioCardPersistidoLeituraBic,
+  cooperadoMotorTemObrigacaoReceber,
+} from "@/lib/cooperadoInicioCardPolicy";
+import { lerInicioCardPersistidoFlex } from "@/lib/cooperadoInicioCardPersistencia";
+
+/** Após limpar cache do PWA — sem card/ficha local o Início zera (HB Créditos ainda vem da API). */
+export function cooperadoPwaFinanceiroSnapshotsAusentes(
+  cooperadoId: string,
+  cooperativaId: string | undefined
+): boolean {
+  const card = filtrarInicioCardPersistidoLeituraBic(
+    lerInicioCardPersistidoFlex(cooperadoId, cooperativaId)
+  );
+  if (card?.display && cooperadoMotorTemObrigacaoReceber(card.display)) return false;
+  if (!cooperativaId) return !card;
+  const ficha = lerCooperadoPwaFichaResumoSnapshot(cooperadoId, cooperativaId);
+  if (ficha?.paridade && (ficha.paridade.valorLiquido ?? 0) > 0.005) return false;
+  return !card && !ficha;
+}
 
 export function cooperadoPwaFichaSnapshotPrecisaRematerializar(
   cooperadoId: string,
@@ -45,11 +65,16 @@ export function cooperadoPwaMessengerPrecisaSyncOperacionalInicial(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   if (!user || user.role !== "cooperado" || !isCooperadoPwaMessengerMode()) return false;
-  if (!cooperadoAppReleaseNeedsOperacionalSync()) return false;
-  if (!isAppDataWarm()) return true;
-  const data = getData();
-  const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
+  if (cooperadoAppReleaseNeedsOperacionalSync()) return true;
+  const data = isAppDataWarm() ? getData() : null;
+  const coopId = data
+    ? getUserCooperativaId(user, data) ?? user.cooperativaId
+    : user.cooperativaId;
   if (!coopId || !user.cooperadoId) return true;
-  const canon = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+  const canon = data
+    ? resolverCooperadoIdCanonico(data, user.cooperadoId, coopId)
+    : user.cooperadoId;
+  if (cooperadoPwaFinanceiroSnapshotsAusentes(canon, coopId)) return true;
+  if (!isAppDataWarm()) return true;
   return cooperadoPwaFichaSnapshotPrecisaRematerializar(canon, coopId);
 }

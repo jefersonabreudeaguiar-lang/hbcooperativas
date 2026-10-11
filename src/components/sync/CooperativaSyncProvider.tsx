@@ -104,6 +104,7 @@ import {
   isCooperadoUserSyncVisible,
   isStaffGestaoRole,
   markNextCooperadoSyncSilent,
+  markCooperadoUserSyncVisible,
   resetCooperadoUserSyncVisible,
   scheduleCooperadoColdStartSync,
   scheduleCooperadoPostInteractiveTask,
@@ -135,6 +136,7 @@ import {
   isCooperadoPwaMessengerMode,
   persistirCooperadoPwaMessengerCaches,
 } from "@/lib/cooperado/cooperadoPwaMessengerMode";
+import { cooperadoPwaMessengerPrecisaSyncOperacionalInicial } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 /** Intervalo mínimo entre pulls de operacional só para votação (bem menor que sync completa). */
@@ -976,9 +978,15 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     let initialDelay: ReturnType<typeof setTimeout> | undefined;
     if (cooperadoSemAutoSync) {
-      if (user?.role === "cooperado" && cooperadoAppReleaseNeedsOperacionalSync()) {
+      if (
+        user?.role === "cooperado" &&
+        (cooperadoAppReleaseNeedsOperacionalSync() ||
+          (isCooperadoPwaMessengerMode() &&
+            cooperadoPwaMessengerPrecisaSyncOperacionalInicial(user)))
+      ) {
         if (isCooperadoPwaMessengerMode()) {
           scheduleCooperadoPostShellSync(() => {
+            markCooperadoUserSyncVisible();
             requestCooperadoAppReleaseSync();
           });
         } else {
