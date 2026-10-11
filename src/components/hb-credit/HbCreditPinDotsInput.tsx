@@ -38,7 +38,7 @@ export function HbCreditPinDotsInput({
       className={cn(
         "w-full rounded-3xl border-2 p-5 shadow-md",
         light
-          ? "border-emerald-600/40 bg-white"
+          ? "border-black/[0.06] bg-white shadow-sm"
           : "border-white/20 bg-white/[0.06] p-4 shadow-none"
       )}
     >
@@ -46,7 +46,7 @@ export function HbCreditPinDotsInput({
         <span
           className={cn(
             "flex h-10 w-10 items-center justify-center rounded-full",
-            light ? "bg-emerald-600 text-white" : "bg-white/15 text-white"
+            light ? "bg-gradient-to-br from-[#2a1545] to-[#0d3d2a] text-white" : "bg-white/15 text-white"
           )}
         >
           <Lock size={20} strokeWidth={2.25} />
@@ -57,14 +57,14 @@ export function HbCreditPinDotsInput({
               htmlFor={id}
               className={cn(
                 "block font-bold leading-tight",
-                light ? "text-lg text-emerald-950" : "text-sm font-medium text-white/80"
+                light ? "text-lg text-gray-900" : "text-sm font-medium text-white/80"
               )}
             >
               {label}
             </label>
           ) : null}
           {hint ? (
-            <p className={cn("text-xs mt-0.5", light ? "text-emerald-800/80" : "text-white/50")}>{hint}</p>
+            <p className={cn("text-xs mt-0.5", light ? "text-gray-500" : "text-white/50")}>{hint}</p>
           ) : null}
         </div>
       </div>

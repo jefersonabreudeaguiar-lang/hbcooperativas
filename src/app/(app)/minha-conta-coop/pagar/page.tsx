@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CheckCircle2, Loader2, Store, Users } from "lucide-react";
 import { isCooperadoTransferIntentId } from "@/config/cooperadoTransferenciaCredito";
@@ -41,8 +41,11 @@ import {
 } from "@/modules/hb-credit/engine/paymentAffordability";
 import { cn } from "@/utils/format";
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
-
-const pageBg = "min-h-[calc(100vh-4rem)] flex flex-col bg-gradient-to-b from-emerald-50 via-green-50/95 to-emerald-100/80 text-gray-900";
+import {
+  hbCooperadoFlowPage,
+  hbCooperadoPrimaryBtn,
+  hbCooperadoSurfaceCard,
+} from "@/lib/hb-credit/hbCreditCooperadoUi";
 
 export default function HbCreditPagarPage() {
   return (
@@ -67,6 +70,7 @@ function HbCreditPagarContent() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<{ receiptCode: string } | null>(null);
+  const autoPayPinRef = useRef("");
 
   const hbApiCooperadoId = useMemo(
     () => resolveHbCreditApiCooperadoId(user, cooperadoId),
@@ -183,12 +187,14 @@ function HbCreditPagarContent() {
     router.back();
   }, [router]);
 
-  const confirmar = async () => {
+  const confirmar = useCallback(async () => {
     if (!draft || !cnpj || !hbApiCooperadoId || !intent || !limite) return;
     if (hasPin === false) {
       setError("Cadastre seu PIN de pagamento em HB Créditos → Início antes de continuar.");
       return;
     }
+    if (busy) return;
+    if (!canAffordHbPaymentScanPreview(limite, intent.amountCents)) return;
     setBusy(true);
     setError("");
     try {
@@ -233,20 +239,57 @@ function HbCreditPagarContent() {
     } finally {
       setBusy(false);
     }
-  };
+  }, [
+    busy,
+    cnpj,
+    contaCoopValorSync?.cooperativaId,
+    contaCoopValorSync?.mesReferencia,
+    cooperadoNome,
+    debito,
+    draft,
+    hbApiCooperadoId,
+    hasPin,
+    intent,
+    limite,
+    pagamentoCooperado,
+    payPin,
+    useCashbackOnPay,
+    cashbackAvail,
+  ]);
+
+  const affordOk = limite && intent ? canAffordHbPaymentScanPreview(limite, intent.amountCents) : false;
+
+  useEffect(() => {
+    if (
+      !draft ||
+      !intent ||
+      !limite ||
+      busy ||
+      success ||
+      hasPin === false ||
+      !affordOk ||
+      payPin.length < FINANCIAL_PIN_MIN_LENGTH
+    ) {
+      if (payPin.length < FINANCIAL_PIN_MIN_LENGTH) autoPayPinRef.current = "";
+      return;
+    }
+    if (autoPayPinRef.current === payPin) return;
+    autoPayPinRef.current = payPin;
+    void confirmar();
+  }, [affordOk, busy, confirmar, draft, hasPin, intent, limite, payPin, success]);
 
   if (loadingQr || (!draft && !error)) {
     return (
-      <div className={cn(pageBg, "items-center justify-center gap-4 px-6")}>
-        <Loader2 className="h-10 w-10 animate-spin text-emerald-600" />
-        <p className="text-center text-sm font-medium text-emerald-900">Preparando pagamento…</p>
+      <div className={cn(hbCooperadoFlowPage, "items-center justify-center gap-4 px-6")}>
+        <Loader2 className="h-10 w-10 animate-spin text-[#00a868]" />
+        <p className="text-center text-sm font-medium text-gray-700">Abrindo cobrança…</p>
       </div>
     );
   }
 
   if (!draft || !intent) {
     return (
-      <div className={cn(pageBg, "items-center justify-center px-6")}>
+      <div className={cn(hbCooperadoFlowPage, "items-center justify-center px-6")}>
         <p className="text-center text-sm text-red-800" role="alert">
           {error || "Não foi possível abrir esta cobrança."}
         </p>
@@ -259,23 +302,21 @@ function HbCreditPagarContent() {
 
   if (success) {
     return (
-      <div className={pageBg}>
+      <div className={hbCooperadoFlowPage}>
         <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
-          <CheckCircle2 className="h-16 w-16 text-emerald-600" strokeWidth={1.5} />
-          <h1 className="mt-6 text-2xl font-semibold tracking-tight text-emerald-950">Pagamento enviado</h1>
+          <CheckCircle2 className="h-16 w-16 text-[#00a868]" strokeWidth={1.5} />
+          <h1 className="mt-6 text-2xl font-semibold tracking-tight text-gray-900">Pagamento confirmado</h1>
           <p className="mt-2 text-4xl font-bold tabular-nums text-gray-900">
             {formatCentsBRL(intent.amountCents)}
           </p>
           <p className="mt-1 text-sm text-gray-600">{draft.parceiroNome}</p>
-          <p className="mt-6 rounded-full bg-emerald-600/15 px-4 py-2 text-sm font-medium text-emerald-900">
+          <p className="mt-6 rounded-full bg-[#00a868]/12 px-4 py-2 text-sm font-medium text-[#0d3d2a]">
             Comprovante {success.receiptCode}
           </p>
+          <p className="mt-3 text-xs text-gray-500">O mercado já foi avisado na hora.</p>
         </div>
         <div className="p-6 pb-10">
-          <Button
-            className="h-14 w-full rounded-2xl bg-emerald-600 text-base font-semibold text-white hover:bg-emerald-700"
-            onClick={() => router.replace("/minha-conta-coop")}
-          >
+          <Button className={hbCooperadoPrimaryBtn} onClick={() => router.replace("/minha-conta-coop")}>
             Concluir
           </Button>
         </div>
@@ -283,7 +324,6 @@ function HbCreditPagarContent() {
     );
   }
 
-  const affordOk = limite ? canAffordHbPaymentScanPreview(limite, intent.amountCents) : false;
   const podePagar =
     !busy &&
     payPin.length >= FINANCIAL_PIN_MIN_LENGTH &&
@@ -291,26 +331,26 @@ function HbCreditPagarContent() {
     hasPin !== false;
 
   return (
-    <div className={pageBg}>
+    <div className={hbCooperadoFlowPage}>
       <header className="flex items-center gap-3 px-4 py-3">
         <button
           type="button"
           onClick={voltar}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-white/80 text-emerald-900 shadow-sm"
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-800 shadow-sm ring-1 ring-black/5"
           aria-label="Voltar"
         >
           <ArrowLeft size={20} />
         </button>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">HB Créditos</p>
-          <h1 className="text-lg font-semibold text-gray-900">Confirmar pagamento</h1>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#00a868]">HB Créditos</p>
+          <h1 className="text-lg font-semibold tracking-tight text-gray-900">Confirmar</h1>
         </div>
       </header>
 
       <main className="flex-1 px-5 pb-4 pt-2">
-        <p className="text-sm text-gray-600">Você está pagando</p>
+        <p className="text-sm text-gray-500">Pagando para</p>
         <div className="mt-2 flex items-start gap-3">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 shadow-sm">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#2a1545] to-[#0d3d2a] shadow-md">
             {pagamentoCooperado ? (
               <Users size={24} className="text-white" />
             ) : (
@@ -325,7 +365,7 @@ function HbCreditPagarContent() {
           </div>
         </div>
 
-        <p className="mt-6 text-5xl font-bold tracking-tight tabular-nums text-gray-900">
+        <p className="mt-5 text-[2.75rem] font-bold leading-none tracking-tight tabular-nums text-gray-900">
           {formatCentsBRL(intent.amountCents)}
         </p>
 
@@ -336,12 +376,12 @@ function HbCreditPagarContent() {
             onChange={setPayPin}
             disabled={busy || hasPin === false}
             autoFocus
-            label="PIN de pagamento"
-            hint="Toque nas bolinhas e digite seu PIN no teclado"
+            label="Digite seu PIN"
+            hint={busy ? "Confirmando na nuvem…" : "Confirma automaticamente ao completar"}
           />
         </div>
 
-        <div className="mt-6 space-y-0 divide-y divide-emerald-900/10 rounded-2xl border border-emerald-900/10 bg-white/70 px-4 shadow-sm backdrop-blur-sm">
+        <div className={cn("mt-6 space-y-0 divide-y divide-gray-100 px-4", hbCooperadoSurfaceCard)}>
           <Row label="Forma de pagamento" value="HB Crédito" />
           <Row label="Seu saldo agora" value={formatCentsBRL(saldoDisponivel)} />
           <Row label="Saldo após pagamento" value={formatCentsBRL(saldoApos)} highlight />
@@ -367,13 +407,13 @@ function HbCreditPagarContent() {
         )}
       </main>
 
-      <footer className="border-t border-emerald-900/10 bg-white/50 px-5 pb-10 pt-5 backdrop-blur-sm">
+      <footer className="border-t border-black/[0.06] bg-white/80 px-5 pb-10 pt-5 backdrop-blur-md">
         <Button
-          className="h-14 w-full rounded-2xl bg-emerald-600 text-base font-semibold text-white hover:bg-emerald-700 disabled:opacity-40"
+          className={cn(hbCooperadoPrimaryBtn, "disabled:opacity-40")}
           disabled={!podePagar}
           onClick={() => void confirmar()}
         >
-          {busy ? "Processando…" : affordOk ? `Pagar ${formatCentsBRL(intent.amountCents)}` : "Saldo insuficiente"}
+          {busy ? "Confirmando…" : affordOk ? `Pagar ${formatCentsBRL(intent.amountCents)}` : "Saldo insuficiente"}
         </Button>
       </footer>
     </div>

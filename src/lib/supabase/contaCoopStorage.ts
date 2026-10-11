@@ -1656,6 +1656,16 @@ async function fetchHbCreditAccountRowForCooperado(
   };
 }
 
+/** ID da conta HB na nuvem (titular) — alinha reserva do QR com o RPC de pagamento. */
+export async function resolveHbCreditPayCooperadoId(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string
+): Promise<string> {
+  const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
+  return found?.accountCooperadoId ?? cooperadoId;
+}
+
 export type HbCreditAccountRevision = {
   updatedAt: string | null;
   limitReleasedCents: number;
@@ -2827,11 +2837,21 @@ export async function authorizePayment(
     }
   | { ok: false; error: string; code?: string }
 > {
-  const [pinCheck, intentCheck, accountFound] = await Promise.all([
+  const accountFound = await fetchHbCreditAccountRowForCooperado(
+    supabase,
+    input.cooperativaCnpj,
+    input.cooperadoId
+  );
+  if (!accountFound) {
+    return { ok: false, error: "Cooperado sem limite Conta Coop." };
+  }
+  const accountCooperadoId = accountFound.accountCooperadoId;
+
+  const [pinCheck, intentCheck] = await Promise.all([
     verifyFinancialPin(
       supabase,
       input.cooperativaCnpj,
-      input.cooperadoId,
+      accountCooperadoId,
       input.pin,
       input.actorUserId
     ),
@@ -2839,19 +2859,14 @@ export async function authorizePayment(
       supabase,
       input.intentId,
       input.nonce,
-      input.cooperadoId,
+      accountCooperadoId,
       input.cooperativaCnpj,
       { useCashback: Boolean(input.useCashback), forAuthorize: true, fast: true }
     ),
-    fetchHbCreditAccountRowForCooperado(supabase, input.cooperativaCnpj, input.cooperadoId),
   ]);
 
   if (!pinCheck.ok) return { ok: false, error: pinCheck.error };
-  if (!intentCheck.ok) return { ok: false, error: intentCheck.error };
-  if (!accountFound) {
-    return { ok: false, error: "Cooperado sem limite Conta Coop." };
-  }
-  const accountCooperadoId = accountFound.accountCooperadoId;
+  if (!intentCheck.ok) return { ok: false, error: intentCheck.error, code: intentCheck.code };
 
   let cashbackAppliedCents = 0;
   if (input.useCashback) {

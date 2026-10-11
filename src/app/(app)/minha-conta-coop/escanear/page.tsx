@@ -13,6 +13,8 @@ import { useAppData } from "@/hooks/useAppData";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { prepareAndOpenHbCreditPaymentFromQrScan } from "@/lib/hb-credit/openHbCreditPaymentFromQr";
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
+import { hbCooperadoFlowPage } from "@/lib/hb-credit/hbCreditCooperadoUi";
+import { cn } from "@/utils/format";
 
 export default function EscanearQrContaCoopPage() {
   return (
@@ -64,22 +66,22 @@ function EscanearQrContent() {
   );
 
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-lg flex-col gap-4 pb-8">
-      <div className="flex items-center gap-2">
+    <div className={cn(hbCooperadoFlowPage, "mx-auto max-w-lg gap-4 px-4 pb-8")}>
+      <div className="flex items-center gap-2 pt-2">
         <Button type="button" variant="ghost" size="sm" onClick={() => router.back()} aria-label="Voltar">
           <ArrowLeft size={18} />
         </Button>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-green-700">HB Créditos</p>
-          <h1 className="text-xl font-bold text-gray-900">Escanear QR</h1>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#00a868]">HB Créditos</p>
+          <h1 className="text-xl font-bold tracking-tight text-gray-900">Escanear QR</h1>
         </div>
       </div>
 
       <div className="relative">
         {validating && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-3xl bg-emerald-50/95 text-emerald-950">
-            <div className="h-10 w-10 animate-spin rounded-full border-2 border-emerald-300 border-t-emerald-700" />
-            <p className="mt-4 text-sm font-medium">Abrindo pagamento…</p>
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-[28px] bg-white/92 text-gray-900 backdrop-blur-sm">
+            <div className="h-10 w-10 animate-spin rounded-full border-2 border-gray-200 border-t-[#00a868]" />
+            <p className="mt-4 text-sm font-medium">Lendo cobrança…</p>
           </div>
         )}
         <HbCreditScannerErrorBoundary onReset={() => router.refresh()}>
@@ -100,8 +102,8 @@ function EscanearQrContent() {
           {scanError}
         </p>
       ) : (
-        <p className="text-center text-xs text-gray-500">
-          Aponte para o QR do mercado — ao ler, você confirma o valor na próxima tela.
+        <p className="text-center text-xs leading-relaxed text-gray-500">
+          Aponte para o QR do mercado. Na próxima tela, digite o PIN — o pagamento confirma na hora.
         </p>
       )}
     </div>

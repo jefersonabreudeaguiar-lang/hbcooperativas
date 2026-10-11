@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
 import { projectContaCoopDescontosAfterHbAuthorize } from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
 import { shouldProjectHbFichaBaseOnServer } from "@/lib/hb-credit/hbFichaBaseOperacional";
-import { authorizePayment, parseQrPayload, prepareHbCreditPaymentAuthorize } from "@/lib/supabase/contaCoopStorage";
+import {
+  authorizePayment,
+  parseQrPayload,
+  prepareHbCreditPaymentAuthorize,
+} from "@/lib/supabase/contaCoopStorage";
 import { requireCreditApi, requireCreditCnpj, resolveCreditPaymentCooperadoId } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
+import {
+  HB_CREDIT_LIMIT_DIVERGENT_CODE,
+  HB_CREDIT_STATE_STALE_CODE,
+} from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
 import { isCooperadoTransferIntentId } from "@/config/cooperadoTransferenciaCredito";
 import { authorizeCooperadoTransferPayment } from "@/lib/supabase/cooperadoTransferenciaCreditoStorage";
 
@@ -14,6 +22,7 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   const gate = await requireCreditApi(request, { requireOperations: true });
   if (!gate.ok) return gate.response;
+  const { supabase } = gate.ctx;
 
   const body = await request.json().catch(() => null);
   let cooperadoId = String(body?.cooperadoId ?? gate.ctx.session?.cooperadoId ?? "");
@@ -46,13 +55,22 @@ export async function POST(request: Request) {
   cooperadoId = resolved.cooperadoId;
 
   const actorId = gate.ctx.session?.sub ?? cooperadoId;
-  const prepare = await prepareHbCreditPaymentAuthorize(gate.ctx.supabase, cnpj, cooperadoId, actorId);
+
+  async function ensureLimitePronto(): Promise<{ ok: true } | { ok: false; error: string; code?: string }> {
+    const prep = await prepareHbCreditPaymentAuthorize(supabase, cnpj, cooperadoId, actorId);
+    if (!prep.ok) {
+      return { ok: false, error: prep.error, code: prep.code ?? "HB_LIMIT_PREPARE_FAILED" };
+    }
+    return { ok: true };
+  }
+
+  const prepare = await ensureLimitePronto();
   if (!prepare.ok) {
-    return NextResponse.json({ error: prepare.error, code: prepare.code ?? "HB_LIMIT_PREPARE_FAILED" }, { status: 503 });
+    return NextResponse.json({ error: prepare.error, code: prepare.code }, { status: 503 });
   }
 
   if (isCooperadoTransferIntentId(intentId)) {
-    const result = await authorizeCooperadoTransferPayment(gate.ctx.supabase, {
+    const result = await authorizeCooperadoTransferPayment(supabase, {
       intentId,
       nonce,
       payerCooperadoId: cooperadoId,
@@ -72,7 +90,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const result = await authorizePayment(gate.ctx.supabase, {
+  const payInput = {
     intentId,
     nonce,
     cooperadoId,
@@ -82,13 +100,25 @@ export async function POST(request: Request) {
     actorUserId: gate.ctx.session?.sub ?? cooperadoId,
     cooperadoNome: String(body?.cooperadoNome ?? gate.ctx.session?.name ?? ""),
     useCashback: Boolean(body?.useCashback),
-  });
+  };
+
+  let result = await authorizePayment(supabase, payInput);
+
+  const retryable =
+    !result.ok &&
+    (result.code === HB_CREDIT_STATE_STALE_CODE || result.code === HB_CREDIT_LIMIT_DIVERGENT_CODE);
+  if (retryable) {
+    const prepAgain = await ensureLimitePronto();
+    if (prepAgain.ok) {
+      result = await authorizePayment(supabase, payInput);
+    }
+  }
 
   if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: 400 });
 
   const mesReferencia = String(body?.mesReferencia ?? "").trim() || undefined;
   if (shouldProjectHbFichaBaseOnServer()) {
-    void projectContaCoopDescontosAfterHbAuthorize(gate.ctx.supabase, cnpj, cooperadoId, {
+    void projectContaCoopDescontosAfterHbAuthorize(supabase, cnpj, cooperadoId, {
       mesReferencia,
     }).catch(() => {});
   }

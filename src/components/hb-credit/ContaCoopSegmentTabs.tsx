@@ -13,6 +13,8 @@ interface ContaCoopSegmentTabsProps<T extends string> {
   active: T;
   onChange: (tab: T) => void;
   className?: string;
+  /** Estilo premium cooperado (HB Créditos). */
+  variant?: "default" | "cooperado";
 }
 
 export function ContaCoopSegmentTabs<T extends string>({
@@ -20,9 +22,18 @@ export function ContaCoopSegmentTabs<T extends string>({
   active,
   onChange,
   className,
+  variant = "default",
 }: ContaCoopSegmentTabsProps<T>) {
+  const cooperado = variant === "cooperado";
   return (
-    <div className={cn("flex rounded-2xl bg-gray-100 p-1 gap-1", className)} role="tablist">
+    <div
+      className={cn(
+        "flex rounded-2xl p-1 gap-1",
+        cooperado ? "bg-black/[0.04]" : "bg-gray-100",
+        className
+      )}
+      role="tablist"
+    >
       {tabs.map((tab) => (
         <button
           key={tab.id}
@@ -33,7 +44,9 @@ export function ContaCoopSegmentTabs<T extends string>({
           className={cn(
             "flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all",
             active === tab.id
-              ? "bg-white text-green-900 shadow-sm"
+              ? cooperado
+                ? "bg-white text-[#1a0b2e] shadow-sm"
+                : "bg-white text-green-900 shadow-sm"
               : "text-gray-600 hover:text-gray-900"
           )}
         >

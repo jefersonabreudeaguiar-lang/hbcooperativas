@@ -59,6 +59,12 @@ import {
   gravarHbCreditLedgerPersistido,
   lerHbCreditLedgerPersistido,
 } from "@/lib/hb-credit/hbCreditLedgerPersistencia";
+import {
+  hbCooperadoHeroCard,
+  hbCooperadoHeroGlow,
+  hbCooperadoHubPage,
+  hbCooperadoPrimaryBtn,
+} from "@/lib/hb-credit/hbCreditCooperadoUi";
 
 type Tab = "inicio" | "pagar" | "receber" | "extrato";
 
@@ -500,12 +506,12 @@ function MinhaContaCoopContent() {
   };
 
   return (
-    <div className="mx-auto max-w-lg space-y-5 pb-8">
-      <header className="space-y-1">
-        <p className="text-xs font-semibold uppercase tracking-wider text-green-700">HB Créditos</p>
-        <h1 className="text-2xl font-bold text-gray-900">Conta cooperado</h1>
-        <p className="text-sm text-gray-500">
-          Pague no mercado parceiro{transferenciaCooperadoAtiva ? " ou receba de outro cooperado" : ""} com QR e PIN
+    <div className={cn(hbCooperadoHubPage, "px-4")}>
+      <header className="space-y-1 pt-1">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#00a868]">HB Créditos</p>
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900">Sua conta</h1>
+        <p className="text-sm text-gray-500 leading-relaxed">
+          Pague no mercado com QR e PIN{transferenciaCooperadoAtiva ? ", ou receba de outro cooperado" : ""}.
         </p>
       </header>
 
@@ -527,14 +533,17 @@ function MinhaContaCoopContent() {
         </div>
       )}
 
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-green-900 via-green-800 to-emerald-700 p-6 text-white shadow-lg ring-1 ring-green-900/10">
+      <div className={hbCooperadoHeroCard}>
+        <span className={hbCooperadoHeroGlow} aria-hidden />
         {accountRefreshing && (
-          <span className="absolute right-4 top-4 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-green-50">
+          <span className="absolute right-4 top-4 z-10 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-green-50">
             Atualizando…
           </span>
         )}
-        <p className="text-sm font-medium text-green-100">Saldo HB para pagar</p>
-        <p className="mt-1 text-4xl font-bold tracking-tight sm:text-5xl">{formatCentsBRL(saldoHb)}</p>
+        <p className="relative text-sm font-medium text-white/75">Disponível para pagar</p>
+        <p className="relative mt-1 text-4xl font-bold tracking-tight tabular-nums sm:text-5xl">
+          {formatCentsBRL(saldoHb)}
+        </p>
 
         {cashback > 0 && (
           <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-3 py-2.5">
@@ -569,7 +578,12 @@ function MinhaContaCoopContent() {
         )}
       </div>
 
-      <ContaCoopSegmentTabs tabs={segmentTabs} active={tab} onChange={handleTabChange} />
+      <ContaCoopSegmentTabs
+        tabs={segmentTabs}
+        active={tab}
+        onChange={handleTabChange}
+        variant="cooperado"
+      />
 
       {tabEverOpened.inicio && (
         <div className={cn("space-y-4", tabPanelHidden("inicio"))}>
@@ -609,7 +623,12 @@ function MinhaContaCoopContent() {
             </Card>
           ) : (
             <>
-              <Button size="lg" className="w-full" onClick={() => router.push("/minha-conta-coop/escanear")} disabled={account?.bloqueado}>
+              <Button
+                size="lg"
+                className={cn("w-full", hbCooperadoPrimaryBtn)}
+                onClick={() => router.push("/minha-conta-coop/escanear")}
+                disabled={account?.bloqueado}
+              >
                 Pagar com QR Code
               </Button>
               {pinResetPending ? (
@@ -685,7 +704,7 @@ function MinhaContaCoopContent() {
                 <p className="text-sm text-gray-600">Escaneie o QR Code gerado no mercado parceiro.</p>
                 <Button
                   size="lg"
-                  className="w-full"
+                  className={cn("w-full", hbCooperadoPrimaryBtn)}
                   onClick={() => router.push("/minha-conta-coop/escanear")}
                   disabled={pagamentoBloqueado || busy}
                 >

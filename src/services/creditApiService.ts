@@ -333,6 +333,13 @@ async function sleepMs(ms: number): Promise<void> {
   await new Promise((r) => setTimeout(r, ms));
 }
 
+const AUTHORIZE_RETRY_CODES = new Set([
+  "HB_CREDIT_STATE_STALE",
+  "HB_CREDIT_LIMIT_DIVERGENT",
+  "HB_LIMIT_PREPARE_FAILED",
+  "HB_CREDIT_LIMIT_SNAPSHOT_MISSING",
+]);
+
 export async function authorizeCreditPayment(input: {
   cnpj: string;
   cooperadoId: string;
@@ -351,19 +358,34 @@ export async function authorizeCreditPayment(input: {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body,
+      cache: "no-store",
     });
 
-  let res: Response;
-  try {
-    res = await postAuthorize();
-  } catch {
-    await sleepMs(400);
-    res = await postAuthorize();
+  let res: Response | null = null;
+  let data: AuthorizeCreditPaymentResult & { ok?: boolean; error?: string; code?: string } = {};
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      res = await postAuthorize();
+    } catch {
+      if (attempt < 2) {
+        await sleepMs(attempt === 0 ? 250 : 500);
+        continue;
+      }
+      throw new Error("Sem conexão para confirmar o pagamento.");
+    }
+    data = await parseJson<
+      AuthorizeCreditPaymentResult & { ok?: boolean; error?: string; code?: string }
+    >(res);
+    if (res.ok && data.ok) break;
+    const retryable =
+      attempt < 2 &&
+      (res.status === 503 || (data.code && AUTHORIZE_RETRY_CODES.has(data.code)));
+    if (!retryable) break;
+    await sleepMs(attempt === 0 ? 200 : 450);
   }
-  const data = await parseJson<
-    AuthorizeCreditPaymentResult & { ok?: boolean; error?: string }
-  >(res);
-  if (!res.ok || !data.ok) throw new Error(data.error ?? "Pagamento recusado.");
+
+  if (!res || !res.ok || !data.ok) throw new Error(data.error ?? "Pagamento recusado.");
 
   notifyHbCreditLimiteSynced({ immediate: true });
 
@@ -553,7 +575,9 @@ export async function pollCreditIntentPayment(
   } else {
     params.set("lite", "1");
   }
-  const res = await secureApiFetch(`/api/credit/payment-intents?${params.toString()}`);
+  const res = await secureApiFetch(`/api/credit/payment-intents?${params.toString()}`, {
+    cache: "no-store",
+  });
   const data = await parseJson<CreditIntentPaymentPoll & { ok?: boolean; error?: string }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao consultar cobrança.");
   return data;

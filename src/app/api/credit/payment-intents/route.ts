@@ -6,6 +6,7 @@ import {
   getPartnerPaymentIntentStatus,
   parseQrPayload,
   prepareHbCreditPaymentAuthorize,
+  resolveHbCreditPayCooperadoId,
   validateIntentForCooperado,
 } from "@/lib/supabase/contaCoopStorage";
 import {
@@ -44,7 +45,10 @@ export async function GET(request: Request) {
   );
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
 
-  return NextResponse.json({ ok: true, ...result.data });
+  return NextResponse.json(
+    { ok: true, ...result.data },
+    { headers: { "Cache-Control": "no-store, max-age=0" } }
+  );
 }
 
 export async function POST(request: Request) {
@@ -84,13 +88,19 @@ export async function POST(request: Request) {
     const resolved = resolveCreditPaymentCooperadoId(gate.ctx, request, cooperadoId);
     if ("response" in resolved) return resolved.response;
 
-    const actorId = gate.ctx.session?.sub ?? resolved.cooperadoId;
+    const payCooperadoId = await resolveHbCreditPayCooperadoId(
+      gate.ctx.supabase,
+      cnpj,
+      resolved.cooperadoId
+    );
+
+    const actorId = gate.ctx.session?.sub ?? payCooperadoId;
     const fastValidate = body?.fast !== false;
     /** Em paralelo à validação — no scan rápido não bloqueia a tela PIN; authorize prepara de novo. */
     const prepareLimitePromise = prepareHbCreditPaymentAuthorize(
       gate.ctx.supabase,
       cnpj,
-      resolved.cooperadoId,
+      payCooperadoId,
       actorId
     );
 
@@ -108,7 +118,7 @@ export async function POST(request: Request) {
       const transferResult = await validateCooperadoTransferForPayer(gate.ctx.supabase, {
         intentId: parsed.intentId,
         nonce: parsed.nonce,
-        payerCooperadoId: resolved.cooperadoId,
+        payerCooperadoId: payCooperadoId,
         cooperativeCnpj: cnpj,
         receiverNome: nome,
       });
@@ -151,7 +161,7 @@ export async function POST(request: Request) {
       gate.ctx.supabase,
       parsed.intentId,
       parsed.nonce,
-      resolved.cooperadoId,
+      payCooperadoId,
       cnpj,
       { fast: fastValidate }
     );
