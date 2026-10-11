@@ -577,9 +577,9 @@ export function buildInlinePageReleaseBootstrap(pageRelease: ClientReleaseInfo):
   return `window.__HB_PAGE_RELEASE__=${JSON.stringify(pageRelease)};`;
 }
 
-/** 1º paint: remove SW ?build= legado e registra /sw.js de passthrough de navigate. */
+/** 1º paint: no atalho remove todo SW; no browser só ?build= legado. Depois registra passthrough. */
 export function buildInlineServiceWorkerMigrationScript(): string {
-  return `(function(){if(!("serviceWorker"in navigator))return;function leg(u){return u&&(u.indexOf("sw.js?")>=0||u.indexOf("sw.js%3F")>=0);}void navigator.serviceWorker.getRegistrations().then(function(regs){var drop=regs.filter(function(r){var u=(r.active&&r.active.scriptURL)||(r.waiting&&r.waiting.scriptURL)||(r.installing&&r.installing.scriptURL)||"";return leg(u);});return Promise.all(drop.map(function(r){return r.unregister();}));}).then(function(){return navigator.serviceWorker.register("/sw.js",{scope:"/",updateViaCache:"none"});}).catch(function(){});})();`;
+  return `(function(){if(!("serviceWorker"in navigator))return;function leg(u){return u&&(u.indexOf("sw.js?")>=0||u.indexOf("sw.js%3F")>=0);}function standalone(){try{return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;}catch(e){return false;}}void navigator.serviceWorker.getRegistrations().then(function(regs){if(standalone()){return Promise.all(regs.map(function(r){return r.unregister();}));}return Promise.all(regs.filter(function(r){var u=(r.active&&r.active.scriptURL)||(r.waiting&&r.waiting.scriptURL)||(r.installing&&r.installing.scriptURL)||"";return leg(u);}).map(function(r){return r.unregister();}));}).then(function(){return navigator.serviceWorker.register("/sw.js",{scope:"/",updateViaCache:"none"});}).catch(function(){});})();`;
 }
 
 /**

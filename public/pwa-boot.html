@@ -47,18 +47,9 @@
             : Promise.resolve();
         var purgeSw = navigator.serviceWorker.getRegistrations().then(function (regs) {
           return Promise.all(
-            regs
-              .filter(function (r) {
-                var u =
-                  (r.active && r.active.scriptURL) ||
-                  (r.waiting && r.waiting.scriptURL) ||
-                  (r.installing && r.installing.scriptURL) ||
-                  "";
-                return u.indexOf("sw.js?") >= 0 || u.indexOf("sw.js%3F") >= 0;
-              })
-              .map(function (r) {
-                return r.unregister();
-              })
+            regs.map(function (r) {
+              return r.unregister();
+            })
           );
         });
         Promise.all([purgeCaches, purgeSw])
@@ -70,7 +61,9 @@
             });
           })
           .catch(function () {})
-          .finally(go);
+          .finally(function () {
+            window.setTimeout(go, 400);
+          });
       })();
     </script>
   </head>

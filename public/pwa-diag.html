@@ -119,10 +119,21 @@
       >
     </div>
 
+    <div class="card" id="probes">
+      <p class="muted" style="margin: 0 0 0.5rem">Teste de rotas (servidor):</p>
+      <p id="probeResult" style="margin: 0; font-size: 0.85rem">—</p>
+    </div>
+
     <div class="row">
       <button type="button" class="btn btn-primary" id="repair">Reparar neste navegador</button>
-      <button type="button" class="btn btn-secondary" id="login">Ir para login</button>
+      <button type="button" class="btn btn-secondary" id="login">Abrir login (teste)</button>
+      <button type="button" class="btn btn-secondary" id="clearLocal">Limpar dados locais</button>
     </div>
+    <p class="muted" style="margin-top: 0.75rem">
+      Se o ícone continua preto mas o teste de <strong>/login</strong> dá 200: Android → Configurações → Apps →
+      <strong>HB Cooperativas</strong> (ou o nome do atalho) → Armazenamento → <strong>Limpar tudo</strong> → reinstale o
+      atalho pelo Chrome.
+    </p>
 
     <div id="toast"></div>
 
@@ -183,6 +194,7 @@
             caches: [],
             clientReleaseApi: null,
             manifestStartUrl: null,
+            probes: {},
             recomendacoes: [],
           };
 
@@ -235,6 +247,22 @@
             diag.manifestStartUrl = "erro";
           }
 
+          var paths = ["/login", "/dashboard", "/pwa-boot.html"];
+          for (var pi = 0; pi < paths.length; pi++) {
+            var path = paths[pi];
+            try {
+              var pr = await fetch(path, {
+                method: "GET",
+                cache: "no-store",
+                credentials: "same-origin",
+                redirect: "follow",
+              });
+              diag.probes[path] = { status: pr.status, ok: pr.ok };
+            } catch (e) {
+              diag.probes[path] = { erro: e && e.message ? e.message : String(e) };
+            }
+          }
+
           if (diag.serviceWorker.registrations.some(function (r) {
             return r.legadoComQuery;
           })) {
@@ -269,9 +297,18 @@
             );
           } else if (!diag.standalone) {
             diag.recomendacoes.push(
-              "No Chrome: toque em Reparar, faça login, remova o ícone da tela inicial e instale de novo."
+              "Toque em Reparar → login → remova o ícone e instale de novo (Baixar app)."
             );
-            diag.recomendacoes.push("Depois teste abrindo pelo ícone (não pela barra de endereço).");
+            diag.recomendacoes.push('Toque em "Abrir login (teste)". Se falhar aqui, o problema não é só o ícone.');
+          }
+
+          var loginProbe = diag.probes["/login"];
+          if (loginProbe && loginProbe.ok) {
+            diag.recomendacoes.push(
+              "Servidor responde /login OK — se só o ícone falha, limpe dados do app HB nas configurações do Android."
+            );
+          } else if (loginProbe && !loginProbe.ok) {
+            diag.recomendacoes.push("Servidor não abriu /login — verifique rede ou tente mais tarde.");
           }
 
           return diag;
@@ -321,6 +358,16 @@
           }
           lines.push("</ul>");
           document.getElementById("resumo").innerHTML = lines.join("");
+          var probeEl = document.getElementById("probeResult");
+          if (probeEl && diag.probes) {
+            var bits = [];
+            for (var k in diag.probes) {
+              if (!Object.prototype.hasOwnProperty.call(diag.probes, k)) continue;
+              var v = diag.probes[k];
+              bits.push(k + ": " + (v.status != null ? v.status : v.erro || "?"));
+            }
+            probeEl.textContent = bits.join(" · ") || "—";
+          }
           document.getElementById("json").value = JSON.stringify(diag, null, 2);
           window.__HB_PWA_DIAG__ = diag;
 
@@ -388,7 +435,41 @@
           location.href = "/pwa-rescue.html?next=%2Fpwa-diag.html";
         });
         document.getElementById("login").addEventListener("click", function () {
-          location.href = "/login";
+          location.href = "/pwa-boot.html?next=%2Flogin";
+        });
+
+        document.getElementById("clearLocal").addEventListener("click", function () {
+          if (!confirm("Apaga login e dados salvos neste aparelho. Você precisará entrar de novo.")) return;
+          try {
+            var keys = [];
+            for (var i = 0; i < localStorage.length; i++) {
+              var key = localStorage.key(i);
+              if (key && (key.indexOf("coopeagriplla") >= 0 || key.indexOf("hb-coop") >= 0 || key.indexOf("hb.coop") >= 0)) {
+                keys.push(key);
+              }
+            }
+            keys.forEach(function (k) {
+              localStorage.removeItem(k);
+            });
+          } catch (e) {
+            /* ignore */
+          }
+          if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function (regs) {
+              return Promise.all(regs.map(function (r) {
+                return r.unregister();
+              }));
+            });
+          }
+          if ("caches" in window) {
+            caches.keys().then(function (ks) {
+              return Promise.all(ks.map(function (k) {
+                return caches.delete(k);
+              }));
+            });
+          }
+          toast("Dados locais limpos");
+          window.setTimeout(run, 600);
         });
 
         run();
