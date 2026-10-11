@@ -6,7 +6,9 @@ import { useAppDataSnapshotForDomains } from "@/hooks/useAppData";
 import { Button } from "@/components/ui/Button";
 import { CooperadoHistoricoPagamentoMes } from "@/components/cooperado/CooperadoHistoricoPagamentoMes";
 import { CooperadoMesEntregasDetalhe } from "@/components/cooperado/CooperadoMesEntregasDetalhe";
+import { CooperadoMesEntregasFotosSanfona } from "@/components/cooperado/cooperadoMesEntregasFotosSanfona";
 import { CooperadoMesItensConsolidadosTable } from "@/components/cooperado/CooperadoMesItensConsolidadosTable";
+import { contarFotosEnviadasNotas } from "@/utils/fotoEntrega";
 import { agregarItensFichaMes } from "@/services/notaPedidoService";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
 import { notaTemFotoEnviadaCooperado } from "@/services/cooperadoEntregasService";
@@ -34,6 +36,7 @@ export function CooperadoPagamentoMesView({
   const data = useAppDataSnapshotForDomains(["financeiro", "notas"]);
   const [entregasAbertas, setEntregasAbertas] = useState(false);
   const [itensAbertos, setItensAbertos] = useState(false);
+  const [fotosMesAbertas, setFotosMesAbertas] = useState(true);
 
   const pagamento = resumo.pagamentoConfirmado ?? resumo.pagamentoAguardando;
   const aguardandoAssinatura =
@@ -53,6 +56,7 @@ export function CooperadoPagamentoMesView({
   }, [data, cooperadoId, resumo.mesReferencia, cooperativaId]);
 
   const temFotos = resumo.notas.some((n) => notaTemFotoEnviadaCooperado(n));
+  const qtdFotosMes = contarFotosEnviadasNotas(resumo.notas);
 
   if (!data) return null;
 
@@ -82,6 +86,17 @@ export function CooperadoPagamentoMesView({
           Resumo do PIX ainda não disponível neste dispositivo — sincronize e abra de novo. As entregas e itens do mês
           estão abaixo.
         </p>
+      )}
+
+      {qtdFotosMes > 0 && (
+        <CooperadoMesEntregasFotosSanfona
+          resumo={resumo}
+          getEscolaLabel={getEscolaLabel}
+          cnpj={coopCnpj.length === 14 ? coopCnpj : undefined}
+          compacto
+          expandido={fotosMesAbertas}
+          onToggle={() => setFotosMesAbertas((v) => !v)}
+        />
       )}
 
       <section className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
@@ -145,7 +160,7 @@ export function CooperadoPagamentoMesView({
         </section>
       )}
 
-      {temFotos && onVerFotosMes && (
+      {temFotos && qtdFotosMes === 0 && onVerFotosMes && (
         <Button type="button" variant="secondary" onClick={() => onVerFotosMes(resumo.mesReferencia)}>
           <Camera size={16} /> Ver fotos deste mês
         </Button>
