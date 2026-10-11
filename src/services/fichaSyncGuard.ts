@@ -15,7 +15,7 @@ import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { getCurrentMesReferencia } from "@/utils/format";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
-import { readCooperadoLastOperacionalSyncAt } from "@/lib/performance/cooperadoEventDrivenSync";
+import { readCooperadoLastOperacionalSyncAt } from "@/lib/performance/cooperadoOperacionalSyncAtStorage";
 
 export { cooperadoTemDadosFinanceirosMinimos };
 
