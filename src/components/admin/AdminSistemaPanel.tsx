@@ -53,8 +53,14 @@ export function AdminSistemaPanel({ user }: AdminSistemaPanelProps) {
     configured: boolean;
     sandbox: boolean;
     apiKeyFormatOk: boolean;
+    apiKeyKind: "prod" | "hmlg" | "unknown" | null;
     webhookUrl: string;
     webhookTokenConfigured: boolean;
+  } | null>(null);
+  const [asaasApiProbe, setAsaasApiProbe] = useState<{
+    ok: boolean;
+    status?: number;
+    error?: string;
   } | null>(null);
   const [asaasLoading, setAsaasLoading] = useState(true);
   const [webhookCopied, setWebhookCopied] = useState(false);
@@ -97,13 +103,24 @@ export function AdminSistemaPanel({ user }: AdminSistemaPanelProps) {
 
   const reloadAsaasSetup = () => {
     setAsaasLoading(true);
-    secureApiFetch("/api/admin/asaas-setup", { cache: "no-store" })
+    setAsaasApiProbe(null);
+    secureApiFetch("/api/admin/asaas-setup?probe=1", { cache: "no-store" })
       .then((r) => r.json())
-      .then((json: { ok?: boolean; setup?: typeof asaasSetup }) => {
-        if (json.ok && json.setup) setAsaasSetup(json.setup);
-        else setAsaasSetup(null);
+      .then(
+        (json: {
+          ok?: boolean;
+          setup?: typeof asaasSetup;
+          apiProbe?: { ok: boolean; status?: number; error?: string };
+        }) => {
+          if (json.ok && json.setup) setAsaasSetup(json.setup);
+          else setAsaasSetup(null);
+          if (json.apiProbe) setAsaasApiProbe(json.apiProbe);
+        }
+      )
+      .catch(() => {
+        setAsaasSetup(null);
+        setAsaasApiProbe(null);
       })
-      .catch(() => setAsaasSetup(null))
       .finally(() => setAsaasLoading(false));
   };
 
@@ -423,8 +440,28 @@ export function AdminSistemaPanel({ user }: AdminSistemaPanelProps) {
                 }
               >
                 {asaasSetup?.apiKeyFormatOk
-                  ? "OK ($aact_…)"
+                  ? `OK ($aact_${asaasSetup.apiKeyKind === "hmlg" ? "hmlg" : asaasSetup.apiKeyKind === "prod" ? "prod" : "?"}_…)`
                   : "Inválido — use $aact_prod_ ou $aact_hmlg_ com aspas no .env"}
+              </dd>
+            </div>
+            <div className="flex justify-between py-2 border-b border-gray-100 sm:col-span-2">
+              <dt className="text-gray-500">Teste na API Asaas</dt>
+              <dd
+                className={
+                  asaasApiProbe?.ok
+                    ? "text-green-700 font-medium"
+                    : asaasApiProbe
+                      ? "text-red-700 font-medium text-right max-w-[min(100%,20rem)]"
+                      : "text-gray-500"
+                }
+              >
+                {asaasLoading && !asaasApiProbe
+                  ? "Testando…"
+                  : asaasApiProbe?.ok
+                    ? "Autenticação OK"
+                    : asaasApiProbe
+                      ? `Falhou (HTTP ${asaasApiProbe.status ?? "?"}). Atualize a chave na Vercel e faça redeploy.`
+                      : "—"}
               </dd>
             </div>
             <div className="flex justify-between py-2 border-b border-gray-100">

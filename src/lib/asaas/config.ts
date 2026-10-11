@@ -76,10 +76,18 @@ export function getAsaasConfig(): AsaasConfig | null {
   };
 }
 
+export function getAsaasKeyKind(config: AsaasConfig | null): "prod" | "hmlg" | "unknown" | null {
+  if (!config) return null;
+  if (config.apiKey.includes("_prod_")) return "prod";
+  if (config.apiKey.includes("_hmlg_")) return "hmlg";
+  return "unknown";
+}
+
 export function getAsaasSetupInfo(): {
   configured: boolean;
   sandbox: boolean;
   apiKeyFormatOk: boolean;
+  apiKeyKind: "prod" | "hmlg" | "unknown" | null;
   webhookUrl: string;
   webhookTokenConfigured: boolean;
 } {
@@ -89,6 +97,7 @@ export function getAsaasSetupInfo(): {
     configured: Boolean(config),
     sandbox: config?.sandbox ?? false,
     apiKeyFormatOk: Boolean(config?.apiKey.startsWith("$aact_")),
+    apiKeyKind: getAsaasKeyKind(config),
     webhookUrl: appUrl ? `${appUrl}/api/webhooks/asaas` : "/api/webhooks/asaas",
     webhookTokenConfigured: Boolean(config?.webhookToken),
   };

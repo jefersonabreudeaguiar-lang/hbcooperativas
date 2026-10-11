@@ -123,3 +123,12 @@ export async function getAsaasPayment(
   if (!result.ok) return result;
   return { ok: true, payment: result.data };
 }
+
+/** Teste leve de autenticação (admin) — não expõe a chave. */
+export async function probeAsaasApiConnection(
+  config: AsaasConfig
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const result = await asaasRequest<unknown>(config, "/customers?limit=1", { method: "GET" });
+  if (result.ok) return { ok: true };
+  return { ok: false, status: result.status, error: result.error };
+}
