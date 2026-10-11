@@ -136,6 +136,13 @@ export async function applyOfficialReleaseIfNeeded(): Promise<"ok" | "aligning" 
   if (decision.action === "pending") return "pending";
 
   if (decision.action === "align") {
+    if (runtimeAlreadyOnCanonicalRelease(canonical, pageRelease, embedded)) {
+      markClientReleaseSeen(canonical);
+      clearReleaseShieldExpected();
+      clearReloadBurstCounter();
+      clearUrgentReleaseAlignDedup();
+      return "ok";
+    }
     return alignToCanonicalIfNeeded(canonical, decision.reason);
   }
 

@@ -11,6 +11,20 @@ let inFlight: Promise<ReleaseShieldResult> | null = null;
 let misalignedAttempt = 0;
 let misalignedTimer = 0;
 let aligning = false;
+let lastForegroundShieldAt = 0;
+
+/** Evita rajada de fetch/reload ao alternar app ↔ PWA (foco/visibilidade/rede). */
+const FOREGROUND_SHIELD_MIN_GAP_MS = 45_000;
+
+function isForegroundShieldTrigger(trigger: string): boolean {
+  return (
+    trigger === "visibility" ||
+    trigger === "focus" ||
+    trigger === "online" ||
+    trigger === "sw_visibility" ||
+    trigger === "pageshow_bfcache"
+  );
+}
 
 function stopMisalignedRetries(): void {
   misalignedAttempt = 0;
@@ -39,6 +53,18 @@ function scheduleMisalignedRetry(trigger: string): void {
 export async function runClientReleaseShield(trigger: string): Promise<ReleaseShieldResult> {
   if (typeof window === "undefined") return "ok";
   if (inFlight) return inFlight;
+
+  const now = Date.now();
+  if (
+    isForegroundShieldTrigger(trigger) &&
+    !aligning &&
+    now - lastForegroundShieldAt < FOREGROUND_SHIELD_MIN_GAP_MS
+  ) {
+    return "ok";
+  }
+  if (isForegroundShieldTrigger(trigger)) {
+    lastForegroundShieldAt = now;
+  }
 
   inFlight = (async () => {
     const result = await applyOfficialReleaseIfNeeded();

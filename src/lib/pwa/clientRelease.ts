@@ -233,6 +233,10 @@ export function readConfirmedClientReleaseBuild(): number | null {
 export function localPersistedBuildBehindCanonical(canonical: ClientReleaseInfo): boolean {
   if (typeof localStorage === "undefined") return false;
   try {
+    const embeddedBuild = getEmbeddedClientRelease().build;
+    if (embeddedBuild > 0 && embeddedBuild >= canonical.build) {
+      return false;
+    }
     const raw = localStorage.getItem(BUILD_SEEN_KEY);
     const seen = raw != null ? parseInt(raw, 10) : 0;
     if (!Number.isFinite(seen) || seen <= 0) return false;

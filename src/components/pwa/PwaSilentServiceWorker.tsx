@@ -20,9 +20,14 @@ export function PwaSilentServiceWorker() {
     if (!shouldAutoAlignClientRelease()) return;
 
     let reloaded = false;
+    let lastSwReloadAt = 0;
+    const SW_RELOAD_MIN_GAP_MS = 60_000;
     const onControllerChange = () => {
       if (reloaded) return;
       if (shouldSkipServiceWorkerActivationReload()) return;
+      const now = Date.now();
+      if (now - lastSwReloadAt < SW_RELOAD_MIN_GAP_MS) return;
+      lastSwReloadAt = now;
       reloaded = true;
       window.location.reload();
     };

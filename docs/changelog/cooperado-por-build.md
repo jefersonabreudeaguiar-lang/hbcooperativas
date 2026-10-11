@@ -6,7 +6,11 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
-## v306 (atual)
+## v307 (atual)
+
+- **Estabilidade PWA:** menos tela branca/reload ao voltar ao app — release shield não força atualização quando o bundle já é o atual; menos reload duplo do service worker.
+
+## v306
 
 - **HB Créditos / QR mercado:** validação do QR não espera mais o sync pesado de limite — tela de PIN abre bem mais rápido; o alinhamento de limite roda em paralelo e na confirmação do PIN.
 
