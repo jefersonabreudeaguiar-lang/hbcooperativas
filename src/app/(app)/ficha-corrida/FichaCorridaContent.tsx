@@ -2303,6 +2303,7 @@ export default function FichaCorridaPage() {
                       ? totalExibido
                       : resumoQuantoVouReceber.valorDestaque
                 }
+                valorAbertoEntregas={resumoQuantoVouReceber.valorAberto}
                 tituloValor={resumoQuantoVouReceber.tituloValor}
                 subtitulo={resumoQuantoVouReceber.subtitulo}
                 acaoRotulo={fluxoReciboAssinatura ? resumoQuantoVouReceber.acaoRotulo : null}

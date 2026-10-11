@@ -15,6 +15,7 @@ import {
   upsertNotasInTable,
 } from "@/lib/supabase/notasStorage";
 import { mergeNotaComFotos } from "@/utils/fotoEntrega";
+import { applyNotaPedidoDeletedOnOperacionalSync } from "@/lib/supabase/cooperativaSyncStorage";
 
 export async function GET(
   request: Request,
@@ -205,11 +206,34 @@ export async function DELETE(
     if (mgmt) return mgmt;
   }
 
+  const existingStorage = await fetchNotaFromStorage(supabase, cnpj, id);
+  const fromTablePre = await supabase
+    .from("notas_pedido")
+    .select("payload")
+    .eq("id", id)
+    .eq("cooperativa_cnpj", cnpj)
+    .maybeSingle();
+  const tableNotaPre =
+    fromTablePre.data?.payload && typeof fromTablePre.data.payload === "object"
+      ? (fromTablePre.data.payload as NotaPedido)
+      : null;
+  const notaRef = tableNotaPre ?? existingStorage;
+  const cooperativaIdRef = notaRef?.cooperativaId;
+
   const tableDel = await deleteNotaFromTable(supabase, cnpj, id);
   const storageDel = await deleteNotaFromStorage(supabase, cnpj, id);
   const tableOk = tableDel.ok;
   const tableMissing = "tableMissing" in tableDel && tableDel.tableMissing;
   const storageOk = storageDel.ok;
+
+  const deletedOk = (tableOk && storageOk) || (tableMissing && storageOk);
+
+  if (deletedOk && cooperativaIdRef) {
+    const op = await applyNotaPedidoDeletedOnOperacionalSync(supabase, cnpj, id, cooperativaIdRef);
+    if (!op.ok) {
+      console.error("[notas-pedido/delete-operacional]", op.error);
+    }
+  }
 
   if (tableOk && storageOk) {
     return NextResponse.json({ success: true });

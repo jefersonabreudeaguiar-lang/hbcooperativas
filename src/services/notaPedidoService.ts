@@ -3651,8 +3651,31 @@ export function aplicarNotasPedidoExcluidas(data: AppData, cooperativaId?: strin
   const excl = idsNotasPedidoExcluidas(data, cooperativaId);
   if (excl.size === 0) return data;
   const notasPedido = data.notasPedido.filter((n) => !excl.has(n.id));
-  if (notasPedido.length === data.notasPedido.length) return data;
-  return { ...data, notasPedido };
+  const removedFichas = data.fichaCorrida.filter((f) => f.notaPedidoId && excl.has(f.notaPedidoId));
+  const fichaCorrida = data.fichaCorrida.filter((f) => !f.notaPedidoId || !excl.has(f.notaPedidoId));
+  const notasChanged = notasPedido.length !== data.notasPedido.length;
+  const fichaChanged = fichaCorrida.length !== data.fichaCorrida.length;
+  if (!notasChanged && !fichaChanged) return data;
+
+  const arquivosMensais = data.arquivosMensais.map((a) => {
+    const notaPedidoIds = a.notaPedidoIds.filter((id) => !excl.has(id));
+    if (notaPedidoIds.length === a.notaPedidoIds.length) return a;
+    return { ...a, notaPedidoIds };
+  });
+
+  let next: AppData = { ...data, notasPedido, fichaCorrida, arquivosMensais };
+  if (fichaChanged && removedFichas.length > 0) {
+    let fc = next.fichaCorrida;
+    const seen = new Set<string>();
+    for (const f of removedFichas) {
+      const key = `${f.cooperadoId}:${f.mesReferencia}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      fc = recalcularSaldosFichaCooperadoMes(fc, f.cooperadoId, f.mesReferencia);
+    }
+    next = { ...next, fichaCorrida: fc };
+  }
+  return next;
 }
 
 /** Cooperado: entrega apagada na nuvem / tombstone da cooperativa — remove da lista local. */

@@ -202,3 +202,41 @@ export async function fetchOperacionalSync(
 ): Promise<OperacionalSyncPayload | null> {
   return fetchJson<OperacionalSyncPayload>(supabase, cnpj, "operacional.json");
 }
+
+/** Tombstone + ficha na nuvem quando a entrega foi apagada via API (não depende só do push do staff). */
+export async function applyNotaPedidoDeletedOnOperacionalSync(
+  supabase: SupabaseClient,
+  cnpj: string,
+  notaId: string,
+  cooperativaId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const existing = await fetchOperacionalSync(supabase, cnpj);
+  if (!existing) return { ok: true };
+
+  const now = new Date().toISOString();
+  const prev = existing.notasPedidoExcluidas ?? [];
+  const entry: NotaPedidoExcluida = { id: notaId, cooperativaId, deletedAt: now };
+  const has = prev.some((e) => e.id === notaId && e.cooperativaId === cooperativaId);
+  const notasPedidoExcluidas = has
+    ? prev.map((e) => (e.id === notaId && e.cooperativaId === cooperativaId ? entry : e))
+    : [...prev, entry];
+
+  const fichaCorrida = (existing.fichaCorrida ?? []).filter((f) => f.notaPedidoId !== notaId);
+  const arquivosMensais = (existing.arquivosMensais ?? []).map((a) => {
+    const notaPedidoIds = a.notaPedidoIds.filter((id) => id !== notaId);
+    if (notaPedidoIds.length === a.notaPedidoIds.length) return a;
+    return { ...a, notaPedidoIds, updatedAt: now };
+  });
+
+  const payload: OperacionalSyncPayload = {
+    ...existing,
+    updatedAt: now,
+    notasPedidoExcluidas,
+    fichaCorrida,
+    arquivosMensais,
+  };
+
+  const uploaded = await uploadOperacionalSync(supabase, cnpj, payload, { existingOperacional: existing });
+  if (!uploaded.ok) return uploaded;
+  return { ok: true };
+}

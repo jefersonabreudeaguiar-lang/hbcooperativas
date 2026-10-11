@@ -506,6 +506,15 @@ export async function downloadFotoPartBuffer(
   return null;
 }
 
+/**
+ * JSON só no bucket não entra no merge salvo fila do responsável — evita rascunho/conferida
+ * “fantasma” após exclusão na tabela SQL (cooperado/staff já não vê na API, mas HB/sync lia).
+ */
+export function shouldAdoptStorageOnlyNotaInMerge(nota: NotaPedido): boolean {
+  const s = nota.status;
+  return s === "aguardando_conferencia" || s === "entregue" || s === "rejeitada";
+}
+
 /** Une notas da tabela SQL e do storage, mantendo metadados recentes e o maior conjunto de fotos. */
 export function mergeNotasSources(tableNotas: NotaPedido[], storageNotas: NotaPedido[]): NotaPedido[] {
   const byId = new Map<string, NotaPedido>();
@@ -516,7 +525,7 @@ export function mergeNotasSources(tableNotas: NotaPedido[], storageNotas: NotaPe
     if (!nota?.id) continue;
     const cur = byId.get(nota.id);
     if (!cur) {
-      byId.set(nota.id, nota);
+      if (shouldAdoptStorageOnlyNotaInMerge(nota)) byId.set(nota.id, nota);
       continue;
     }
     byId.set(nota.id, mergeNotaComFotos(cur, nota));

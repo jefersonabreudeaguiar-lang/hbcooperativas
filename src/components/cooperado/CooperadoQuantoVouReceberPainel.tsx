@@ -11,6 +11,8 @@ type Props = {
   estado: EstadoQuantoVouReceberCooperado;
   mesLabel: string;
   valorDestaque: number;
+  /** Entregas conferidas ainda não pagas — exibido junto ao recibo (PIX aguardando assinatura). */
+  valorAbertoEntregas?: number;
   tituloValor: string;
   subtitulo: string;
   acaoRotulo: string | null;
@@ -30,6 +32,7 @@ export function CooperadoQuantoVouReceberPainel({
   estado,
   mesLabel,
   valorDestaque,
+  valorAbertoEntregas = 0,
   tituloValor,
   subtitulo,
   acaoRotulo,
@@ -69,6 +72,12 @@ export function CooperadoQuantoVouReceberPainel({
         {formatCurrency(valorDestaque)}
       </p>
       <p className={`text-sm mt-3 max-w-lg ${temaEscuro ? "text-green-100" : "text-gray-600"}`}>{subtitulo}</p>
+
+      {estado === "aguardando_assinatura" && valorAbertoEntregas > 0 && (
+        <p className={`text-sm mt-2 font-medium ${temaEscuro ? "text-white" : "text-gray-800"}`}>
+          Entregas conferidas em aberto: {formatCurrency(valorAbertoEntregas)}
+        </p>
+      )}
 
       {estado === "aguardando_assinatura" && acaoRotulo && onAcao && (
         <Button
