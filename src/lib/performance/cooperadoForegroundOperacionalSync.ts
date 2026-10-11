@@ -19,8 +19,9 @@ import {
 import {
   cooperadoCloudRevisionNotasInSyncWithApplied,
   clearCooperadoPwaDadosDesatualizados,
-  markCooperadoPwaRevisaoNuvemAdiantada,
+  cooperadoPwaSuppressForegroundStaleCheck,
 } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
+import { persistirCooperadoPwaMessengerCaches } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { runCooperadoMessengerOperacionalLightPull } from "@/lib/cooperado/cooperadoMessengerOperacionalLightPull";
 import {
   requestCooperadoFinanceiroRecoverySync,
@@ -94,15 +95,15 @@ export async function runCooperadoForegroundOperacionalCheck(
     cooperativaId?: string;
   }
 ): Promise<boolean> {
+  if (isCooperadoPwaMessengerMode() && cooperadoPwaSuppressForegroundStaleCheck()) {
+    return false;
+  }
+
   const evaluation = await evaluateCooperadoForegroundOperacionalPull(cnpj, opts);
   if (!evaluation) return false;
 
   const digits = normalizeCnpj(cnpj ?? "");
   const { reason, remote } = evaluation;
-
-  if (isCooperadoPwaMessengerMode()) {
-    markCooperadoPwaRevisaoNuvemAdiantada();
-  }
 
   if (reason === "financeiro_desatualizado") {
     requestCooperadoFinanceiroRecoverySync();
@@ -115,9 +116,22 @@ export async function runCooperadoForegroundOperacionalCheck(
     isAppDataWarm()
   ) {
     const session = getSession();
-    if (session?.role === "cooperado" && rematerializarCooperadoPwaSnapshotsSeNecessario(session)) {
-      clearCooperadoPwaDadosDesatualizados();
-      return true;
+    if (session?.role === "cooperado") {
+      persistirCooperadoPwaMessengerCaches(session);
+      if (rematerializarCooperadoPwaSnapshotsSeNecessario(session)) {
+        clearCooperadoPwaDadosDesatualizados();
+        return true;
+      }
+      const coopId = opts?.cooperativaId;
+      const cooperadoId = opts?.cooperadoId;
+      if (
+        coopId &&
+        cooperadoId &&
+        !cooperadoPwaFinanceiroSnapshotsAusentes(cooperadoId, coopId)
+      ) {
+        clearCooperadoPwaDadosDesatualizados();
+        return true;
+      }
     }
   }
 

@@ -835,17 +835,21 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (userRef.current?.role === "cooperado" && completed) {
         const coopIdFinal = getUserCooperativaId(userRef.current, getData());
         if (coopIdFinal) {
-          void resolveCooperativaCnpj(getData(), coopIdFinal, userRef.current).then(async (cnpjDone) => {
-            if (!cnpjDone) return;
-            const remote = await fetchCooperativaCloudRevision(cnpjDone);
-            if (remote) {
-              persistAppliedCooperativaCloudRevision(
-                cnpjDone,
-                fingerprintCooperativaCloudRevision(remote)
-              );
+          try {
+            const cnpjDone = await resolveCooperativaCnpj(getData(), coopIdFinal, userRef.current);
+            if (cnpjDone) {
+              const remote = await fetchCooperativaCloudRevision(cnpjDone);
+              if (remote) {
+                persistAppliedCooperativaCloudRevision(
+                  cnpjDone,
+                  fingerprintCooperativaCloudRevision(remote)
+                );
+              }
+              persistOperacionalSyncedAppBuild();
             }
-            persistOperacionalSyncedAppBuild();
-          });
+          } catch {
+            /* revisão local — não bloqueia fim do sync */
+          }
         }
       }
       if (completed && hasCooperadoEventDrivenGrant()) {

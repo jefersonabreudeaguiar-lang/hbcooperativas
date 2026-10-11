@@ -13,25 +13,28 @@ import { readAppliedCooperativaCloudRevision } from "@/lib/performance/cooperado
 export const COOPERADO_PWA_DADOS_STALE_EVENT = "hb-cooperado-pwa-dados-stale";
 export const COOPERADO_PWA_DADOS_FRESH_EVENT = "hb-cooperado-pwa-dados-fresh";
 
-let revisaoNuvemAdiantada = false;
-
-export function markCooperadoPwaRevisaoNuvemAdiantada(): void {
-  if (!isCooperadoPwaMessengerMode()) return;
-  revisaoNuvemAdiantada = true;
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent(COOPERADO_PWA_DADOS_STALE_EVENT));
-  }
-}
+/** Evita re-marcar stale logo após sync manual/materialização bem-sucedida. */
+const FOREGROUND_STALE_SUPPRESS_MS = 18_000;
+let suppressForegroundStaleUntil = 0;
 
 export function clearCooperadoPwaDadosDesatualizados(): void {
-  revisaoNuvemAdiantada = false;
+  suppressForegroundStaleUntil = Date.now() + FOREGROUND_STALE_SUPPRESS_MS;
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent(COOPERADO_PWA_DADOS_FRESH_EVENT));
   }
 }
 
+export function cooperadoPwaSuppressForegroundStaleCheck(): boolean {
+  return Date.now() < suppressForegroundStaleUntil;
+}
+
+/** @deprecated Não usar — gerava badge “desatualizado” em loop após Atualizar. */
+export function markCooperadoPwaRevisaoNuvemAdiantada(): void {
+  /* noop */
+}
+
 export function cooperadoPwaRevisaoNuvemAdiantada(): boolean {
-  return revisaoNuvemAdiantada;
+  return false;
 }
 
 /** Notas inalteradas na nuvem desde a última sync aplicada — pull só operacional é seguro. */
@@ -65,6 +68,6 @@ export function cooperadoPwaMostraDadosDesatualizados(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   if (!isCooperadoPwaMessengerMode() || !user || user.role !== "cooperado") return false;
-  if (cooperadoPwaRevisaoNuvemAdiantada()) return true;
+  if (cooperadoPwaSuppressForegroundStaleCheck()) return false;
   return cooperadoPwaFinanceiroSnapshotsAusentesForUser(user);
 }
