@@ -579,7 +579,7 @@ export function buildInlinePageReleaseBootstrap(pageRelease: ClientReleaseInfo):
 
 /** PWA: remove SW legado em todo carregamento (idempotente, sem reload). */
 export function buildInlineServiceWorkerMigrationScript(): string {
-  return `(function(){if(!("serviceWorker"in navigator))return;function isPwa(){try{return window.matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;}catch(e){return false;}}if(!isPwa())return;var purgeCaches=("caches"in window)?caches.keys().then(function(keys){return Promise.all(keys.map(function(k){return caches.delete(k);}));}):Promise.resolve();var purgeSw=navigator.serviceWorker.getRegistrations().then(function(regs){return Promise.all(regs.map(function(r){return r.unregister();}));});void Promise.all([purgeCaches,purgeSw]).catch(function(){});})();`;
+  return `(function(){if(!("serviceWorker"in navigator))return;function isPwa(){try{return window.matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;}catch(e){return false;}}if(!isPwa())return;var purgeCaches=("caches"in window)?caches.keys().then(function(keys){return Promise.all(keys.map(function(k){return caches.delete(k);}));}):Promise.resolve();var purgeSw=navigator.serviceWorker.getRegistrations().then(function(regs){return Promise.all(regs.map(function(r){return r.unregister();}));});var registerSafe=navigator.serviceWorker.register("/sw.js",{scope:"/",updateViaCache:"none"});void Promise.all([purgeCaches,purgeSw]).then(function(){return registerSafe;}).catch(function(){});})();`;
 }
 
 /**

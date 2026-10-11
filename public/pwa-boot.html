@@ -44,6 +44,13 @@
         });
         Promise.all([purgeCaches, purgeSw])
           .catch(function () {})
+          .then(function () {
+            return navigator.serviceWorker.register("/sw.js", {
+              scope: "/",
+              updateViaCache: "none",
+            });
+          })
+          .catch(function () {})
           .finally(go);
       })();
     </script>

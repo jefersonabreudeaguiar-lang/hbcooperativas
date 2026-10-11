@@ -7,7 +7,7 @@ import { shouldAutoAlignClientRelease } from "@/lib/pwa/clientRelease";
 import { registerHbServiceWorker } from "@/lib/pwa/registerHbServiceWorker";
 
 /**
- * PWA instalado: remove SW legado (sem registrar de novo) para não interceptar navegação no cold start.
+ * PWA instalado: purga SW legado e registra /sw.js com navigate seguro (sem Response.error).
  * Atualização de versão fica no ClientReleaseShieldHost.
  */
 export function PwaSilentServiceWorker() {

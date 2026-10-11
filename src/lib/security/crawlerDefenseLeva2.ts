@@ -49,6 +49,7 @@ export function isLeva2PageAllowlisted(pathname: string): boolean {
 export function isStaticOrFrameworkPath(pathname: string): boolean {
   if (pathname.startsWith("/_next/")) return true;
   if (pathname === "/favicon.ico" || pathname === "/robots.txt" || pathname === "/sitemap.xml") return true;
+  if (pathname === "/pwa-boot.html" || pathname === "/sw.js") return true;
   return /\.(svg|png|jpg|jpeg|gif|webp|ico|woff2?|txt|xml|webmanifest)$/i.test(pathname);
 }
 
