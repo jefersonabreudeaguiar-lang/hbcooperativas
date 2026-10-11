@@ -6,7 +6,11 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
-## v293 (atual)
+## v294 (atual)
+
+- **HB Créditos:** com a receber zerado, “utilizado” e totais do dashboard passam a 0 (Orlando/casos sem `hbTransactionId` no PIX); heal do novo ciclo em toda leitura de limites/dashboard.
+
+## v293
 
 - **HB Créditos:** ao quitar o a receber (pagamento do responsável), zera liberado/usado na nuvem para novo ciclo; sync HB no `registrar-pagamento`; auto-correção na aba Limites e Minha Conta HB.
 

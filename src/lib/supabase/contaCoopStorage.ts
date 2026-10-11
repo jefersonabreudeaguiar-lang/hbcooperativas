@@ -395,6 +395,7 @@ export async function getDashboardResumo(
 
   const limitesEfetivos = await listLimitesCooperadosAlinhadosAEntregas(supabase, digits, {
     resyncIfInflated: false,
+    actorUserId: "system:hb_dashboard",
   });
   let limiteDistribuido = 0;
   let usadoTotal = 0;
@@ -557,22 +558,23 @@ export async function listLimitesCooperadosAlinhadosComBase(
 }> {
   const digits = normalizeCnpj(cnpj);
   const limitesRaw = await listLimitesCooperados(supabase, cnpj);
+  const actorHeal = opts?.actorUserId ?? "system:hb_limites_list_heal";
+  const limitesPosHeal = await aplicarHealNovoCicloContasComSaldo(
+    supabase,
+    cnpj,
+    limitesRaw,
+    actorHeal
+  );
+
   if (opts?.fast) {
-    const actor = opts?.actorUserId ?? "system:hb_limites_fast_heal";
-    const withSaldo = limitesRaw.filter((l) => l.limiteLiberadoCents > 0 || l.valorUsadoCents > 0);
-    for (const l of withSaldo) {
-      await healHbCreditNovoCicloQuandoBaseZero(supabase, cnpj, l.cooperadoId, actor).catch(() => {});
-    }
-    const limites =
-      withSaldo.length > 0 ? await listLimitesCooperados(supabase, cnpj) : limitesRaw;
-    return { limites, creditosBaseCents: {} };
+    return { limites: limitesPosHeal, creditosBaseCents: {} };
   }
 
   const persistFichaSync = opts?.persistFichaSync === true;
   const heavyListSync = persistFichaSync || opts?.resyncIfInflated === true;
-  /** GET padrão = só hb_credit_accounts (rápido). BIC/autoritativo só em persist/resync explícitos. */
+  /** GET padrão = hb_credit_accounts + heal novo ciclo; BIC/autoritativo só em persist/resync explícitos. */
   if (!heavyListSync) {
-    return { limites: limitesRaw, creditosBaseCents: {} };
+    return { limites: limitesPosHeal, creditosBaseCents: {} };
   }
 
   /** Reconcile em lote só no sync explícito — GET leve evita timeout/resposta vazia. */
@@ -1169,6 +1171,21 @@ export async function healHbCreditNovoCicloQuandoBaseZero(
   );
   if (!reset.ok) return { healed: false };
   return { healed: true };
+}
+
+/** Zera contas com saldo HB quando crédito-base = 0 (novo ciclo) antes de exibir totais. */
+async function aplicarHealNovoCicloContasComSaldo(
+  supabase: SupabaseClient,
+  cnpj: string,
+  limitesRaw: ContaCoopLimiteCooperado[],
+  actorUserId: string
+): Promise<ContaCoopLimiteCooperado[]> {
+  const withSaldo = limitesRaw.filter((l) => l.limiteLiberadoCents > 0 || l.valorUsadoCents > 0);
+  if (!withSaldo.length) return limitesRaw;
+  for (const l of withSaldo) {
+    await healHbCreditNovoCicloQuandoBaseZero(supabase, cnpj, l.cooperadoId, actorUserId).catch(() => {});
+  }
+  return listLimitesCooperados(supabase, cnpj);
 }
 
 async function cooperadoTemComprasContaCoopAtivas(
