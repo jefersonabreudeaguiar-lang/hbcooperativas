@@ -1,9 +1,8 @@
 /**
- * Service worker "tombstone" — substitui SW legado (≤307) que usava Response.error() no navigate.
- * Sem listener "fetch": o browser trata navegação na rede (sem tela "This page couldn't load").
- * Após ativar, desregistra a si mesmo e limpa caches antigos.
+ * Arquivo mantido só para o browser substituir SW legado (≤307) que interceptava navigate.
+ * Sem listener "fetch". Ao ativar, limpa caches e desregistra — não permanece controlando o site.
  */
-const CACHE_VERSION = "hb-coop-build-317-tombstone";
+const CACHE_VERSION = "hb-coop-build-318-retired";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -14,13 +13,6 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
       .then(() => self.registration.unregister())
   );
-});
-
-self.addEventListener("message", (event) => {
-  if (event.data?.type === "SKIP_WAITING") {
-    self.skipWaiting();
-  }
 });

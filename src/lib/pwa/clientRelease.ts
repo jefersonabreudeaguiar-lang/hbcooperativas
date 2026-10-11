@@ -577,11 +577,9 @@ export function buildInlinePageReleaseBootstrap(pageRelease: ClientReleaseInfo):
   return `window.__HB_PAGE_RELEASE__=${JSON.stringify(pageRelease)};`;
 }
 
-/**
- * Todo carregamento: remove SW legado e aplica sw.js tombstone (sem fetch) para expulsar ≤307 no aparelho.
- */
+/** Todo carregamento: remove SW + caches. Nunca registra SW de novo (evita reativar interceptador). */
 export function buildInlineServiceWorkerMigrationScript(): string {
-  return `(function(){if(!("serviceWorker"in navigator))return;function purgeCaches(){return("caches"in window)?caches.keys().then(function(keys){return Promise.all(keys.map(function(k){return caches.delete(k);}));}):Promise.resolve();}function tombstone(){return navigator.serviceWorker.register("/sw.js",{scope:"/",updateViaCache:"none"}).catch(function(){});}void navigator.serviceWorker.getRegistrations().then(function(regs){var step=regs.length?Promise.all(regs.map(function(r){return r.unregister();})):Promise.resolve();return step.then(purgeCaches).then(tombstone);}).catch(function(){});})();`;
+  return `(function(){if(!("serviceWorker"in navigator))return;function purgeCaches(){return("caches"in window)?caches.keys().then(function(keys){return Promise.all(keys.map(function(k){return caches.delete(k);}));}):Promise.resolve();}void navigator.serviceWorker.getRegistrations().then(function(regs){if(!regs.length)return purgeCaches();return Promise.all(regs.map(function(r){return r.unregister();})).then(purgeCaches);}).catch(function(){});})();`;
 }
 
 /**

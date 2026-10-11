@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#15803d" />
+    <title>Reparar app HB Cooperativas</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: system-ui, sans-serif;
+        background: #f0fdf4;
+        color: #14532d;
+        padding: 1.5rem;
+        box-sizing: border-box;
+      }
+      main {
+        max-width: 22rem;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 1.15rem;
+        margin: 0 0 0.75rem;
+      }
+      p {
+        font-size: 0.9rem;
+        line-height: 1.45;
+        margin: 0 0 0.75rem;
+      }
+      .btn {
+        display: block;
+        width: 100%;
+        margin-top: 1rem;
+        padding: 0.85rem 1rem;
+        border: none;
+        border-radius: 0.65rem;
+        background: #15803d;
+        color: #fff;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .muted {
+        color: #4b5563;
+        font-size: 0.8rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Reparar “This page couldn’t load”</h1>
+      <p id="status">Limpando cache do atalho antigo…</p>
+      <p class="muted">
+        Use com Wi‑fi ligado. Se o erro continuar: Chrome → cadeado do site → Configurações do site →
+        <strong>Limpar dados</strong> → reinstale o atalho.
+      </p>
+      <button type="button" class="btn" id="go" hidden>Continuar para o login</button>
+    </main>
+    <script>
+      (function () {
+        var target = "/login";
+        var params = new URLSearchParams(location.search);
+        var next = params.get("next");
+        if (next && next.charAt(0) === "/") target = next;
+
+        var status = document.getElementById("status");
+        var btn = document.getElementById("go");
+
+        function done(msg) {
+          if (status) status.textContent = msg;
+          if (btn) btn.hidden = false;
+        }
+
+        function go() {
+          location.replace(target);
+        }
+
+        if (btn) btn.addEventListener("click", go);
+
+        if (!("serviceWorker" in navigator)) {
+          done("Pronto. Toque em continuar.");
+          return;
+        }
+
+        var purgeCaches =
+          "caches" in window
+            ? caches.keys().then(function (keys) {
+                return Promise.all(keys.map(function (k) {
+                  return caches.delete(k);
+                }));
+              })
+            : Promise.resolve();
+
+        var purgeSw = navigator.serviceWorker.getRegistrations().then(function (regs) {
+          return Promise.all(regs.map(function (r) {
+            return r.unregister();
+          }));
+        });
+
+        Promise.all([purgeCaches, purgeSw])
+          .catch(function () {})
+          .finally(function () {
+            done("Limpeza concluída. Toque em continuar.");
+          });
+      })();
+    </script>
+  </body>
+</html>

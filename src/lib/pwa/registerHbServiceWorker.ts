@@ -1,8 +1,8 @@
 /** URL estável — não usar ?build= (criava vários SW e mantinha versões antigas ativas). */
 export const HB_SERVICE_WORKER_URL = "/sw.js";
 
-/** Cooperado PWA: não manter SW ativo — só tombstone para expulsar legado e auto-remover. */
-export const PWA_SERVICE_WORKER_REGISTRATION_ENABLED = true;
+/** Cooperado: não registrar SW no cliente — só remover legado do aparelho. */
+export const PWA_SERVICE_WORKER_REGISTRATION_ENABLED = false;
 
 export async function purgeLegacyHbServiceWorkers(): Promise<void> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
@@ -15,30 +15,17 @@ export async function purgeLegacyHbServiceWorkers(): Promise<void> {
   await Promise.all(legacy.map((reg) => reg.unregister()));
 }
 
-/** Remove todos os SW do origin (inclui legado com navigate / Response.error). */
+/** Remove todos os service workers do origin (única forma segura de matar SW ≤307 no aparelho). */
 export async function purgeAllHbServiceWorkers(): Promise<void> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
   const regs = await navigator.serviceWorker.getRegistrations();
   await Promise.all(regs.map((reg) => reg.unregister()));
 }
 
-/**
- * Registra sw.js tombstone uma vez: força atualização do script no aparelho e auto-remove o SW.
- * Não deixa controller permanente com fetch(navigate).
- */
-export function registerHbServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+/** Apenas purga — nunca registra SW de novo. */
+export function registerHbServiceWorker(): Promise<null> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
     return Promise.resolve(null);
   }
-  return purgeAllHbServiceWorkers().then(() => {
-    if (!PWA_SERVICE_WORKER_REGISTRATION_ENABLED) {
-      return null;
-    }
-    return navigator.serviceWorker
-      .register(HB_SERVICE_WORKER_URL, {
-        scope: "/",
-        updateViaCache: "none",
-      })
-      .catch(() => null);
-  });
+  return purgeAllHbServiceWorkers().then(() => null);
 }
