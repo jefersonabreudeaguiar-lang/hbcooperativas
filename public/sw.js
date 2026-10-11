@@ -1,5 +1,5 @@
 /** Bump junto com APP_BUILD_VERSION quando mudar estratégia de cache offline. */
-const CACHE_VERSION = "hb-coop-build-307";
+const CACHE_VERSION = "hb-coop-build-308";
 /** Shell HTML não vai para precache — evita mobile preso em deployment antigo (dpl_Eoe9…). */
 const PRECACHE = ["/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
@@ -33,12 +33,9 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Navegação (HTML): não interceptar — fetch com Response.error() no catch gerava
+  // "This page couldn't load" no cold start do PWA; o Next já serve a página na rede.
   if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request, { cache: "no-store" }).catch(() =>
-        Response.error()
-      )
-    );
     return;
   }
 
