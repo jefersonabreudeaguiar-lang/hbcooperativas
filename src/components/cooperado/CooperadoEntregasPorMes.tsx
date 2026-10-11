@@ -34,6 +34,8 @@ import { Button } from "@/components/ui/Button";
 import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
 import { cn } from "@/utils/format";
 import { baixarRecibo, nomeArquivoRecibo } from "@/utils/recibo";
+import { CooperadoMesEntregasFotosSanfona } from "@/components/cooperado/cooperadoMesEntregasFotosSanfona";
+import { normalizeCnpj } from "@/utils/cooperativa";
 
 interface CooperadoEntregasPorMesProps {
   resumos: ResumoMesEntregasCooperado[];
@@ -369,6 +371,7 @@ export const CooperadoEntregasPorMes = memo(function CooperadoEntregasPorMes({
   const data = useAppDataSnapshotForDomainsWhenActive(painelRotaAtiva, ["notas"]);
   const [expandidaId, setExpandidaId] = useState<string | null>(null);
   const [mesAberto, setMesAberto] = useState<string | null>(() => resumos[0]?.mesReferencia ?? null);
+  const [fotosMesAberto, setFotosMesAberto] = useState<string | null>(null);
 
   useEffect(() => {
     if (!entregasLeve) return;
@@ -401,6 +404,12 @@ export const CooperadoEntregasPorMes = memo(function CooperadoEntregasPorMes({
         const entregas = agruparNotasEmEntregas(resumo.notas);
         const semanas = agruparEntregasPorSemanaNoMes(entregas, resumo.mesReferencia);
         const mesExpandido = !entregasLeve || mesAberto === resumo.mesReferencia;
+        const mesQuitado = resumo.pagamentoConfirmado != null;
+        const cnpjMes = resumo.notas.reduce<string | undefined>((acc, n) => {
+          if (acc) return acc;
+          const d = normalizeCnpj(n.cooperativaCnpj ?? "");
+          return d.length === 14 ? d : undefined;
+        }, undefined);
 
         return (
           <section key={resumo.mesReferencia} id={`mes-${resumo.mesReferencia}`}>
@@ -419,6 +428,21 @@ export const CooperadoEntregasPorMes = memo(function CooperadoEntregasPorMes({
                   : undefined
               }
             />
+
+            {mesExpandido && mesQuitado && (
+              <CooperadoMesEntregasFotosSanfona
+                resumo={resumo}
+                getEscolaLabel={getEscolaLabel}
+                cnpj={cnpjMes}
+                compacto
+                expandido={fotosMesAberto === resumo.mesReferencia}
+                onToggle={() =>
+                  setFotosMesAberto((cur) =>
+                    cur === resumo.mesReferencia ? null : resumo.mesReferencia
+                  )
+                }
+              />
+            )}
 
             {mesExpandido && entregas.length > 0 && (
               <div className="space-y-6">
