@@ -14,6 +14,7 @@ import {
 } from "@/services/bicLeituraCentralCooperado";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
+import type { LeituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 
 export const COOPERADO_PWA_FICHA_RESUMO_SNAPSHOT_VERSION = 2;
 
@@ -24,12 +25,38 @@ export type CooperadoPwaFichaResumoSnapshot = {
   fichaAberto: ResumoMesEntregasCooperado[];
   mesPrincipal: ReturnType<typeof bicCentralMesPrincipalQuantoVouReceber>;
   consolidado: ReturnType<typeof bicCentralGetConsolidadoFinanceiroCooperado>;
-  /** Paridade Financeiro (líquido por mês, HB/descontos no resumo) — leitura somente nas abas. */
-  paridade: ReturnType<typeof leituraFinanceiraParidadeCooperado>;
+  /** Paridade Financeiro (v2+) — leitura somente nas abas. */
+  paridade?: LeituraFinanceiraParidadeCooperado;
 };
 
+function storageKeyForVersion(
+  version: number,
+  cooperadoId: string,
+  cooperativaId: string
+): string {
+  return `hb.coop.pwaFichaResumo.v${version}:${cooperativaId}:${cooperadoId}`;
+}
+
 function storageKey(cooperadoId: string, cooperativaId: string): string {
-  return `hb.coop.pwaFichaResumo.v${COOPERADO_PWA_FICHA_RESUMO_SNAPSHOT_VERSION}:${cooperativaId}:${cooperadoId}`;
+  return storageKeyForVersion(COOPERADO_PWA_FICHA_RESUMO_SNAPSHOT_VERSION, cooperadoId, cooperativaId);
+}
+
+/** v1 sem `paridade` — deriva do consolidado materializado. */
+export function resolveParidadeFromFichaResumoSnapshot(
+  snap: CooperadoPwaFichaResumoSnapshot
+): LeituraFinanceiraParidadeCooperado | null {
+  if (snap.paridade) return snap.paridade;
+  const c = snap.consolidado;
+  if (!c) return null;
+  const mesesResumo = c.meses?.length ? [...c.meses] : [];
+  return {
+    consolidado: c,
+    mesesResumo,
+    valorLiquido: c.valorLiquido ?? 0,
+    mesLabel: c.mesLabel ?? "",
+    resumo: c.resumo,
+    descontosExtras: [],
+  };
 }
 
 export function buildCooperadoPwaFichaResumoSnapshot(
@@ -56,23 +83,31 @@ export function buildCooperadoPwaFichaResumoSnapshot(
   };
 }
 
+function parseFichaResumoSnapshotRaw(raw: string): CooperadoPwaFichaResumoSnapshot | null {
+  const parsed = JSON.parse(raw) as CooperadoPwaFichaResumoSnapshot;
+  if (
+    (parsed.v !== COOPERADO_PWA_FICHA_RESUMO_SNAPSHOT_VERSION && parsed.v !== 1) ||
+    !Array.isArray(parsed.fichaAberto)
+  ) {
+    return null;
+  }
+  if (!cooperadoPwaSnapshotBuildReadable(parsed.appBuild)) return null;
+  return parsed;
+}
+
 export function lerCooperadoPwaFichaResumoSnapshot(
   cooperadoId: string,
   cooperativaId: string
 ): CooperadoPwaFichaResumoSnapshot | null {
   if (typeof localStorage === "undefined") return null;
   try {
-    const raw = localStorage.getItem(storageKey(cooperadoId, cooperativaId));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as CooperadoPwaFichaResumoSnapshot;
-    if (
-      (parsed.v !== COOPERADO_PWA_FICHA_RESUMO_SNAPSHOT_VERSION && parsed.v !== 1) ||
-      !Array.isArray(parsed.fichaAberto)
-    ) {
-      return null;
+    for (const version of [COOPERADO_PWA_FICHA_RESUMO_SNAPSHOT_VERSION, 1] as const) {
+      const raw = localStorage.getItem(storageKeyForVersion(version, cooperadoId, cooperativaId));
+      if (!raw) continue;
+      const parsed = parseFichaResumoSnapshotRaw(raw);
+      if (parsed) return parsed;
     }
-    if (!cooperadoPwaSnapshotBuildReadable(parsed.appBuild)) return null;
-    return parsed;
+    return null;
   } catch {
     return null;
   }

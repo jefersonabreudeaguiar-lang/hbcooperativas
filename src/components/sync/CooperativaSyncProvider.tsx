@@ -976,13 +976,15 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     let initialDelay: ReturnType<typeof setTimeout> | undefined;
     if (cooperadoSemAutoSync) {
-      if (
-        user?.role === "cooperado" &&
-        cooperadoAppReleaseNeedsOperacionalSync() &&
-        !isCooperadoPwaMessengerMode()
-      ) {
-        purgarInicioCardValorReceberCooperado(user);
-        requestCooperadoAppReleaseSync();
+      if (user?.role === "cooperado" && cooperadoAppReleaseNeedsOperacionalSync()) {
+        if (isCooperadoPwaMessengerMode()) {
+          scheduleCooperadoPostShellSync(() => {
+            requestCooperadoAppReleaseSync();
+          });
+        } else {
+          purgarInicioCardValorReceberCooperado(user);
+          requestCooperadoAppReleaseSync();
+        }
       } else if (
         user?.role === "cooperado" &&
         !document.hidden &&

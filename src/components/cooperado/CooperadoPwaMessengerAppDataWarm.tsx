@@ -3,8 +3,9 @@
 import { useEffect } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
+import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { scheduleCooperadoPaintFirst } from "@/lib/performance/cooperadoColdStart";
-import { isAppDataWarm, preloadAppData } from "@/services/dataStore";
+import { isAppDataWarm, preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
 
 /** Após o shell pintar, carrega AppData em idle (sync/Atualizar precisa disso). */
 export function CooperadoPwaMessengerAppDataWarm() {
@@ -18,7 +19,15 @@ export function CooperadoPwaMessengerAppDataWarm() {
     let timeoutId: number | undefined;
 
     const run = () => {
-      if (!isAppDataWarm()) preloadAppData({ eager: true });
+      const hydrate = () => rematerializarCooperadoPwaSnapshotsSeNecessario(user);
+      if (!isAppDataWarm()) {
+        preloadAppData({ eager: true });
+        void waitForAppDataWarm().then((ok) => {
+          if (ok) hydrate();
+        });
+        return;
+      }
+      hydrate();
     };
 
     scheduleCooperadoPaintFirst(() => {

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useCallback, useLayoutEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard, History, Users, ChevronDown, Pencil, RefreshCw, Eye } from "lucide-react";
 import { useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
@@ -14,8 +14,10 @@ import { useCooperadoMessengerReadModelRevision } from "@/hooks/useCooperadoMess
 import { useCooperadoDormantAppData } from "@/hooks/useCooperadoDormantAppData";
 import {
   lerCooperadoPwaFichaResumoSnapshot,
+  resolveParidadeFromFichaResumoSnapshot,
   type CooperadoPwaFichaResumoSnapshot,
 } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
+import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import {
   cooperadoPwaUiSubscribesAppData,
   isCooperadoPwaMessengerMode,
@@ -124,6 +126,7 @@ import { baixarRecibo, resumoReciboFromPagamento, nomeArquivoRecibo } from "@/ut
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import {
   cooperadoLocalResumeReady,
+  ensureAppDataEagerWarm,
   isCooperadoInstantResumeEnabled,
   isCooperadoManualOperacionalSync,
 } from "@/lib/performance/cooperadoColdStart";
@@ -211,9 +214,10 @@ export default function FichaCorridaPage() {
     (d) => d,
     []
   );
+  const [appDataWarmTick, setAppDataWarmTick] = useState(0);
   const dataDormant = useCooperadoDormantAppData(
     tabActive && financeiroDormant,
-    readModelsRevision
+    readModelsRevision + appDataWarmTick
   );
   const data = financeiroDormant ? dataDormant : dataLive;
   const hbDescontosRevision = useContaCoopDescontosRevisionWhenLive(!financeiroDormant);
@@ -231,10 +235,21 @@ export default function FichaCorridaPage() {
   const [abaMesCooperado, setAbaMesCooperado] = useState<"aberto" | string>("aberto");
   const [abaMesPagamentoResponsavel, setAbaMesPagamentoResponsavel] = useState<"pendente" | string>("pendente");
   const [pixStepVisited, setPixStepVisited] = useState(false);
-  const coopIdEarly = user && data ? getUserCooperativaId(user, data) : undefined;
+  const coopIdEarly = user && data ? getUserCooperativaId(user, data) : user?.cooperativaId;
   const [fichaResumoSnap, setFichaResumoSnap] = useState<CooperadoPwaFichaResumoSnapshot | null>(
     null
   );
+
+  useLayoutEffect(() => {
+    if (!tabActive || !messenger || !isCooperado) return;
+    ensureAppDataEagerWarm();
+    if (isAppDataWarm()) setAppDataWarmTick((n) => n + 1);
+    else {
+      void import("@/services/dataStore").then(({ waitForAppDataWarm }) =>
+        waitForAppDataWarm().then((ok) => ok && setAppDataWarmTick((n) => n + 1))
+      );
+    }
+  }, [tabActive, messenger, isCooperado]);
 
   useEffect(() => {
     if (!messenger || !cooperadoId || !coopIdEarly) {
@@ -243,6 +258,17 @@ export default function FichaCorridaPage() {
     }
     setFichaResumoSnap(lerCooperadoPwaFichaResumoSnapshot(cooperadoId, coopIdEarly));
   }, [messenger, cooperadoId, coopIdEarly, readModelsRevision]);
+
+  useEffect(() => {
+    if (!tabActive || !messenger || !user || user.role !== "cooperado") return;
+    const run = () => rematerializarCooperadoPwaSnapshotsSeNecessario(user);
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(run, { timeout: 600 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(run, 0);
+    return () => window.clearTimeout(t);
+  }, [tabActive, messenger, user?.id, readModelsRevision]);
 
   useEffect(() => {
     const c = searchParams.get("cooperado");
@@ -338,7 +364,10 @@ export default function FichaCorridaPage() {
   /** Uma leitura paridade por revisão — evita BIC/consolidado repetido no cooperado. */
   const paridadeCooperadoMobile = useMemo(() => {
     if (!tabActive || !isCooperado || !cooperadoId) return null;
-    if (financeiroDormant && fichaResumoSnap?.paridade) return fichaResumoSnap.paridade;
+    if (financeiroDormant && fichaResumoSnap) {
+      const fromSnap = resolveParidadeFromFichaResumoSnapshot(fichaResumoSnap);
+      if (fromSnap) return fromSnap;
+    }
     if (!data) return null;
     return leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
   }, [

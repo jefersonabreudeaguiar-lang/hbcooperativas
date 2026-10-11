@@ -27,7 +27,10 @@ import {
 } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
 import { lerInicioCardPersistidoResume } from "@/lib/cooperado/cooperadoPwaInstantResume";
 import { inicioCardMotorFromParidadeFinanceiro } from "@/lib/cooperado/cooperadoFinanceiroParidadeInicioBridge";
-import { lerCooperadoPwaFichaResumoSnapshot } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
+import {
+  lerCooperadoPwaFichaResumoSnapshot,
+  resolveParidadeFromFichaResumoSnapshot,
+} from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 
 const SNAPSHOT_VAZIO: InicioCardMotorSnapshot = {
@@ -252,12 +255,15 @@ export function useCooperadoInicioValorReceberCardState(input: {
         input.cooperadoId && cooperativaIdLatch
           ? lerCooperadoPwaFichaResumoSnapshot(input.cooperadoId, cooperativaIdLatch)
           : null;
-      if (fichaSnap?.paridade && dataLatch && input.cooperadoId) {
+      const paridadeSnap = fichaSnap ? resolveParidadeFromFichaResumoSnapshot(fichaSnap) : null;
+      const dataParidade =
+        dataLatch ?? (paridadeSnap && isAppDataWarm() ? getData() : null);
+      if (paridadeSnap && dataParidade && input.cooperadoId) {
         const display = inicioCardMotorFromParidadeFinanceiro(
-          dataLatch,
+          dataParidade,
           input.cooperadoId,
           cooperativaIdLatch,
-          fichaSnap.paridade
+          paridadeSnap
         );
         return {
           display,
