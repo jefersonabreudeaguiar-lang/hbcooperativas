@@ -64,6 +64,7 @@ import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoM
 import { StaffMobileTabKeepAlive } from "@/components/performance/StaffMobileTabKeepAlive";
 import { CooperadoPwaResumeLifecycle } from "@/components/cooperado/CooperadoPwaResumeLifecycle";
 import { CooperadoPwaMessengerAppDataWarm } from "@/components/cooperado/CooperadoPwaMessengerAppDataWarm";
+import { CooperadoMobileBuildBadge } from "@/components/cooperado/CooperadoMobileBuildBadge";
 import { StaffMobileReleaseBar } from "@/components/layout/StaffMobileReleaseBar";
 import type { Resource } from "@/types";
 
@@ -282,7 +283,11 @@ export function MobileNav() {
       <header className="lg:hidden flex items-center justify-between gap-2 px-4 py-3 bg-green-900 text-white sticky top-0 z-40">
         <BrandHeader compact />
         <div className="flex items-center gap-1 shrink-0">
-          {!isCooperadoAppUser(navUser) && <SyncStatusChip showBuild />}
+          {isCooperadoAppUser(navUser) ? (
+            <CooperadoMobileBuildBadge />
+          ) : (
+            <SyncStatusChip showBuild />
+          )}
           <button onClick={() => setOpen(true)} className="p-2 hover:bg-green-800 rounded-lg" aria-label="Abrir menu">
             <Menu size={22} />
           </button>

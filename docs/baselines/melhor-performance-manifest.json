@@ -48,7 +48,8 @@
     ],
     "pwa": [
       "Início card: latch recibo assinado + snapshot PWA leve",
-      "Idle sync dedup + yield downloads cooperados storage (281)"
+      "Idle sync dedup + yield downloads cooperados storage (281)",
+      "Cooperado mobile: badge v{build} no header (sem faixa sync/Atualizar na shell)"
     ]
   },
   "responsavelStabilityPolicy": {
