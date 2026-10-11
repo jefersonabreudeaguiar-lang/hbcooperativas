@@ -247,6 +247,15 @@ window.HB_COOP_RUN_FORENSICS = async function HB_COOP_CONSOLE_FORENSICS() {
     if (last && last.message && /before initialization/i.test(last.message)) {
       report.causasProvaveis.push("TDZ_GRAVADO: " + String(last.message).slice(0, 140));
     }
+    var crashDpl = "";
+    if (last && last.chunkDpls && last.chunkDpls[0]) crashDpl = last.chunkDpls[0];
+    else if (last && last.src) crashDpl = dplFromUrl(last.src) || "";
+    var cloudDpl = (cloud.deploymentId || "").trim();
+    if (crashDpl && cloudDpl && crashDpl !== cloudDpl) {
+      report.causasProvaveis.push(
+        "CHUNK_DEPLOY_ANTIGO: crash usou " + crashDpl + " mas nuvem atual e " + cloudDpl
+      );
+    }
   }
   if (/Edg\//i.test(navigator.userAgent) && !report.standalone) {
     report.causasProvaveis.push("EDGE: cache separado do Chrome/WebAPK no celular");
