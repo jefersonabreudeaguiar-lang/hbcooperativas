@@ -391,6 +391,15 @@ export async function ensureAccessTokenForApi(): Promise<boolean> {
   return ensureCloudSessionReady();
 }
 
+function isAppUsersCloudConfigError(error?: string): boolean {
+  const msg = error ?? "";
+  if (!msg.trim()) return false;
+  if (/app_users/i.test(msg)) return true;
+  if (msg.includes("APP_USERS_MISSING")) return true;
+  if (/tabela app_users/i.test(msg)) return true;
+  return false;
+}
+
 export function mensagemErroAuthApi(status: number, error?: string): string {
   if (status === 401 || error === "Autenticação necessária.") {
     return "Não foi possível conectar à HB Créditos. Saia, entre de novo e aguarde alguns segundos antes de abrir a HB Créditos.";
@@ -401,8 +410,12 @@ export function mensagemErroAuthApi(status: number, error?: string): string {
   if (error === "Credenciais inválidas." || error === "Dados inválidos.") {
     return "Conta na nuvem desatualizada. Saia, entre de novo com e-mail e senha atuais.";
   }
-  if (status === 503 || error?.includes("não configurada") || error?.includes("app_users")) {
+  if (isAppUsersCloudConfigError(error)) {
     return "Conta na nuvem não configurada (tabela app_users). Fale com o suporte HB Cooperativas.";
+  }
+  if (status === 503) {
+    if (error?.trim()) return error.trim();
+    return "Serviço HB temporariamente indisponível. Aguarde alguns segundos e use «Atualizar limites».";
   }
   if (status === 403) {
     return "Sem permissão para esta cooperativa. Verifique o login ou fale com a diretoria.";

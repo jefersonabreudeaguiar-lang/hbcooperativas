@@ -32,11 +32,20 @@ export async function GET() {
   }
 
   if (error) {
+    console.error("[schema-status] app_users probe:", error.message);
+    if (isAppUsersTableMissing(error)) {
+      return NextResponse.json({
+        configured: true,
+        appUsersTableOk: false,
+        message: error.message,
+        code: "APP_USERS_MISSING",
+      });
+    }
     return NextResponse.json({
       configured: true,
-      appUsersTableOk: false,
-      message: error.message,
-      code: isAppUsersTableMissing(error) ? "APP_USERS_MISSING" : undefined,
+      appUsersTableOk: true,
+      message: "Autenticação na nuvem pronta.",
+      probeWarning: error.message,
     });
   }
 
