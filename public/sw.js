@@ -1,8 +1,8 @@
 /**
- * Arquivo mantido só para o browser substituir SW legado (≤307) que interceptava navigate.
- * Sem listener "fetch". Ao ativar, limpa caches e desregistra — não permanece controlando o site.
+ * SW de transição: substitui legado (≤307) que devolvia Response.error() em navigate.
+ * Enquanto ativo: navegação sempre vai à rede. Ao ativar: limpa caches e desregistra.
  */
-const CACHE_VERSION = "hb-coop-build-318-retired";
+const CACHE_VERSION = "hb-coop-build-320-nav-pass";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -13,6 +13,20 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
       .then(() => self.registration.unregister())
   );
+});
+
+self.addEventListener("fetch", (event) => {
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        return new Response(
+          "<!DOCTYPE html><html lang=\"pt-BR\"><head><meta charset=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/><title>HB Cooperativas</title></head><body style=\"font-family:system-ui,sans-serif;padding:1.25rem;background:#f0fdf4;color:#14532d\"><h1>Sem conexão</h1><p>Abra com Wi‑fi ou dados móveis.</p><p><a href=\"/pwa-rescue.html\">Reparar atalho</a></p></body></html>",
+          { status: 503, headers: { "Content-Type": "text/html; charset=utf-8" } }
+        );
+      })
+    );
+  }
 });

@@ -7,7 +7,7 @@ import { shouldAutoAlignClientRelease } from "@/lib/pwa/clientRelease";
 import { registerHbServiceWorker } from "@/lib/pwa/registerHbServiceWorker";
 
 /**
- * PWA instalado: remove service workers do aparelho (sem registrar de novo).
+ * PWA instalado: substitui SW legado por /sw.js de passthrough (navigate → rede).
  * Atualização de versão fica no ClientReleaseShieldHost.
  */
 export function PwaSilentServiceWorker() {

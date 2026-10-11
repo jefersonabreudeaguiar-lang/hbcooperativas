@@ -577,9 +577,9 @@ export function buildInlinePageReleaseBootstrap(pageRelease: ClientReleaseInfo):
   return `window.__HB_PAGE_RELEASE__=${JSON.stringify(pageRelease)};`;
 }
 
-/** Todo carregamento: remove SW + caches. Nunca registra SW de novo (evita reativar interceptador). */
+/** 1º paint: remove SW ?build= legado e registra /sw.js de passthrough de navigate. */
 export function buildInlineServiceWorkerMigrationScript(): string {
-  return `(function(){if(!("serviceWorker"in navigator))return;function purgeCaches(){return("caches"in window)?caches.keys().then(function(keys){return Promise.all(keys.map(function(k){return caches.delete(k);}));}):Promise.resolve();}void navigator.serviceWorker.getRegistrations().then(function(regs){if(!regs.length)return purgeCaches();return Promise.all(regs.map(function(r){return r.unregister();})).then(purgeCaches);}).catch(function(){});})();`;
+  return `(function(){if(!("serviceWorker"in navigator))return;function leg(u){return u&&(u.indexOf("sw.js?")>=0||u.indexOf("sw.js%3F")>=0);}void navigator.serviceWorker.getRegistrations().then(function(regs){var drop=regs.filter(function(r){var u=(r.active&&r.active.scriptURL)||(r.waiting&&r.waiting.scriptURL)||(r.installing&&r.installing.scriptURL)||"";return leg(u);});return Promise.all(drop.map(function(r){return r.unregister();}));}).then(function(){return navigator.serviceWorker.register("/sw.js",{scope:"/",updateViaCache:"none"});}).catch(function(){});})();`;
 }
 
 /**

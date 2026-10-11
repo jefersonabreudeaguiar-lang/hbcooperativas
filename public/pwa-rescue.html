@@ -100,8 +100,17 @@
 
         Promise.all([purgeCaches, purgeSw])
           .catch(function () {})
+          .then(function () {
+            if (navigator.serviceWorker && navigator.serviceWorker.register) {
+              return navigator.serviceWorker.register("/sw.js", {
+                scope: "/",
+                updateViaCache: "none",
+              });
+            }
+          })
           .finally(function () {
-            done("Limpeza concluída. Toque em continuar.");
+            done("Limpeza concluída. Abrindo o app…");
+            window.setTimeout(go, 800);
           });
       })();
     </script>
