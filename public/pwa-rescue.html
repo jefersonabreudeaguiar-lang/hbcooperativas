@@ -31,7 +31,7 @@
       .btn {
         display: block;
         width: 100%;
-        margin-top: 1rem;
+        margin-top: 0.65rem;
         padding: 0.85rem 1rem;
         border: none;
         border-radius: 0.65rem;
@@ -40,23 +40,37 @@
         font-size: 1rem;
         font-weight: 600;
         cursor: pointer;
+        text-align: center;
+        text-decoration: none;
+        box-sizing: border-box;
+      }
+      .btn.secondary {
+        background: #fff;
+        color: #15803d;
+        border: 2px solid #15803d;
       }
       .muted {
         color: #4b5563;
         font-size: 0.8rem;
       }
+      .err {
+        color: #b91c1c;
+        font-size: 0.85rem;
+      }
     </style>
   </head>
   <body>
     <main>
-      <h1>Reparar “This page couldn’t load”</h1>
-      <p id="status">Limpando cache do atalho antigo…</p>
+      <h1>Reparar atalho HB</h1>
+      <p id="status">Aguarde… limpando cache e atalho antigo.</p>
+      <p id="err" class="err" hidden></p>
       <p class="muted">
-        Use com Wi‑fi ligado. Se o erro continuar: Chrome → cadeado do site → Configurações do site →
-        <strong>Limpar dados</strong> → reinstale o atalho.
-        <a href="/pwa-diag.html" style="display: block; margin-top: 0.5rem; color: #15803d">Ver diagnóstico (copiar para o suporte)</a>
+        Use <strong>Chrome</strong> com Wi‑fi ou dados. Se o erro aparecer antes desta tela verde:
+        Chrome → cadeado → <strong>Limpar dados do site</strong> → abra este link de novo.
       </p>
       <button type="button" class="btn" id="go" hidden>Continuar para o login</button>
+      <a class="btn secondary" id="launch" href="/pwa-launch.html?v=327" hidden>Preparar novo ícone (recomendado)</a>
+      <a class="btn secondary" href="/pwa-diag.html" style="margin-top: 0.5rem">Diagnóstico (copiar para suporte)</a>
     </main>
     <script>
       (function () {
@@ -66,52 +80,63 @@
         if (next && next.charAt(0) === "/") target = next;
 
         var status = document.getElementById("status");
+        var errEl = document.getElementById("err");
         var btn = document.getElementById("go");
+        var launch = document.getElementById("launch");
+
+        function showErr(msg) {
+          if (errEl) {
+            errEl.textContent = msg;
+            errEl.hidden = false;
+          }
+        }
 
         function done(msg) {
           if (status) status.textContent = msg;
           if (btn) btn.hidden = false;
+          if (launch) launch.hidden = false;
         }
 
         function go() {
-          location.replace(target);
+          try {
+            location.href = target + (target.indexOf("?") >= 0 ? "&" : "?") + "_rescue=" + Date.now();
+          } catch (e) {
+            location.replace(target);
+          }
         }
 
         if (btn) btn.addEventListener("click", go);
 
-        if (!("serviceWorker" in navigator)) {
-          done("Pronto. Toque em continuar.");
-          return;
-        }
-
         var purgeCaches =
           "caches" in window
             ? caches.keys().then(function (keys) {
-                return Promise.all(keys.map(function (k) {
-                  return caches.delete(k);
-                }));
+                return Promise.all(
+                  keys.map(function (k) {
+                    return caches.delete(k);
+                  })
+                );
               })
             : Promise.resolve();
 
-        var purgeSw = navigator.serviceWorker.getRegistrations().then(function (regs) {
-          return Promise.all(regs.map(function (r) {
-            return r.unregister();
-          }));
-        });
+        var purgeSw =
+          "serviceWorker" in navigator
+            ? navigator.serviceWorker.getRegistrations().then(function (regs) {
+                return Promise.all(
+                  regs.map(function (r) {
+                    return r.unregister();
+                  })
+                );
+              })
+            : Promise.resolve();
 
         Promise.all([purgeCaches, purgeSw])
-          .catch(function () {})
-          .then(function () {
-            if (navigator.serviceWorker && navigator.serviceWorker.register) {
-              return navigator.serviceWorker.register("/sw.js", {
-                scope: "/",
-                updateViaCache: "none",
-              });
-            }
+          .catch(function (e) {
+            showErr("Parte da limpeza falhou; toque Continuar mesmo assim.");
           })
-          .finally(function () {
-            done("Limpeza concluída. Abrindo o app…");
-            window.setTimeout(go, 800);
+          .then(function () {
+            done(
+              "Limpeza concluída. Toque em Continuar (não feche antes). Depois use Preparar novo ícone e adicione à tela inicial."
+            );
           });
       })();
     </script>
