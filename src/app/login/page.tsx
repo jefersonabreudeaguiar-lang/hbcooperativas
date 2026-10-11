@@ -89,7 +89,7 @@ function LoginForm() {
   const sessaoExpirada = searchParams.get("sessao") === "expirada";
 
   useEffect(() => {
-    void repairBrowserProfileIfStale();
+    void repairBrowserProfileIfStale({ includeStandalone: true });
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {

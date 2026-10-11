@@ -42,6 +42,7 @@ import {
   purgarInicioCardValorReceberCooperado,
 } from "@/services/cooperadoInicioCardPersistenciaService";
 import { markCooperadoPostLoginFinanceSync } from "@/lib/cooperado/cooperadoPostLoginFinanceSync";
+import { repairBrowserProfileIfStale } from "@/lib/pwa/browserProfileRepair";
 import {
   ensureCloudSessionReady,
   setActiveCloudProfile,
@@ -296,6 +297,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const redirectTo = role === "parceiro" ? "/mercado-parceiro" : "/dashboard";
       if (typeof window !== "undefined") {
+        const reloaded = await repairBrowserProfileIfStale({ includeStandalone: true });
+        if (reloaded) {
+          return { ok: true as const, redirectTo, navigated: true as const };
+        }
         window.location.assign(redirectTo);
         return { ok: true as const, redirectTo, navigated: true as const };
       }

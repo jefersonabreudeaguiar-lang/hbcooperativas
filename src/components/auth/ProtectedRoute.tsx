@@ -1,20 +1,36 @@
 "use client";
 
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { cooperadoInstantShellReady } from "@/lib/performance/cooperadoColdStart";
 import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import { getSession } from "@/services/dataStore";
+import { repairBrowserProfileIfStale } from "@/lib/pwa/browserProfileRepair";
+import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+
+function AppAreaLoadingShell() {
+  return (
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      <div className="h-14 bg-green-900/90 animate-pulse shrink-0" />
+      <div className="flex-1 p-4 space-y-3 max-w-lg mx-auto w-full pt-6">
+        <div className="h-8 w-48 bg-gray-200 rounded-lg animate-pulse" />
+        <div className="h-24 bg-white rounded-xl border border-gray-200 animate-pulse" />
+        <div className="h-24 bg-white rounded-xl border border-gray-200 animate-pulse" />
+      </div>
+    </div>
+  );
+}
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const [profileRepairDone, setProfileRepairDone] = useState(false);
 
   useLayoutEffect(() => {
     if (!loading && !user) {
-      router.replace("/login");
+      router.replace(`/login?hb-pwa=${APP_BUILD_VERSION}`);
     }
     if (!loading && user) {
       markRqlColdStartPhase("auth_ready");
@@ -24,33 +40,31 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, router]);
 
-  if (loading && user && cooperadoInstantShellReady(getSession())) {
+  useLayoutEffect(() => {
+    if (loading || !user) {
+      setProfileRepairDone(false);
+      return;
+    }
+    let cancelled = false;
+    void repairBrowserProfileIfStale({ includeStandalone: true }).then((reloaded) => {
+      if (cancelled || reloaded) return;
+      setProfileRepairDone(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, user?.id]);
+
+  if (loading && user && cooperadoInstantShellReady(getSession()) && profileRepairDone) {
     return <>{children}</>;
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex flex-col bg-gray-50">
-        <div className="h-14 bg-green-900/90 animate-pulse shrink-0" />
-        <div className="flex-1 p-4 space-y-3 max-w-lg mx-auto w-full pt-6">
-          <div className="h-8 w-48 bg-gray-200 rounded-lg animate-pulse" />
-          <div className="h-24 bg-white rounded-xl border border-gray-200 animate-pulse" />
-          <div className="h-24 bg-white rounded-xl border border-gray-200 animate-pulse" />
-        </div>
-      </div>
-    );
+  if (loading || (user && !profileRepairDone)) {
+    return <AppAreaLoadingShell />;
   }
 
   if (!user) {
-    return (
-      <div className="min-h-screen flex flex-col bg-gray-50">
-        <div className="h-14 bg-green-900/90 animate-pulse shrink-0" />
-        <div className="flex-1 p-4 space-y-3 max-w-lg mx-auto w-full pt-6">
-          <div className="h-8 w-48 bg-gray-200 rounded-lg animate-pulse" />
-          <div className="h-24 bg-white rounded-xl border border-gray-200 animate-pulse" />
-        </div>
-      </div>
-    );
+    return <AppAreaLoadingShell />;
   }
 
   return <>{children}</>;

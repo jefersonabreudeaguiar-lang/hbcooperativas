@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getSession } from "@/services/dataStore";
+import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 
 /** Redireciona usuários já logados para o painel (sessão persistente). */
 export default function HomePage() {
@@ -10,7 +11,7 @@ export default function HomePage() {
 
   useEffect(() => {
     const session = getSession();
-    router.replace(session ? "/dashboard" : "/login");
+    router.replace(session ? "/dashboard" : `/login?hb-pwa=${APP_BUILD_VERSION}`);
   }, [router]);
 
   return (

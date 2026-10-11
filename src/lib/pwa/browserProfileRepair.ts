@@ -1,13 +1,21 @@
 import { BUILD_SEEN_KEY } from "@/lib/pwa/clientRelease";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 
+export type RepairBrowserProfileOptions = {
+  /** Ícone instalado (PWA): também repara — antes ignorava só standalone. */
+  includeStandalone?: boolean;
+};
+
 /**
- * Aba normal com JS/HTML antigo misturado quebra o dashboard; aba anônima não.
- * No login, alinha cache + SW com o build em produção antes de autenticar.
+ * Aba normal com JS/HTML antigo misturado quebra o dashboard (“This page couldn’t load”).
+ * Alinha cache + SW com o build em produção antes de carregar o painel cooperado.
  */
-export async function repairBrowserProfileIfStale(): Promise<boolean> {
+export async function repairBrowserProfileIfStale(
+  options?: RepairBrowserProfileOptions
+): Promise<boolean> {
   if (typeof window === "undefined") return false;
-  if (window.matchMedia("(display-mode: standalone)").matches) return false;
+  const standalone = window.matchMedia("(display-mode: standalone)").matches;
+  if (standalone && !options?.includeStandalone) return false;
 
   let cloudBuild = 0;
   try {
@@ -59,10 +67,6 @@ export async function repairBrowserProfileIfStale(): Promise<boolean> {
     return false;
   }
 
-  if (htmlStale) {
-    window.location.reload();
-    return true;
-  }
-
+  window.location.reload();
   return true;
 }
