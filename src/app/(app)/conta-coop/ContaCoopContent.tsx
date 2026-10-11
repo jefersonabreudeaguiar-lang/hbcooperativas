@@ -43,6 +43,7 @@ import {
 } from "@/lib/hb-credit/hbCreditDashboardPersistencia";
 import { lerHbCreditLimitesPersistidos, gravarHbCreditLimitesPersistidos } from "@/lib/hb-credit/hbCreditLimitesPersistencia";
 import { refreshHbCreditLimitesStaff } from "@/lib/hb-credit/hbCreditLimitesRefresh";
+import { notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import { mensagemAvisoBaseAuthoritativeLimites, mensagemErroListaLimitesStaff } from "@/lib/hb-credit/hbCreditLimitesStaffMessages";
 import { ensureHbCreditLabLiberacaoPadrao } from "@/lib/hb-credit/ensureHbCreditLabLiberacaoPadrao";
 import {
@@ -846,6 +847,7 @@ function ContaCoopContent() {
       aplicarLimitesColetivoLocal(pct, creditosBaseCents, cooperadoIds);
       gravarHbCreditLimitesPersistidos(cnpj, limitesRef.current, creditosBaseRef.current, pct);
       marcarPercentualLiberacaoConfirmado(pct);
+      notifyHbCreditLimiteSynced({ immediate: true });
       setSuccess("Percentual salvo na nuvem.");
       await refreshLimitesAposLiberacao();
     } catch (e) {
@@ -931,6 +933,7 @@ function ContaCoopContent() {
       aplicarLimitesColetivoLocal(percentual, creditosBaseCents, ids);
       gravarHbCreditLimitesPersistidos(cnpj, limitesRef.current, creditosBaseRef.current, percentual);
       marcarPercentualLiberacaoConfirmado(percentual);
+      notifyHbCreditLimiteSynced({ immediate: true });
       setSuccess("Limites liberados na nuvem.");
       await refreshLimitesAposLiberacao();
     } catch (e) {

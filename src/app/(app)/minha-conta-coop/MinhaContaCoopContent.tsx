@@ -20,6 +20,7 @@ import {
   fetchCreditLedger,
   requestCooperadoPinReset,
   setCreditFinancialPin,
+  syncCreditLimiteFromFicha,
 } from "@/services/creditApiService";
 import { isCooperadoTransferenciaCreditoEnabled } from "@/config/cooperadoTransferenciaCredito";
 import {
@@ -222,16 +223,19 @@ function MinhaContaCoopContent() {
     if (!background) setLedgerLoaded(false);
     setError("");
     try {
+      if (!background) {
+        try {
+          await syncCreditLimiteFromFicha({
+            cnpj,
+            cooperadoId: hbApiCooperadoId,
+            creditosBaseCents: {},
+          });
+        } catch {
+          /* offline ou operacional indisponível — segue com leitura da conta */
+        }
+      }
       const acc = await fetchCreditAccount(cnpj, hbApiCooperadoId);
       const accObj = (acc.account as ContaCoopLimiteCooperado) ?? null;
-      const emptyShell =
-        accObj &&
-        (accObj.limiteLiberadoCents ?? 0) <= 0 &&
-        (accObj.valorDisponivelCents ?? 0) <= 0 &&
-        !acc.hasPin;
-      if (emptyShell) {
-        throw new Error("Conta HB não encontrada. Saia e entre de novo ou atualize a página.");
-      }
       setAccount(accObj);
       setUpdatedAt(acc.updatedAt ?? null);
       setHasPin(Boolean(acc.hasPin));

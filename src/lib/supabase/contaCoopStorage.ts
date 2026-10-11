@@ -1883,14 +1883,38 @@ export async function getLimiteCooperadoAlinhadoAEntregas(
 }
 
 /**
- * Saldo HB exibido no cooperado — conta na nuvem (rápido). Pagamento valida com a mesma leitura em modo fast.
+ * Saldo HB exibido no cooperado — paridade com aba Limites (staff): leitura rápida na conta + cap % × crédito-base.
  */
 export async function getLimiteCooperadoExibicaoParidadeLimites(
   supabase: SupabaseClient,
   cnpj: string,
   cooperadoId: string
 ): Promise<ContaCoopLimiteCooperado | null> {
-  return getLimiteCooperado(supabase, cnpj, cooperadoId);
+  const limite = await getLimiteCooperado(supabase, cnpj, cooperadoId, {
+    fastPreview: true,
+    skipAmountUsedReconcile: true,
+  });
+  if (!limite) return null;
+
+  const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, [cooperadoId]);
+  if (!authoritative.ok) return limite;
+
+  const canon = resolverCooperadoIdCanonico(
+    authoritative.creditoBaseAppData,
+    cooperadoId,
+    authoritative.cooperativaId
+  );
+  const creditoBaseCents = Math.max(
+    authoritative.creditosBaseCents[cooperadoId] ?? 0,
+    authoritative.creditosBaseCents[canon] ?? 0
+  );
+  const teto = await resolveTetoGlobal(supabase, cnpj, authoritative.creditosBaseCents);
+  const tetoPercent = teto.configured ? teto.percent : 0;
+  const liberacaoPercent = teto.configured
+    ? (await getCooperativaLiberacaoPercentConfigured(supabase, cnpj)) ?? tetoPercent
+    : null;
+
+  return capContaCoopLimiteToAuthoritativeBase(limite, creditoBaseCents, tetoPercent, liberacaoPercent);
 }
 
 export async function setFinancialPin(

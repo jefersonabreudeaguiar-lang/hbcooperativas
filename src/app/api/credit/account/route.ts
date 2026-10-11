@@ -49,33 +49,39 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: true, revision });
   }
 
-  /** Paridade com aba Limites (lista rápida): saldo/limit_released da conta na nuvem. */
-  const limite = await getLimiteCooperadoExibicaoParidadeLimites(
-    gate.ctx.supabase,
-    cnpj,
-    cooperadoId
-  );
-  const pinResetPending = await hasPendingCooperadoPinResetRequest(
-    gate.ctx.supabase,
-    cnpj,
-    cooperadoId
-  );
+  try {
+    /** Paridade com aba Limites (lista rápida): saldo/limit_released da conta na nuvem. */
+    const limite = await getLimiteCooperadoExibicaoParidadeLimites(
+      gate.ctx.supabase,
+      cnpj,
+      cooperadoId
+    );
+    const pinResetPending = await hasPendingCooperadoPinResetRequest(
+      gate.ctx.supabase,
+      cnpj,
+      cooperadoId
+    );
 
-  const hasPin = await hasFinancialPin(gate.ctx.supabase, cnpj, cooperadoId);
+    const hasPin = await hasFinancialPin(gate.ctx.supabase, cnpj, cooperadoId);
 
-  return NextResponse.json({
-    ok: true,
-    account: limite ?? {
-      cooperadoId,
-      limiteLiberadoCents: 0,
-      valorUsadoCents: 0,
-      valorDisponivelCents: 0,
-      bloqueado: false,
-    },
-    updatedAt: limite?.updatedAt ?? null,
-    hasPin,
-    pinResetPending,
-  });
+    return NextResponse.json({
+      ok: true,
+      account: limite ?? {
+        cooperadoId,
+        limiteLiberadoCents: 0,
+        valorUsadoCents: 0,
+        valorDisponivelCents: 0,
+        bloqueado: false,
+      },
+      updatedAt: limite?.updatedAt ?? null,
+      hasPin,
+      pinResetPending,
+    });
+  } catch (e) {
+    console.error("[GET /api/credit/account]", e);
+    const message = e instanceof Error ? e.message : "Erro ao carregar conta HB.";
+    return NextResponse.json({ ok: false, error: message }, { status: 503 });
+  }
 }
 
 export async function POST(request: Request) {
