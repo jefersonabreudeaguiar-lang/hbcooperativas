@@ -3964,6 +3964,7 @@ export async function listRecebiveisParceiro(
     .from("hb_credit_receivables")
     .select("id, amount_cents, status, created_at")
     .eq("partner_id", parceiroId)
+    .neq("status", "SETTLED")
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -4545,6 +4546,18 @@ export async function previewPartnerSettlement(
       "system:settlement_comprovante"
     );
     if (repaired.ok) pendingSettlement = null;
+    else {
+      await repairReceivablesForPartnerSettlement(
+        supabase,
+        digits,
+        partnerId,
+        (
+          await listSettlementTransactions(supabase, digits, partnerId, mesNorm)
+        )
+          .filter((tx) => tx.tipo === "PAYMENT")
+          .map((tx) => tx.id)
+      );
+    }
   }
 
   const transacoes = await listSettlementTransactions(supabase, digits, partnerId, mesNorm);
@@ -4555,6 +4568,8 @@ export async function previewPartnerSettlement(
 
   const eligibleRecebiveis = await resolveLiquidatableSettlementPayments(supabase, digits, transacoes);
   const totalCents = eligibleRecebiveis.reduce((sum, tx) => sum + tx.amountCents, 0);
+  const fiscalTxIds =
+    eligibleRecebiveis.length > 0 ? eligibleRecebiveis.map((tx) => tx.id) : paymentTxIds;
 
   let fiscalResumo;
   let pagamentoAprovado = false;
@@ -4568,9 +4583,9 @@ export async function previewPartnerSettlement(
       digits,
       partnerId,
       mesNorm,
-      paymentTxIds
+      fiscalTxIds
     );
-    const gate = evaluatePartnerFiscalSettlementGate(fiscalResumo);
+    const gate = evaluatePartnerFiscalSettlementGate(fiscalResumo, { minPayableCents: totalCents });
     pagamentoAprovado = gate.ready && totalCents > 0;
     bloqueioPagamento =
       gate.message ??
@@ -4590,8 +4605,9 @@ export async function previewPartnerSettlement(
     pagamentoAprovado = false;
     totalExibirCents = Number(pendingSettlement.total_cents);
     transacoesExibir = Number(pendingSettlement.transacoes_count);
-    bloqueioPagamento =
-      "Comprovante enviado, mas a liquidação ainda não foi finalizada — toque em Atualizar resumo.";
+    bloqueioPagamento = pendingSettlement.comprovante_storage_path
+      ? "Comprovante já anexado — toque em Atualizar resumo para concluir a liquidação e zerar o valor do mercado."
+      : "Pagamento em andamento neste mês — aguarde ou atualize o resumo.";
   }
 
   if (!pendingSettlement && totalCents <= 0 && paymentTxIds.length > 0 && !bloqueioPagamento) {
@@ -4653,13 +4669,40 @@ export async function registerPartnerSettlementPayment(
 
   const { data: existing } = await supabase
     .from("hb_credit_settlements")
-    .select("id")
+    .select("id, comprovante_storage_path")
     .eq("cooperative_cnpj", normalizeCnpj(params.cnpj))
     .eq("partner_id", params.partnerId)
     .eq("mes_referencia", mesNorm)
     .eq("status", "AWAITING_PARTNER")
     .maybeSingle();
-  if (existing) return { ok: false, error: "Já existe um pagamento aguardando confirmação do mercado neste mês." };
+  if (existing) {
+    if (existing.comprovante_storage_path) {
+      const repaired = await finalizePartnerSettlementPayment(
+        supabase,
+        String(existing.id),
+        params.partnerId,
+        params.responsavelUserId
+      );
+      if (repaired.ok) {
+        const { data: confirmedRow } = await supabase
+          .from("hb_credit_settlements")
+          .select("*")
+          .eq("id", String(existing.id))
+          .maybeSingle();
+        if (confirmedRow) {
+          return {
+            ok: true,
+            settlement: mapSettlementRow(
+              confirmedRow as Record<string, unknown>,
+              preview.partnerNome
+            ),
+          };
+        }
+        return { ok: true };
+      }
+    }
+    return { ok: false, error: "Já existe um pagamento em andamento neste mês — atualize o resumo ou aguarde a conclusão." };
+  }
 
   const settlementId = genId("settle");
   const now = new Date().toISOString();

@@ -712,11 +712,16 @@ export async function getFiscalNoteByTransaction(
   return enriched[0] ?? null;
 }
 
-/** Trava de liquidação — só libera PIX quando todas as NFs do mês estiverem conferidas. */
-export function evaluatePartnerFiscalSettlementGate(resumo: ContaCoopFiscalNotesResumo): {
+/** Trava de liquidação — só libera PIX quando todas as NFs do lote elegível estiverem conferidas. */
+export function evaluatePartnerFiscalSettlementGate(
+  resumo: ContaCoopFiscalNotesResumo,
+  options?: { minPayableCents?: number }
+): {
   ready: boolean;
   message: string | null;
 } {
+  const minPayableCents = Math.max(0, options?.minPayableCents ?? 0);
+
   if (resumo.totalVendas === 0) {
     return { ready: false, message: "Nenhuma venda HB Créditos neste mês para liquidar." };
   }
@@ -739,6 +744,18 @@ export function evaluatePartnerFiscalSettlementGate(resumo: ContaCoopFiscalNotes
     };
   }
   if (resumo.totalConferidasCents !== resumo.totalVendasCents) {
+    const semPendencias =
+      resumo.pendentesAnexo === 0 &&
+      resumo.aguardandoConferencia === 0 &&
+      resumo.correcaoPedida === 0 &&
+      resumo.conferidas === resumo.totalVendas;
+    if (
+      semPendencias &&
+      minPayableCents > 0 &&
+      resumo.totalConferidasCents >= minPayableCents
+    ) {
+      return { ready: true, message: null };
+    }
     return {
       ready: false,
       message: "Total conferido por NF não bate com vendas do mês.",
