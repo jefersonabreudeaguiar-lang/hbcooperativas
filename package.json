@@ -14,6 +14,7 @@
     "gate:melhor-performance": "npm run baseline:melhor-performance",
     "test:image-pipeline": "npx tsx scripts/test-image-pipeline.ts",
     "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs",
+    "probe:pwa-crash": "npx tsx scripts/pwa-crash-forensics-probe-once.ts",
     "reset:operacional": "npx tsx scripts/reset-operacional-cloud.mjs",
     "wipe:cooperados-teste": "node scripts/wipe-cooperado-test-data.mjs",
     "wipe:platform": "node scripts/wipe-platform-completo.mjs",

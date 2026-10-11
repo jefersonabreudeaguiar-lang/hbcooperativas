@@ -15,6 +15,7 @@ import {
   buildInlineServiceWorkerMigrationScript,
   type ClientReleaseInfo,
 } from "@/lib/pwa/clientRelease";
+import { buildInlineRuntimeCrashRecorderScript } from "@/lib/pwa/runtimeCrashForensics";
 import { buildInlineRqlPerfStubScript } from "@/lib/performance/rqlPerfReport";
 import { buildInlineCooperadoAppDataWarmScript } from "@/lib/performance/cooperadoAppDataInlineWarm";
 import {
@@ -86,6 +87,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       data-staff-tab-keep-alive={staffTabKeepAliveOn ? "1" : "0"}
     >
       <head>
+        <script dangerouslySetInnerHTML={{ __html: buildInlineRuntimeCrashRecorderScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlinePwaStandaloneLaunchGuardScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineServiceWorkerMigrationScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlinePageReleaseBootstrap(pageRelease) }} />

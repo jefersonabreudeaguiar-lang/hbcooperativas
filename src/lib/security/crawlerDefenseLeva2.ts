@@ -54,6 +54,7 @@ export function isStaticOrFrameworkPath(pathname: string): boolean {
     pathname === "/pwa-launch.html" ||
     pathname === "/pwa-rescue.html" ||
     pathname === "/pwa-diag.html" ||
+    pathname === "/pwa-crash-forensics.html" ||
     pathname === "/sw.js"
   ) {
     return true;

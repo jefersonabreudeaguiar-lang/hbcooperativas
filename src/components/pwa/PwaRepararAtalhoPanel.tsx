@@ -84,8 +84,11 @@ export function PwaRepararAtalhoPanel({ variant = "login" }: PwaRepararAtalhoPan
           {copied ? <Check size={12} /> : <Copy size={12} />}
           {copied ? "Link copiado — envie no WhatsApp" : "Copiar link para cooperado"}
         </button>
+        <Link href="/pwa-crash-forensics.html" className="text-gray-500 underline hover:text-gray-700">
+          Forensics (tela preta)
+        </Link>
         <Link href="/pwa-diag.html" className="text-gray-500 underline hover:text-gray-700">
-          Diagnóstico do atalho
+          Diagnóstico simples
         </Link>
       </div>
     </div>

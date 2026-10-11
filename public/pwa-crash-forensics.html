@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#15803d" />
+    <title>Forensics — crash HB Cooperativas</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: ui-monospace, system-ui, sans-serif;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 1rem 1rem 3rem;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      h1 {
+        font-family: system-ui, sans-serif;
+        font-size: 1.1rem;
+        color: #86efac;
+        margin: 0 0 0.25rem;
+      }
+      .sub {
+        font-family: system-ui, sans-serif;
+        color: #94a3b8;
+        font-size: 0.85rem;
+        margin-bottom: 1rem;
+      }
+      .card {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 0.65rem;
+        padding: 0.85rem 1rem;
+        margin: 0.65rem 0;
+      }
+      .verdict {
+        border-color: #f59e0b;
+        background: #422006;
+      }
+      .ok { color: #4ade80; }
+      .warn { color: #fbbf24; }
+      .bad { color: #f87171; }
+      textarea {
+        width: 100%;
+        min-height: 14rem;
+        background: #020617;
+        color: #cbd5e1;
+        border: 1px solid #475569;
+        border-radius: 0.5rem;
+        padding: 0.5rem;
+        font-size: 11px;
+        box-sizing: border-box;
+      }
+      button, a.btn {
+        display: inline-block;
+        margin: 0.25rem 0.35rem 0.25rem 0;
+        padding: 0.55rem 0.85rem;
+        border-radius: 0.45rem;
+        border: none;
+        font-weight: 600;
+        font-size: 0.85rem;
+        cursor: pointer;
+        text-decoration: none;
+        font-family: system-ui, sans-serif;
+      }
+      .primary { background: #15803d; color: #fff; }
+      .secondary { background: #334155; color: #f1f5f9; }
+      ul { margin: 0.35rem 0 0; padding-left: 1.1rem; }
+      li { margin: 0.2rem 0; }
+      code { color: #7dd3fc; word-break: break-all; }
+    </style>
+  </head>
+  <body>
+    <h1>Forensics — “This page couldn’t load”</h1>
+    <p class="sub">
+      Diagnóstico profissional: chunks de deploys diferentes, cache e último erro TDZ gravado no aparelho.
+    </p>
+
+    <div class="card verdict" id="verdict">Analisando…</div>
+    <div class="card" id="summary"></div>
+
+    <p>
+      <button type="button" class="primary" id="copy">Copiar JSON completo</button>
+      <button type="button" class="secondary" id="again">Rodar de novo</button>
+      <a class="btn primary" id="repair" href="#">Reparar atalho (auto)</a>
+      <a class="btn secondary" href="/pwa-diag.html">Diagnóstico simples</a>
+    </p>
+
+    <textarea id="json" readonly></textarea>
+
+    <script>
+      (function () {
+        var CRASH_KEY = "hb-coop-runtime-crash-log";
+        var BUILD_SEEN = "hb-coop-app-build-seen";
+        var REPAIR_KEY = "hb-coop-pwa-repair-done";
+
+        function dplFromUrl(u) {
+          var m = (u || "").match(/[?&]dpl=([^&]+)/);
+          if (!m) return null;
+          var id = decodeURIComponent(m[1]);
+          return id.indexOf("dpl_") === 0 ? id : null;
+        }
+
+        function collectChunkDpls() {
+          var out = [];
+          var seen = {};
+          document.querySelectorAll('script[src*="dpl="], link[href*="dpl="]').forEach(function (el) {
+            var u = el.src || el.href || "";
+            var id = dplFromUrl(u);
+            if (id && !seen[id]) {
+              seen[id] = 1;
+              out.push(id);
+            }
+          });
+          return out;
+        }
+
+        function readCrashLog() {
+          try {
+            var raw = localStorage.getItem(CRASH_KEY);
+            return raw ? JSON.parse(raw) : [];
+          } catch (e) {
+            return [];
+          }
+        }
+
+        function extractDplsFromHtml(html) {
+          var seen = {};
+          var re = /[?&]dpl=([^&"'\\s]+)/g;
+          var m;
+          while ((m = re.exec(html)) !== null) {
+            var id = decodeURIComponent(m[1]).trim();
+            if (id && id.indexOf("dpl_") === 0) seen[id] = 1;
+          }
+          var meta = html.match(/data-dpl-id="([^"]+)"/);
+          if (meta && meta[1]) seen[meta[1].trim()] = 1;
+          return Object.keys(seen);
+        }
+
+        function metaFromHtml(html, attr) {
+          var re = new RegExp(attr + '="([^"]*)"');
+          var m = html.match(re);
+          return m ? m[1] : "";
+        }
+
+        async function fetchHtml(path) {
+          var r = await fetch(path + (path.indexOf("?") >= 0 ? "&" : "?") + "_fx=" + Date.now(), {
+            cache: "no-store",
+            credentials: "same-origin",
+            headers: { Accept: "text/html", "Cache-Control": "no-cache" },
+          });
+          return { status: r.status, html: await r.text() };
+        }
+
+        async function run() {
+          var pageDpl = document.documentElement.getAttribute("data-dpl-id");
+          var pageBuild = document.documentElement.getAttribute("data-app-build");
+          var chunkDplsLive = collectChunkDpls();
+          var crashLog = readCrashLog();
+          var lastCrash = crashLog.length ? crashLog[crashLog.length - 1] : null;
+
+          var report = {
+            schema: "hb-pwa-crash-forensics-v1",
+            quando: new Date().toISOString(),
+            href: location.href,
+            standalone:
+              window.matchMedia("(display-mode: standalone)").matches ||
+              window.navigator.standalone === true,
+            userAgent: navigator.userAgent,
+            online: navigator.onLine,
+            paginaAtual: {
+              build: pageBuild,
+              dpl: pageDpl,
+              chunkDpls: chunkDplsLive,
+            },
+            storage: {},
+            clientRelease: null,
+            rotas: {},
+            ultimoCrashGravado: lastCrash,
+            historicoCrash: crashLog,
+            causasProvaveis: [],
+            acoes: [],
+          };
+
+          try {
+            report.storage.buildSeen = localStorage.getItem(BUILD_SEEN);
+            report.storage.repairDone = sessionStorage.getItem(REPAIR_KEY);
+            report.storage.temSessao = !!localStorage.getItem("coopeagriplla_session");
+          } catch (e) {
+            report.storage.erro = String(e);
+          }
+
+          try {
+            var cr = await fetch("/api/client-release?_=" + Date.now(), { cache: "no-store" });
+            report.clientRelease = cr.ok ? await cr.json() : { http: cr.status };
+          } catch (e) {
+            report.clientRelease = { erro: String(e) };
+          }
+
+          for (var pi = 0; pi < ["/dashboard", "/login"].length; pi++) {
+            var path = ["/dashboard", "/login"][pi];
+            try {
+              var fh = await fetchHtml(path);
+              var dpls = extractDplsFromHtml(fh.html);
+              report.rotas[path] = {
+                http: fh.status,
+                build: metaFromHtml(fh.html, "data-app-build"),
+                dpl: metaFromHtml(fh.html, "data-dpl-id"),
+                dplsNoHtml: dpls,
+                mixedDeploy: dpls.length > 1,
+              };
+            } catch (e) {
+              report.rotas[path] = { erro: String(e) };
+            }
+          }
+
+          var cloud = report.clientRelease || {};
+          var cloudBuild = cloud.build ? Number(cloud.build) : 0;
+          var cloudDpl = (cloud.deploymentId || "").trim();
+          var pb = Number(pageBuild || 0);
+
+          var mixedLive = chunkDplsLive.length > 1;
+          if (pageDpl && chunkDplsLive.length) {
+            for (var i = 0; i < chunkDplsLive.length; i++) {
+              if (chunkDplsLive[i] !== pageDpl) mixedLive = true;
+            }
+          }
+
+          if (mixedLive) {
+            report.causasProvaveis.push(
+              "MIXED_DEPLOY_LIVE: scripts na tela atual com dpl diferente do HTML — típico de Cannot access before initialization."
+            );
+          }
+          Object.keys(report.rotas).forEach(function (k) {
+            var r = report.rotas[k];
+            if (r.mixedDeploy) {
+              report.causasProvaveis.push("MIXED_DEPLOY_SERVIDOR em " + k + ": " + (r.dplsNoHtml || []).join(", "));
+            }
+            if (cloudBuild && r.build && Number(r.build) < cloudBuild) {
+              report.causasProvaveis.push("HTML_ANTIGO em " + k + " (build " + r.build + " < nuvem " + cloudBuild + ")");
+            }
+            if (cloudDpl && r.dpl && r.dpl !== cloudDpl) {
+              report.causasProvaveis.push("DPL_DRIFT em " + k + ": HTML " + r.dpl + " ≠ nuvem " + cloudDpl);
+            }
+          });
+
+          if (lastCrash && /before initialization/i.test(lastCrash.message || "")) {
+            report.causasProvaveis.push(
+              "TDZ_CONFIRMADO: último erro gravado foi ReferenceError before initialization."
+            );
+          }
+          if (report.causasProvaveis.length === 0) {
+            report.causasProvaveis.push(
+              "Nenhum sinal no momento — se o dashboard quebrou, rode isto logo após o erro ou use Reparar."
+            );
+          }
+
+          report.acoes.push("Reparar atalho (limpa cache/SW)");
+          report.acoes.push("Remover ícone antigo e instalar de novo em /login?hb-pwa=" + (cloudBuild || pb || "?"));
+          if (mixedLive || report.causasProvaveis.some(function (c) { return c.indexOf("MIXED") >= 0; })) {
+            report.acoes.push("Build 343+ recarrega automaticamente ao detectar chunks mistos — atualize o app.");
+          }
+
+          return report;
+        }
+
+        function render(report) {
+          var v = document.getElementById("verdict");
+          var s = document.getElementById("summary");
+          var mixed = report.causasProvaveis.some(function (c) {
+            return c.indexOf("MIXED") >= 0 || c.indexOf("TDZ") >= 0;
+          });
+          v.innerHTML =
+            "<strong class=\"" +
+            (mixed ? "bad" : "warn") +
+            "\">Veredito:</strong> " +
+            (mixed
+              ? "Provável mistura de versões (HTML + JS de deploys diferentes)."
+              : "Sem mistura óbvia agora — veja histórico de crash abaixo.");
+
+          var lines = [
+            "Build página: <code>" + (report.paginaAtual.build || "—") + "</code>",
+            "DPL página: <code>" + (report.paginaAtual.dpl || "—") + "</code>",
+            "Chunks dpl na tela: <code>" + (report.paginaAtual.chunkDpls.join(", ") || "—") + "</code>",
+            "Nuvem build: <code>" + (report.clientRelease && report.clientRelease.build) + "</code>",
+            "Nuvem dpl: <code>" + (report.clientRelease && report.clientRelease.deploymentId) + "</code>",
+          ];
+          s.innerHTML = "<ul><li>" + lines.join("</li><li>") + "</li></ul>";
+          s.innerHTML +=
+            "<p class=\"warn\" style=\"margin:0.5rem 0 0\">Causas:</p><ul>" +
+            report.causasProvaveis.map(function (c) { return "<li>" + c + "</li>"; }).join("") +
+            "</ul>";
+
+          document.getElementById("json").value = JSON.stringify(report, null, 2);
+
+          var cloudB = report.clientRelease && report.clientRelease.build ? report.clientRelease.build : 343;
+          var repair = document.getElementById("repair");
+          repair.href =
+            "/pwa-rescue.html?auto=1&next=" +
+            encodeURIComponent("/login?hb-pwa=" + cloudB);
+        }
+
+        function toast(t) {
+          var el = document.getElementById("verdict");
+          var prev = el.innerHTML;
+          el.innerHTML = "<span class=\"ok\">" + t + "</span>";
+          setTimeout(function () { render(window.__hbFxReport); }, 1500);
+        }
+
+        document.getElementById("copy").addEventListener("click", function () {
+          var ta = document.getElementById("json");
+          ta.select();
+          try {
+            navigator.clipboard.writeText(ta.value);
+            toast("JSON copiado");
+          } catch (e) {
+            toast("Selecione e copie manualmente");
+          }
+        });
+
+        document.getElementById("again").addEventListener("click", function () {
+          run().then(function (r) {
+            window.__hbFxReport = r;
+            render(r);
+          });
+        });
+
+        run().then(function (r) {
+          window.__hbFxReport = r;
+          render(r);
+        });
+      })();
+    </script>
+  </body>
+</html>

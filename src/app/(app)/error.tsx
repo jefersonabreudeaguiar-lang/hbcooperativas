@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
+import { buildPwaRescueAutoLoginHref } from "@/lib/pwa/cooperadoPwaRescueUrl";
 
 export default function AppSegmentError({
   error,
@@ -18,11 +20,21 @@ export default function AppSegmentError({
     <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 p-6 text-center">
       <h1 className="text-lg font-bold text-gray-900">Não foi possível abrir esta tela</h1>
       <p className="text-sm text-gray-600 max-w-sm">
-        Feche o app e abra de novo. Se continuar, use Atualizar no menu ou reinstale o atalho.
+        Pode ser cache misturado após atualização. Use reparar atalho ou o relatório forensics e envie ao suporte.
       </p>
-      <Button type="button" onClick={() => reset()}>
-        Tentar novamente
-      </Button>
+      <div className="flex flex-col gap-2 w-full max-w-xs">
+        <Button type="button" onClick={() => reset()}>
+          Tentar novamente
+        </Button>
+        <Link href={buildPwaRescueAutoLoginHref()} className="w-full">
+          <Button type="button" variant="secondary" className="w-full">
+            Reparar atalho do app
+          </Button>
+        </Link>
+        <Link href="/pwa-crash-forensics.html" className="text-sm text-green-800 font-medium underline">
+          Abrir forensics (copiar relatório)
+        </Link>
+      </div>
     </div>
   );
 }
