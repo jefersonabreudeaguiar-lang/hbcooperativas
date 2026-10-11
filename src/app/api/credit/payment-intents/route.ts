@@ -24,6 +24,9 @@ import {
   validateCooperadoTransferForPayer,
 } from "@/lib/supabase/cooperadoTransferenciaCreditoStorage";
 
+/** Validação QR + prepare de limite podem reconciliar M6 em paralelo. */
+export const maxDuration = 60;
+
 export async function GET(request: Request) {
   const gate = await requireCreditApi(request);
   if (!gate.ok) return gate.response;
@@ -96,7 +99,6 @@ export async function POST(request: Request) {
 
     const actorId = gate.ctx.session?.sub ?? payCooperadoId;
     const fastValidate = body?.fast !== false;
-    /** Em paralelo à validação — no scan rápido não bloqueia a tela PIN; authorize prepara de novo. */
     const prepareLimitePromise = prepareHbCreditPaymentAuthorize(
       gate.ctx.supabase,
       cnpj,
@@ -115,32 +117,22 @@ export async function POST(request: Request) {
         ? await resolveCooperadoNomeForTransfer(gate.ctx.supabase, cnpj, receiverId)
         : "Cooperado";
 
-      const transferResult = await validateCooperadoTransferForPayer(gate.ctx.supabase, {
-        intentId: parsed.intentId,
-        nonce: parsed.nonce,
-        payerCooperadoId: payCooperadoId,
-        cooperativeCnpj: cnpj,
-        receiverNome: nome,
-      });
+      const [transferResult, prepareTransfer] = await Promise.all([
+        validateCooperadoTransferForPayer(gate.ctx.supabase, {
+          intentId: parsed.intentId,
+          nonce: parsed.nonce,
+          payerCooperadoId: payCooperadoId,
+          cooperativeCnpj: cnpj,
+          receiverNome: nome,
+        }),
+        prepareLimitePromise,
+      ]);
       if (!transferResult.ok) {
-        void prepareLimitePromise.catch(() => {});
         return NextResponse.json(
           { ok: false, error: transferResult.error, code: transferResult.code },
           { status: 400 }
         );
       }
-      if (fastValidate) {
-        void prepareLimitePromise.catch(() => {});
-        return NextResponse.json({
-          ok: true,
-          valid: true,
-          intent: transferResult.intent,
-          parceiroNome: transferResult.parceiroNome,
-          limite: transferResult.limite,
-          cooperadoTransfer: true,
-        });
-      }
-      const prepareTransfer = await prepareLimitePromise;
       if (!prepareTransfer.ok) {
         return NextResponse.json(
           { ok: false, error: prepareTransfer.error, code: prepareTransfer.code ?? "HB_LIMIT_PREPARE_FAILED" },
@@ -157,29 +149,20 @@ export async function POST(request: Request) {
       });
     }
 
-    const result = await validateIntentForCooperado(
-      gate.ctx.supabase,
-      parsed.intentId,
-      parsed.nonce,
-      payCooperadoId,
-      cnpj,
-      { fast: fastValidate }
-    );
+    const [result, prepare] = await Promise.all([
+      validateIntentForCooperado(
+        gate.ctx.supabase,
+        parsed.intentId,
+        parsed.nonce,
+        payCooperadoId,
+        cnpj,
+        { fast: fastValidate }
+      ),
+      prepareLimitePromise,
+    ]);
     if (!result.ok) {
-      void prepareLimitePromise.catch(() => {});
       return NextResponse.json({ ok: false, error: result.error, code: result.code }, { status: 400 });
     }
-    if (fastValidate) {
-      void prepareLimitePromise.catch(() => {});
-      return NextResponse.json({
-        ok: true,
-        valid: true,
-        intent: result.intent,
-        parceiroNome: result.parceiroNome,
-        limite: result.limite,
-      });
-    }
-    const prepare = await prepareLimitePromise;
     if (!prepare.ok) {
       return NextResponse.json(
         { ok: false, error: prepare.error, code: prepare.code ?? "HB_LIMIT_PREPARE_FAILED" },

@@ -73,6 +73,7 @@ function HbCreditPagarContent() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<{ receiptCode: string } | null>(null);
   const autoPayPinRef = useRef("");
+  const payInFlightRef = useRef(false);
 
   const hbApiCooperadoId = useMemo(
     () => resolveHbCreditApiCooperadoId(user, cooperadoId),
@@ -209,8 +210,9 @@ function HbCreditPagarContent() {
       setError("Cadastre seu PIN de pagamento em HB Créditos → Início antes de continuar.");
       return;
     }
-    if (busy) return;
+    if (busy || payInFlightRef.current) return;
     if (!canAffordHbPaymentScanPreview(limite, intent.amountCents)) return;
+    payInFlightRef.current = true;
     setBusy(true);
     setError("");
     try {
@@ -253,6 +255,7 @@ function HbCreditPagarContent() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível concluir o pagamento.");
     } finally {
+      payInFlightRef.current = false;
       setBusy(false);
     }
   }, [

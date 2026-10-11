@@ -22,6 +22,42 @@ import { getData } from "@/services/dataStore";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { isCooperadoTransferIntentId } from "@/config/cooperadoTransferenciaCredito";
 
+function mensagemCorpoNaoJson(res: Response, raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("<") || /<!doctype/i.test(trimmed)) {
+    return "O servidor demorou para responder. Aguarde alguns segundos e tente confirmar de novo.";
+  }
+  if (
+    res.status === 502 ||
+    res.status === 503 ||
+    res.status === 504 ||
+    res.status === 524 ||
+    /FUNCTION_INVOCATION_TIMEOUT|gateway timeout|timed out|bad gateway|service unavailable/i.test(
+      trimmed
+    )
+  ) {
+    return mensagemErroAuthApi(res.status >= 400 ? res.status : 504);
+  }
+  if (res.status >= 500) {
+    return mensagemErroAuthApi(res.status);
+  }
+  return "Resposta inválida do servidor. Tente de novo; se persistir, use «Atualizar limites».";
+}
+
+function authorizeResponseRetryable(res: Response, raw?: string): boolean {
+  if (res.status === 0 || res.status === 408 || res.status === 429 || res.status >= 500) return true;
+  const body = raw?.trim() ?? "";
+  if (!body) return res.status >= 500;
+  if (body.startsWith("<") || /<!doctype/i.test(body)) return true;
+  if (/FUNCTION_INVOCATION_TIMEOUT|gateway timeout|timed out/i.test(body)) return true;
+  try {
+    JSON.parse(body);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 async function parseJson<T>(res: Response): Promise<T & { error?: string }> {
   const raw = await res.text();
   if (!raw.trim()) {
@@ -36,15 +72,7 @@ async function parseJson<T>(res: Response): Promise<T & { error?: string }> {
   try {
     data = JSON.parse(raw) as T & { error?: string };
   } catch {
-    const trimmed = raw.trim();
-    if (trimmed.startsWith("<") || /<!doctype/i.test(trimmed)) {
-      throw new Error(
-        "O servidor demorou para responder. Aguarde alguns segundos e tente confirmar de novo."
-      );
-    }
-    throw new Error(
-      "Resposta inválida do servidor. Tente de novo; se persistir, use «Atualizar limites»."
-    );
+    throw new Error(mensagemCorpoNaoJson(res, raw));
   }
   if (!res.ok) {
     const extra = data as { error?: string; message?: string };
@@ -370,33 +398,66 @@ export async function authorizeCreditPayment(input: {
   let res: Response | null = null;
   let data: AuthorizeCreditPaymentResult & { ok?: boolean; error?: string; code?: string } = {};
 
-  for (let attempt = 0; attempt < 2; attempt++) {
+  const maxAuthorizeAttempts = 3;
+  for (let attempt = 0; attempt < maxAuthorizeAttempts; attempt++) {
     try {
       res = await postAuthorize();
     } catch {
-      if (attempt < 1) {
-        await sleepMs(280);
+      if (attempt < maxAuthorizeAttempts - 1) {
+        await sleepMs(400 + attempt * 200);
         continue;
       }
       throw new Error("Sem conexão para confirmar o pagamento.");
     }
-    try {
-      data = await parseJson<
-        AuthorizeCreditPaymentResult & { ok?: boolean; error?: string; code?: string }
-      >(res);
-    } catch (e) {
-      if (attempt < 1 && (res.status >= 500 || res.status === 0)) {
-        await sleepMs(350);
+
+    const rawBody = await res.text();
+    if (!rawBody.trim()) {
+      if (attempt < maxAuthorizeAttempts - 1 && authorizeResponseRetryable(res, rawBody)) {
+        await sleepMs(450 + attempt * 250);
         continue;
       }
-      throw e;
+      throw new Error(
+        res.ok
+          ? "Resposta vazia do servidor. A operação pode ter demorado demais — tente de novo ou use «Atualizar limites»."
+          : mensagemErroAuthApi(res.status, undefined)
+      );
     }
-    if (res.ok && data.ok) break;
-    const retryable =
-      attempt < 1 &&
-      (res.status === 503 || (data.code && AUTHORIZE_RETRY_CODES.has(data.code)));
-    if (!retryable) break;
-    await sleepMs(280);
+
+    try {
+      data = JSON.parse(rawBody) as AuthorizeCreditPaymentResult & {
+        ok?: boolean;
+        error?: string;
+        code?: string;
+        message?: string;
+      };
+    } catch {
+      if (attempt < maxAuthorizeAttempts - 1 && authorizeResponseRetryable(res, rawBody)) {
+        await sleepMs(450 + attempt * 250);
+        continue;
+      }
+      throw new Error(mensagemCorpoNaoJson(res, rawBody));
+    }
+
+    if (!res.ok) {
+      const serverMsg = data.error ?? data.message;
+      const retryable =
+        attempt < maxAuthorizeAttempts - 1 &&
+        (res.status === 503 || (data.code && AUTHORIZE_RETRY_CODES.has(data.code)));
+      if (!retryable) {
+        throw new Error(mensagemErroAuthApi(res.status, serverMsg));
+      }
+      await sleepMs(400 + attempt * 200);
+      continue;
+    }
+
+    if (data.ok) break;
+
+    const retryableOkBody =
+      attempt < maxAuthorizeAttempts - 1 &&
+      data.code &&
+      AUTHORIZE_RETRY_CODES.has(data.code);
+    if (!retryableOkBody) break;
+    await sleepMs(400 + attempt * 200);
   }
 
   if (!res || !res.ok || !data.ok) throw new Error(data.error ?? "Pagamento recusado.");

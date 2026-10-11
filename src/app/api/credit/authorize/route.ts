@@ -20,6 +20,7 @@ import { authorizeCooperadoTransferPayment } from "@/lib/supabase/cooperadoTrans
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
+  try {
   const gate = await requireCreditApi(request, { requireOperations: true });
   if (!gate.ok) return gate.response;
   const { supabase } = gate.ctx;
@@ -139,4 +140,16 @@ export async function POST(request: Request) {
     financeiroConfirmado: true,
     projecaoPendente: true,
   });
+  } catch (e) {
+    console.error("[credit/authorize]", e);
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "Não foi possível concluir o pagamento agora. Aguarde alguns segundos e tente de novo; se o PIN estava certo, confira o extrato antes de repetir.",
+        code: "HB_AUTHORIZE_INTERNAL_ERROR",
+      },
+      { status: 500 }
+    );
+  }
 }
