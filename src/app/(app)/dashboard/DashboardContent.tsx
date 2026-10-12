@@ -97,7 +97,6 @@ import {
   isCooperadoPwaMessengerMode,
 } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { isCooperadoAppUser } from "@/permissions";
-import { shouldHideCooperadoBaixarAppPromo } from "@/lib/pwa/cooperadoPwaBrowserWorkaround";
 import { getSession } from "@/services/dataStore";
 
 const DASHBOARD_INICIO_DOMAINS: AppDataNotifyDomain[] = ["shell", "notas", "financeiro", "operacional"];
@@ -389,10 +388,7 @@ function CooperadoDashboard() {
 
   /** Mostra enquanto não estiver no atalho instalado — appInstaladoEm só indica uso passado no app. */
   const mostrarBaixarApp =
-    !isAppStandalone() &&
-    Boolean(cooperado) &&
-    !cooperado!.avulso &&
-    !shouldHideCooperadoBaixarAppPromo("cooperado");
+    !isAppStandalone() && Boolean(cooperado) && !cooperado!.avulso;
 
   return (
     <div className="space-y-6 max-w-3xl">

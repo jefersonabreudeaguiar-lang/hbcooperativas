@@ -11,20 +11,3 @@ export function buildPwaRescueAutoLoginAbsoluteUrl(
 ): string {
   return `${origin.replace(/\/$/, "")}${buildPwaRescueAutoLoginHref()}`;
 }
-
-/** Após o reparo, login com hb-pwa e volta ao app no navegador (não no ícone PWA). */
-export function buildPwaRescueCooperadoBrowserWorkaroundHref(
-  build = APP_BUILD_VERSION,
-  afterLoginPath = "/dashboard"
-): string {
-  const loginNext = `/login?hb-pwa=${build}&next=${encodeURIComponent(afterLoginPath)}`;
-  return `/pwa-rescue.html?auto=1&next=${encodeURIComponent(loginNext)}`;
-}
-
-export function buildPwaRescueCooperadoBrowserWorkaroundAbsoluteUrl(
-  origin = "https://hbcooperativas.vercel.app",
-  build = APP_BUILD_VERSION,
-  afterLoginPath = "/dashboard"
-): string {
-  return `${origin.replace(/\/$/, "")}${buildPwaRescueCooperadoBrowserWorkaroundHref(build, afterLoginPath)}`;
-}
