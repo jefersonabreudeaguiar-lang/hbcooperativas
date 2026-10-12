@@ -1,4 +1,8 @@
-/** Um reload por sessão se o HTML servido tiver dpl diferente do release canônico. */
+import { buildInlineReleaseEpisodeGuardScript } from "@/lib/pwa/pwaReleaseConsistency";
+
+/** Um align por sessão se o HTML tiver dpl diferente do release canônico (purge Cache API/SW, sem loop). */
 export function buildInlineHtmlDeploymentAlignScript(): string {
-  return `(function(){try{var htmlDpl=(document.documentElement.getAttribute("data-dpl-id")||"").trim();if(!htmlDpl||htmlDpl.indexOf("dpl_")!==0)return;var key="hb-coop-html-dpl-align-once";fetch("/api/client-release?_="+Date.now(),{cache:"no-store",credentials:"same-origin"}).then(function(r){return r.ok?r.json():null;}).then(function(c){if(!c||!c.deploymentId)return;var cloud=String(c.deploymentId).trim();if(!cloud||cloud===htmlDpl)return;try{if(sessionStorage.getItem(key))return;sessionStorage.setItem(key,"1");}catch(e){return;}location.reload();}).catch(function(){});}catch(e){}})();`;
+  const helpers = buildInlineReleaseEpisodeGuardScript();
+  const navKey = "hb-coop-release-nav";
+  return `(function(){${helpers}try{var htmlDpl=(document.documentElement.getAttribute("data-dpl-id")||"").trim();if(!htmlDpl||htmlDpl.indexOf("dpl_")!==0)return;if(hbEpisodeBlocked())return;fetch("/api/client-release?_="+Date.now(),{cache:"no-store",credentials:"same-origin"}).then(function(r){return r.ok?r.json():null;}).then(function(c){if(!c||!c.deploymentId)return;if(hbEpisodeBlocked())return;var cloud=String(c.deploymentId).trim();if(!cloud||cloud===htmlDpl)return;hbEpisodePending();Promise.resolve().then(function(){if(!("caches" in window))return;return caches.keys().then(function(keys){return Promise.all(keys.map(function(k){return caches.delete(k);}));});}).then(function(){if(!("serviceWorker" in navigator))return;return navigator.serviceWorker.getRegistrations().then(function(regs){return Promise.all(regs.map(function(r){return r.unregister();}));});}).finally(function(){hbEpisodeDone();try{sessionStorage.setItem(${JSON.stringify(navKey)},String(Date.now()));}catch(e){}location.replace(hbAlignUrl(cloud));});}).catch(function(){});}catch(e){}})();`;
 }

@@ -66,19 +66,19 @@
       <p id="err" class="err" hidden></p>
       <p class="muted">
         Use <strong>Chrome</strong> com Wi‑fi ou dados. Se o erro aparecer antes desta tela verde:
-        Chrome → cadeado → <strong>Limpar dados do site</strong> → abra este link de novo.
+        Este reparo limpa cache do app (Cache API) e service worker — <strong>não</strong> apaga o cache HTTP do Chrome. Se o erro continuar: Chrome → cadeado → <strong>Limpar dados do site</strong> → abra este link de novo.
       </p>
       <button type="button" class="btn" id="go" hidden>Continuar para o login</button>
-      <a class="btn secondary" id="launch" href="/login?hb-pwa=347" hidden>Continuar para instalar ícone</a>
+      <a class="btn secondary" id="launch" href="/login?hb-pwa=348" hidden>Continuar para instalar ícone</a>
       <a class="btn secondary" href="/pwa-diag.html" style="margin-top: 0.5rem">Diagnóstico (copiar para suporte)</a>
     </main>
     <script>
       (function () {
-        var REPAIR_KEY = "hb-coop-pwa-repair-done";
-        var REPAIR_VER = "347";
-        var BUILD_FALLBACK = 347;
-        var BUILD_SEEN_KEY = "hb-coop-app-build-seen";
-        var target = "/login?hb-pwa=347";
+        var REPAIR_VER = "348";
+        var RELEASE_FETCH_MS = 8000;
+        var BUILD_FALLBACK = 348;
+        var PENDING_VERIFY_KEY = "hb-coop-rescue-pending-verify";
+        var target = "/login?hb-pwa=348";
         var params = new URLSearchParams(location.search);
         var next = params.get("next");
         var auto = params.get("auto") === "1";
@@ -112,6 +112,24 @@
 
         if (btn) btn.addEventListener("click", go);
 
+        function fetchClientRelease() {
+          var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+          var timer = window.setTimeout(function () {
+            if (ctrl) ctrl.abort();
+          }, RELEASE_FETCH_MS);
+          var opts = { cache: "no-store" };
+          if (ctrl) opts.signal = ctrl.signal;
+          return fetch("/api/client-release?_=" + Date.now(), opts)
+            .then(function (r) {
+              window.clearTimeout(timer);
+              return r.ok ? r.json() : null;
+            })
+            .catch(function () {
+              window.clearTimeout(timer);
+              return null;
+            });
+        }
+
         var purgeCaches =
           "caches" in window
             ? caches.keys().then(function (keys) {
@@ -134,14 +152,23 @@
               })
             : Promise.resolve();
 
-        function markRepaired(cloudBuild) {
+        function queueRuntimeVerify(cloud) {
           try {
-            var ver = String(cloudBuild || BUILD_FALLBACK);
-            sessionStorage.setItem(REPAIR_KEY, ver);
-            localStorage.setItem(BUILD_SEEN_KEY, ver);
-            localStorage.setItem("hb-coop-pwa-repair-done-build", ver);
+            var build = cloud && cloud.build ? cloud.build : BUILD_FALLBACK;
+            var deploymentId = cloud && cloud.deploymentId ? String(cloud.deploymentId).trim() : "";
+            if (!deploymentId) return false;
+            sessionStorage.setItem(
+              PENDING_VERIFY_KEY,
+              JSON.stringify({
+                build: build,
+                deploymentId: deploymentId,
+                repairVer: REPAIR_VER,
+                t: Date.now(),
+              })
+            );
+            return true;
           } catch (e) {
-            /* ignore */
+            return false;
           }
         }
 
@@ -150,23 +177,33 @@
             showErr("Parte da limpeza falhou; toque Continuar mesmo assim.");
           })
           .then(function () {
-            return fetch("/api/client-release?_=" + Date.now(), { cache: "no-store" })
-              .then(function (r) {
-                return r.ok ? r.json() : null;
-              })
-              .catch(function () {
-                return null;
-              });
+            return fetchClientRelease();
           })
           .then(function (cloud) {
-            markRepaired(cloud && cloud.build ? cloud.build : BUILD_FALLBACK);
+            var queued = queueRuntimeVerify(cloud);
+            if (!queued) {
+              showErr(
+                "Não foi possível obter o release na nuvem (rede, timeout ou resposta inválida). O reparo não foi confirmado."
+              );
+            }
             if (auto) {
-              if (status) status.textContent = "Limpeza concluída. Abrindo o app…";
+              if (!queued) {
+                done(
+                  "Limpeza do app feita, mas a nuvem não respondeu. Toque Continuar manualmente ou tente de novo com Wi‑fi. Se o erro persistir, limpe os dados do site no Chrome."
+                );
+                return;
+              }
+              if (status) {
+                status.textContent =
+                  "Limpeza parcial concluída. Abrindo o app (confirmação na próxima tela)…";
+              }
               window.setTimeout(go, 400);
               return;
             }
             done(
-              "Limpeza concluída. Toque em Continuar (não feche antes). Depois use Preparar novo ícone e adicione à tela inicial."
+              queued
+                ? "Limpeza do app concluída. Toque em Continuar. O reparo só será confirmado se o login carregar com a mesma versão na nuvem."
+                : "Toque em Continuar. Se o erro voltar, limpe os dados do site no Chrome."
             );
           });
       })();

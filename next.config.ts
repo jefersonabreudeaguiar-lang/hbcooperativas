@@ -97,12 +97,11 @@ const nextConfig: NextConfig = {
         source: "/pwa-diag.html",
         headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
       },
+      // Vercel envia `public, max-age=31536000, immutable` ao browser em /_next/static;
+      // next.config não substitui isso. Escopo entre publicações: query `?dpl=` + boot/SW/rescue.
       {
         source: "/_next/static/:path*",
-        headers: [
-          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
-          { key: "CDN-Cache-Control", value: "no-store" },
-        ],
+        headers: [{ key: "CDN-Cache-Control", value: "no-store" }],
       },
     ];
   },

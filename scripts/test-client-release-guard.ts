@@ -92,9 +92,9 @@ assert.equal(typeof shouldAllowHardReload("test"), "boolean");
     new URL("../src/lib/pwa/clientRelease.ts", import.meta.url),
     "utf8"
   );
-  assert.match(boot, /checkBlockedOnly/);
-  assert.doesNotMatch(boot, /pullCanonical/);
-  assert.doesNotMatch(boot, /setTimeout\(function\(\)\{evaluate\(c\);\},600\)/);
+  assert.match(boot, /bootReleaseCheck/);
+  assert.match(boot, /hardAlign\("mixed_dpl"/);
+  assert.doesNotMatch(boot, /cloudAhead\("boot"/);
   assert.match(boot, /markCurrentRuntimeReleaseSeen/);
 }
 
