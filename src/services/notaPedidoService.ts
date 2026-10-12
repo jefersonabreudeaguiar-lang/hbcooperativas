@@ -1945,6 +1945,13 @@ function alinharStatusFichaComNotasConferidas(
   const now = new Date().toISOString();
   let changed = false;
   const next = fichaCorrida.map((f) => {
+    if (f.status === "pendente") {
+      const confirmado = getPagamentoConfirmadoCooperadoMes(data, f.cooperadoId, f.mesReferencia);
+      if (confirmado && fichaCobertaPorPagamentoCooperativa(data, f, confirmado)) {
+        changed = true;
+        return { ...f, status: "pago", updatedAt: now };
+      }
+    }
     const nota = notaById.get(f.notaPedidoId);
     if (!nota || (nota.status !== "conferida" && nota.status !== "pago")) return f;
     const esperado = statusFichaAposConferenciaNota(data, nota, f.cooperadoId);
@@ -2169,8 +2176,31 @@ export function mesesReferenciaComDebitoAberto(
   return [...meses].sort();
 }
 
-/** Fichas pendentes de entregas conferidas depois do PIX já registrado (nota fora do escopo do pagamento). */
-export function fichasPendentesComplementaresPosPagamento(
+/** Ficha já quitada pelo registro de pagamento da cooperativa (mesmo com status local ainda pendente). */
+function fichaCobertaPorPagamentoCooperativa(
+  data: AppData,
+  ficha: FichaCorrida,
+  pagamento: PagamentoCooperadoRegistro
+): boolean {
+  if (pagamento.notaPedidoIds?.includes(ficha.notaPedidoId)) return true;
+  if (pagamento.fichaIds?.includes(ficha.id)) return true;
+  const nota = data.notasPedido.find((n) => n.id === ficha.notaPedidoId);
+  if (nota && notaQuitadaPorPagamentoCooperativaRegistrado(data, nota, ficha.cooperadoId)) {
+    return true;
+  }
+  const escopoExplicito =
+    (pagamento.fichaIds?.length ?? 0) > 0 || (pagamento.notaPedidoIds?.length ?? 0) > 0;
+  if (escopoExplicito || !nota) return false;
+  const meses = getMesesReferenciaPagamento(pagamento);
+  if (!meses.includes(nota.mesReferencia)) return false;
+  const notaTs = notaReferenciaTemporalEscopoPagamento(nota);
+  const pagoTs = Date.parse(pagamento.pagoEm ?? pagamento.createdAt ?? "");
+  if (!Number.isNaN(notaTs) && !Number.isNaN(pagoTs) && notaTs <= pagoTs) return true;
+  return false;
+}
+
+/** Pendentes do mês que ainda não foram cobertos por pagamento confirmado (complementares reais). */
+export function listarFichasPendentesNaoCobertasPorPagamentoConfirmado(
   data: AppData,
   cooperadoId: string,
   mesReferencia: string,
@@ -2178,12 +2208,25 @@ export function fichasPendentesComplementaresPosPagamento(
 ): FichaCorrida[] {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const confirmado = getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia);
+  const pendentes = listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId);
+  if (!confirmado) return pendentes;
+  return pendentes.filter((f) => !fichaCobertaPorPagamentoCooperativa(data, f, confirmado));
+}
+
+/** Fichas pendentes de entregas conferidas depois do PIX já registrado (nota fora do escopo do pagamento). */
+export function fichasPendentesComplementaresPosPagamento(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): FichaCorrida[] {
+  const confirmado = getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia);
   if (!confirmado) return [];
-  const notaIds = new Set(confirmado.notaPedidoIds ?? []);
-  const fichaIds = new Set(confirmado.fichaIds ?? []);
-  if (notaIds.size === 0 && fichaIds.size === 0) return [];
-  return listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId).filter(
-    (f) => !notaIds.has(f.notaPedidoId) && !fichaIds.has(f.id)
+  return listarFichasPendentesNaoCobertasPorPagamentoConfirmado(
+    data,
+    cooperadoId,
+    mesReferencia,
+    cooperativaId
   );
 }
 
@@ -2373,21 +2416,18 @@ export function getResumoValorAPagarRelatorio(
     return { ...resumoFromPagamento(aguardando), valorLiquido: 0 };
   }
   const confirmado = getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia);
-  const pendentes = listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId);
-  if (confirmado && pendentes.length === 0) {
-    return { ...resumoFromPagamento(confirmado), valorLiquido: 0 };
-  }
-  if (confirmado && pendentes.length > 0) {
-    const complementares = fichasPendentesComplementaresPosPagamento(
+  if (confirmado) {
+    const descobertas = listarFichasPendentesNaoCobertasPorPagamentoConfirmado(
       data,
       cooperadoId,
       mesReferencia,
       coopId
     );
-    if (complementares.length > 0 && complementares.length === pendentes.length) {
-      const base = getResumoSomenteFichasComplementares(complementares);
-      return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
+    if (descobertas.length === 0) {
+      return { ...resumoFromPagamento(confirmado), valorLiquido: 0 };
     }
+    const base = getResumoSomenteFichasComplementares(descobertas);
+    return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
   }
   const live = getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId);
   return getResumoPagamentoParaRegistro(live, data, cooperadoId, mesReferencia, coopId);
@@ -2400,16 +2440,14 @@ export function resumoComplementaresPosPagamento(
   cooperativaId?: string
 ): ResumoPagamentoCooperado | null {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  const complementares = fichasPendentesComplementaresPosPagamento(
+  const descobertas = listarFichasPendentesNaoCobertasPorPagamentoConfirmado(
     data,
     cooperadoId,
     mesReferencia,
     coopId
   );
-  if (!complementares.length) return null;
-  const pendentes = listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId);
-  if (complementares.length !== pendentes.length) return null;
-  const base = getResumoSomenteFichasComplementares(complementares);
+  if (!descobertas.length) return null;
+  const base = getResumoSomenteFichasComplementares(descobertas);
   return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
 }
 
@@ -2623,13 +2661,18 @@ export function getResumoPagamentoExibicao(
 ): ResumoPagamentoCooperado {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const confirmado = getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia);
-  const pendentes = listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId);
-  if (confirmado && pendentes.length === 0) {
-    return resumoFromPagamento(confirmado);
-  }
-  if (confirmado && pendentes.length > 0) {
+  if (confirmado) {
     const complementar = resumoComplementaresPosPagamento(data, cooperadoId, mesReferencia, coopId);
     if (complementar) return complementar;
+    const descobertas = listarFichasPendentesNaoCobertasPorPagamentoConfirmado(
+      data,
+      cooperadoId,
+      mesReferencia,
+      coopId
+    );
+    if (descobertas.length === 0) {
+      return resumoFromPagamento(confirmado);
+    }
   }
   const pagamento = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
   if (pagamento) {

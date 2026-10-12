@@ -6,7 +6,11 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
-## v360 (atual)
+## v361 (atual)
+
+- **Dados:** responsável não exibe «a receber» de cooperado já pago quando a ficha no operacional ficou pendente após o PIX — alinha com o registro de pagamento e repara status na sync.
+
+## v360
 
 - **Entrada no app:** menos espera no «Preparando…» após login — reparo de perfil não bloqueia o shell quando a sessão já está pronta; menos chamadas repetidas a `/api/client-release`; AppData aquece mais cedo no PWA.
 

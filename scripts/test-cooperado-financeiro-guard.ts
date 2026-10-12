@@ -392,6 +392,27 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
 
 {
   const MES = "2026-08";
+  let data = baseData({
+    fichaCorrida: [ficha("f1", "n1", MES)],
+    notasPedido: [nota("n1", "conferida")],
+  });
+  data = registrarPagamentoCooperado(data, COOPERADO, MES, "Responsável teste");
+  const pg = data.pagamentosCooperado.find((p) => p.status === "confirmado");
+  assert.ok(pg?.fichaIds?.includes("f1"), "pagamento amarra ficha");
+  data = {
+    ...data,
+    fichaCorrida: data.fichaCorrida.map((f) =>
+      f.id === "f1" ? { ...f, status: "pendente" as const } : f
+    ),
+  };
+  const relatorio = getResumoValorAPagarRelatorio(data, COOPERADO, MES, COOP).valorLiquido;
+  const total = getTotalAPagarCooperado(data, COOPERADO, undefined, COOP);
+  assert.equal(relatorio, 0, "Em aberto zera mesmo com ficha pendente já coberta pelo PIX");
+  assert.equal(total, 0, "Total a pagar do responsável zera");
+}
+
+{
+  const MES = "2026-08";
   const data = baseData({
     fichaCorrida: [
       { ...ficha("f1", "n1", MES), status: "pago" },
