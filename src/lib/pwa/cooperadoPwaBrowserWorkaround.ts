@@ -34,6 +34,37 @@ function readStoredCooperadoSession(): boolean {
 export const COOPERADO_PWA_BROWSER_WORKAROUND_OPT_OUT_KEY =
   "hb-coop-pwa-browser-workaround-opt-out";
 
+/** Evita redirect em loop no ícone (rescue → dashboard → redirect de novo). */
+export const COOPERADO_PWA_BROWSER_HANDOFF_SESSION_KEY =
+  "hb-coop-pwa-browser-handoff";
+
+export function hasCooperadoPwaBrowserHandoffInSession(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return sessionStorage.getItem(COOPERADO_PWA_BROWSER_HANDOFF_SESSION_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function markCooperadoPwaBrowserHandoffSession(): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(COOPERADO_PWA_BROWSER_HANDOFF_SESSION_KEY, "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearCooperadoPwaBrowserHandoffSession(): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem(COOPERADO_PWA_BROWSER_HANDOFF_SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function isCooperadoPwaBrowserWorkaroundOptedOut(): boolean {
   if (typeof window === "undefined") return false;
   try {
@@ -55,6 +86,7 @@ export function voltarCooperadoParaAppNormal(): void {
   } catch {
     /* ignore */
   }
+  clearCooperadoPwaBrowserHandoffSession();
   window.location.reload();
 }
 
@@ -86,6 +118,7 @@ export function shouldCooperadoPwaUseBrowserWorkaround(): boolean {
   if (!isCooperadoPwaBrowserWorkaroundGloballyActive()) return false;
   if (typeof window === "undefined") return false;
   if (!isAppStandalone()) return false;
+  if (hasCooperadoPwaBrowserHandoffInSession()) return false;
   if (isCooperadoPwaMessengerMode()) return true;
   return readStoredCooperadoSession();
 }
@@ -131,8 +164,11 @@ export function openHbUrlInSystemBrowser(absoluteHttpsUrl: string): void {
 
 /** PWA cooperado → reparo + login/dashboard (sem esperar rede). */
 export function launchCooperadoPwaBrowserWorkaround(
-  _profile?: CloudSessionProfile | null
+  _profile?: CloudSessionProfile | null,
+  options?: { forceRetry?: boolean }
 ): void {
+  if (options?.forceRetry) clearCooperadoPwaBrowserHandoffSession();
+  markCooperadoPwaBrowserHandoffSession();
   void ensureCloudSessionReady(_profile ?? undefined);
   openHbUrlInSystemBrowser(cooperadoPwaBrowserWorkaroundAbsoluteUrl());
 }

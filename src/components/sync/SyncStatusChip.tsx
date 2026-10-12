@@ -180,7 +180,9 @@ export function CooperadoAtualizarButton({
       onClick={() => {
         if (busy || syncing) return;
         if (browserWorkaround) {
-          launchCooperadoPwaBrowserWorkaround(user ? userToCloudProfile(user) : null);
+          launchCooperadoPwaBrowserWorkaround(user ? userToCloudProfile(user) : null, {
+            forceRetry: true,
+          });
           return;
         }
         startedAtRef.current = Date.now();
