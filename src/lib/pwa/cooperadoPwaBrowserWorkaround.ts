@@ -107,13 +107,27 @@ export function filterCooperadoMenuHideBaixarApp<T extends { href: string }>(
   return items.filter((item) => item.href !== BAIXAR_APP_HREF);
 }
 
-export function shouldCooperadoPwaUseBrowserWorkaround(): boolean {
-  if (!isCooperadoPwaBrowserWorkaroundGloballyActive()) return false;
+function isCooperadoPwaStandaloneTarget(): boolean {
   if (typeof window === "undefined") return false;
   if (!isAppStandalone()) return false;
-  if (hasCooperadoPwaBrowserHandoffInSession()) return false;
   if (isCooperadoPwaMessengerMode()) return true;
   return readStoredCooperadoSession();
+}
+
+/** Tela inicial no ícone: botão para abrir o link no navegador. */
+export function shouldShowCooperadoPwaAbrirNavegadorGate(
+  userRole?: string | null
+): boolean {
+  if (!isCooperadoPwaBrowserWorkaroundGloballyActive()) return false;
+  if (!isCooperadoPwaStandaloneTarget()) return false;
+  if (userRole && userRole !== "cooperado") return false;
+  if (!userRole && !readStoredCooperadoSession()) return false;
+  return true;
+}
+
+/** @deprecated Use shouldShowCooperadoPwaAbrirNavegadorGate — mantido para testes. */
+export function shouldCooperadoPwaUseBrowserWorkaround(): boolean {
+  return shouldShowCooperadoPwaAbrirNavegadorGate("cooperado");
 }
 
 export function cooperadoPwaBrowserWorkaroundAbsoluteUrl(

@@ -63,7 +63,6 @@ import type { MobileTabScrollMode } from "@/lib/performance/mobileTabScrollMemor
 import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoMobileTabKeepAlive";
 import { StaffMobileTabKeepAlive } from "@/components/performance/StaffMobileTabKeepAlive";
 import { CooperadoPwaResumeLifecycle } from "@/components/cooperado/CooperadoPwaResumeLifecycle";
-import { CooperadoPwaBrowserWorkaroundAutoLaunch } from "@/components/cooperado/CooperadoPwaBrowserWorkaroundAutoLaunch";
 import { CooperadoPwaMessengerAppDataWarm } from "@/components/cooperado/CooperadoPwaMessengerAppDataWarm";
 import { CooperadoMobileBuildBadge } from "@/components/cooperado/CooperadoMobileBuildBadge";
 import { CooperadoMobileReleaseBar } from "@/components/cooperado/CooperadoMobileReleaseBar";
@@ -549,7 +548,6 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           {navUser && isCooperadoAppUser(navUser) && <CooperadoFinanceiroSyncBanner />}
           {navUser && isCooperadoAppUser(navUser) && <CooperadoPwaMessengerAppDataWarm />}
           {navUser && isCooperadoAppUser(navUser) && <CooperadoPwaResumeLifecycle />}
-          {navUser && isCooperadoAppUser(navUser) && <CooperadoPwaBrowserWorkaroundAutoLaunch />}
           {cooperadoKeepAliveShell ? (
             <CooperadoMobileTabKeepAlive pathname={pathname}>{children}</CooperadoMobileTabKeepAlive>
           ) : staffKeepAliveShell ? (

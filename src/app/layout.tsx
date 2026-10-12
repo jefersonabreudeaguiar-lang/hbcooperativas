@@ -27,6 +27,7 @@ import {
 import { buildInlineCooperadoPwaBrowserWorkaroundScript } from "@/lib/pwa/cooperadoPwaBrowserWorkaroundInline";
 import { RqlPerfDebugBootstrap } from "@/components/performance/RqlPerfDebugBootstrap";
 import { CooperadoBootShellDismiss } from "@/components/performance/CooperadoBootShellDismiss";
+import { CooperadoPwaAbrirNavegadorGate } from "@/components/cooperado/CooperadoPwaAbrirNavegadorGate";
 
 const geist = Geist({
   variable: "--font-geist-sans",
@@ -124,6 +125,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <PwaSilentServiceWorker />
           {children}
           <PwaProvider />
+          <CooperadoPwaAbrirNavegadorGate />
         </AuthProvider>
       </body>
     </html>
