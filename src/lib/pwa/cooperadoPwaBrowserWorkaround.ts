@@ -90,13 +90,6 @@ export function voltarCooperadoParaAppNormal(): void {
   window.location.reload();
 }
 
-export function shouldShowVoltarParaAppNormal(userRole?: string | null): boolean {
-  if (!COOPERADO_PWA_BROWSER_WORKAROUND_ENABLED) return false;
-  if (isCooperadoPwaBrowserWorkaroundOptedOut()) return false;
-  if (userRole && userRole !== "cooperado") return false;
-  return true;
-}
-
 /** Cooperado no navegador (workaround): não mostrar instalar/baixar app. */
 export function shouldHideCooperadoBaixarAppPromo(
   userRole?: string | null

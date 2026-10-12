@@ -64,7 +64,6 @@ import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoM
 import { StaffMobileTabKeepAlive } from "@/components/performance/StaffMobileTabKeepAlive";
 import { CooperadoPwaResumeLifecycle } from "@/components/cooperado/CooperadoPwaResumeLifecycle";
 import { CooperadoPwaBrowserWorkaroundAutoLaunch } from "@/components/cooperado/CooperadoPwaBrowserWorkaroundAutoLaunch";
-import { CooperadoPwaVoltarAppNormalBar } from "@/components/cooperado/CooperadoPwaVoltarAppNormalBar";
 import { CooperadoPwaMessengerAppDataWarm } from "@/components/cooperado/CooperadoPwaMessengerAppDataWarm";
 import { CooperadoMobileBuildBadge } from "@/components/cooperado/CooperadoMobileBuildBadge";
 import { CooperadoMobileReleaseBar } from "@/components/cooperado/CooperadoMobileReleaseBar";
@@ -307,7 +306,6 @@ export function MobileNav() {
       )}
 
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 flex flex-col safe-area-pb shadow-[0_-6px_24px_rgba(0,0,0,0.12)]">
-        {isCooperadoAppUser(navUser) && <CooperadoPwaVoltarAppNormalBar />}
         {isCooperadoAppUser(navUser) && <CooperadoMobileReleaseBar />}
         <nav className="flex bg-white border-t-2 border-green-200">
         {mobileItems.map((item) => {
