@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import {
+  buildPwaRescueAutoLoginAbsoluteUrl,
   buildPwaRescueCooperadoBrowserWorkaroundAbsoluteUrl,
   buildPwaRescueCooperadoBrowserWorkaroundHref,
 } from "../src/lib/pwa/cooperadoPwaRescueUrl";
+import { cooperadoPwaBrowserEntryAbsoluteUrl } from "../src/lib/pwa/cooperadoPwaBrowserWorkaround";
 
 const href = buildPwaRescueCooperadoBrowserWorkaroundHref(348);
 assert.match(href, /^\/pwa-rescue\.html\?auto=1&next=/);
@@ -25,5 +27,9 @@ import {
 
 assert.equal(COOPERADO_PWA_BROWSER_WORKAROUND_OPT_OUT_KEY, "hb-coop-pwa-browser-workaround-opt-out");
 assert.equal(typeof isCooperadoPwaBrowserWorkaroundGloballyActive(), "boolean");
+
+const entry = cooperadoPwaBrowserEntryAbsoluteUrl();
+assert.equal(entry, buildPwaRescueAutoLoginAbsoluteUrl("https://hbcooperativas.vercel.app"));
+assert.match(entry, /pwa-rescue\.html\?auto=1&next=/);
 
 console.log("test-cooperado-pwa-browser-workaround: ok");

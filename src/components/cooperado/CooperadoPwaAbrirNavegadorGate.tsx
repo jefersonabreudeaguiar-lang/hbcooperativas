@@ -4,17 +4,18 @@ import { useLayoutEffect, useMemo } from "react";
 import { ExternalLink } from "lucide-react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { AppIcon } from "@/components/ui/AppIcon";
-import { Button } from "@/components/ui/Button";
 import {
-  launchCooperadoPwaBrowserWorkaround,
+  cooperadoPwaBrowserEntryAbsoluteUrl,
   shouldShowCooperadoPwaAbrirNavegadorGate,
 } from "@/lib/pwa/cooperadoPwaBrowserWorkaround";
-import { userToCloudProfile } from "@/lib/security/clientSession";
+import { userToCloudProfile, ensureCloudSessionReady } from "@/lib/security/clientSession";
 import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
+import { cn } from "@/utils/format";
 
-/** Ícone PWA: cooperado escolhe abrir o HB no navegador (sem redirect automático). */
+/** Ícone PWA: cooperado toca e abre o link de produção no Chrome (nova aba). */
 export function CooperadoPwaAbrirNavegadorGate() {
   const { user, loading } = useAuth();
+  const entryUrl = useMemo(() => cooperadoPwaBrowserEntryAbsoluteUrl(), []);
 
   const visible = useMemo(() => {
     if (loading) return shouldShowCooperadoPwaAbrirNavegadorGate(null);
@@ -39,22 +40,24 @@ export function CooperadoPwaAbrirNavegadorGate() {
         HB Cooperativas
       </h1>
       <p className="mt-2 max-w-xs text-sm text-green-100/90 leading-relaxed">
-        Toque abaixo para abrir no navegador com seus dados atualizados.
+        Toque abaixo para abrir no navegador.
       </p>
-      <Button
-        type="button"
-        size="lg"
-        variant="inverse"
-        className="mt-8 w-full max-w-sm font-semibold text-base gap-2"
-        onClick={() =>
-          launchCooperadoPwaBrowserWorkaround(user ? userToCloudProfile(user) : null, {
-            forceRetry: true,
-          })
-        }
+      <a
+        href={entryUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={cn(
+          "mt-8 inline-flex w-full max-w-sm items-center justify-center gap-2 rounded-xl",
+          "bg-white px-6 py-3.5 text-base font-semibold text-green-900 shadow-lg",
+          "hover:bg-green-50 active:scale-[0.98] transition-transform"
+        )}
+        onClick={() => {
+          void ensureCloudSessionReady(user ? userToCloudProfile(user) : undefined);
+        }}
       >
         <ExternalLink size={20} aria-hidden />
         Abrir no navegador
-      </Button>
+      </a>
     </div>
   );
 }

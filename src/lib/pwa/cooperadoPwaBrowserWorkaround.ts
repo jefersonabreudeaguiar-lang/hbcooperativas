@@ -5,6 +5,7 @@
  */
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import {
+  buildPwaRescueAutoLoginAbsoluteUrl,
   buildPwaRescueCooperadoBrowserWorkaroundHref,
 } from "@/lib/pwa/cooperadoPwaRescueUrl";
 import {
@@ -15,6 +16,9 @@ import { isAppStandalone } from "@/services/cooperadoAppInstallService";
 
 /** Desligue quando o ícone PWA voltar a abrir normalmente. */
 export const COOPERADO_PWA_BROWSER_WORKAROUND_ENABLED = true;
+
+/** Link canônico de suporte (sempre HTTPS de produção, não o WebAPK). */
+export const COOPERADO_PWA_BROWSER_ENTRY_ORIGIN = "https://hbcooperativas.vercel.app";
 
 const BAIXAR_APP_HREF = "/baixar-app";
 const LOCAL_SESSION_KEY = "coopeagriplla_session";
@@ -130,52 +134,61 @@ export function shouldCooperadoPwaUseBrowserWorkaround(): boolean {
   return shouldShowCooperadoPwaAbrirNavegadorGate("cooperado");
 }
 
-export function cooperadoPwaBrowserWorkaroundAbsoluteUrl(
-  origin = typeof window !== "undefined" ? window.location.origin : "https://hbcooperativas.vercel.app"
-): string {
-  const href = buildPwaRescueCooperadoBrowserWorkaroundHref();
-  return `${origin.replace(/\/$/, "")}${href}`;
+/**
+ * URL enviada ao cooperado — pwa-rescue + login hb-pwa (produção).
+ * Ex.: …/pwa-rescue.html?auto=1&next=%2Flogin%3Fhb-pwa%3D348
+ */
+export function cooperadoPwaBrowserEntryAbsoluteUrl(): string {
+  return buildPwaRescueAutoLoginAbsoluteUrl(COOPERADO_PWA_BROWSER_ENTRY_ORIGIN);
 }
 
-/** Abre URL HTTPS no Chrome (Android) ou navegação direta. */
-export function openHbUrlInSystemBrowser(absoluteHttpsUrl: string): void {
+export function cooperadoPwaBrowserWorkaroundAbsoluteUrl(): string {
+  const href = buildPwaRescueCooperadoBrowserWorkaroundHref();
+  return `${COOPERADO_PWA_BROWSER_ENTRY_ORIGIN.replace(/\/$/, "")}${href}`;
+}
+
+/** Abre fora do WebAPK — só gesto do usuário; não usa replace no ícone. */
+export function openHbUrlInExternalBrowserFromUserGesture(absoluteHttpsUrl: string): void {
   if (typeof window === "undefined") return;
   const url = absoluteHttpsUrl.trim();
   const absolute =
     /^https?:\/\//i.test(url)
       ? url
-      : `${window.location.origin}${url.startsWith("/") ? url : `/${url}`}`;
+      : `${COOPERADO_PWA_BROWSER_ENTRY_ORIGIN}${url.startsWith("/") ? url : `/${url}`}`;
+
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = absolute;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    anchor.style.display = "none";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } catch {
+    /* ignore */
+  }
+
+  const opened = window.open(absolute, "_blank", "noopener,noreferrer");
+  if (opened) return;
 
   const ua = navigator.userAgent || "";
   if (/Android/i.test(ua)) {
     const tail = absolute.replace(/^https?:\/\//i, "");
-    const encodedFallback = encodeURIComponent(absolute);
-    const intent = `intent://${tail}#Intent;scheme=https;action=android.intent.action.VIEW;package=com.android.chrome;S.browser_fallback_url=${encodedFallback};end`;
+    const intent = `intent://${tail}#Intent;scheme=https;action=android.intent.action.VIEW;package=com.android.chrome;end`;
     try {
-      window.location.href = intent;
+      window.open(intent);
     } catch {
       /* ignore */
     }
-    window.setTimeout(() => {
-      try {
-        window.location.replace(absolute);
-      } catch {
-        /* ignore */
-      }
-    }, 280);
-    return;
   }
-
-  window.location.replace(absolute);
 }
 
-/** PWA cooperado → reparo + login/dashboard (sem esperar rede). */
+/** PWA cooperado → link de produção no navegador (toque no botão). */
 export function launchCooperadoPwaBrowserWorkaround(
-  _profile?: CloudSessionProfile | null,
-  options?: { forceRetry?: boolean }
+  profile?: CloudSessionProfile | null,
+  _options?: { forceRetry?: boolean }
 ): void {
-  if (options?.forceRetry) clearCooperadoPwaBrowserHandoffSession();
-  markCooperadoPwaBrowserHandoffSession();
-  void ensureCloudSessionReady(_profile ?? undefined);
-  openHbUrlInSystemBrowser(cooperadoPwaBrowserWorkaroundAbsoluteUrl());
+  void ensureCloudSessionReady(profile ?? undefined);
+  openHbUrlInExternalBrowserFromUserGesture(cooperadoPwaBrowserEntryAbsoluteUrl());
 }
