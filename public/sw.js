@@ -3,7 +3,7 @@
  * Bump CACHE_VERSION a cada mudança de estratégia (força o Chrome a baixar este arquivo).
  * HTML / navigate: SEMPRE rede primeiro — nunca Cache API nem fallback de HTML antigo online.
  */
-const CACHE_VERSION = "hb-coop-build-349-network-first-v2";
+const CACHE_VERSION = "hb-coop-build-350-network-first-v2";
 
 const OFFLINE_HTML =
   '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>HB Cooperativas</title></head><body style="font-family:system-ui,sans-serif;padding:1.25rem;background:#f0fdf4;color:#14532d"><h1>Sem conexão</h1><p>Verifique Wi‑fi ou dados móveis e abra de novo.</p><p><a href="/pwa-rescue.html">Reparar atalho</a></p></body></html>';

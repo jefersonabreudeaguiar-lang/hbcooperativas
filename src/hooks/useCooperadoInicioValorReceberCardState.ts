@@ -23,7 +23,7 @@ import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import {
   COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
   dispatchCooperadoPwaLeveUiSnapshotRefresh,
-} from "@/lib/cooperado/cooperadoPwaLeveUi";
+} from "@/lib/cooperado/cooperadoPwaLeveUiEvents";
 import {
   cooperadoTemReciboAssinadoLocalSemPendenciaUi,
   resolverCooperativaIdReciboLatch,
