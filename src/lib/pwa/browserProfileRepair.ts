@@ -1,5 +1,28 @@
 import { BUILD_SEEN_KEY } from "@/lib/pwa/clientRelease";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { fetchOfficialClientRelease } from "@/lib/pwa/fetchOfficialClientRelease";
+
+export const PROFILE_REPAIR_RECENT_KEY = "hb-coop-profile-repair-at";
+export const PROFILE_REPAIR_RECENT_MS = 30_000;
+
+function markProfileRepairChecked(): void {
+  try {
+    sessionStorage?.setItem(PROFILE_REPAIR_RECENT_KEY, String(Date.now()));
+  } catch {
+    /* ignore */
+  }
+}
+
+function profileRepairCheckedRecently(): boolean {
+  try {
+    const raw = sessionStorage?.getItem(PROFILE_REPAIR_RECENT_KEY);
+    if (!raw) return false;
+    const t = parseInt(raw, 10);
+    return Number.isFinite(t) && Date.now() - t < PROFILE_REPAIR_RECENT_MS;
+  } catch {
+    return false;
+  }
+}
 
 export type RepairBrowserProfileOptions = {
   /** Ícone instalado (PWA): também repara — antes ignorava só standalone. */
@@ -16,21 +39,10 @@ export async function repairBrowserProfileIfStale(
   if (typeof window === "undefined") return false;
   const standalone = window.matchMedia("(display-mode: standalone)").matches;
   if (standalone && !options?.includeStandalone) return false;
+  if (profileRepairCheckedRecently()) return false;
 
-  let cloudBuild = 0;
-  try {
-    const res = await fetch(`/api/client-release?_=${Date.now()}`, {
-      cache: "no-store",
-      credentials: "same-origin",
-    });
-    if (res.ok) {
-      const json = (await res.json()) as { build?: number };
-      cloudBuild = Number(json.build) || 0;
-    }
-  } catch {
-    return false;
-  }
-
+  const official = await fetchOfficialClientRelease();
+  let cloudBuild = official?.build ?? 0;
   if (cloudBuild <= 0) cloudBuild = APP_BUILD_VERSION;
 
   const pageBuild = parseInt(
@@ -50,6 +62,7 @@ export async function repairBrowserProfileIfStale(
     } catch {
       /* ignore */
     }
+    markProfileRepairChecked();
     return false;
   }
 

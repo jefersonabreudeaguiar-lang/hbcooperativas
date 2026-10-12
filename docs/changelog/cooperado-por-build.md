@@ -6,7 +6,11 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
-## v359 (atual)
+## v360 (atual)
+
+- **Entrada no app:** menos espera no «Preparando…» após login — reparo de perfil não bloqueia o shell quando a sessão já está pronta; menos chamadas repetidas a `/api/client-release`; AppData aquece mais cedo no PWA.
+
+## v359
 
 - **Entregas:** anexar foto mais rápido — compressão entrega otimizada, pipeline/worker aquecidos ao abrir a câmera, menos espera até liberar a próxima foto.
 

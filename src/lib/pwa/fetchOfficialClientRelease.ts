@@ -25,11 +25,27 @@ import {
   type ClientReleaseInfo,
 } from "@/lib/pwa/clientRelease";
 
+const OFFICIAL_RELEASE_CACHE_MS = 25_000;
+let officialReleaseCache: { at: number; value: ClientReleaseInfo } | null = null;
+
+export function invalidateOfficialClientReleaseCache(): void {
+  officialReleaseCache = null;
+}
+
 /**
  * Release oficial na nuvem. `null` se a rede falhar — nunca devolver o build embutido no JS
  * (isso fazia o guard pensar que já estava alinhado e o PWA ficava preso em build antigo).
  */
-export async function fetchOfficialClientRelease(): Promise<ClientReleaseInfo | null> {
+export async function fetchOfficialClientRelease(
+  options?: { bypassCache?: boolean }
+): Promise<ClientReleaseInfo | null> {
+  const bypass = options?.bypassCache === true;
+  if (!bypass && officialReleaseCache) {
+    const age = Date.now() - officialReleaseCache.at;
+    if (age >= 0 && age < OFFICIAL_RELEASE_CACHE_MS) {
+      return officialReleaseCache.value;
+    }
+  }
   try {
     const res = await fetch(`/api/client-release?_=${Date.now()}`, {
       cache: "no-store",
@@ -43,11 +59,13 @@ export async function fetchOfficialClientRelease(): Promise<ClientReleaseInfo | 
     const json = (await res.json()) as Partial<ClientReleaseInfo>;
     const build = typeof json.build === "number" ? json.build : 0;
     if (build <= 0) return null;
-    return {
+    const value: ClientReleaseInfo = {
       build,
       deploymentId: (json.deploymentId ?? "").trim(),
       gitCommitSha: (json.gitCommitSha ?? "").trim(),
     };
+    officialReleaseCache = { at: Date.now(), value };
+    return value;
   } catch {
     return null;
   }
@@ -186,7 +204,7 @@ export async function runClientReleaseAlignment(
 /** Botão «Atualizar app» — ignora cooldown/rajada e força hard align com a nuvem. */
 export async function requestManualCooperadoReleaseUpgrade(): Promise<boolean> {
   if (typeof window === "undefined") return false;
-  const canonical = await fetchOfficialClientRelease();
+  const canonical = await fetchOfficialClientRelease({ bypassCache: true });
   if (!canonical) return false;
 
   clearUrgentReleaseAlignDedup();

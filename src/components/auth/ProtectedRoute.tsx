@@ -46,9 +46,15 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       return;
     }
     let cancelled = false;
+    const session = getSession();
+    const instantCoop =
+      user.role === "cooperado" && cooperadoInstantShellReady(session);
+    if (instantCoop) {
+      setProfileRepairDone(true);
+    }
     void repairBrowserProfileIfStale({ includeStandalone: true }).then((reloaded) => {
       if (cancelled || reloaded) return;
-      setProfileRepairDone(true);
+      if (!instantCoop) setProfileRepairDone(true);
     });
     return () => {
       cancelled = true;

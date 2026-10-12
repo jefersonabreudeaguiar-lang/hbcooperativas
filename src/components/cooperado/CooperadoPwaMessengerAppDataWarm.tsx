@@ -32,7 +32,7 @@ export function CooperadoPwaMessengerAppDataWarm() {
 
     scheduleCooperadoPaintFirst(() => {
       if (typeof requestIdleCallback !== "undefined") {
-        idleId = requestIdleCallback(run, { timeout: 900 });
+        idleId = requestIdleCallback(run, { timeout: 320 });
       } else {
         timeoutId = window.setTimeout(run, 80);
       }
