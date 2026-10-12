@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Download } from "lucide-react";
 import { AppIcon } from "@/components/ui/AppIcon";
 import { BaixarAppGuide, detectDevicePlatform } from "@/components/pwa/BaixarAppGuide";
@@ -9,12 +10,28 @@ import { PLATFORM_NAME } from "@/utils/constants";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { PwaRepararAtalhoPanel } from "@/components/pwa/PwaRepararAtalhoPanel";
+import { shouldShowBaixarAppInstallPromo } from "@/lib/pwa/baixarAppInstallPromo";
 
 export default function BaixarAppPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const platform = useMemo(() => detectDevicePlatform(), []);
   const loginPreparado = `/login?hb-pwa=${APP_BUILD_VERSION}`;
   const voltarHref = user ? "/dashboard" : loginPreparado;
+  const promoVisivel = shouldShowBaixarAppInstallPromo();
+
+  useEffect(() => {
+    if (promoVisivel) return;
+    router.replace(voltarHref);
+  }, [promoVisivel, router, voltarHref]);
+
+  if (!promoVisivel) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-green-50 text-sm text-gray-600">
+        Redirecionando…
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">

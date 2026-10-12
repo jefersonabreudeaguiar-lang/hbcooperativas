@@ -17,6 +17,7 @@ import {
 } from "@/services/cooperadoAppInstallService";
 import { getData } from "@/services/dataStore";
 import { markPwaRepairSessionForBuild } from "@/lib/pwa/cooperadoPwaInstallPrepare";
+import { shouldHideBaixarAppInstallPromoInBrowser } from "@/lib/pwa/baixarAppInstallPromo";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 
 /** v2 — reexibe o aviso de baixar o app para quem já tinha fechado a versão antiga. */
@@ -100,12 +101,11 @@ export function PwaProvider() {
   useEffect(() => {
     if (loading) return;
 
-    if (isStandalone()) {
+    if (shouldHideBaixarAppInstallPromoInBrowser() || isStandalone()) {
       setVisible(false);
       return;
     }
 
-    // Cooperado no navegador (não no atalho): sempre pode reinstalar — não esconder por appInstaladoEm antigo.
     const forcarPorFaltaDeApp = Boolean(isCooperado && !isStandalone());
 
     if (!shouldShowPrompt(isCooperado, forcarPorFaltaDeApp)) {

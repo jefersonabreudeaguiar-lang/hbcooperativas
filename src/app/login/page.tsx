@@ -16,6 +16,7 @@ import { isBicLabEnabledClient } from "@/lib/lab/bicLabGate";
 import { repairBrowserProfileIfStale } from "@/lib/pwa/browserProfileRepair";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { prepareBrowserProfileForPwaInstall } from "@/lib/pwa/cooperadoPwaInstallPrepare";
+import { shouldShowBaixarAppInstallPromo } from "@/lib/pwa/baixarAppInstallPromo";
 import { PwaRepararAtalhoPanel } from "@/components/pwa/PwaRepararAtalhoPanel";
 
 const SEGMENTOS_ATENDIDOS = [
@@ -217,14 +218,16 @@ function LoginForm() {
                 </Link>
               </p>
 
-              <p className="text-center text-sm mt-4">
-                <Link
-                  href="/baixar-app"
-                  className="inline-flex items-center gap-1.5 font-semibold text-green-800 hover:text-green-950"
-                >
-                  Baixar aplicativo — Android e iPhone
-                </Link>
-              </p>
+              {shouldShowBaixarAppInstallPromo() && (
+                <p className="text-center text-sm mt-4">
+                  <Link
+                    href="/baixar-app"
+                    className="inline-flex items-center gap-1.5 font-semibold text-green-800 hover:text-green-950"
+                  >
+                    Baixar aplicativo — Android e iPhone
+                  </Link>
+                </p>
+              )}
 
               <PwaRepararAtalhoPanel />
 
