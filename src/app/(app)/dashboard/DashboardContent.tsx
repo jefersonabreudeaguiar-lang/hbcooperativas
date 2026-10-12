@@ -12,6 +12,7 @@ import {
   useAppDataSelectorForDomainsWhenActive,
 } from "@/hooks/useAppData";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
+import { isCooperadoInicioFinanceiroWarmTabRevisit } from "@/lib/performance/cooperadoInicioFinanceiroTabRevisit";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { getData, getDataRevision, isAppDataWarm } from "@/services/dataStore";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -304,6 +305,7 @@ function CooperadoDashboard() {
 
   useLayoutEffect(() => {
     if (!inicioPwaLeve || !tabActive) return;
+    if (isCooperadoInicioFinanceiroWarmTabRevisit("/dashboard")) return;
     refreshPwaInicioView();
   }, [inicioPwaLeve, tabActive, refreshPwaInicioView]);
 

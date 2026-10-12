@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useEffect, useCallback, useLayoutEffect } from "react";
+import { useMemo, useState, useEffect, useCallback, useLayoutEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard, History, Users, ChevronDown, Pencil, RefreshCw, Eye } from "lucide-react";
 import { useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
@@ -130,6 +130,7 @@ import {
   isCooperadoInstantResumeEnabled,
   isCooperadoManualOperacionalSync,
 } from "@/lib/performance/cooperadoColdStart";
+import { isCooperadoInicioFinanceiroWarmTabRevisit } from "@/lib/performance/cooperadoInicioFinanceiroTabRevisit";
 import { requestAppSync, requestAppSyncImmediate } from "@/services/syncRequest";
 import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
 import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExibirAguardandoAssinatura";
@@ -239,9 +240,11 @@ export default function FichaCorridaPage() {
   const [fichaResumoSnap, setFichaResumoSnap] = useState<CooperadoPwaFichaResumoSnapshot | null>(
     null
   );
+  const messengerHydrateRevisionRef = useRef<number | null>(null);
 
   useLayoutEffect(() => {
     if (!tabActive || !messenger || !isCooperado) return;
+    if (isCooperadoInicioFinanceiroWarmTabRevisit("/ficha-corrida")) return;
     ensureAppDataEagerWarm();
     if (isAppDataWarm()) setAppDataWarmTick((n) => n + 1);
     else {
@@ -261,6 +264,8 @@ export default function FichaCorridaPage() {
 
   useEffect(() => {
     if (!tabActive || !messenger || !user || user.role !== "cooperado") return;
+    if (messengerHydrateRevisionRef.current === readModelsRevision) return;
+    messengerHydrateRevisionRef.current = readModelsRevision;
     const run = () => rematerializarCooperadoPwaSnapshotsSeNecessario(user);
     if (typeof requestIdleCallback !== "undefined") {
       const id = requestIdleCallback(run, { timeout: 600 });
