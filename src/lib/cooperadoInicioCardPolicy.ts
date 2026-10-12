@@ -17,7 +17,7 @@ import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
 import { cooperadoMotorRevisionOperacional } from "@/lib/cooperado/cooperadoMotorRevisionOperacional";
 import { bicCentralResolveInicioParaExibicao, bicCentralSincronizarRotuloMeses, bicCentralValorAReceberAgregado } from "@/services/bicLeituraCentralCooperado";
 import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
-import { resolverMotorCardInicioParidadeFinanceiro } from "@/lib/cooperado/cooperadoFinanceiroParidadeInicioBridge";
+import { resolverMotorCardInicioParidadeFinanceiro } from "@/lib/cooperado/cooperadoInicioCardParidadeMotor";
 import {
   buildCooperadoFinanceiroUiSnapshot,
   type CooperadoFinanceiroUiSnapshot,
@@ -50,12 +50,8 @@ export function filtrarInicioCardPersistidoLeituraBic(
   };
 }
 
-export type InicioCardMotorSnapshot = {
-  mesLabel: string;
-  valor: number;
-  valorRecibo: number;
-  aguardandoAssinatura: boolean;
-};
+export type { InicioCardMotorSnapshot } from "@/lib/cooperado/cooperadoInicioCardMotorTypes";
+import type { InicioCardMotorSnapshot } from "@/lib/cooperado/cooperadoInicioCardMotorTypes";
 
 export type InicioCardLatchState = {
   motorRevision: string;

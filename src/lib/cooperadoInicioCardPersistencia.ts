@@ -1,8 +1,20 @@
 /**
  * Cache local do card “A receber” — exibição instantânea ao abrir o app (antes do sync).
  */
-import type { InicioCardMotorSnapshot } from "@/lib/cooperadoInicioCardPolicy";
-import { cooperadoMotorTemObrigacaoReceber } from "@/lib/cooperadoInicioCardPolicy";
+import type { InicioCardMotorSnapshot } from "@/lib/cooperado/cooperadoInicioCardMotorTypes";
+import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
+
+function persistidoTemObrigacaoReceber(display: InicioCardMotorSnapshot): boolean {
+  if (display.valor > 0) return true;
+  if (
+    cooperadoUsarFluxoReciboAssinaturaNaUi() &&
+    display.aguardandoAssinatura &&
+    display.valorRecibo > 0
+  ) {
+    return true;
+  }
+  return false;
+}
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { cooperadoPwaSnapshotBuildReadable } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
 
@@ -123,7 +135,7 @@ export function inicioCardCacheProntoParaAbertura(persistido: InicioCardPersisti
   if (!persistido?.display) return false;
   if (persistido.v !== INICIO_CARD_STORAGE_VERSION) return false;
   if (!cooperadoPwaSnapshotBuildReadable(persistido.appBuild)) return false;
-  if (cooperadoMotorTemObrigacaoReceber(persistido.display)) return true;
+  if (persistidoTemObrigacaoReceber(persistido.display)) return true;
   const savedAt = Date.parse(persistido.savedAt);
   if (!Number.isFinite(savedAt)) return false;
   const maxAgeMs = 45 * 24 * 60 * 60 * 1000;

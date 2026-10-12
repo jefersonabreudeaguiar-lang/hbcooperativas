@@ -10,22 +10,21 @@ import { getData, isAppDataWarm } from "@/services/dataStore";
 import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { gravarReciboAssinadoLocalLatch } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
+import {
+  COOPERADO_PWA_ENTREGAS_SNAPSHOT_REFRESH_EVENT,
+  COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
+  dispatchCooperadoPwaLeveUiSnapshotRefresh,
+} from "@/lib/cooperado/cooperadoPwaLeveUiEvents";
 
 export function isCooperadoPwaMobileLeveUi(): boolean {
   return isCooperadoPwaMobileEntregasLeve();
 }
 
-export const COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT =
-  "hb-cooperado-pwa-leve-ui-snapshot-refresh";
-
-/** @deprecated Use COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT */
-export const COOPERADO_PWA_ENTREGAS_SNAPSHOT_REFRESH_EVENT =
-  COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT;
-
-export function dispatchCooperadoPwaLeveUiSnapshotRefresh(): void {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT));
-}
+export {
+  COOPERADO_PWA_ENTREGAS_SNAPSHOT_REFRESH_EVENT,
+  COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
+  dispatchCooperadoPwaLeveUiSnapshotRefresh,
+};
 
 /** Card + snapshot do painel Início (mesma leitura do motor). */
 export function refreshCooperadoPwaInicioCachesFromMotor(

@@ -13,10 +13,8 @@ import { getSession } from "@/services/dataStore";
 import { persistirCooperadoPwaFichaResumoSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import { persistirCooperadoPwaInicioDashboardSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
 import { persistirCooperadoPwaEntregasResumosSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
-import {
-  dispatchCooperadoPwaLeveUiSnapshotRefresh,
-  persistirInicioCardCooperadoNotificarPwaLeve,
-} from "@/lib/cooperado/cooperadoPwaLeveUi";
+import { dispatchCooperadoPwaLeveUiSnapshotRefresh } from "@/lib/cooperado/cooperadoPwaLeveUiEvents";
+import { persistirInicioCardCooperadoNotificarPwaLeve } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { materializeCooperadoScopedReadModels } from "@/lib/cooperado/cooperadoScopedReadModels";
 
 export function isCooperadoPwaMessengerMode(): boolean {

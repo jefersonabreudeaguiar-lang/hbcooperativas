@@ -18,7 +18,7 @@ import { cooperadoPwaSnapshotBuildReadable } from "@/lib/cooperado/cooperadoPwaS
 import {
   COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
   dispatchCooperadoPwaLeveUiSnapshotRefresh,
-} from "@/lib/cooperado/cooperadoPwaLeveUi";
+} from "@/lib/cooperado/cooperadoPwaLeveUiEvents";
 
 export const COOPERADO_PWA_ENTREGAS_SNAPSHOT_VERSION = 1;
 

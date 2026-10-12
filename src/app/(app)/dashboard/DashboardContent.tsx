@@ -3,6 +3,7 @@
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AppData, User } from "@/types";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
   useAppDataSelector,
@@ -34,8 +35,18 @@ import type { AdminDashboardStats } from "@/services/dashboardService";
 import type { FilaDoDiaItem } from "@/services/filaDoDiaService";
 import { getFilaDoDiaCached } from "@/services/filaDoDiaService";
 import { FilaDoDiaPanel } from "@/components/dashboard/FilaDoDiaPanel";
-import { CooperadoHbCreditResumoCard } from "@/components/hb-credit/CooperadoHbCreditResumoCard";
-import { ContaCoopFilaCloudPanel } from "@/components/hb-credit/ContaCoopFilaCloudPanel";
+const CooperadoHbCreditResumoCard = dynamic(
+  () =>
+    import("@/components/hb-credit/CooperadoHbCreditResumoCard").then(
+      (m) => m.CooperadoHbCreditResumoCard
+    ),
+  { ssr: false, loading: () => null }
+);
+const ContaCoopFilaCloudPanel = dynamic(
+  () =>
+    import("@/components/hb-credit/ContaCoopFilaCloudPanel").then((m) => m.ContaCoopFilaCloudPanel),
+  { ssr: false, loading: () => null }
+);
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
@@ -85,7 +96,6 @@ import {
   persistirCooperadoPwaInicioDashboardSnapshot,
   type CooperadoPwaInicioDashboardView,
 } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
-import { cooperadoPwaMaterializarSnapshotsFinanceirosPosSync } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import {
   cooperadoPrecisaCadastrarAssinatura,
   normalizarAssinaturaLegadoCooperado,
@@ -269,8 +279,10 @@ function CooperadoDashboard() {
   useEffect(() => {
     if (!inicioPwaLeve || !user?.cooperadoId) return;
     if (!apresentacaoConsolidada || lastSyncedAt == null) return;
-    cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user);
-    refreshPwaInicioView({ rebuildFromAppData: true });
+    void import("@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh").then((mod) => {
+      mod.cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user);
+      refreshPwaInicioView({ rebuildFromAppData: true });
+    });
   }, [
     inicioPwaLeve,
     apresentacaoConsolidada,
