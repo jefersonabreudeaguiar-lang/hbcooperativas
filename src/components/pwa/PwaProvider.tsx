@@ -101,12 +101,14 @@ export function PwaProvider() {
   useEffect(() => {
     if (loading) return;
 
-    if (shouldHideBaixarAppInstallPromoInBrowser() || isStandalone()) {
+    const hideFloatingBanner = shouldHideBaixarAppInstallPromoInBrowser();
+
+    if (isStandalone()) {
       setVisible(false);
       return;
     }
 
-    const forcarPorFaltaDeApp = Boolean(isCooperado && !isStandalone());
+    const forcarPorFaltaDeApp = Boolean(isCooperado && !isStandalone() && !hideFloatingBanner);
 
     if (!shouldShowPrompt(isCooperado, forcarPorFaltaDeApp)) {
       setVisible(false);
@@ -118,14 +120,12 @@ export function PwaProvider() {
     setPlatform(detected);
     setNonSafariIos(isIosNonSafari());
 
-    // iPhone/iPad: sempre mostra instruções (Safari A2HS).
-    if (detected === "ios" || forcarPorFaltaDeApp) {
+    if (hideFloatingBanner) {
+      setVisible(false);
+    } else if (detected === "ios" || forcarPorFaltaDeApp) {
       setVisible(true);
       if (detected === "ios") return;
-    }
-
-    // Navegador (desktop ou outro): cooperado sem PWA instalado — guia de instalação.
-    if (isCooperado && !isStandalone() && (forcarPorFaltaDeApp || detected === "other")) {
+    } else if (isCooperado && !isStandalone() && (forcarPorFaltaDeApp || detected === "other")) {
       setVisible(true);
     }
 
@@ -141,6 +141,7 @@ export function PwaProvider() {
 
     // Fallback Android: se o evento não vier em alguns segundos, mostra o guia mesmo assim.
     const fallbackTimer = window.setTimeout(() => {
+      if (hideFloatingBanner) return;
       if (!shouldShowPrompt(isCooperado, forcarPorFaltaDeApp)) return;
       if (detected === "android" || forcarPorFaltaDeApp) setVisible(true);
     }, 2500);

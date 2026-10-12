@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { ArrowLeft, Download } from "lucide-react";
 import { AppIcon } from "@/components/ui/AppIcon";
@@ -9,12 +9,18 @@ import { PLATFORM_NAME } from "@/utils/constants";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { PwaRepararAtalhoPanel } from "@/components/pwa/PwaRepararAtalhoPanel";
+import { BaixarAppInstallPanel } from "@/components/pwa/BaixarAppInstallPanel";
+import { prepareBrowserProfileForPwaInstall } from "@/lib/pwa/cooperadoPwaInstallPrepare";
 
 export default function BaixarAppPage() {
   const { user } = useAuth();
   const platform = useMemo(() => detectDevicePlatform(), []);
   const loginPreparado = `/login?hb-pwa=${APP_BUILD_VERSION}`;
   const voltarHref = user ? "/dashboard" : loginPreparado;
+
+  useEffect(() => {
+    void prepareBrowserProfileForPwaInstall("install");
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">
@@ -40,6 +46,8 @@ export default function BaixarAppPage() {
             </p>
           </div>
         </header>
+
+        <BaixarAppInstallPanel />
 
         <BaixarAppGuide highlight={platform} />
 
