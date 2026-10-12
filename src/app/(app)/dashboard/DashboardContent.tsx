@@ -63,8 +63,7 @@ import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/
 import { getUserCooperativaId, getUserCooperativaNome, normalizeCnpj } from "@/utils/cooperativa";
 import { Camera, Wallet, ClipboardList, Users, Vote, Download, PenLine } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
-import { isAppStandalone, resumoInstalacaoApp } from "@/services/cooperadoAppInstallService";
-import { shouldHideBaixarAppInstallPromoInBrowser } from "@/lib/pwa/baixarAppInstallPromo";
+import { resumoInstalacaoApp } from "@/services/cooperadoAppInstallService";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import {
   appLocalResumeReady,
@@ -386,12 +385,6 @@ function CooperadoDashboard() {
       )
   );
 
-  /** Mostra enquanto não estiver no atalho instalado — appInstaladoEm só indica uso passado no app. */
-  const mostrarBaixarApp =
-    !shouldHideBaixarAppInstallPromoInBrowser() &&
-    Boolean(cooperado) &&
-    !cooperado!.avulso;
-
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
@@ -421,24 +414,6 @@ function CooperadoDashboard() {
           </Button>
         </div>
       </div>
-
-      {mostrarBaixarApp && (
-        <Link
-          href="/baixar-app"
-          className="flex items-center gap-4 rounded-2xl border-2 border-green-300 bg-gradient-to-r from-green-50 to-emerald-50 px-5 py-4 hover:border-green-400 transition-colors"
-        >
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-700 text-white shrink-0">
-            <Download size={24} />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block font-bold text-gray-900">Baixar aplicativo</span>
-            <span className="block text-sm text-gray-600 mt-0.5">
-              Android e iPhone — adicione à tela inicial e use sem abrir o navegador
-            </span>
-          </span>
-          <span className="text-sm font-semibold text-green-800 shrink-0">Ver como →</span>
-        </Link>
-      )}
 
       {pautasAbertas.length > 0 && <VotacaoPautasInicioPanel pautas={pautasAbertas} />}
 

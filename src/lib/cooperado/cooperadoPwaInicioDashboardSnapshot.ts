@@ -20,7 +20,6 @@ import { getComunicadosInicioCooperado } from "@/services/comunicadoService";
 import { getPagamentoPendenteAssinaturaReciboCooperado } from "@/services/notaPedidoService";
 import { cooperadoTemReciboAssinadoLocalSemPendenciaUi } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
 import { listarResolvidosInicioCooperado } from "@/services/cooperadoInicioResolvidosService";
-import { cooperadoTemAppInstalado, isAppStandalone } from "@/services/cooperadoAppInstallService";
 import { cooperadoUsaAssinaturaCadastroPilot } from "@/config/assinaturaCadastroPilot";
 import {
   cooperadoPrecisaCadastrarAssinatura,
@@ -155,11 +154,6 @@ export function buildCooperadoPwaInicioDashboardView(
     mensalidadeAberta ||
     prestacaoAberta ||
     exibirCardAvulsosSeparado;
-  const mostrarBaixarApp =
-    Boolean(cooperado) &&
-    !cooperado!.avulso &&
-    !isAppStandalone() &&
-    !cooperadoTemAppInstalado(cooperado!);
   const cnpjDigits = cnpj ? normalizeCnpj(cnpj) : "";
 
   return {
@@ -180,7 +174,7 @@ export function buildCooperadoPwaInicioDashboardView(
     resultadoVotacao,
     resolvidos,
     temSecaoPendencias,
-    mostrarBaixarApp,
+    mostrarBaixarApp: false,
     coopId,
     mostrarAssinaturaPilot,
     precisaAssinatura,
