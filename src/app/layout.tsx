@@ -27,6 +27,8 @@ import {
 import { RqlPerfDebugBootstrap } from "@/components/performance/RqlPerfDebugBootstrap";
 import { CooperadoBootShellDismiss } from "@/components/performance/CooperadoBootShellDismiss";
 import { PwaStandaloneRepairAck } from "@/components/pwa/PwaStandaloneRepairAck";
+import { buildInlineCooperadoPwaStealthReloadScript } from "@/lib/pwa/cooperadoPwaStealthReload";
+import { CooperadoPwaStealthReloadHost } from "@/components/cooperado/CooperadoPwaStealthReloadHost";
 
 const geist = Geist({
   variable: "--font-geist-sans",
@@ -116,9 +118,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="h-24 bg-white rounded-xl border border-gray-200 animate-pulse" />
           </div>
         </div>
+        <script dangerouslySetInnerHTML={{ __html: buildInlineCooperadoPwaStealthReloadScript() }} />
         <AuthProvider>
           <CooperadoBootShellDismiss />
           <PwaStandaloneRepairAck />
+          <CooperadoPwaStealthReloadHost />
           <RqlPerfDebugBootstrap />
           <ClientReleaseShieldHost />
           <PwaSilentServiceWorker />
