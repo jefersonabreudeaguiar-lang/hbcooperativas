@@ -1,6 +1,8 @@
+import { normalizeAppBaseUrl } from "@/lib/security/secureOriginUrl";
+
 export function getAppBaseUrl(request?: Request): string {
   const env = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (env) return env.replace(/\/$/, "");
+  if (env) return normalizeAppBaseUrl(env);
 
   if (request) {
     const host = request.headers.get("x-forwarded-host") || request.headers.get("host");

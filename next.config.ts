@@ -1,6 +1,25 @@
 import type { NextConfig } from "next";
 import { X_ROBOTS_TAG_NOINDEX, isSearchIndexingAllowed } from "./src/lib/security/crawlerPolicy";
 
+const CSP_DIRECTIVES = [
+  "object-src 'none'",
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  "frame-src 'self' https://*.supabase.co blob:",
+  "media-src 'self' blob: data:",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+];
+
+if (process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production") {
+  CSP_DIRECTIVES.push("upgrade-insecure-requests");
+}
+
 const SECURITY_HEADERS = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
@@ -13,20 +32,7 @@ const SECURITY_HEADERS = [
   },
   {
     key: "Content-Security-Policy",
-    value: [
-      "object-src 'none'",
-      "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https:",
-      "font-src 'self' data:",
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
-      "frame-src 'self' https://*.supabase.co blob:",
-      "media-src 'self' blob: data:",
-      "frame-ancestors 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-    ].join("; "),
+    value: CSP_DIRECTIVES.join("; "),
   },
 ];
 

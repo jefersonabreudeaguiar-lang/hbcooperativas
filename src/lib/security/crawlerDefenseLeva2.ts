@@ -61,6 +61,7 @@ export function isStaticOrFrameworkPath(pathname: string): boolean {
   ) {
     return true;
   }
+  if (pathname.startsWith("/share/")) return true;
   return /\.(svg|png|jpg|jpeg|gif|webp|ico|woff2?|txt|xml|webmanifest)$/i.test(pathname);
 }
 

@@ -17,8 +17,23 @@ function leva2Response(request: NextRequest, pathname: string): NextResponse | n
   return NextResponse.json({ error: verdict.message }, { status: verdict.status, headers });
 }
 
+function httpsRedirectIfNeeded(request: NextRequest): NextResponse | null {
+  if (process.env.NODE_ENV !== "production") return null;
+  const proto = request.headers.get("x-forwarded-proto");
+  if (proto && proto !== "http") return null;
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+  if (!host) return null;
+  const url = request.nextUrl.clone();
+  url.protocol = "https:";
+  url.host = host;
+  return NextResponse.redirect(url, 308);
+}
+
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+
+  const httpsRedirect = httpsRedirectIfNeeded(request);
+  if (httpsRedirect) return httpsRedirect;
 
   const blocked = leva2Response(request, pathname);
   if (blocked) return blocked;
@@ -67,6 +82,6 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/api/:path*",
-    "/((?!_next/static|_next/image|favicon.ico|pwa-boot\\.html|pwa-launch\\.html|pwa-rescue\\.html|pwa-diag\\.html|pwa-crash-forensics\\.html|pwa-console-forensics\\.html|hb-console-forensics-paste\\.js|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?|webmanifest)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|pwa-boot\\.html|pwa-launch\\.html|pwa-rescue\\.html|pwa-diag\\.html|pwa-crash-forensics\\.html|pwa-console-forensics\\.html|hb-console-forensics-paste\\.js|sw\\.js|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?|webmanifest)$).*)",
   ],
 };

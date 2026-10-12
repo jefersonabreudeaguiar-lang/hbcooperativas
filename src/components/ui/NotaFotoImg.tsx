@@ -2,6 +2,7 @@
 
 import { Camera } from "lucide-react";
 import { useEffect, useState } from "react";
+import { upgradeInsecureHttpUrl } from "@/lib/security/secureOriginUrl";
 import { isLocalMediaRef } from "@/utils/fotoEntrega";
 import { getLocalMediaBlobUrl } from "@/services/localMediaStore";
 import { cn } from "@/utils/format";
@@ -16,7 +17,7 @@ interface NotaFotoImgProps {
 /** Resolve fotos em IndexedDB (`idb:`) ou URLs inline para exibição. */
 export function NotaFotoImg({ src, alt = "", className, placeholderClassName }: NotaFotoImgProps) {
   const [resolved, setResolved] = useState<string | undefined>(
-    src && !isLocalMediaRef(src) ? src : undefined
+    src && !isLocalMediaRef(src) ? upgradeInsecureHttpUrl(src) : undefined
   );
   const [failed, setFailed] = useState(false);
 
@@ -27,7 +28,7 @@ export function NotaFotoImg({ src, alt = "", className, placeholderClassName }: 
       return;
     }
     if (!isLocalMediaRef(src)) {
-      setResolved(src);
+      setResolved(upgradeInsecureHttpUrl(src));
       return;
     }
 
