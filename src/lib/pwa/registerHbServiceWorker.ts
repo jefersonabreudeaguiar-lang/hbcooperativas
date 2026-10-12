@@ -2,7 +2,7 @@
 export const HB_SERVICE_WORKER_URL = "/sw.js";
 
 /** Registra SW de passthrough (substitui legado) em PWA/standalone. */
-export const PWA_SERVICE_WORKER_REGISTRATION_ENABLED = true;
+export const PWA_SERVICE_WORKER_REGISTRATION_ENABLED = false;
 
 function registrationScriptUrl(reg: ServiceWorkerRegistration): string {
   return (
