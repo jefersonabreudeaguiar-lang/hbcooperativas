@@ -115,11 +115,20 @@ window.HB_PWA_DIAG_RUN = async function HB_PWA_DIAG_RUN() {
   if (storage.repairLocal && pageBuild && String(storage.repairLocal) !== String(pageBuild) && Number(storage.repairLocal) < pageBuild - 1) {
     causas.push("REPARO_LOCAL_DESATUALIZADO: " + storage.repairLocal + " vs page " + pageBuild);
   }
-  if (crashLog.length) {
-    var last = crashLog[crashLog.length - 1];
+  var crashRecent = crashLog.filter(function (e) {
+    if (!e) return false;
+    if (pageBuild && e.build && String(e.build) !== String(pageBuild)) return false;
+    if (cloudDpl && e.chunkDpls && e.chunkDpls.length && e.chunkDpls.indexOf(cloudDpl) < 0) return false;
+    if (cloudDpl && e.src && e.src.indexOf(cloudDpl) < 0 && e.chunkDpls && !e.chunkDpls.length) return false;
+    return true;
+  });
+  if (crashRecent.length) {
+    var last = crashRecent[crashRecent.length - 1];
     if (last && /before initialization|ChunkLoadError|Loading chunk/i.test(String(last.message))) {
-      causas.push("CRASH_JS: " + String(last.message).slice(0, 120));
+      causas.push("CRASH_JS_AGORA: " + String(last.message).slice(0, 120));
     }
+  } else if (crashLog.length) {
+    causas.push("CRASH_LOG_ANTIGO: " + crashLog.length + " entrada(s) de build/dpl anterior — limpe e recarregue");
   }
   if (!navigator.onLine) {
     causas.push("OFFLINE");
@@ -159,6 +168,7 @@ window.HB_PWA_DIAG_RUN = async function HB_PWA_DIAG_RUN() {
       : null,
     cacheKeys: cacheKeys,
     crashLog: crashLog.slice(-5),
+    crashLogBuildAtual: crashRecent.slice(-3),
     causasProvaveis: causas,
     acoesRecomendadas: [
       "Chrome (nao Edge): " + location.origin + "/pwa-rescue.html?auto=1&next=%2Flogin%3Fhb-pwa%3D" + (cloudBuild || pageBuild),
