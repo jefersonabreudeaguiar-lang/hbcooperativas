@@ -133,12 +133,18 @@ export function resolveCompressSettings(_file?: File): CompressSettings {
 export function resolveFastEntregaCompressSettings(): CompressSettings {
   const low = isLowMemoryDevice();
   return {
-    maxWidth: low ? 800 : 960,
-    quality: low ? 0.55 : 0.58,
-    thumbWidth: 200,
-    thumbQuality: 0.45,
+    maxWidth: low ? 720 : 800,
+    quality: low ? 0.5 : 0.52,
+    thumbWidth: 160,
+    thumbQuality: 0.4,
     preferWebP: true,
   };
+}
+
+/** Aquece WebP/worker antes da 1ª foto no modal de anexar. */
+export function warmDeliveryImagePipeline(): void {
+  void detectWebPSupport();
+  void import("@/services/photoCompressWorker");
 }
 
 export function validateImageFile(file: File): ImageValidationResult {

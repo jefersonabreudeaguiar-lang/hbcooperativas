@@ -1638,9 +1638,7 @@ export default function NotasPedidoCooperadoMain() {
     if (!anexarModal || !pendingCameraOnAnexarRef.current) return;
     if (processandoFoto || enviando) return;
     pendingCameraOnAnexarRef.current = false;
-    const raf1 = requestAnimationFrame(() => {
-      requestAnimationFrame(() => abrirCameraAnexar());
-    });
+    const raf1 = requestAnimationFrame(() => abrirCameraAnexar());
     return () => cancelAnimationFrame(raf1);
   }, [anexarModal, abrirCameraAnexar, enviando, processandoFoto]);
 
@@ -1683,6 +1681,7 @@ export default function NotasPedidoCooperadoMain() {
     setObservacoes(notaRejeitada?.observacoes ?? "");
 
     if (options?.abrirCamera) {
+      prefetchCooperadoAnexarPipeline();
       resetFotosSessaoUi();
       if (!notaRejeitada) limparRascunhoAnexar();
       const currentData = data ?? getData();
@@ -2535,9 +2534,13 @@ export default function NotasPedidoCooperadoMain() {
   };
 
   const processarFotoArquivo = async (file: File) => {
-    if (!data || !cooperadoId || !ANEXAR_DRAFT_KEY || enviando) return;
+    const shellData = data ?? getData();
+    if (!shellData || !cooperadoId || !ANEXAR_DRAFT_KEY || enviando) return;
 
-    const pipeline = await loadCooperadoAnexarPipeline();
+    const [pipeline, qtdAtualInicial] = await Promise.all([
+      loadCooperadoAnexarPipeline(),
+      countFotoDraft(ANEXAR_DRAFT_KEY),
+    ]);
 
     if (fotoProcessandoRef.current) {
       fotoAbortRef.current?.abort();
@@ -2562,7 +2565,7 @@ export default function NotasPedidoCooperadoMain() {
       }
       if (validation.warning) setFotoValidationWarning(validation.warning);
 
-      const qtdAtual = await countFotoDraft(ANEXAR_DRAFT_KEY);
+      const qtdAtual = qtdAtualInicial;
       if (fotosSessaoAtingiuLimite(qtdAtual)) {
         setErroEnvio(mensagemLimiteFotosSessao());
         setFotoPipelineStep("idle");
@@ -2574,17 +2577,18 @@ export default function NotasPedidoCooperadoMain() {
         await getOrCreatePendingNotaId(ANEXAR_DRAFT_KEY, () => reenviarNotaId);
       }
 
-      const resolved = resolverContratoEntrega(data, coopId!, contratoInstId || undefined, {
+      const resolved = resolverContratoEntrega(shellData, coopId!, contratoInstId || undefined, {
         criarPadraoSeVazio: false,
       });
       const contratoId = resolved.instituicaoId || contratoInstId;
-      const cnpjPromise = resolveCooperativaCnpj(data, coopId, user);
+      const cnpjPromise = resolveCooperativaCnpj(shellData, coopId, user);
+      const skipDupCheck = qtdAtual === 0 && !reenviarNotaId;
 
       setFotoPipelineStep("compressing");
-      const [cnpj, fileFingerprint, processed] = await Promise.all([
+      const [cnpj, processed, fileFingerprint] = await Promise.all([
         cnpjPromise,
-        fingerprintFotoFile(file),
         pipeline.processDeliveryImage(file, abort.signal, { fastEntrega: true }),
+        skipDupCheck ? Promise.resolve("") : fingerprintFotoFile(file),
       ]);
       if (!cnpj) {
         setErroEnvio("CNPJ da cooperativa não encontrado. Verifique a conexão.");
@@ -2592,20 +2596,24 @@ export default function NotasPedidoCooperadoMain() {
         return;
       }
 
-      if (await isFotoDraftDuplicadaByFingerprint(ANEXAR_DRAFT_KEY, fileFingerprint)) {
+      if (
+        !skipDupCheck &&
+        fileFingerprint &&
+        (await isFotoDraftDuplicadaByFingerprint(ANEXAR_DRAFT_KEY, fileFingerprint))
+      ) {
         setFotoDuplicadaMsg("Imagem repetida — esta foto já foi adicionada ou já foi enviada antes.");
         setFotoPipelineStep("idle");
         return;
       }
 
-      const cooperadoNome = getCooperadoNome(data.cooperados, cooperadoId);
+      const cooperadoNome = getCooperadoNome(shellData.cooperados, cooperadoId);
       const notaId =
         reenviarNotaId ??
         (await getOrCreatePendingNotaId(ANEXAR_DRAFT_KEY, () => generateId("np")));
       const newIndex = await appendFotoDraftMeta(ANEXAR_DRAFT_KEY, contratoId, fileFingerprint);
       const totalCount = newIndex + 1;
 
-      const inst = data.instituicoes.find((i) => i.id === contratoId);
+      const inst = shellData.instituicoes.find((i) => i.id === contratoId);
       const localEntregaDraft = inst?.localEntrega ?? inst?.endereco ?? "";
       const now = new Date().toISOString();
       const mes = getCurrentMesReferencia();
@@ -2615,8 +2623,8 @@ export default function NotasPedidoCooperadoMain() {
       let mesReferencia: string;
 
       if (reenviarNotaId) {
-        const base = data.notasPedido.find((n) => n.id === reenviarNotaId);
-        numeroNota = base?.numeroNota ?? gerarNumeroNota(data, coopId!);
+        const base = shellData.notasPedido.find((n) => n.id === reenviarNotaId);
+        numeroNota = base?.numeroNota ?? gerarNumeroNota(shellData, coopId!);
         createdAt = base?.createdAt ?? now;
         mesReferencia = base?.mesReferencia ?? mes;
       } else {
@@ -2626,7 +2634,7 @@ export default function NotasPedidoCooperadoMain() {
           createdAt = identity.createdAt;
           mesReferencia = identity.mesReferencia;
         } else {
-          numeroNota = gerarNumeroNota(data, coopId!);
+          numeroNota = gerarNumeroNota(shellData, coopId!);
           createdAt = now;
           mesReferencia = mes;
           await saveDraftNotaIdentity(ANEXAR_DRAFT_KEY, { numeroNota, createdAt, mesReferencia });
@@ -2635,7 +2643,7 @@ export default function NotasPedidoCooperadoMain() {
 
       const draftNota: NotaPedido = reenviarNotaId
         ? {
-            ...(data.notasPedido.find((n) => n.id === reenviarNotaId) as NotaPedido),
+            ...(shellData.notasPedido.find((n) => n.id === reenviarNotaId) as NotaPedido),
             instituicaoId: contratoId,
             localEntrega: localEntregaDraft,
             fotosEnviadasCount: totalCount,
@@ -2654,7 +2662,7 @@ export default function NotasPedidoCooperadoMain() {
             localEntrega: localEntregaDraft,
             itens: [],
             valorBruto: 0,
-            percentualDescontoCooperativa: data.config.descontoPadraoCooperativa,
+            percentualDescontoCooperativa: shellData.config.descontoPadraoCooperativa,
             valorDesconto: 0,
             valorLiquido: 0,
             status: "rascunho",

@@ -6,7 +6,11 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
-## v358 (atual)
+## v359 (atual)
+
+- **Entregas:** anexar foto mais rápido — compressão entrega otimizada, pipeline/worker aquecidos ao abrir a câmera, menos espera até liberar a próxima foto.
+
+## v358
 
 - **Entregas:** botão «Enviar foto da entrega» no Início volta a abrir a câmera (navegação alinhada às abas + `?anexar=1` mesmo com AppData aquecendo).
 

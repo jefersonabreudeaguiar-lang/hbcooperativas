@@ -8,7 +8,10 @@ let pipelineModule: Promise<typeof import("@/services/imagePipelineService")> | 
 export function prefetchCooperadoAnexarPipeline(): void {
   if (typeof window === "undefined") return;
   if (!pipelineModule) {
-    pipelineModule = import("@/services/imagePipelineService");
+    pipelineModule = import("@/services/imagePipelineService").then((m) => {
+      m.warmDeliveryImagePipeline();
+      return m;
+    });
   }
 }
 
