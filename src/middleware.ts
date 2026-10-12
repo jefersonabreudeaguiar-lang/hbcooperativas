@@ -19,13 +19,13 @@ function leva2Response(request: NextRequest, pathname: string): NextResponse | n
 
 function httpsRedirectIfNeeded(request: NextRequest): NextResponse | null {
   if (process.env.NODE_ENV !== "production") return null;
-  const proto = request.headers.get("x-forwarded-proto");
-  if (proto && proto !== "http") return null;
+  const proto = (request.headers.get("x-forwarded-proto") ?? "").split(",")[0]?.trim();
+  if (proto !== "http") return null;
   const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
   if (!host) return null;
   const url = request.nextUrl.clone();
   url.protocol = "https:";
-  url.host = host;
+  url.host = host.split(",")[0]?.trim() || host;
   return NextResponse.redirect(url, 308);
 }
 

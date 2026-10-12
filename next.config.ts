@@ -1,5 +1,11 @@
 import type { NextConfig } from "next";
 import { X_ROBOTS_TAG_NOINDEX, isSearchIndexingAllowed } from "./src/lib/security/crawlerPolicy";
+import { validateProductionClientEnv } from "./src/lib/security/validateProductionClientEnv";
+
+const prodEnvIssues = validateProductionClientEnv();
+if (prodEnvIssues.length > 0) {
+  console.warn("[hb-coop] Avisos de ambiente em produção:\n", prodEnvIssues.join("\n"));
+}
 
 const CSP_DIRECTIVES = [
   "object-src 'none'",
@@ -8,13 +14,25 @@ const CSP_DIRECTIVES = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://vitals.vercel-insights.com https://*.vercel-scripts.com",
+  "worker-src 'self'",
   "frame-src 'self' https://*.supabase.co blob:",
-  "media-src 'self' blob: data:",
+  "media-src 'self' blob: data: https:",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
 ];
+
+/** Bootstrap PWA (HTML estático em /public) — sem upgrade-insecure-requests para evitar edge cases no WebView. */
+const PWA_BOOTSTRAP_CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: https:",
+  "connect-src 'self'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
 
 if (process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production") {
   CSP_DIRECTIVES.push("upgrade-insecure-requests");
@@ -84,24 +102,18 @@ const nextConfig: NextConfig = {
         headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
       },
       {
+        source: "/pwa-:file(boot|launch|rescue|diag).html",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Content-Security-Policy", value: PWA_BOOTSTRAP_CSP },
+        ],
+      },
+      {
         source: "/manifest.webmanifest",
-        headers: [{ key: "Cache-Control", value: "no-cache, must-revalidate" }],
-      },
-      {
-        source: "/pwa-boot.html",
-        headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
-      },
-      {
-        source: "/pwa-launch.html",
-        headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
-      },
-      {
-        source: "/pwa-rescue.html",
-        headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
-      },
-      {
-        source: "/pwa-diag.html",
-        headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Content-Type", value: "application/manifest+json; charset=utf-8" },
+        ],
       },
       // Vercel envia `public, max-age=31536000, immutable` ao browser em /_next/static;
       // next.config não substitui isso. Escopo entre publicações: query `?dpl=` + boot/SW/rescue.

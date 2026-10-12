@@ -1,3 +1,5 @@
+import { normalizeAppBaseUrl } from "@/lib/security/secureOriginUrl";
+
 export interface AsaasConfig {
   apiKey: string;
   baseUrl: string;
@@ -116,7 +118,7 @@ export function getAsaasSetupInfo(): {
   webhookTokenConfigured: boolean;
 } {
   const config = getAsaasConfig();
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+  const appUrl = normalizeAppBaseUrl((process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, ""));
   return {
     configured: Boolean(config),
     sandbox: config?.sandbox ?? false,
