@@ -6,9 +6,13 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
-## v356 (atual)
+## v357 (atual)
 
-- **Performance:** troca Início ↔ Financeiro no PWA — sem re-hydrate/AppData no frame quando o painel já está em cache (dual-mount).
+- **Performance:** volta ao padrão melhor-performance nas abas Início/Financeiro (reverte otimização experimental v356; mantém cold start v355).
+
+## v356
+
+- **Performance:** troca Início ↔ Financeiro no PWA — sem re-hydrate/AppData no frame quando o painel já está em cache (dual-mount). *(substituída por v357 — baseline padrão.)*
 
 ## v355
 
