@@ -14,6 +14,7 @@ export function HbCreditNavPrefetch() {
 
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;
 
     if (user.role === "cooperado") {
       const routes = ["/minha-conta-coop", "/minha-conta-coop/escanear", "/minha-conta-coop/pagar"];
@@ -41,7 +42,6 @@ export function HbCreditNavPrefetch() {
       };
     }
 
-    let cancelled = false;
     const prefetch = () => {
       if (cancelled) return;
       const routes = hbState.enabled ? ["/conta-coop", PREFETCH_INICIO] : [PREFETCH_INICIO];
