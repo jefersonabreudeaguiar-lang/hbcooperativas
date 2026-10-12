@@ -36,6 +36,7 @@ export function refreshCooperadoPwaInicioCachesFromMotor(
   const ok = persistirInicioCardValorReceberCooperado(user);
   if (isAppDataWarm()) {
     persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, apresentacaoConsolidada);
+    persistirCooperadoPwaFichaResumoSnapshotFromUser(user, apresentacaoConsolidada);
   }
   if (isCooperadoPwaMobileLeveUi()) {
     dispatchCooperadoPwaLeveUiSnapshotRefresh();

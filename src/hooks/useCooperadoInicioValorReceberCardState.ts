@@ -20,7 +20,10 @@ import {
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { isCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
-import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import {
+  COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
+  dispatchCooperadoPwaLeveUiSnapshotRefresh,
+} from "@/lib/cooperado/cooperadoPwaLeveUi";
 import {
   cooperadoTemReciboAssinadoLocalSemPendenciaUi,
   resolverCooperativaIdReciboLatch,
@@ -122,7 +125,8 @@ export function useCooperadoInicioValorReceberCardState(input: {
       const needsMotor =
         syncMotorPass ||
         persistidoTick > 0 ||
-        !persistidoMesmoBuildEarly?.display;
+        !persistidoMesmoBuildEarly?.display ||
+        (input.dataReady && apresentacaoConsolidada);
 
       const data =
         needsMotor || !persistidoMesmoBuildEarly?.display
@@ -153,10 +157,12 @@ export function useCooperadoInicioValorReceberCardState(input: {
               data,
               cooperadoId: input.cooperadoId,
               cooperativaId: cooperativaIdCard,
-              apresentacaoConsolidada: true,
-              carregandoFinanceiro: false,
+              apresentacaoConsolidada,
+              carregandoFinanceiro: carregandoFinanceiro && !apresentacaoConsolidada,
               prevLatch: null,
               persistido: null,
+              dataReady: input.dataReady,
+              syncing: input.syncing,
             })
           : null;
 
@@ -282,10 +288,12 @@ export function useCooperadoInicioValorReceberCardState(input: {
           data: dataLatch,
           cooperadoId: input.cooperadoId,
           cooperativaId: cooperativaIdLatch,
-          apresentacaoConsolidada: true,
-          carregandoFinanceiro: false,
+          apresentacaoConsolidada,
+          carregandoFinanceiro: carregandoFinanceiro && !apresentacaoConsolidada,
           prevLatch: null,
           persistido: null,
+          dataReady: input.dataReady,
+          syncing: input.syncing,
         });
         if (cooperadoMotorTemObrigacaoReceber(motorLocal.display)) {
           return { ...motorLocal, gravarPersistencia: true };
@@ -337,12 +345,16 @@ export function useCooperadoInicioValorReceberCardState(input: {
       display: sanitizeInicioCardSnapshotParaPersistenciaBic(resolved.display),
       savedAt: new Date().toISOString(),
     });
+    if (leituraSomentePwa) {
+      dispatchCooperadoPwaLeveUiSnapshotRefresh();
+    }
   }, [
     input.cooperadoId,
     input.cooperativaId,
     resolved.display,
     resolved.latch.motorRevision,
     resolved.gravarPersistencia,
+    leituraSomentePwa,
   ]);
 
   const atualizando =

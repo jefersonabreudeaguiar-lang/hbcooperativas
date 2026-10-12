@@ -22,6 +22,7 @@ import { getData, isAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import type { User } from "@/types";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
+import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 
 export type CooperadoInicioCardPersistUser = Omit<User, "password">;
 
@@ -48,7 +49,11 @@ export function persistirInicioCardValorReceberCooperado(
 
   const { cooperadoId, cooperativaId } = tenant;
   const data = getData();
-  if (cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId)) {
+  const financeiroDesatualizado = cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId);
+  if (
+    financeiroDesatualizado &&
+    !cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, cooperativaId)
+  ) {
     return false;
   }
   const resolved = resolverCardInicioEndurecido({

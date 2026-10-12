@@ -74,7 +74,8 @@ export function useCooperadoApresentacaoFinanceiraConsolidada(): {
     dadosFinanceirosConsistentes:
       user?.role === "cooperado"
         ? financeiroUiGate
-          ? !financeiroUiGate.aguardandoFatia && financeiroUiGate.consistentes
+          ? !financeiroUiGate.aguardandoFatia &&
+            (financeiroUiGate.consistentes || cooperadoPagamentosHydrated)
           : false
         : undefined,
   };

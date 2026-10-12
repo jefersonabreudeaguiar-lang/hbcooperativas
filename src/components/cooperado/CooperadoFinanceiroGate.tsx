@@ -35,7 +35,6 @@ import {
 } from "@/services/syncRequest";
 import { consumeCooperadoPostLoginFinanceSync } from "@/lib/cooperado/cooperadoPostLoginFinanceSync";
 import { markCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
-import { purgarInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { cooperadoRematerializarFinanceiroLocalSePossivel } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -135,9 +134,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
       const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId!, coopId);
 
       if (cooperadoAppReleaseNeedsOperacionalSync()) {
-        if (!cooperadoRematerializarFinanceiroLocalSePossivel(user)) {
-          purgarInicioCardValorReceberCooperado(user);
-        }
+        cooperadoRematerializarFinanceiroLocalSePossivel(user);
         requestCooperadoAppReleaseSync();
       }
 

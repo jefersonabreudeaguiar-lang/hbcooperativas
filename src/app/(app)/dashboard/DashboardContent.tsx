@@ -177,13 +177,12 @@ function CooperadoDashboard() {
   }, [messenger, user?.id, user?.cooperadoId]);
 
   useEffect(() => {
-    if (inicioPwaLeve) return;
     if (!financeiroAusente || recoverySyncRef.current || typeof navigator === "undefined" || !navigator.onLine) {
       return;
     }
     recoverySyncRef.current = true;
     requestCooperadoFinanceiroRecoverySync();
-  }, [financeiroAusente, inicioPwaLeve]);
+  }, [financeiroAusente]);
 
   const contaCoopSync = useAppDataSelectorForDomainsWhenActive(
     appDataUiOn && hbCredit.navEnabled,

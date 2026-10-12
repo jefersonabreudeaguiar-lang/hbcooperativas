@@ -47,8 +47,8 @@ export function useCooperadoInicioCardContext(user: Omit<User, "password"> | nul
 
   const subscribeDomains = useCallback(
     (onChange: () => void) => {
-      if (pwaLeveUi) return () => undefined;
-      const unsubs = INICIO_CARD_DOMAINS.map((d) => subscribeAppDataDomain(d, onChange));
+      const domains: AppDataNotifyDomain[] = pwaLeveUi ? ["financeiro", "notas"] : INICIO_CARD_DOMAINS;
+      const unsubs = domains.map((d) => subscribeAppDataDomain(d, onChange));
       return () => {
         for (const u of unsubs) u();
       };
@@ -58,7 +58,7 @@ export function useCooperadoInicioCardContext(user: Omit<User, "password"> | nul
 
   const revisionKey = useSyncExternalStore(
     subscribeDomains,
-    () => (pwaLeveUi ? "pwa-leve-paused" : inicioCardRevisionSnapshot()),
+    inicioCardRevisionSnapshot,
     () => "-1"
   );
 

@@ -991,6 +991,14 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           cooperadoFinanceiroStaleRecuperavelEmBackground(latest, cooperadoCanonico, coopIdFinal)
         ) {
           restaurarApresentacaoCooperado();
+        } else if (
+          cooperadoCanonico &&
+          coopIdFinal &&
+          completed &&
+          cooperadoTemDadosFinanceirosMinimos(latest, cooperadoCanonico, coopIdFinal) &&
+          !cooperadoFinanceiroBloqueiaEntradaApp(latest, cooperadoCanonico, coopIdFinal)
+        ) {
+          restaurarApresentacaoCooperado();
         } else if (!isCooperadoManualOperacionalSync()) {
           setCooperadoPagamentosHydrated(false);
         }
