@@ -97,6 +97,13 @@ const nextConfig: NextConfig = {
         source: "/pwa-diag.html",
         headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
       },
+      {
+        source: "/_next/static/:path*",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "CDN-Cache-Control", value: "no-store" },
+        ],
+      },
     ];
   },
 };

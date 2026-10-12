@@ -17,6 +17,7 @@ import {
 } from "@/lib/pwa/clientRelease";
 import { buildInlineRuntimeCrashRecorderScript } from "@/lib/pwa/runtimeCrashForensics";
 import { buildInlineStaleProfileGuardScript } from "@/lib/pwa/staleProfileGuard";
+import { buildInlineHtmlDeploymentAlignScript } from "@/lib/pwa/htmlDeploymentAlign";
 import { buildInlineRqlPerfStubScript } from "@/lib/performance/rqlPerfReport";
 import { buildInlineCooperadoAppDataWarmScript } from "@/lib/performance/cooperadoAppDataInlineWarm";
 import {
@@ -93,6 +94,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: buildInlinePwaStandaloneLaunchGuardScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineServiceWorkerMigrationScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlinePageReleaseBootstrap(pageRelease) }} />
+        <script dangerouslySetInnerHTML={{ __html: buildInlineHtmlDeploymentAlignScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineDeploymentBootScript(pageRelease) }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineRqlPerfStubScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineCooperadoAppDataWarmScript() }} />

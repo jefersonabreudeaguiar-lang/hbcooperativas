@@ -1,3 +1,4 @@
-import { lazyAppRoute } from "@/lib/performance/appRouteLazy";
+import DashboardContent from "./DashboardContent";
 
-export default lazyAppRoute(() => import("./DashboardContent"));
+/** Bundle da rota no carregamento inicial — evita chunk async extra (TDZ no PWA). */
+export default DashboardContent;
