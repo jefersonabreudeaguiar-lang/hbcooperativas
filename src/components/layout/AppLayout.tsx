@@ -68,7 +68,10 @@ import { CooperadoMobileBuildBadge } from "@/components/cooperado/CooperadoMobil
 import { CooperadoMobileReleaseBar } from "@/components/cooperado/CooperadoMobileReleaseBar";
 import { StaffMobileReleaseBar } from "@/components/layout/StaffMobileReleaseBar";
 import type { Resource } from "@/types";
-import { shouldShowBaixarAppInstallPromo } from "@/lib/pwa/baixarAppInstallPromo";
+import {
+  shouldShowBaixarAppInCooperadoOverflowMenu,
+  shouldShowBaixarAppInstallPromo,
+} from "@/lib/pwa/baixarAppInstallPromo";
 
 const ICONS: Record<string, React.ReactNode> = {
   dashboard: <LayoutDashboard size={20} />,
@@ -212,14 +215,15 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
           <p className="text-xs text-green-300">{getUserFuncaoLabel(navUser)}</p>
         </div>
         {!isCooperadoAppUser(navUser) && <StaffSidebarSyncVersionLine />}
-        {shouldShowBaixarAppInstallPromo() && (
+        {(shouldShowBaixarAppInstallPromo() ||
+          (isCooperadoAppUser(navUser) && shouldShowBaixarAppInCooperadoOverflowMenu())) && (
           <Link
             href="/baixar-app"
             onClick={onClose}
             className="flex items-center gap-2 w-full px-3 py-2 text-sm text-green-200 hover:bg-green-800 hover:text-white rounded-lg transition-colors"
           >
             <Download size={18} />
-            Baixar app (Android e iPhone)
+            Baixar aplicativo
           </Link>
         )}
         <button

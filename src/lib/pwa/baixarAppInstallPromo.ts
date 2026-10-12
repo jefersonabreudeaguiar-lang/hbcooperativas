@@ -10,9 +10,7 @@ export function shouldShowBaixarAppInstallPromo(): boolean {
   return !shouldHideBaixarAppInstallPromoInBrowser();
 }
 
-export function filterMenuHideBaixarAppInBrowser<T extends { href: string }>(
-  items: T[]
-): T[] {
-  if (!shouldHideBaixarAppInstallPromoInBrowser()) return items;
-  return items.filter((item) => item.href !== "/baixar-app");
+/** Menu ☰ do cooperado no navegador — único lugar da promo de instalar. */
+export function shouldShowBaixarAppInCooperadoOverflowMenu(): boolean {
+  return shouldHideBaixarAppInstallPromoInBrowser();
 }
