@@ -244,19 +244,6 @@ export function useCooperadoInicioValorReceberCardState(input: {
         };
       }
 
-      if (reciboAssinadoLocal) {
-        return {
-          display: SNAPSHOT_VAZIO,
-          latch: {
-            motorRevision: "",
-            display: SNAPSHOT_VAZIO,
-            hadPendencia: false,
-          },
-          atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
-          gravarPersistencia: false,
-        };
-      }
-
       const fichaSnap =
         input.cooperadoId && cooperativaIdLatch
           ? lerCooperadoPwaFichaResumoSnapshot(input.cooperadoId, cooperativaIdLatch)
@@ -298,6 +285,19 @@ export function useCooperadoInicioValorReceberCardState(input: {
         if (cooperadoMotorTemObrigacaoReceber(motorLocal.display)) {
           return { ...motorLocal, gravarPersistencia: true };
         }
+      }
+
+      if (reciboAssinadoLocal) {
+        return {
+          display: SNAPSHOT_VAZIO,
+          latch: {
+            motorRevision: "",
+            display: SNAPSHOT_VAZIO,
+            hadPendencia: false,
+          },
+          atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+          gravarPersistencia: false,
+        };
       }
 
       return {
