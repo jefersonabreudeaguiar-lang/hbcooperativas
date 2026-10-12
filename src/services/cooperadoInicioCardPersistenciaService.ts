@@ -9,6 +9,7 @@ import {
   resolverInicioCardMotorFromAppData,
   sanitizeInicioCardSnapshotParaPersistenciaBic,
 } from "@/lib/cooperadoInicioCardPolicy";
+import { resolverMotorCardInicioParidadeFinanceiro } from "@/lib/cooperado/cooperadoFinanceiroParidadeInicioBridge";
 import {
   INICIO_CARD_STORAGE_VERSION,
   gravarInicioCardPersistidoFlex,
@@ -67,6 +68,12 @@ export function persistirInicioCardValorReceberCooperado(
   });
 
   let display = resolved.display;
+  if (!cooperadoMotorTemObrigacaoReceber(display)) {
+    const paridade = resolverMotorCardInicioParidadeFinanceiro(data, cooperadoId, cooperativaId);
+    if (cooperadoMotorTemObrigacaoReceber(paridade.motor)) {
+      display = paridade.motor;
+    }
+  }
   if (cooperadoTemReciboAssinadoLocalSemPendenciaUi(data, cooperadoId, cooperativaId)) {
     display = {
       ...display,

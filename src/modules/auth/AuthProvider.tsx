@@ -289,10 +289,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         await waitForAppDataWarm(4000);
       }
-      if (role === "cooperado" && !isCooperadoPwaMessengerMode()) {
+      if (role === "cooperado") {
         markCooperadoPostLoginFinanceSync();
-        if (!persistirInicioCardValorReceberCooperado(safeUser)) {
-          purgarInicioCardValorReceberCooperado(safeUser);
+        if (!isCooperadoPwaMessengerMode()) {
+          if (!persistirInicioCardValorReceberCooperado(safeUser)) {
+            purgarInicioCardValorReceberCooperado(safeUser);
+          }
         }
       }
       const redirectTo = role === "parceiro" ? "/mercado-parceiro" : "/dashboard";

@@ -406,7 +406,17 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         markCooperadoPagamentosHydrated();
         return;
       }
-      purgarInicioCardValorReceberCooperado(currentUser);
+      if (!isAppDataWarm() || !currentUser.cooperadoId) return;
+      const data = getData();
+      const coopId = getUserCooperativaId(currentUser, data) ?? currentUser.cooperativaId;
+      if (!coopId) return;
+      const cooperadoId = resolverCooperadoIdCanonico(data, currentUser.cooperadoId, coopId);
+      if (
+        cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId) &&
+        !cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, coopId)
+      ) {
+        markCooperadoPagamentosHydrated();
+      }
     },
     [markCooperadoPagamentosHydrated]
   );
@@ -414,7 +424,13 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   useEffect(() => {
     if (user?.role !== "cooperado" || !coopId) return;
     const run = () => {
-      if (!user || !cooperadoLocalResumeReady(user)) return;
+      if (!user || !isAppDataWarm()) return;
+      const data = getData();
+      const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId!, coopId);
+      const fatiaLocalUtil =
+        cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId) &&
+        !cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, coopId);
+      if (!fatiaLocalUtil && !cooperadoLocalResumeReady(user)) return;
       markCooperadoPagamentosHydrated();
       if (isCooperadoPwaMobileLeveUi() || isCooperadoPwaMessengerMode()) {
         cooperadoRematerializarFinanceiroLocalSePossivel(user);
@@ -1079,6 +1095,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         if (isCooperadoPwaMessengerMode()) {
           scheduleCooperadoPostShellSync(() => {
             markCooperadoUserSyncVisible();
+            prepararFinanceiroLocalCooperado(user);
             requestCooperadoAppReleaseSync();
           });
         } else {

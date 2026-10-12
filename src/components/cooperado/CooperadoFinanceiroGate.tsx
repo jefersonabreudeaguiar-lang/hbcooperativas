@@ -36,6 +36,7 @@ import {
 import { consumeCooperadoPostLoginFinanceSync } from "@/lib/cooperado/cooperadoPostLoginFinanceSync";
 import { markCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
 import { cooperadoRematerializarFinanceiroLocalSePossivel } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
+import { cooperadoPwaMessengerPrecisaSyncOperacionalInicial } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { getData, isAppDataWarm } from "@/services/dataStore";
@@ -121,6 +122,11 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
       markCooperadoPostShellSyncStarted();
 
       if (isCooperadoPwaMessengerMode()) {
+        cooperadoRematerializarFinanceiroLocalSePossivel(user);
+        if (cooperadoPwaMessengerPrecisaSyncOperacionalInicial(user)) {
+          markCooperadoUserSyncVisible();
+          requestCooperadoAppReleaseSync();
+        }
         clearCooperadoPostShellSyncStarted();
         return;
       }

@@ -16,8 +16,10 @@ import {
   cooperadoAguardandoPrimeiraFatiaFinanceira,
   cooperadoDadosFinanceirosConsistentesParaApresentacao,
 } from "@/services/cooperadoFinanceiroGuard";
+import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { isAppDataWarm } from "@/services/dataStore";
+import { cooperadoFinanceiroBloqueiaEntradaApp } from "@/services/fichaSyncGuard";
 
 /** Gate global H203 — quando apresentar projeção financeira cooperado como definitiva na UI. */
 export function useCooperadoApresentacaoFinanceiraConsolidada(): {
@@ -29,12 +31,25 @@ export function useCooperadoApresentacaoFinanceiraConsolidada(): {
 } {
   const { user } = useAuth();
   const { syncing, syncingForUi, cooperadoPagamentosHydrated, lastSyncedAt } = useSyncStatus();
-  const exibirComDadosLocais =
-    user?.role === "cooperado" &&
-    isCooperadoManualOperacionalSync() &&
-    cooperadoLocalResumeReady(user);
-
   const offline = typeof navigator !== "undefined" && !navigator.onLine;
+
+  const exibirComFatiaFinanceiraLocal = useAppDataSelector(
+    (data) => {
+      if (user?.role !== "cooperado" || !user.cooperadoId || !isAppDataWarm()) return false;
+      const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
+      if (!coopId) return false;
+      const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+      if (cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, coopId)) return false;
+      return cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId);
+    },
+    [user?.id, user?.role, user?.cooperadoId, user?.cooperativaId]
+  );
+
+  const exibirComDadosLocais = Boolean(
+    user?.role === "cooperado" &&
+      ((isCooperadoManualOperacionalSync() && cooperadoLocalResumeReady(user)) ||
+        exibirComFatiaFinanceiraLocal)
+  );
 
   const financeiroUiGate = useAppDataSelector(
     (data) => {
@@ -75,7 +90,9 @@ export function useCooperadoApresentacaoFinanceiraConsolidada(): {
       user?.role === "cooperado"
         ? financeiroUiGate
           ? !financeiroUiGate.aguardandoFatia &&
-            (financeiroUiGate.consistentes || cooperadoPagamentosHydrated)
+            (financeiroUiGate.consistentes ||
+              cooperadoPagamentosHydrated ||
+              Boolean(exibirComFatiaFinanceiraLocal))
           : false
         : undefined,
   };
