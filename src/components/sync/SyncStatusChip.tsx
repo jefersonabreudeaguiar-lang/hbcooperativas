@@ -10,6 +10,11 @@ import {
 } from "@/services/syncRequest";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { cooperadoPwaMaterializarSnapshotsFinanceirosPosSync } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
+import {
+  launchCooperadoPwaBrowserWorkaround,
+  shouldCooperadoPwaUseBrowserWorkaround,
+} from "@/lib/pwa/cooperadoPwaBrowserWorkaround";
+import { userToCloudProfile } from "@/lib/security/clientSession";
 import { cn } from "@/utils/format";
 import {
   formatRelativoSync,
@@ -156,6 +161,7 @@ export function CooperadoAtualizarButton({
   const startedAtRef = useRef(0);
   const spinning = busy || syncing;
   const header = variant === "header";
+  const browserWorkaround = shouldCooperadoPwaUseBrowserWorkaround();
 
   useEffect(() => {
     if (!busy) return;
@@ -173,6 +179,10 @@ export function CooperadoAtualizarButton({
       type="button"
       onClick={() => {
         if (busy || syncing) return;
+        if (browserWorkaround) {
+          void launchCooperadoPwaBrowserWorkaround(user ? userToCloudProfile(user) : null);
+          return;
+        }
         startedAtRef.current = Date.now();
         setBusy(true);
         if (isCooperadoEventDrivenSync()) {
@@ -181,23 +191,35 @@ export function CooperadoAtualizarButton({
           requestAppSyncImmediate();
         }
       }}
-      disabled={spinning}
+      disabled={browserWorkaround ? false : spinning}
       className={cn(
         header
           ? "inline-flex items-center gap-0.5 rounded-md bg-green-800/80 px-1.5 py-0.5 text-[10px] font-semibold text-green-50 transition-colors hover:bg-green-700/90 disabled:opacity-60"
           : "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors text-green-100/95 hover:bg-green-800/90 disabled:opacity-70",
         className
       )}
-      aria-busy={spinning}
+      aria-busy={browserWorkaround ? false : spinning}
       aria-label={
-        spinning
-          ? "Atualizando a receber e financeiro"
-          : "Atualizar a receber e financeiro da cooperativa"
+        browserWorkaround
+          ? "Abrir HB Cooperativas no Chrome para sincronizar"
+          : spinning
+            ? "Atualizando a receber e financeiro"
+            : "Atualizar a receber e financeiro da cooperativa"
       }
-      title={spinning ? "Atualizando…" : "Atualizar a receber e financeiro"}
+      title={
+        browserWorkaround
+          ? "Abre no Chrome (recomendado até o ícone do app voltar ao normal). Se pedir login, use o mesmo e-mail e senha."
+          : spinning
+            ? "Atualizando…"
+            : "Atualizar a receber e financeiro"
+      }
     >
-      <RefreshCw size={header ? 11 : 12} className={cn("shrink-0", spinning && "animate-spin")} aria-hidden />
-      {header ? null : "Atualizar"}
+      <RefreshCw
+        size={header ? 11 : 12}
+        className={cn("shrink-0", !browserWorkaround && spinning && "animate-spin")}
+        aria-hidden
+      />
+      {header ? null : browserWorkaround ? "Chrome" : "Atualizar"}
     </button>
   );
 }

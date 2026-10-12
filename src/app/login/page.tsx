@@ -17,6 +17,7 @@ import { repairBrowserProfileIfStale } from "@/lib/pwa/browserProfileRepair";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { prepareBrowserProfileForPwaInstall } from "@/lib/pwa/cooperadoPwaInstallPrepare";
 import { PwaRepararAtalhoPanel } from "@/components/pwa/PwaRepararAtalhoPanel";
+import { shouldHideCooperadoBaixarAppPromo } from "@/lib/pwa/cooperadoPwaBrowserWorkaround";
 
 const SEGMENTOS_ATENDIDOS = [
   "Agrícola e agroindustrial",
@@ -91,6 +92,7 @@ function LoginForm() {
     nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/dashboard";
   const bicLabLogin = isBicLabEnabledClient();
   const sessaoExpirada = searchParams.get("sessao") === "expirada";
+  const ocultarBaixarApp = shouldHideCooperadoBaixarAppPromo();
 
   useEffect(() => {
     if (!searchParams.has("hb-pwa")) {
@@ -217,14 +219,16 @@ function LoginForm() {
                 </Link>
               </p>
 
-              <p className="text-center text-sm mt-4">
-                <Link
-                  href="/baixar-app"
-                  className="inline-flex items-center gap-1.5 font-semibold text-green-800 hover:text-green-950"
-                >
-                  Baixar aplicativo — Android e iPhone
-                </Link>
-              </p>
+              {!ocultarBaixarApp && (
+                <p className="text-center text-sm mt-4">
+                  <Link
+                    href="/baixar-app"
+                    className="inline-flex items-center gap-1.5 font-semibold text-green-800 hover:text-green-950"
+                  >
+                    Baixar aplicativo — Android e iPhone
+                  </Link>
+                </p>
+              )}
 
               <PwaRepararAtalhoPanel />
 

@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Download } from "lucide-react";
 import { AppIcon } from "@/components/ui/AppIcon";
 import { BaixarAppGuide, detectDevicePlatform } from "@/components/pwa/BaixarAppGuide";
@@ -9,12 +10,30 @@ import { PLATFORM_NAME } from "@/utils/constants";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { PwaRepararAtalhoPanel } from "@/components/pwa/PwaRepararAtalhoPanel";
+import { shouldHideCooperadoBaixarAppPromo } from "@/lib/pwa/cooperadoPwaBrowserWorkaround";
 
 export default function BaixarAppPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const platform = useMemo(() => detectDevicePlatform(), []);
   const loginPreparado = `/login?hb-pwa=${APP_BUILD_VERSION}`;
   const voltarHref = user ? "/dashboard" : loginPreparado;
+  const ocultarParaCooperado =
+    shouldHideCooperadoBaixarAppPromo(user?.role ?? "cooperado") &&
+    (!user || user.role === "cooperado");
+
+  useEffect(() => {
+    if (!ocultarParaCooperado) return;
+    router.replace(user ? "/dashboard" : loginPreparado);
+  }, [ocultarParaCooperado, loginPreparado, router, user]);
+
+  if (ocultarParaCooperado) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-green-50 text-sm text-gray-600">
+        Redirecionando…
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">

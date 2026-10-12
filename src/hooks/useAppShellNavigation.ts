@@ -22,6 +22,7 @@ import { getUserCooperativaId } from "@/utils/cooperativa";
 import { resolveStaffNavigationUser, shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
 import { isContaCoopUiVisibleForUser } from "@/utils/contaCoopUiVisibility";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
+import { filterCooperadoMenuHideBaixarApp } from "@/lib/pwa/cooperadoPwaBrowserWorkaround";
 
 export type AppShellMenuItem = { href: string; label: string; resource: Resource };
 
@@ -115,7 +116,7 @@ export function useAppShellNavigation(): AppShellNavigation | null {
         moduleNavEligible: false,
         desktopMenu: menus.desktopMenu,
         mobileMenu: menus.mobileMenu,
-        drawerMenu: menus.drawerMenu,
+        drawerMenu: filterCooperadoMenuHideBaixarApp(menus.drawerMenu),
       };
     }
     const data = getData();
@@ -138,12 +139,14 @@ export function useAppShellNavigation(): AppShellNavigation | null {
       moduleNavEligible
     );
 
-    const drawerMenu = getCooperadoDrawerMenuItems(
-      navUser,
-      credit.enabled,
-      contaCoopUiVisible,
-      data,
-      moduleNavEligible
+    const drawerMenu = filterCooperadoMenuHideBaixarApp(
+      getCooperadoDrawerMenuItems(
+        navUser,
+        credit.enabled,
+        contaCoopUiVisible,
+        data,
+        moduleNavEligible
+      )
     );
 
     return {

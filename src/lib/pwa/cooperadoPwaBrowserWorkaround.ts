@@ -1,0 +1,113 @@
+/**
+ * Workaround temporário: PWA standalone quebrado → cooperado usa o HB no Chrome
+ * via pwa-rescue (limpa cache do ícone) e continua logado quando a sessão/cookie
+ * já existir no perfil do navegador.
+ */
+import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
+import {
+  buildPwaRescueCooperadoBrowserWorkaroundHref,
+} from "@/lib/pwa/cooperadoPwaRescueUrl";
+import {
+  ensureCloudSessionReady,
+  type CloudSessionProfile,
+} from "@/lib/security/clientSession";
+import { isAppStandalone } from "@/services/cooperadoAppInstallService";
+
+/** Desligue quando o ícone PWA voltar a abrir normalmente. */
+export const COOPERADO_PWA_BROWSER_WORKAROUND_ENABLED = true;
+
+const BAIXAR_APP_HREF = "/baixar-app";
+/** Cooperado escolheu sair do modo “use o Chrome” neste aparelho. */
+export const COOPERADO_PWA_BROWSER_WORKAROUND_OPT_OUT_KEY =
+  "hb-coop-pwa-browser-workaround-opt-out";
+
+export function isCooperadoPwaBrowserWorkaroundOptedOut(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(COOPERADO_PWA_BROWSER_WORKAROUND_OPT_OUT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function isCooperadoPwaBrowserWorkaroundGloballyActive(): boolean {
+  return COOPERADO_PWA_BROWSER_WORKAROUND_ENABLED && !isCooperadoPwaBrowserWorkaroundOptedOut();
+}
+
+/** Restaura ícone PWA, banner de instalar e sync normal neste dispositivo. */
+export function voltarCooperadoParaAppNormal(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(COOPERADO_PWA_BROWSER_WORKAROUND_OPT_OUT_KEY, "1");
+  } catch {
+    /* ignore */
+  }
+  window.location.reload();
+}
+
+export function shouldShowVoltarParaAppNormal(userRole?: string | null): boolean {
+  if (!COOPERADO_PWA_BROWSER_WORKAROUND_ENABLED) return false;
+  if (isCooperadoPwaBrowserWorkaroundOptedOut()) return false;
+  if (userRole && userRole !== "cooperado") return false;
+  return true;
+}
+
+/** Cooperado no navegador (workaround): não mostrar instalar/baixar app. */
+export function shouldHideCooperadoBaixarAppPromo(
+  userRole?: string | null
+): boolean {
+  if (!isCooperadoPwaBrowserWorkaroundGloballyActive()) return false;
+  if (typeof window !== "undefined" && isAppStandalone()) return false;
+  if (userRole && userRole !== "cooperado") return false;
+  return true;
+}
+
+export function filterCooperadoMenuHideBaixarApp<T extends { href: string }>(
+  items: T[]
+): T[] {
+  if (!shouldHideCooperadoBaixarAppPromo("cooperado")) return items;
+  return items.filter((item) => item.href !== BAIXAR_APP_HREF);
+}
+
+export function shouldCooperadoPwaUseBrowserWorkaround(): boolean {
+  if (!isCooperadoPwaBrowserWorkaroundGloballyActive()) return false;
+  if (typeof window === "undefined") return false;
+  if (!isAppStandalone()) return false;
+  return isCooperadoPwaMessengerMode();
+}
+
+export function cooperadoPwaBrowserWorkaroundAbsoluteUrl(
+  origin = typeof window !== "undefined" ? window.location.origin : "https://hbcooperativas.vercel.app"
+): string {
+  const href = buildPwaRescueCooperadoBrowserWorkaroundHref();
+  return `${origin.replace(/\/$/, "")}${href}`;
+}
+
+/** Abre URL HTTPS no Chrome (Android) ou em nova aba. */
+export function openHbUrlInSystemBrowser(absoluteHttpsUrl: string): void {
+  if (typeof window === "undefined") return;
+  const url = absoluteHttpsUrl.trim();
+  const absolute =
+    /^https?:\/\//i.test(url)
+      ? url
+      : `${window.location.origin}${url.startsWith("/") ? url : `/${url}`}`;
+
+  const ua = navigator.userAgent || "";
+  if (/Android/i.test(ua)) {
+    const pathQueryHash = absolute.replace(/^https?:\/\//i, "");
+    const encodedFallback = encodeURIComponent(absolute);
+    window.location.href = `intent://${pathQueryHash}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodedFallback};end`;
+    return;
+  }
+
+  const opened = window.open(absolute, "_blank", "noopener,noreferrer");
+  if (!opened) window.location.assign(absolute);
+}
+
+/** Atualizar no PWA → reparo + login/dashboard no Chrome. */
+export async function launchCooperadoPwaBrowserWorkaround(
+  profile?: CloudSessionProfile | null
+): Promise<void> {
+  await ensureCloudSessionReady(profile ?? undefined);
+  openHbUrlInSystemBrowser(cooperadoPwaBrowserWorkaroundAbsoluteUrl());
+}

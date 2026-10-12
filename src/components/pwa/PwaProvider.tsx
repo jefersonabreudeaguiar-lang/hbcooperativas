@@ -17,6 +17,7 @@ import {
 } from "@/services/cooperadoAppInstallService";
 import { getData } from "@/services/dataStore";
 import { markPwaRepairSessionForBuild } from "@/lib/pwa/cooperadoPwaInstallPrepare";
+import { shouldHideCooperadoBaixarAppPromo } from "@/lib/pwa/cooperadoPwaBrowserWorkaround";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 
 /** v2 — reexibe o aviso de baixar o app para quem já tinha fechado a versão antiga. */
@@ -101,6 +102,11 @@ export function PwaProvider() {
     if (loading) return;
 
     if (isStandalone()) {
+      setVisible(false);
+      return;
+    }
+
+    if (isCooperado && shouldHideCooperadoBaixarAppPromo("cooperado")) {
       setVisible(false);
       return;
     }
