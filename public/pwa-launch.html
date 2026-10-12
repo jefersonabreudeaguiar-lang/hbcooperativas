@@ -36,14 +36,15 @@
   <body>
     <div>
       <div class="spin" aria-hidden="true"></div>
-      <p><strong>Abrindo HB Cooperativas…</strong></p>
-      <p id="hint" style="font-size: 0.8rem; color: #4b5563">Preparando atalho…</p>
+      <p><strong>Entrando no HB Cooperativas…</strong></p>
+      <p id="hint" style="font-size: 0.8rem; color: #4b5563">Aguarde um instante</p>
     </div>
     <script>
       (function () {
         var REPAIR_KEY = "hb-coop-pwa-repair-done";
+        var DIRECT_ENTRY_KEY = "hb-coop-pwa-direct-entry";
         var BUILD_SEEN_KEY = "hb-coop-app-build-seen";
-        var FALLBACK_BUILD = 349;
+        var FALLBACK_BUILD = 352;
         var params = new URLSearchParams(location.search);
         var next = params.get("next");
         var hasSession = false;
@@ -61,17 +62,14 @@
                 ? next
                 : next + (next.indexOf("?") >= 0 ? "&" : "?") + "hb-pwa=" + pageBuild;
           } else if (hasSession) {
-            target =
-              "/login?hb-pwa=" +
-              pageBuild +
-              "&next=" +
-              encodeURIComponent("/dashboard");
+            target = "/dashboard?hb-pwa=" + pageBuild;
           }
           return target;
         }
 
         function go(pageBuild, target) {
           try {
+            sessionStorage.setItem(DIRECT_ENTRY_KEY, "1");
             sessionStorage.setItem(REPAIR_KEY, String(pageBuild));
             localStorage.setItem(BUILD_SEEN_KEY, String(pageBuild));
             localStorage.setItem("hb-coop-pwa-repair-done-build", String(pageBuild));
@@ -79,6 +77,16 @@
             /* ignore */
           }
           location.replace(target);
+        }
+
+        function goWithRetry(pageBuild, target, attempt) {
+          go(pageBuild, target);
+          if (attempt >= 2) return;
+          window.setTimeout(function () {
+            if (location.pathname.indexOf("pwa-launch") >= 0) {
+              goWithRetry(pageBuild, target, attempt + 1);
+            }
+          }, 2800);
         }
 
         function purgeCaches() {
@@ -123,6 +131,12 @@
 
         function runLaunch(pageBuild) {
           var target = resolveTarget(pageBuild);
+          if (hasSession) {
+            window.setTimeout(function () {
+              goWithRetry(pageBuild, target, 0);
+            }, 120);
+            return;
+          }
           purgeCaches()
             .catch(function () {})
             .then(purgeServiceWorkers)
@@ -134,7 +148,7 @@
             })
             .finally(function () {
               window.setTimeout(function () {
-                go(pageBuild, target);
+                goWithRetry(pageBuild, target, 0);
               }, 200);
             });
         }

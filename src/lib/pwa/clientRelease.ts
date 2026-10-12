@@ -591,6 +591,9 @@ export function buildInlinePageReleaseBootstrap(pageRelease: ClientReleaseInfo):
 export const PWA_REPAIR_SESSION_KEY = "hb-coop-pwa-repair-done";
 export const PWA_REPAIR_SESSION_VERSION = String(APP_BUILD_VERSION);
 
+/** Definido em pwa-launch antes de entrar no app — evita re-redirect e mantém splash HB. */
+export const PWA_DIRECT_ENTRY_SESSION_KEY = "hb-coop-pwa-direct-entry";
+
 /** Evita rajada de replace/reload do guard standalone no cold start (rede lenta). */
 export const PWA_STANDALONE_GUARD_DEDUP_KEY = "hb-coop-pwa-standalone-guard-target";
 export const PWA_STANDALONE_GUARD_AT_KEY = "hb-coop-pwa-standalone-guard-at";
@@ -609,8 +612,9 @@ export function buildInlinePwaStandaloneLaunchGuardScript(): string {
   const buildSeenKey = BUILD_SEEN_KEY;
   const appBuild = APP_BUILD_VERSION;
   const repairLocalKey = "hb-coop-pwa-repair-done-build";
+  const directKey = PWA_DIRECT_ENTRY_SESSION_KEY;
   /** Alinhado a 0fc3a12a / aa928574: redirect único, sem purge de SW no cold start (purge ficou no rescue/launch). */
-  return `(function(){try{var standalone=window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;if(!standalone)return;var path=location.pathname||"";if(path.indexOf("pwa-rescue")>=0||path.indexOf("pwa-launch")>=0||path.indexOf("pwa-diag")>=0)return;var repairKey="${repairKey}";var repairVer="${repairVer}";var repairLocalKey="${repairLocalKey}";var buildSeenKey="${buildSeenKey}";var pageBuild=parseInt(document.documentElement.getAttribute("data-app-build")||"0",10)||${appBuild};var seen=0;try{seen=parseInt(localStorage.getItem(buildSeenKey)||"0",10);}catch(e){}var repairLocal=false;try{repairLocal=localStorage.getItem(repairLocalKey)===String(pageBuild);}catch(e){}var repairOk=repairLocal||sessionStorage.getItem(repairKey)===repairVer;var buildOk=!seen||seen>=pageBuild-1;var veryStale=seen>0&&seen<pageBuild-1;var loginNext="/login?hb-pwa="+pageBuild;var nextPath=path+location.search;if(!nextPath||nextPath==="/")nextPath=loginNext;if(repairOk&&buildOk)return;if(!buildOk||veryStale){location.replace("/pwa-rescue.html?auto=1&next="+encodeURIComponent(loginNext));return;}location.replace("/pwa-launch.html?next="+encodeURIComponent(nextPath));}catch(e){}})();`;
+  return `(function(){try{var standalone=window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;if(!standalone)return;try{if(sessionStorage.getItem("${directKey}")==="1")return;}catch(e){}var path=location.pathname||"";if(path.indexOf("pwa-rescue")>=0||path.indexOf("pwa-launch")>=0||path.indexOf("pwa-diag")>=0)return;var repairKey="${repairKey}";var repairVer="${repairVer}";var repairLocalKey="${repairLocalKey}";var buildSeenKey="${buildSeenKey}";var pageBuild=parseInt(document.documentElement.getAttribute("data-app-build")||"0",10)||${appBuild};var seen=0;try{seen=parseInt(localStorage.getItem(buildSeenKey)||"0",10);}catch(e){}var repairLocal=false;try{repairLocal=localStorage.getItem(repairLocalKey)===String(pageBuild);}catch(e){}var repairOk=repairLocal||sessionStorage.getItem(repairKey)===repairVer;var buildOk=!seen||seen>=pageBuild-1;var veryStale=seen>0&&seen<pageBuild-1;var loginNext="/login?hb-pwa="+pageBuild;var nextPath=path+location.search;if(!nextPath||nextPath==="/")nextPath=loginNext;if(repairOk&&buildOk)return;if(!buildOk||veryStale){location.replace("/pwa-rescue.html?auto=1&next="+encodeURIComponent(loginNext));return;}location.replace("/pwa-launch.html?next="+encodeURIComponent(nextPath));}catch(e){}})();`;
 }
 
 /** 1º paint: no atalho remove todo SW legado; registra /sw.js passthrough. */
