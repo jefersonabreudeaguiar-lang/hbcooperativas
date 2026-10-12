@@ -591,6 +591,14 @@ export function buildInlinePageReleaseBootstrap(pageRelease: ClientReleaseInfo):
 export const PWA_REPAIR_SESSION_KEY = "hb-coop-pwa-repair-done";
 export const PWA_REPAIR_SESSION_VERSION = String(APP_BUILD_VERSION);
 
+/** Evita rajada de replace/reload do guard standalone no cold start (rede lenta). */
+export const PWA_STANDALONE_GUARD_DEDUP_KEY = "hb-coop-pwa-standalone-guard-target";
+export const PWA_STANDALONE_GUARD_AT_KEY = "hb-coop-pwa-standalone-guard-at";
+export const PWA_STANDALONE_GUARD_BURST_KEY = "hb-coop-pwa-guard-burst";
+export const PWA_STANDALONE_GUARD_DEDUP_MS = 12_000;
+export const PWA_STANDALONE_GUARD_BURST_MAX = 3;
+export const PWA_STANDALONE_GUARD_BURST_WINDOW_MS = 120_000;
+
 /**
  * Ícone instalado (WebAPK): antes do React, manda para pwa-rescue se cache/build desalinhado.
  * O guard antigo só marcava “reparado” sem limpar — causava “This page couldn’t load”.
@@ -601,7 +609,15 @@ export function buildInlinePwaStandaloneLaunchGuardScript(): string {
   const buildSeenKey = BUILD_SEEN_KEY;
   const appBuild = APP_BUILD_VERSION;
   const repairLocalKey = "hb-coop-pwa-repair-done-build";
-  return `(function(){try{var standalone=window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;if(!standalone)return;var path=location.pathname||"";if(path.indexOf("pwa-rescue")>=0||path.indexOf("pwa-launch")>=0||path.indexOf("pwa-diag")>=0)return;var repairKey="${repairKey}";var repairVer="${repairVer}";var repairLocalKey="${repairLocalKey}";var buildSeenKey="${buildSeenKey}";var pageBuild=parseInt(document.documentElement.getAttribute("data-app-build")||"0",10)||${appBuild};var seen=0;try{seen=parseInt(localStorage.getItem(buildSeenKey)||"0",10);}catch(e){}var repairLocal=false;try{repairLocal=localStorage.getItem(repairLocalKey)===String(pageBuild);}catch(e){}var repairOk=repairLocal||sessionStorage.getItem(repairKey)===repairVer;var buildOk=!seen||seen>=pageBuild-1;var veryStale=seen>0&&seen<pageBuild-1;var loginNext="/login?hb-pwa="+pageBuild;var nextPath=path+location.search;if(!nextPath||nextPath==="/")nextPath=loginNext;if(repairOk&&buildOk)return;if(!buildOk||veryStale){location.replace("/pwa-rescue.html?auto=1&next="+encodeURIComponent(loginNext));return;}location.replace("/pwa-launch.html?next="+encodeURIComponent(nextPath));}catch(e){}})();`;
+  const dedupKey = PWA_STANDALONE_GUARD_DEDUP_KEY;
+  const atKey = PWA_STANDALONE_GUARD_AT_KEY;
+  const burstKey = PWA_STANDALONE_GUARD_BURST_KEY;
+  const dedupMs = PWA_STANDALONE_GUARD_DEDUP_MS;
+  const burstMax = PWA_STANDALONE_GUARD_BURST_MAX;
+  const burstWindowMs = PWA_STANDALONE_GUARD_BURST_WINDOW_MS;
+  const purgeRaceMs = 350;
+
+  return `(function(){try{var standalone=window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;if(!standalone)return;var path=location.pathname||"";if(path.indexOf("pwa-rescue")>=0||path.indexOf("pwa-launch")>=0||path.indexOf("pwa-diag")>=0)return;var repairKey="${repairKey}";var repairVer="${repairVer}";var repairLocalKey="${repairLocalKey}";var buildSeenKey="${buildSeenKey}";var pageBuild=parseInt(document.documentElement.getAttribute("data-app-build")||"0",10)||${appBuild};if(!pageBuild||pageBuild<1)pageBuild=${appBuild};var seen=0;try{seen=parseInt(localStorage.getItem(buildSeenKey)||"0",10);}catch(e){}var repairLocal=false;try{repairLocal=localStorage.getItem(repairLocalKey)===String(pageBuild);}catch(e){}var repairOk=repairLocal||sessionStorage.getItem(repairKey)===repairVer;var buildOk=!seen||seen>=pageBuild-1;var veryStale=seen>0&&seen<pageBuild-1;function withCurrentHbPwa(route){var raw=route||"/";try{var u=new URL(raw,location.origin);u.searchParams.set("hb-pwa",String(pageBuild));return u.pathname+u.search+u.hash;}catch(e){var pathOnly=raw.split("?")[0]||"/";var qs=raw.indexOf("?")>=0?raw.slice(raw.indexOf("?")+1):"";var sp=new URLSearchParams(qs);sp.set("hb-pwa",String(pageBuild));var q=sp.toString();return pathOnly+(q?"?"+q:"");}}function allowGuardNav(target){try{var now=Date.now();var lastAt=parseInt(sessionStorage.getItem("${atKey}")||"0",10);var lastTarget=sessionStorage.getItem("${dedupKey}")||"";if(lastTarget===target&&lastAt&&now-lastAt<${dedupMs})return false;var raw=sessionStorage.getItem("${burstKey}");var burst=raw?JSON.parse(raw):[];if(!Array.isArray(burst))burst=[];burst=burst.filter(function(t){return now-t<${burstWindowMs};});if(burst.length>=${burstMax})return false;burst.push(now);sessionStorage.setItem("${burstKey}",JSON.stringify(burst));sessionStorage.setItem("${atKey}",String(now));sessionStorage.setItem("${dedupKey}",target);return true;}catch(e){return true;}}function aggressivePurge(){try{if("caches"in window){caches.keys().then(function(keys){return Promise.all(keys.map(function(k){return caches.delete(k);}));}).catch(function(){});}}catch(e){}try{if("serviceWorker"in navigator){navigator.serviceWorker.getRegistrations().then(function(regs){return Promise.all(regs.map(function(r){return r.unregister();}));}).catch(function(){});}}catch(e){}}function replaceOnce(url){if(!allowGuardNav(url))return;aggressivePurge();var done=false;function nav(){if(done)return;done=true;location.replace(url);}nav();Promise.race([new Promise(function(resolve){if(!("caches"in window))return resolve();caches.keys().then(function(keys){return Promise.all(keys.map(function(k){return caches.delete(k);}));}).then(resolve,resolve);}),new Promise(function(resolve){setTimeout(resolve,${purgeRaceMs});})]).finally(nav);}var loginNext=withCurrentHbPwa("/login");var nextPath=withCurrentHbPwa(path+(location.search||""));if(!nextPath||nextPath==="/")nextPath=loginNext;if(repairOk&&buildOk)return;if(!buildOk||veryStale){replaceOnce("/pwa-rescue.html?auto=1&reason=stale_build&next="+encodeURIComponent(loginNext));return;}replaceOnce("/pwa-launch.html?next="+encodeURIComponent(nextPath));}catch(e){}})();`;
 }
 
 /** 1º paint: no atalho remove todo SW legado; registra /sw.js passthrough. */

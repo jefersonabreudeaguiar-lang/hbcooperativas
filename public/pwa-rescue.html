@@ -4,6 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#15803d" />
+    <!-- Último recurso offline; hb-pwa nas URLs vem de /api/client-release -->
+    <meta name="hb-app-build-fallback" content="349" />
     <title>Reparar app HB Cooperativas</title>
     <style>
       body {
@@ -69,25 +71,56 @@
         Este reparo limpa cache do app (Cache API) e service worker — <strong>não</strong> apaga o cache HTTP do Chrome. Se o erro continuar: Chrome → cadeado → <strong>Limpar dados do site</strong> → abra este link de novo.
       </p>
       <button type="button" class="btn" id="go" hidden>Continuar para o login</button>
-      <a class="btn secondary" id="launch" href="/login?hb-pwa=349" hidden>Continuar para instalar ícone</a>
+      <a class="btn secondary" id="launch" href="/login" hidden>Continuar para instalar ícone</a>
       <a class="btn secondary" href="/pwa-diag.html" style="margin-top: 0.5rem">Diagnóstico (copiar para suporte)</a>
     </main>
     <script>
       (function () {
-        var REPAIR_VER = "349";
         var RELEASE_FETCH_MS = 8000;
-        var BUILD_FALLBACK = 349;
         var PENDING_VERIFY_KEY = "hb-coop-rescue-pending-verify";
-        var target = "/login?hb-pwa=349";
+        var metaFb = document.querySelector('meta[name="hb-app-build-fallback"]');
+        var BUILD_FALLBACK = metaFb
+          ? parseInt(metaFb.getAttribute("content") || "0", 10) || 349
+          : 349;
+        var REPAIR_VER = String(BUILD_FALLBACK);
         var params = new URLSearchParams(location.search);
         var next = params.get("next");
         var auto = params.get("auto") === "1";
-        if (next && next.charAt(0) === "/") target = next;
+        var target = "/login";
 
         var status = document.getElementById("status");
         var errEl = document.getElementById("err");
         var btn = document.getElementById("go");
         var launch = document.getElementById("launch");
+
+        function withHbPwa(route, build) {
+          var b = build && build > 0 ? build : BUILD_FALLBACK;
+          try {
+            var u = new URL(route || "/login", location.origin);
+            u.searchParams.set("hb-pwa", String(b));
+            return u.pathname + u.search + u.hash;
+          } catch (e) {
+            var pathOnly = (route || "/login").split("?")[0] || "/login";
+            var qs = (route || "").indexOf("?") >= 0 ? route.slice(route.indexOf("?") + 1) : "";
+            var sp = new URLSearchParams(qs);
+            sp.set("hb-pwa", String(b));
+            var q = sp.toString();
+            return pathOnly + (q ? "?" + q : "");
+          }
+        }
+
+        function applyRelease(cloud) {
+          var build =
+            cloud && cloud.build ? Number(cloud.build) : BUILD_FALLBACK;
+          if (!build || build < 1) build = BUILD_FALLBACK;
+          REPAIR_VER = String(build);
+          if (next && next.charAt(0) === "/") {
+            target = withHbPwa(next, build);
+          } else {
+            target = withHbPwa("/login", build);
+          }
+          if (launch) launch.href = withHbPwa("/login", build);
+        }
 
         function showErr(msg) {
           if (errEl) {
@@ -129,6 +162,8 @@
               return null;
             });
         }
+
+        var releasePromise = fetchClientRelease();
 
         var purgeCaches =
           "caches" in window
@@ -172,14 +207,18 @@
           }
         }
 
-        Promise.all([purgeCaches, purgeSw])
-          .catch(function (e) {
+        Promise.all([
+          purgeCaches.catch(function () {}),
+          purgeSw.catch(function () {}),
+        ])
+          .catch(function () {
             showErr("Parte da limpeza falhou; toque Continuar mesmo assim.");
           })
           .then(function () {
-            return fetchClientRelease();
+            return releasePromise;
           })
           .then(function (cloud) {
+            applyRelease(cloud);
             var queued = queueRuntimeVerify(cloud);
             if (!queued) {
               showErr(
