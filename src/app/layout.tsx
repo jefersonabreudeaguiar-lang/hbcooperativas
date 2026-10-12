@@ -24,6 +24,7 @@ import { buildInlineCooperadoAppDataWarmScript } from "@/lib/performance/coopera
 import {
   buildInlineCooperadoBootShellScript,
 } from "@/lib/performance/cooperadoBootShell";
+import { buildInlineCooperadoPwaBrowserWorkaroundScript } from "@/lib/pwa/cooperadoPwaBrowserWorkaroundInline";
 import { RqlPerfDebugBootstrap } from "@/components/performance/RqlPerfDebugBootstrap";
 import { CooperadoBootShellDismiss } from "@/components/performance/CooperadoBootShellDismiss";
 
@@ -91,6 +92,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: buildInlineRuntimeCrashRecorderScript() }} />
+        <script dangerouslySetInnerHTML={{ __html: buildInlineCooperadoPwaBrowserWorkaroundScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineStaleProfileGuardScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlinePwaStandaloneLaunchGuardScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineServiceWorkerMigrationScript() }} />

@@ -6,12 +6,14 @@ import {
   shouldShowVoltarParaAppNormal,
   voltarCooperadoParaAppNormal,
 } from "@/lib/pwa/cooperadoPwaBrowserWorkaround";
+import { isAppStandalone } from "@/services/cooperadoAppInstallService";
 import { cn } from "@/utils/format";
 
 /** Ponto de retorno: cooperado volta ao fluxo normal (ícone PWA + baixar app). */
 export function CooperadoPwaVoltarAppNormalBar({ className }: { className?: string }) {
   const { user } = useAuth();
   if (!user || user.role !== "cooperado") return null;
+  if (isAppStandalone()) return null;
   if (!shouldShowVoltarParaAppNormal("cooperado")) return null;
 
   return (

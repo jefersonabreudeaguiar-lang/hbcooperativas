@@ -17,6 +17,19 @@ import { isAppStandalone } from "@/services/cooperadoAppInstallService";
 export const COOPERADO_PWA_BROWSER_WORKAROUND_ENABLED = true;
 
 const BAIXAR_APP_HREF = "/baixar-app";
+const LOCAL_SESSION_KEY = "coopeagriplla_session";
+
+function readStoredCooperadoSession(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = localStorage.getItem(LOCAL_SESSION_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as { role?: string; cooperadoId?: string };
+    return parsed.role === "cooperado" || Boolean(parsed.cooperadoId?.trim());
+  } catch {
+    return false;
+  }
+}
 /** Cooperado escolheu sair do modo “use o Chrome” neste aparelho. */
 export const COOPERADO_PWA_BROWSER_WORKAROUND_OPT_OUT_KEY =
   "hb-coop-pwa-browser-workaround-opt-out";
@@ -73,7 +86,8 @@ export function shouldCooperadoPwaUseBrowserWorkaround(): boolean {
   if (!isCooperadoPwaBrowserWorkaroundGloballyActive()) return false;
   if (typeof window === "undefined") return false;
   if (!isAppStandalone()) return false;
-  return isCooperadoPwaMessengerMode();
+  if (isCooperadoPwaMessengerMode()) return true;
+  return readStoredCooperadoSession();
 }
 
 export function cooperadoPwaBrowserWorkaroundAbsoluteUrl(
@@ -83,7 +97,7 @@ export function cooperadoPwaBrowserWorkaroundAbsoluteUrl(
   return `${origin.replace(/\/$/, "")}${href}`;
 }
 
-/** Abre URL HTTPS no Chrome (Android) ou em nova aba. */
+/** Abre URL HTTPS no Chrome (Android) ou navegação direta. */
 export function openHbUrlInSystemBrowser(absoluteHttpsUrl: string): void {
   if (typeof window === "undefined") return;
   const url = absoluteHttpsUrl.trim();
@@ -94,20 +108,31 @@ export function openHbUrlInSystemBrowser(absoluteHttpsUrl: string): void {
 
   const ua = navigator.userAgent || "";
   if (/Android/i.test(ua)) {
-    const pathQueryHash = absolute.replace(/^https?:\/\//i, "");
+    const tail = absolute.replace(/^https?:\/\//i, "");
     const encodedFallback = encodeURIComponent(absolute);
-    window.location.href = `intent://${pathQueryHash}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodedFallback};end`;
+    const intent = `intent://${tail}#Intent;scheme=https;action=android.intent.action.VIEW;package=com.android.chrome;S.browser_fallback_url=${encodedFallback};end`;
+    try {
+      window.location.href = intent;
+    } catch {
+      /* ignore */
+    }
+    window.setTimeout(() => {
+      try {
+        window.location.replace(absolute);
+      } catch {
+        /* ignore */
+      }
+    }, 280);
     return;
   }
 
-  const opened = window.open(absolute, "_blank", "noopener,noreferrer");
-  if (!opened) window.location.assign(absolute);
+  window.location.replace(absolute);
 }
 
-/** Atualizar no PWA → reparo + login/dashboard no Chrome. */
-export async function launchCooperadoPwaBrowserWorkaround(
-  profile?: CloudSessionProfile | null
-): Promise<void> {
-  await ensureCloudSessionReady(profile ?? undefined);
+/** PWA cooperado → reparo + login/dashboard (sem esperar rede). */
+export function launchCooperadoPwaBrowserWorkaround(
+  _profile?: CloudSessionProfile | null
+): void {
+  void ensureCloudSessionReady(_profile ?? undefined);
   openHbUrlInSystemBrowser(cooperadoPwaBrowserWorkaroundAbsoluteUrl());
 }
