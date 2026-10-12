@@ -1,7 +1,8 @@
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 
 /** Workaround até o WebAPK abrir sem “This page couldn’t load”. */
-export const COOPERADO_PWA_STEALTH_RELOAD_ENABLED = true;
+/** Desligado: reload extra no WebAPK somava com guard/SW (0fc3a12a não tinha este passo). */
+export const COOPERADO_PWA_STEALTH_RELOAD_ENABLED = false;
 
 export const COOPERADO_PWA_STEALTH_RELOAD_SESSION_KEY = `hb-coop-pwa-stealth-reload-${APP_BUILD_VERSION}`;
 

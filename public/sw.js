@@ -1,125 +1,56 @@
 /**
- * HB Cooperativas — Service Worker passthrough.
- * Bump CACHE_VERSION a cada mudança de estratégia (força o Chrome a baixar este arquivo).
- * HTML / navigate: SEMPRE rede primeiro — nunca Cache API nem fallback de HTML antigo online.
+ * Passthrough — documentos e chunks Next sempre pela rede (evita TDZ por dpl antigo).
  */
-const CACHE_VERSION = "hb-coop-build-350-network-first-v2";
+const CACHE_VERSION = "hb-coop-build-351-chunk-network-v1";
 
-const OFFLINE_HTML =
-  '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>HB Cooperativas</title></head><body style="font-family:system-ui,sans-serif;padding:1.25rem;background:#f0fdf4;color:#14532d"><h1>Sem conexão</h1><p>Verifique Wi‑fi ou dados móveis e abra de novo.</p><p><a href="/pwa-rescue.html">Reparar atalho</a></p></body></html>';
+self.addEventListener("install", (event) => {
+  event.waitUntil(self.skipWaiting());
+});
 
-/** Remove todo cache legado (precache antigo que causava HTML stale). */
-function deleteAllCaches() {
-  if (!self.caches) return Promise.resolve();
-  return caches.keys().then(function (keys) {
-    return Promise.all(keys.map(function (key) { return caches.delete(key); }));
-  });
-}
-
-/** Assume controle na hora — não espera fechar todas as abas. */
-self.addEventListener("install", function (event) {
+self.addEventListener("activate", (event) => {
   event.waitUntil(
-    Promise.all([deleteAllCaches(), self.skipWaiting()])
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
-self.addEventListener("activate", function (event) {
-  event.waitUntil(
-    deleteAllCaches()
-      .then(function () { return self.clients.claim(); })
-      .then(function () {
-        return self.clients.matchAll({ type: "window", includeUncontrolled: true });
-      })
-      .then(function (clients) {
-        clients.forEach(function (client) {
-          try {
-            client.postMessage({ type: "HB_SW_ACTIVATED", version: CACHE_VERSION });
-          } catch (e) {
-            /* ignore */
-          }
-        });
-      })
-  );
-});
-
-self.addEventListener("message", function (event) {
-  var data = event.data;
-  if (!data) return;
-  if (data.type === "SKIP_WAITING") {
-    self.skipWaiting();
-  }
-});
-
-function isHtmlDocumentRequest(request) {
-  if (request.method !== "GET") return false;
+function isDocumentNavigation(request) {
   if (request.mode === "navigate") return true;
-  if (request.destination === "document") return true;
-  var accept = request.headers.get("accept") || "";
-  if (accept.indexOf("text/html") >= 0) return true;
-  try {
-    var path = new URL(request.url).pathname;
-    if (/\.html$/i.test(path)) return true;
-    if (
-      path === "/pwa-launch.html" ||
-      path === "/pwa-rescue.html" ||
-      path === "/pwa-diag.html" ||
-      path === "/pwa-boot.html"
-    ) {
-      return true;
-    }
-  } catch (e) {
-    /* ignore */
-  }
-  return false;
+  if (request.method !== "GET") return false;
+  const accept = request.headers.get("accept") || "";
+  return accept.indexOf("text/html") >= 0;
 }
 
 function isNextAsset(request) {
   if (request.method !== "GET") return false;
   try {
-    return new URL(request.url).pathname.indexOf("/_next/") >= 0;
-  } catch (e) {
+    const path = new URL(request.url).pathname;
+    return path.indexOf("/_next/") >= 0;
+  } catch {
     return false;
   }
 }
 
-var NETWORK_FETCH_OPTS = {
-  redirect: "follow",
-  credentials: "same-origin",
-  cache: "no-store",
-};
-
-/**
- * Network-first estrito: nunca caches.match() para HTML.
- * Offline → página sintética 503 (não HTML antigo do precache).
- */
-function networkFirstHtml(request) {
-  return fetch(request, NETWORK_FETCH_OPTS).catch(function () {
-    return new Response(OFFLINE_HTML, {
-      status: 503,
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-store",
-      },
-    });
-  });
-}
-
-function networkOnlyAsset(request) {
-  return fetch(request, NETWORK_FETCH_OPTS).catch(function () {
-    return fetch(request);
-  });
-}
-
-self.addEventListener("fetch", function (event) {
-  var request = event.request;
-
-  if (isHtmlDocumentRequest(request)) {
-    event.respondWith(networkFirstHtml(request));
+self.addEventListener("fetch", (event) => {
+  if (isNextAsset(event.request)) {
+    event.respondWith(
+      fetch(event.request, { cache: "no-store", credentials: "same-origin" }).catch(() =>
+        fetch(event.request)
+      )
+    );
     return;
   }
-
-  if (isNextAsset(request)) {
-    event.respondWith(networkOnlyAsset(request));
-    return;
-  }
+  if (!isDocumentNavigation(event.request)) return;
+  event.respondWith(
+    fetch(event.request, { redirect: "follow", credentials: "same-origin", cache: "no-store" }).catch(
+      () => {
+        return new Response(
+          '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>HB Cooperativas</title></head><body style="font-family:system-ui,sans-serif;padding:1.25rem;background:#f0fdf4;color:#14532d"><h1>Sem conexão</h1><p>Verifique Wi‑fi ou dados móveis e abra de novo.</p><p><a href="/pwa-rescue.html">Reparar atalho</a></p></body></html>',
+          { status: 503, headers: { "Content-Type": "text/html; charset=utf-8" } }
+        );
+      }
+    )
+  );
 });
