@@ -6,6 +6,7 @@ import {
   RELEASE_EPISODE_ALIGN_SESSION_KEY,
   RESCUE_PENDING_VERIFY_KEY,
 } from "../src/lib/pwa/pwaReleaseConsistency";
+import { evaluatePwaStandaloneLaunchGuard } from "../src/lib/pwa/pwaStandaloneLaunchGuard";
 
 const CANON = "dpl_DLGWPTTgCNrWxAkD69doGCxwVSar";
 
@@ -28,7 +29,30 @@ const mixed = evaluateDomDeploymentConsistency({
 });
 assert.equal(mixed.status, "mixed");
 
+assert.deepEqual(
+  evaluatePwaStandaloneLaunchGuard({
+    pageBuild: 349,
+    seenBuild: 0,
+    repairSessionOk: false,
+    repairLocalOk: false,
+    nextPath: "/dashboard",
+  }),
+  { action: "launch", nextPath: "/dashboard" }
+);
+
+assert.deepEqual(
+  evaluatePwaStandaloneLaunchGuard({
+    pageBuild: 349,
+    seenBuild: 340,
+    repairSessionOk: false,
+    repairLocalOk: false,
+    nextPath: "/dashboard",
+  }),
+  { action: "rescue", nextLogin: "/login?hb-pwa=349" }
+);
+
 const boot = readFileSync(new URL("../src/lib/pwa/clientRelease.ts", import.meta.url), "utf8");
+assert.match(boot, /pwa-launch\.html\?next=/);
 assert.match(boot, /hbAlignUrl/);
 assert.match(boot, /hbEpisodeBlocked/);
 assert.match(boot, /hardAlign\("mixed_dpl"/);

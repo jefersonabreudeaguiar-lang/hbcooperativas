@@ -69,16 +69,16 @@
         Este reparo limpa cache do app (Cache API) e service worker — <strong>não</strong> apaga o cache HTTP do Chrome. Se o erro continuar: Chrome → cadeado → <strong>Limpar dados do site</strong> → abra este link de novo.
       </p>
       <button type="button" class="btn" id="go" hidden>Continuar para o login</button>
-      <a class="btn secondary" id="launch" href="/login?hb-pwa=348" hidden>Continuar para instalar ícone</a>
+      <a class="btn secondary" id="launch" href="/login?hb-pwa=349" hidden>Continuar para instalar ícone</a>
       <a class="btn secondary" href="/pwa-diag.html" style="margin-top: 0.5rem">Diagnóstico (copiar para suporte)</a>
     </main>
     <script>
       (function () {
-        var REPAIR_VER = "348";
+        var REPAIR_VER = "349";
         var RELEASE_FETCH_MS = 8000;
-        var BUILD_FALLBACK = 348;
+        var BUILD_FALLBACK = 349;
         var PENDING_VERIFY_KEY = "hb-coop-rescue-pending-verify";
-        var target = "/login?hb-pwa=348";
+        var target = "/login?hb-pwa=349";
         var params = new URLSearchParams(location.search);
         var next = params.get("next");
         var auto = params.get("auto") === "1";

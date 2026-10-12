@@ -1,7 +1,7 @@
 /**
  * Passthrough — documentos e chunks Next sempre pela rede (evita TDZ por dpl antigo).
  */
-const CACHE_VERSION = "hb-coop-build-348-chunk-network-v3";
+const CACHE_VERSION = "hb-coop-build-349-chunk-network-v1";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
