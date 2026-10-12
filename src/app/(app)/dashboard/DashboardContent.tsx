@@ -1,6 +1,15 @@
 "use client";
 
-import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  startTransition,
+} from "react";
 import type { AppData, User } from "@/types";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -12,6 +21,8 @@ import {
   useAppDataSelectorForDomainsWhenActive,
 } from "@/hooks/useAppData";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
+import { setCooperadoOptimisticTab } from "@/lib/performance/cooperadoOptimisticTabNavigation";
+import { cooperadoTabWarmOnPointerDown } from "@/lib/performance/cooperadoTabPointerWarmup";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { getData, getDataRevision, isAppDataWarm } from "@/services/dataStore";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -133,6 +144,21 @@ function contaCoopValorReceberPilotOptsFromData(
   };
 }
 
+function EnviarFotoEntregaInicioCard({ onEnviar }: { onEnviar: () => void }) {
+  return (
+    <div className="bg-white border-2 border-green-200 rounded-2xl p-6 flex flex-col justify-between">
+      <div>
+        <Camera size={28} className="text-green-700 mb-3" />
+        <p className="font-semibold text-gray-900">Registrar entrega na escola</p>
+        <p className="text-sm text-gray-500 mt-1">Tire foto do pedido assinado e envie para a cooperativa.</p>
+      </div>
+      <Button type="button" className="mt-4 w-full" size="lg" onClick={onEnviar}>
+        Enviar foto da entrega
+      </Button>
+    </div>
+  );
+}
+
 function CooperadoDashboard() {
   const tabActive = useCooperadoTabPanelActive("/dashboard");
   const messenger = isCooperadoPwaMessengerMode();
@@ -140,6 +166,13 @@ function CooperadoDashboard() {
   const appDataUiOn = cooperadoPwaUiSubscribesAppData() && tabActive;
   const { user } = useAuth();
   const router = useRouter();
+  const irEnviarFotoEntrega = useCallback(() => {
+    setCooperadoOptimisticTab("/notas-pedido");
+    cooperadoTabWarmOnPointerDown("/notas-pedido");
+    startTransition(() => {
+      router.push("/notas-pedido?anexar=1");
+    });
+  }, [router]);
   const hbCredit = useHbCreditEnabled(user);
   const { syncingForUi, lastSyncedAt } = useSyncStatus();
   const fluxo = useCooperadoFluxoPadrao();
@@ -360,7 +393,7 @@ function CooperadoDashboard() {
             atualizando={cardFinanceiroAtualizando}
             exibirReciboAssinatura
           />
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6 animate-pulse min-h-[12rem]" />
+          <EnviarFotoEntregaInicioCard onEnviar={irEnviarFotoEntrega} />
         </div>
       </div>
     );
@@ -415,16 +448,7 @@ function CooperadoDashboard() {
           exibirReciboAssinatura
         />
 
-        <div className="bg-white border-2 border-green-200 rounded-2xl p-6 flex flex-col justify-between">
-          <div>
-            <Camera size={28} className="text-green-700 mb-3" />
-            <p className="font-semibold text-gray-900">Registrar entrega na escola</p>
-            <p className="text-sm text-gray-500 mt-1">Tire foto do pedido assinado e envie para a cooperativa.</p>
-          </div>
-          <Button className="mt-4 w-full" size="lg" onClick={() => router.push("/notas-pedido?anexar=1")}>
-            Enviar foto da entrega
-          </Button>
-        </div>
+        <EnviarFotoEntregaInicioCard onEnviar={irEnviarFotoEntrega} />
       </div>
 
       {pautasAbertas.length > 0 && <VotacaoPautasInicioPanel pautas={pautasAbertas} />}

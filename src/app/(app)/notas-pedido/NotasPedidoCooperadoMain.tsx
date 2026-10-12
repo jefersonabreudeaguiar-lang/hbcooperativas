@@ -2226,12 +2226,17 @@ export default function NotasPedidoCooperadoMain() {
   }, [isCooperado, coopId, data, filaZombieCount]);
 
   useEffect(() => {
-    if (searchParams.get("anexar") !== "1" || !isCooperado || !data || anexarParamHandledRef.current) return;
+    if (searchParams.get("anexar") !== "1") {
+      anexarParamHandledRef.current = false;
+      return;
+    }
+    if (!tabActive || !isCooperado || anexarParamHandledRef.current) return;
+    if (!ready && !isAppDataWarm()) return;
     anexarParamHandledRef.current = true;
     openAnexar(undefined, { abrirCamera: true });
     router.replace("/notas-pedido", { scroll: false });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, isCooperado, data]);
+  }, [searchParams, isCooperado, ready, tabActive]);
 
   useEffect(() => {
     if (!isCooperado || !user || !coopId || !data) return;

@@ -6,7 +6,11 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
-## v357 (atual)
+## v358 (atual)
+
+- **Entregas:** botão «Enviar foto da entrega» no Início volta a abrir a câmera (navegação alinhada às abas + `?anexar=1` mesmo com AppData aquecendo).
+
+## v357
 
 - **Performance:** volta ao padrão melhor-performance nas abas Início/Financeiro (reverte otimização experimental v356; mantém cold start v355).
 
