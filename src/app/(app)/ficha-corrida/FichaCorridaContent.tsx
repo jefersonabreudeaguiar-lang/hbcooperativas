@@ -135,7 +135,6 @@ import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooper
 import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExibirAguardandoAssinatura";
 import { materializarCooperadoPwaAposAssinaturaReciboLocal } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { useCooperadoApresentacaoFinanceiraConsolidada } from "@/hooks/useCooperadoApresentacaoFinanceiraConsolidada";
-import { CooperadoApresentacaoFinanceiraGate } from "@/components/cooperado/CooperadoApresentacaoFinanceiraGate";
 import { cooperadoFluxoPainelProjecaoOpts } from "@/lib/cooperadoFluxoFinanceiroGlobal";
 import { formatCurrency, formatDate, formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia, cn } from "@/utils/format";
 import type { PagamentoCooperadoRegistro, FichaCorrida, NotaPedido } from "@/types";
@@ -198,12 +197,9 @@ function TabelaResumoItens({
 
 const FICHA_APP_DATA_DOMAINS: AppDataNotifyDomain[] = ["financeiro", "shell"];
 
+/** Gate financeiro L1 fica no AppLayout (shell); evita provider duplicado no dual-mount de abas. */
 export default function FichaCorridaPage() {
-  return (
-    <CooperadoApresentacaoFinanceiraGate>
-      <FichaCorridaPageInner />
-    </CooperadoApresentacaoFinanceiraGate>
-  );
+  return <FichaCorridaPageInner />;
 }
 
 function FichaCorridaPageInner() {

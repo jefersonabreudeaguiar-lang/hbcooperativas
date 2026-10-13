@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
@@ -104,13 +104,25 @@ function CooperadoApresentacaoFinanceiraGateInner({ children }: { children: Reac
         : undefined,
   };
 
-  const value: CooperadoApresentacaoFinanceiraValue = {
-    apresentacaoConsolidada: cooperadoApresentacaoFinanceiraConsolidada(input),
-    carregandoValoresFinanceiros: cooperadoCarregandoValoresFinanceiros(input),
-    syncing,
-    syncingForUi,
-    cooperadoPagamentosHydrated,
-  };
+  const apresentacaoConsolidada = cooperadoApresentacaoFinanceiraConsolidada(input);
+  const carregandoValoresFinanceiros = cooperadoCarregandoValoresFinanceiros(input);
+
+  const value = useMemo<CooperadoApresentacaoFinanceiraValue>(
+    () => ({
+      apresentacaoConsolidada,
+      carregandoValoresFinanceiros,
+      syncing,
+      syncingForUi,
+      cooperadoPagamentosHydrated,
+    }),
+    [
+      apresentacaoConsolidada,
+      carregandoValoresFinanceiros,
+      syncing,
+      syncingForUi,
+      cooperadoPagamentosHydrated,
+    ]
+  );
 
   return (
     <CooperadoApresentacaoFinanceiraContext.Provider value={value}>
