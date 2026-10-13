@@ -35,8 +35,11 @@ import { StatCard } from "@/components/ui/Card";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AlertBanner } from "@/components/ui/AlertBanner";
-import { OnboardingChecklist } from "@/components/cooperado/OnboardingChecklist";
-import { AssinaturaStatusAviso } from "@/components/cooperado/AssinaturaStatusAviso";
+import {
+  CooperadoInicioAssinaturaOnboardingLive,
+  CooperadoInicioCooperadoLiveRoot,
+  CooperadoInicioOláTitulo,
+} from "@/components/cooperado/CooperadoInicioCooperadoLiveLeaf";
 import { CooperadoMensalidadesPagarPanel } from "@/components/cooperado/CooperadoMensalidadesPagarPanel";
 import { ValoresAvulsosDashboardCard } from "@/components/ficha/ValoresAvulsosReceberPanel";
 import { getAdminStatsCached } from "@/services/dashboardService";
@@ -107,11 +110,6 @@ import {
   persistirCooperadoPwaInicioDashboardSnapshot,
   type CooperadoPwaInicioDashboardView,
 } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
-import {
-  cooperadoPrecisaCadastrarAssinatura,
-  normalizarAssinaturaLegadoCooperado,
-} from "@/services/cooperadoAssinaturaService";
-import { cooperadoUsaAssinaturaCadastroPilot } from "@/config/assinaturaCadastroPilot";
 import { cooperadoPwaInstantPaintReady, lerCooperadoPwaInicioDashboardViewForResume } from "@/lib/cooperado/cooperadoPwaInstantResume";
 import {
   cooperadoPwaUiSubscribesAppData,
@@ -360,55 +358,71 @@ function CooperadoDashboard() {
     messenger || inicioPwaLeve ? pwaInicioView ?? pwaInicioViewStickyRef.current : viewLive;
 
   const mesAtual = getCurrentMesReferencia();
-  const cooperadoLive = useAppDataSelector(
-    (data) => {
-      if (!data || !cooperadoIdCard) return undefined;
-      const coopId = cooperativaIdCard ?? (user ? getUserCooperativaId(user, data) : undefined);
-      const id = resolverCooperadoIdCanonico(data, cooperadoIdCard, coopId);
-      return data.cooperados.find((c) => c.id === id);
-    },
-    [cooperadoIdCard, cooperativaIdCard, user?.id, user?.cooperativaId]
-  );
-  const nomeCurto =
+  const nomeFromSnapshot =
     view?.cooperado?.nomeCompleto.split(" ")[0] ??
-    cooperadoLive?.nomeCompleto.split(" ")[0] ??
-    user?.name?.split(" ")[0] ??
-    "Cooperado";
+    pwaInicioViewStickyRef.current?.cooperado?.nomeCompleto.split(" ")[0];
   const coopNomeEarly =
     view?.coopNome ?? (user && isAppDataWarm() ? getUserCooperativaNome(user, getData()) : "");
 
-  if (!view) {
-    return (
-      <div className="space-y-6 max-w-3xl">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Olá, {nomeCurto}!</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {coopNomeEarly ? `${coopNomeEarly} · ` : ""}
-            {formatMesReferencia(mesAtual)}
-          </p>
+  return (
+    <CooperadoInicioCooperadoLiveRoot
+      cooperadoIdCard={cooperadoIdCard}
+      cooperativaIdCard={cooperativaIdCard}
+    >
+      {!view ? (
+        <div className="space-y-6 max-w-3xl">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              <CooperadoInicioOláTitulo nomeFromView={nomeFromSnapshot} />
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">
+              {coopNomeEarly ? `${coopNomeEarly} · ` : ""}
+              {formatMesReferencia(mesAtual)}
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <CooperadoInicioValorReceberCard
+              snapshot={valorReceberCard}
+              atualizando={cardFinanceiroAtualizando}
+              exibirReciboAssinatura
+            />
+            <EnviarFotoEntregaInicioCard onEnviar={irEnviarFotoEntrega} />
+          </div>
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <CooperadoInicioValorReceberCard
-            snapshot={valorReceberCard}
-            atualizando={cardFinanceiroAtualizando}
-            exibirReciboAssinatura
-          />
-          <EnviarFotoEntregaInicioCard onEnviar={irEnviarFotoEntrega} />
-        </div>
-      </div>
-    );
-  }
+      ) : (
+        <CooperadoDashboardInicioView
+          view={view}
+          valorReceberCard={valorReceberCard}
+          cardFinanceiroAtualizando={cardFinanceiroAtualizando}
+          irEnviarFotoEntrega={irEnviarFotoEntrega}
+          hbCredit={hbCredit}
+        />
+      )}
+    </CooperadoInicioCooperadoLiveRoot>
+  );
+}
 
+function CooperadoDashboardInicioView({
+  view,
+  valorReceberCard,
+  cardFinanceiroAtualizando,
+  irEnviarFotoEntrega,
+  hbCredit,
+}: {
+  view: CooperadoPwaInicioDashboardView;
+  valorReceberCard: ReturnType<typeof useCooperadoInicioValorReceberCardState>["snapshot"];
+  cardFinanceiroAtualizando: boolean;
+  irEnviarFotoEntrega: () => void;
+  hbCredit: ReturnType<typeof useHbCreditEnabled>;
+}) {
   const {
     cooperadoId,
     mes,
     cooperado,
     coopNome,
-    valorReceber,
     precisaPix,
     rejeitadas,
     fotosEmAnalise,
-    prestacao,
     exibirCardAvulsosSeparado,
     comunicados,
     pautasAbertas,
@@ -420,26 +434,23 @@ function CooperadoDashboard() {
     cnpjDigits,
   } = view;
 
-  const cooperadoExibicao = cooperado ?? cooperadoLive;
-  const precisaAssinatura = Boolean(
-    cooperadoExibicao &&
-      cooperadoUsaAssinaturaCadastroPilot(cooperadoId) &&
-      cooperadoPrecisaCadastrarAssinatura(
-        cooperadoId,
-        normalizarAssinaturaLegadoCooperado(cooperadoExibicao)
-      )
-  );
+  const nomePrimeiro = cooperado?.nomeCompleto.split(" ")[0];
 
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">
-          Olá, {(cooperadoExibicao ?? cooperado)?.nomeCompleto.split(" ")[0] ?? nomeCurto}!
+          <CooperadoInicioOláTitulo nomeFromView={nomePrimeiro} />
         </h1>
         <p className="text-sm text-gray-500 mt-1">{coopNome} · {formatMesReferencia(mes)}</p>
       </div>
 
-      {cooperadoExibicao && <AssinaturaStatusAviso cooperado={cooperadoExibicao} />}
+      <CooperadoInicioAssinaturaOnboardingLive
+        cooperado={cooperado}
+        cooperadoId={cooperadoId}
+        mostrarAssinaturaPilot={mostrarAssinaturaPilot}
+        precisaPix={precisaPix}
+      />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <CooperadoInicioValorReceberCard
@@ -464,12 +475,6 @@ function CooperadoDashboard() {
       {exibirCardAvulsosSeparado && (
         <ValoresAvulsosDashboardCard cooperadoId={cooperadoId} cooperativaId={viewCoopId} />
       )}
-
-      <OnboardingChecklist
-        pixOk={!precisaPix}
-        mostrarAssinatura={mostrarAssinaturaPilot}
-        assinaturaOk={!precisaAssinatura}
-      />
 
       {temSecaoPendencias && (
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Pendências</p>

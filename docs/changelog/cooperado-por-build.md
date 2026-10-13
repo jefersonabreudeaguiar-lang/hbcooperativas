@@ -8,6 +8,8 @@ Produção: https://hbcooperativas.vercel.app
 
 ## v361 (atual)
 
+- **Performance:** Início com folha L1 (`CooperadoInicioCooperadoLiveRoot`) — um subscribe de cooperado para saudação/assinatura; abas mobile com política `361-inicio-live-l1` (financeiro dormant + gate financeiro na casca).
+- **Entregas:** compressão de foto no worker (L4) com `File` no thread e encerramento em idle.
 - **Dados:** responsável não exibe «a receber» de cooperado já pago quando a ficha no operacional ficou pendente após o PIX — alinha com o registro de pagamento e repara status na sync.
 
 ## v360

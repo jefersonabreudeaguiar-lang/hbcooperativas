@@ -1,0 +1,29 @@
+---
+description: Rollback release/361 e fechamento cirúrgico da perf v361 (só escopo autorizado)
+alwaysApply: true
+---
+
+# Release 361 — rollback e fechamento de performance
+
+## Comando do usuário: «volte para o 361»
+
+1. **Não improvisar** revert parcial. Restaurar o snapshot **`release/361`** (`f21ff892`).
+2. Orientar: `git fetch origin tag release/361` → `git checkout release/361` (ou `git reset --hard release/361` na `main` se o usuário pedir explicitamente reset na branch).
+3. Ver `docs/release/ROLLBACK-361.md`.
+
+## Fechamento perf 361 (quando autorizado)
+
+**Escopo único — não tocar fora desta lista sem nova ordem explícita:**
+
+1. Ligar **L1 Início**: `CooperadoInicioCooperadoLiveRoot` + folhas em `DashboardContent.tsx` (remover selector duplicado de `cooperadoLive` no dashboard).
+2. Bump **`COOPERADO_MOBILE_TAB_DOM_POLICY`** só quando a política de abas/Início mudar de fato.
+3. Atualizar **`docs/changelog/cooperado-por-build.md`** (bullets de performance do fechamento).
+4. Smoke estático mínimo se criado/alterado (`scripts/test-cooperado-inicio-l1-gate.ts`).
+
+**Fora de escopo (proibido nesta ordem):**
+
+- `mergeSyncTier` / L2, refactors em Notas, bump de `APP_BUILD_VERSION`/`sw.js` salvo pedido explícito, remoção do gate duplicado na Ficha, HB Créditos, Supabase, scripts de diagnóstico untracked.
+
+## Antes de implementar
+
+Se houver risco de erro boundary (`useCooperadoApresentacaoFinanceiraConsolidada` sem gate): confirmar que `AppLayout` já envolve cooperado com `CooperadoApresentacaoFinanceiraGate`. Rodar `npm run gate:melhor-performance` e `npm run build` antes de considerar pronto.

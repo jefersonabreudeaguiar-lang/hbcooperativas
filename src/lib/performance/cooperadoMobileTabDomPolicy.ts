@@ -1,2 +1,2 @@
 /** Bump quando mudar política de montagem de abas (ver `data-cooperado-tab-dom-policy` no html). */
-export const COOPERADO_MOBILE_TAB_DOM_POLICY = "360-financeiro-cv-l1";
+export const COOPERADO_MOBILE_TAB_DOM_POLICY = "361-inicio-live-l1";
