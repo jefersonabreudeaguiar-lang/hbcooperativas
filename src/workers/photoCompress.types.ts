@@ -1,6 +1,7 @@
 export interface WorkerCompressRequest {
   id: string;
-  buffer: ArrayBuffer;
+  /** Clonado para o worker — leitura ArrayBuffer fora da UI thread. */
+  file: File;
   mimeType: string;
   maxWidth: number;
   quality: number;

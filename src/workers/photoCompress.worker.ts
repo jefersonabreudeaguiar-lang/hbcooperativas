@@ -5,7 +5,8 @@ import type { WorkerCompressRequest, WorkerCompressSuccess, WorkerCompressFailur
 self.onmessage = async (event: MessageEvent<WorkerCompressRequest>) => {
   const msg = event.data;
   try {
-    const blob = new Blob([msg.buffer], { type: msg.mimeType });
+    const buffer = await msg.file.arrayBuffer();
+    const blob = new Blob([buffer], { type: msg.mimeType });
     const bitmap = await createImageBitmap(blob, {
       resizeWidth: msg.maxWidth,
       resizeQuality: "medium",
