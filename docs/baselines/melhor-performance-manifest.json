@@ -40,14 +40,26 @@
     "capturedAt": "2026-10-10T20:18:00-03:00",
     "machineNote": "dev agent; re-run baseline-performance-rql-h80-readonly.ts to compare",
     "metricsMs": {
-      "jsonStringifyAppDataShell": { "p50": 0.013, "p95": 0.019 },
-      "jsonParseAppDataShell": { "p50": 0.025, "p95": 0.03 },
-      "simNav5xDashboardNotas": { "p50": 0.093, "p95": 0.158 },
-      "mergeSyncTierRequests1000": { "p50": 0.269, "p95": 0.893 }
+      "jsonStringifyAppDataShell": {
+        "p50": 0.013,
+        "p95": 0.019
+      },
+      "jsonParseAppDataShell": {
+        "p50": 0.025,
+        "p95": 0.03
+      },
+      "simNav5xDashboardNotas": {
+        "p50": 0.093,
+        "p95": 0.158
+      },
+      "mergeSyncTierRequests1000": {
+        "p50": 0.269,
+        "p95": 0.893
+      }
     },
     "reactSubscriptionCounts": {
       "useAppData": 49,
-      "useAppDataSelector": 47
+      "useAppDataSelector": 50
     }
   },
   "cooperadoPerformancePolicy": {
