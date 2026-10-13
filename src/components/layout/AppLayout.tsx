@@ -26,7 +26,6 @@ import {
   StaffSidebarSyncVersionLine,
 } from "@/components/sync/SyncStatusChip";
 import { CooperadoSubtleUpdateNotice } from "@/components/cooperado/CooperadoSubtleUpdateNotice";
-import { HomologLabBanner } from "@/components/layout/HomologLabBanner";
 import { CobrancaSaasPainel } from "@/components/payments/CobrancaSaasPainelWrapper";
 import { PainelResponsavelMobileBar } from "@/components/permissions/PainelResponsavelMobileBar";
 import { ContratoServicoAppGate } from "@/components/cobranca/ContratoServicoAppGate";
@@ -289,7 +288,6 @@ export function MobileNav() {
 
   return (
     <>
-      <HomologLabBanner />
       <header className="lg:hidden flex items-center justify-between gap-2 px-4 py-3 bg-green-900 text-white sticky top-0 z-40">
         <BrandHeader compact />
         <div className="flex items-center gap-1 shrink-0">
@@ -525,9 +523,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   }, [navUser?.id, navUser?.role, router]);
 
   return (
-    <div className="flex h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden flex-col">
-      <HomologLabBanner />
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+    <div className="flex h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden">
       {navUser && <CooperadoSubtleUpdateNotice />}
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -567,7 +563,6 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
             children
           )}
         </main>
-      </div>
       </div>
     </div>
   );

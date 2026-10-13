@@ -21,7 +21,6 @@ Cada liberação em produção deve deixar rastro verificável. **Commit no GitH
 - `verify:production-identity` falha (build ou SHA divergente).
 - Smoke de login ou API crítica falha.
 - Mudança financeira sem homologação mínima (1 cooperado + 1 responsável nos fluxos tocados).
-- Deploy direto no oficial sem passar pelo **laboratório** (URL/PWA separados): ver [`LABORATORIO-HOMOLOG.md`](./LABORATORIO-HOMOLOG.md).
 
 ## Rollback
 
