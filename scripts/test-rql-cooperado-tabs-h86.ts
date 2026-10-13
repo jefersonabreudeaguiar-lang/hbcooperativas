@@ -103,8 +103,12 @@ assert(layout.includes("setCooperadoOptimisticTab"), "pointerdown otimista no ro
 assert(layout.includes("cooperadoTabWarmOnTouchStart"), "touchstart aquece chunk no rodapé");
 assert(keep.includes("return 2") && keep.includes("PWA: LRU 2"), "PWA mensageiro LRU 2 slots");
 assert(
-  read("src/lib/performance/cooperadoMobileTabDomPolicy.ts").includes("279-financeiro-paint"),
+  read("src/lib/performance/cooperadoMobileTabDomPolicy.ts").includes("361-inicio-live-l1"),
   "política DOM cooperado versionada"
+);
+assert(
+  panel.includes("[content-visibility:auto]") && panel.includes("[contain-intrinsic-size:0_500px]"),
+  "financeiro dormant L1 content-visibility"
 );
 assert(
   read("src/lib/performance/prefetchCooperadoTabRouteChunks.ts").includes(
