@@ -2208,8 +2208,8 @@ export function listarFichasPendentesNaoCobertasPorPagamentoConfirmado(
 ): FichaCorrida[] {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const confirmado = getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia);
+  if (!confirmado) return [];
   const pendentes = listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId);
-  if (!confirmado) return pendentes;
   return pendentes.filter((f) => !fichaCobertaPorPagamentoCooperativa(data, f, confirmado));
 }
 

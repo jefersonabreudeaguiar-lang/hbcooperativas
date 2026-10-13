@@ -119,6 +119,7 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
     valorLiquido: 100,
     valorBruto: 100,
     instituicaoId: "inst-1",
+    dataEntrega: "2026-08-15",
     itens: [{ produtoId: "p1", quantidade: 1, precoUnitario: 100 }],
     createdAt: "2026-08-01T00:00:00.000Z",
     updatedAt: "2026-08-01T00:00:00.000Z",

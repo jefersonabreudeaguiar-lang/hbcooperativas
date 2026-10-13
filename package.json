@@ -48,6 +48,7 @@
     "verify:production-identity": "npx tsx scripts/verify-production-identity.ts",
     "confirm:production": "npx tsx scripts/confirm-production-deploy.ts",
     "confirm:production:wait": "npx tsx scripts/confirm-production-deploy.ts --wait",
+    "confirm:homolog": "npx tsx scripts/confirm-homolog-deploy.ts",
     "push:main": "git push origin main && npm run confirm:production:wait",
     "release:verify": "npx tsx scripts/run-release-verify.ts",
     "release:verify:fast": "npx tsx scripts/run-release-verify.ts --fast",

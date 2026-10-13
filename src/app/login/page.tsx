@@ -18,6 +18,7 @@ import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { prepareBrowserProfileForPwaInstall } from "@/lib/pwa/cooperadoPwaInstallPrepare";
 import { shouldShowBaixarAppInstallPromo } from "@/lib/pwa/baixarAppInstallPromo";
 import { PwaRepararAtalhoPanel } from "@/components/pwa/PwaRepararAtalhoPanel";
+import { HomologLabBanner } from "@/components/layout/HomologLabBanner";
 
 const SEGMENTOS_ATENDIDOS = [
   "Agrícola e agroindustrial",
@@ -128,6 +129,7 @@ function LoginForm() {
 
   return (
     <GuestRoute>
+      <HomologLabBanner />
       <div className="min-h-screen flex flex-col lg:flex-row">
         <div className="bg-green-900 text-white px-6 py-8 lg:w-1/2 lg:flex lg:flex-col lg:justify-center lg:px-12 lg:py-12 relative overflow-hidden shrink-0">
           <div className="absolute inset-0 opacity-10 pointer-events-none">

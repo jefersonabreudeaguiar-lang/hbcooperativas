@@ -71,6 +71,7 @@ const nextConfig: NextConfig = {
       process.env.NEXT_PUBLIC_CONTA_COOP_VALOR_RECEBER_PUBLIC ?? "1",
     NEXT_PUBLIC_VERCEL_DEPLOYMENT_ID: process.env.VERCEL_DEPLOYMENT_ID ?? "",
     NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA: process.env.VERCEL_GIT_COMMIT_SHA ?? "",
+    NEXT_PUBLIC_APP_ENV: process.env.APP_ENV ?? process.env.NEXT_PUBLIC_APP_ENV ?? "",
   },
   // Permite abrir o dev server pelo celular (IP da rede, ex.: 192.168.1.7:3000)
   allowedDevOrigins: [

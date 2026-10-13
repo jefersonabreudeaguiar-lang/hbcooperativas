@@ -1,4 +1,9 @@
 import { getAppBaseUrl } from "@/lib/security/appUrl";
+import {
+  homologLabDisplayName,
+  homologLabShortName,
+  isHomologAppDeployment,
+} from "@/lib/security/homologDeployment";
 
 export type WebAppManifestJson = {
   id: string;
@@ -50,11 +55,14 @@ export function buildWebAppManifest(request?: Request): WebAppManifestJson {
   const launch = (nextPath: string) =>
     `${origin}/pwa-launch.html?next=${encodeURIComponent(nextPath)}`;
 
+  const homolog = isHomologAppDeployment();
   return {
-    id: `${origin}/`,
-    name: "HB Cooperativas",
-    short_name: "HB Coop",
-    description: "Gestão de cooperativas — entregas, mensalidades e ficha corrida",
+    id: homolog ? `${origin}/?hb-env=homolog` : `${origin}/`,
+    name: homolog ? homologLabDisplayName() : "HB Cooperativas",
+    short_name: homolog ? homologLabShortName() : "HB Coop",
+    description: homolog
+      ? "Espelho de testes — responsável e cooperado (dados homolog, separado do app oficial)"
+      : "Gestão de cooperativas — entregas, mensalidades e ficha corrida",
     start_url: `${origin}/pwa-launch.html`,
     scope: `${origin}/`,
     display: "standalone",

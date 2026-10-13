@@ -1,0 +1,39 @@
+# =============================================================================
+# Vercel — projeto LABORATÓRIO (segundo app, NÃO é hbcooperativas oficial)
+# =============================================================================
+# Crie um projeto novo na Vercel (ex.: hbcooperativas-lab), mesmo repositório GitHub.
+# Production Branch sugerida: hb-cooperativas-lab  (main só recebe o que passou no lab)
+# Copie estas chaves em Settings → Environment Variables → Production (do projeto LAB).
+#
+# NUNCA use o Supabase de produção (ref ifptyzikekrswippzmsf) aqui.
+
+APP_ENV=homolog
+BIC_ENVIRONMENT=HOMOLOG
+
+# URL canônica do lab — cooperado instala o PWA DESTE domínio (ícone "HB Lab")
+NEXT_PUBLIC_APP_URL=https://SEU-PROJETO-LAB.vercel.app
+
+# Supabase HOMOLOG (projeto separado — ex. ref ocyfzramxvxqbtkorubn)
+NEXT_PUBLIC_SUPABASE_URL=https://SEU-PROJETO.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+AUTH_SECRET=
+
+# Travas: não herdar flags do deploy oficial
+NEXT_PUBLIC_HB_BIC_PRODUCTION_LOCK=false
+NEXT_PUBLIC_BIC_CENTRAL_READ_OFFICIAL=false
+NEXT_PUBLIC_BIC_CENTRAL_READ_FULL_OFFICIAL=false
+
+# HB / UI (ajuste como no lab local)
+HB_CREDIT_ENABLED=true
+NEXT_PUBLIC_HB_CREDIT_ENABLED=true
+HB_CREDIT_OPERATIONS_ENABLED=true
+NEXT_PUBLIC_CONTA_COOP_UI_PUBLIC=1
+NEXT_PUBLIC_CONTA_COOP_VALOR_RECEBER_PUBLIC=1
+
+# Opcional: BIC lab espelho
+# NEXT_PUBLIC_HB_BIC_LAB_ENABLED=true
+# HB_BIC_LAB_ENABLED=true
+
+# Não indexar o lab
+# HB_ALLOW_SEARCH_INDEXING=0
