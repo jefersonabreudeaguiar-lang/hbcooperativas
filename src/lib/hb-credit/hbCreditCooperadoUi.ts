@@ -28,6 +28,18 @@ export const hbCooperadoSegmentIdle =
 export const hbCooperadoSurfaceCard =
   "rounded-3xl border border-emerald-100 bg-white shadow-sm";
 
+export const hbCooperadoLedgerRow =
+  "flex items-start justify-between gap-3 px-4 py-3.5";
+
+export const hbCooperadoQuickActionsGrid =
+  "grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3";
+
+export const hbCooperadoQuickActionBtn =
+  "flex min-h-[4.5rem] flex-col items-center justify-center gap-2 rounded-2xl border border-emerald-100 bg-white px-2 py-3 shadow-sm transition-colors hover:bg-emerald-50/80 disabled:opacity-45 disabled:pointer-events-none";
+
+export const hbCooperadoQuickActionIcon =
+  "flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-800";
+
 export const hbCooperadoValueBox =
   "rounded-2xl border border-emerald-100 bg-emerald-50/50 px-4 py-3";
 

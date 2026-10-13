@@ -1949,7 +1949,7 @@ function alinharStatusFichaComNotasConferidas(
       const confirmado = getPagamentoConfirmadoCooperadoMes(data, f.cooperadoId, f.mesReferencia);
       if (confirmado && fichaCobertaPorPagamentoCooperativa(data, f, confirmado)) {
         changed = true;
-        return { ...f, status: "pago", updatedAt: now };
+        return { ...f, status: "pago" as const, updatedAt: now };
       }
     }
     const nota = notaById.get(f.notaPedidoId);
