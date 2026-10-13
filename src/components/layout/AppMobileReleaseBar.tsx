@@ -41,9 +41,15 @@ const STYLES: Record<
 /** Faixa fixa — build do app no navegador + última sync (cooperado ou responsável). */
 const LONG_PRESS_MS = 850;
 
-export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
+/** Mantém subscribe AppData na folha da faixa (não invalida a casca do release bar). */
+function CooperadoReleaseBarAppDataBind() {
   const { user } = useAuth();
   useAppDataSelector((d) => d?.cooperados?.length ?? 0, [user?.id, user?.cooperadoId]);
+  return null;
+}
+
+export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
+  const { user } = useAuth();
   const homologOrlando = variant === "cooperado" && canUseRqlPerfHomologPanel(user);
   const { syncing, lastSyncedAt } = useSyncStatus();
   const [, setTick] = useState(0);
@@ -85,6 +91,7 @@ export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
 
   return (
     <>
+    {variant === "cooperado" && <CooperadoReleaseBarAppDataBind />}
     <div
       className={cn(
         "flex items-center justify-between gap-2 px-3 py-1.5 text-[10px] sm:text-[11px] backdrop-blur-sm safe-area-pb",

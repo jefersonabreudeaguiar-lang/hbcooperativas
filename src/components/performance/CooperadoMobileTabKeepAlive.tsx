@@ -234,11 +234,17 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
       if (!panel) return null;
       const pinnedPair =
         pinnedDualReady && isCooperadoTabPinned(href) && isCooperadoTabPinned(activePath);
+      const financeDormantPanel =
+        href === COOPERADO_TAB_FINANCEIRO_HREF && !active && (warm || pinnedPair);
       return (
         <div
           key={href}
           className={cn(
-            active ? "relative z-[1] w-full min-h-0" : "hidden [content-visibility:hidden]"
+            active
+              ? "relative z-[1] w-full min-h-0"
+              : financeDormantPanel
+                ? "relative w-full min-h-0 max-h-0 overflow-hidden opacity-0 pointer-events-none [content-visibility:auto] [contain-intrinsic-size:0_500px]"
+                : "hidden [content-visibility:hidden]"
           )}
           aria-hidden={!active}
           inert={!active}
