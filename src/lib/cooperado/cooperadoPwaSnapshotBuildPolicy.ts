@@ -22,7 +22,8 @@ export function cooperadoPwaSnapshotBuildReadable(savedBuild: number | undefined
   return savedBuild === APP_BUILD_VERSION;
 }
 
-function removeCooperadoPwaSnapshotLocalStorageKeys(): void {
+/** Snapshots PWA cooperado (início/ficha/entregas) — não apaga sessão nem AppData operacional. */
+export function purgeCooperadoPwaSnapshotLocalStorageKeys(): void {
   const keys: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
@@ -41,7 +42,7 @@ export function materializeCooperadoPwaSnapshotsForCurrentBuild(): void {
     const buildChanged = prevBuild !== APP_BUILD_VERSION;
     const epochChanged = prevEpoch !== PWA_SNAPSHOT_PURGE_EPOCH;
     if (!buildChanged && !epochChanged) return;
-    removeCooperadoPwaSnapshotLocalStorageKeys();
+    purgeCooperadoPwaSnapshotLocalStorageKeys();
     localStorage.setItem(PWA_SNAPSHOTS_BUILD_KEY, String(APP_BUILD_VERSION));
     localStorage.setItem(PWA_SNAPSHOT_PURGE_EPOCH_KEY, String(PWA_SNAPSHOT_PURGE_EPOCH));
   } catch {
