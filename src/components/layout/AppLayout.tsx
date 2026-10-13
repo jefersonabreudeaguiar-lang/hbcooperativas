@@ -60,6 +60,7 @@ import {
 import { CooperadoFinanceiroSyncBanner } from "@/components/cooperado/CooperadoFinanceiroShellContext";
 import { useMobileTabScrollRestore } from "@/hooks/useMobileTabScrollRestore";
 import type { MobileTabScrollMode } from "@/lib/performance/mobileTabScrollMemory";
+import { CooperadoApresentacaoFinanceiraGate } from "@/components/cooperado/CooperadoApresentacaoFinanceiraGate";
 import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoMobileTabKeepAlive";
 import { StaffMobileTabKeepAlive } from "@/components/performance/StaffMobileTabKeepAlive";
 import { CooperadoPwaResumeLifecycle } from "@/components/cooperado/CooperadoPwaResumeLifecycle";
@@ -522,6 +523,21 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     return scheduleStaffNavPrefetchEarly(router);
   }, [navUser?.id, navUser?.role, router]);
 
+  const routePanels = cooperadoKeepAliveShell
+    ? (
+        <CooperadoMobileTabKeepAlive pathname={pathname}>{children}</CooperadoMobileTabKeepAlive>
+      )
+    : staffKeepAliveShell
+      ? (
+          <StaffMobileTabKeepAlive pathname={pathname}>{children}</StaffMobileTabKeepAlive>
+        )
+      : children;
+
+  const routePanelsWrapped =
+    navUser && isCooperadoAppUser(navUser)
+      ? <CooperadoApresentacaoFinanceiraGate>{routePanels}</CooperadoApresentacaoFinanceiraGate>
+      : routePanels;
+
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden">
       {navUser && <CooperadoSubtleUpdateNotice />}
@@ -555,13 +571,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           {navUser && isCooperadoAppUser(navUser) && <CooperadoFinanceiroSyncBanner />}
           {navUser && isCooperadoAppUser(navUser) && <CooperadoPwaMessengerAppDataWarm />}
           {navUser && isCooperadoAppUser(navUser) && <CooperadoPwaResumeLifecycle />}
-          {cooperadoKeepAliveShell ? (
-            <CooperadoMobileTabKeepAlive pathname={pathname}>{children}</CooperadoMobileTabKeepAlive>
-          ) : staffKeepAliveShell ? (
-            <StaffMobileTabKeepAlive pathname={pathname}>{children}</StaffMobileTabKeepAlive>
-          ) : (
-            children
-          )}
+          {routePanelsWrapped}
         </main>
       </div>
     </div>
