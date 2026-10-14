@@ -4,7 +4,9 @@ import { useEffect } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/cooperadoMobilePilotPerf";
+import { persistirCooperadoPwaFichaResumoSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import { persistirCooperadoPwaInicioDashboardSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
+import { scheduleCooperadoPilotFinanceReadRecovery } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
 import { persistirCooperadoPwaEntregasResumosSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
 import { persistirInicioCardCooperadoNotificarPwaLeve } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { isAppDataWarm } from "@/services/dataStore";
@@ -22,10 +24,15 @@ export function CooperadoPwaResumeLifecycle() {
       return;
     }
 
+    if (cooperadoMobilePilotSnapshotFirstInicio(user)) {
+      scheduleCooperadoPilotFinanceReadRecovery(user);
+    }
+
     const flush = () => {
       if (!isAppDataWarm()) return;
       persistirInicioCardCooperadoNotificarPwaLeve(user);
       persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, true);
+      persistirCooperadoPwaFichaResumoSnapshotFromUser(user, true);
       persistirCooperadoPwaEntregasResumosSnapshotFromUser(user);
     };
 

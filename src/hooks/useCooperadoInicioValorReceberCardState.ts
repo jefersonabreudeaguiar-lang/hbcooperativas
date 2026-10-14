@@ -36,6 +36,9 @@ import {
   resolveParidadeFromFichaResumoSnapshot,
 } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import { getData, isAppDataWarm } from "@/services/dataStore";
+import { cooperadoPwaFinanceiroSnapshotsAusentes } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
+import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
+import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 
 const SNAPSHOT_VAZIO: InicioCardMotorSnapshot = {
   mesLabel: "—",
@@ -126,9 +129,22 @@ export function useCooperadoInicioValorReceberCardState(input: {
       const persistidoMesmoBuildEarly =
         persistido?.appBuild === APP_BUILD_VERSION ? persistido : null;
       const syncMotorPass = Boolean(input.syncing && isCooperadoUserSyncVisible());
+      const pilotPrecisaMotorLocal = (() => {
+        if (!isCooperadoMobilePilotPerfActive() || persistidoMesmoBuildEarly?.display) {
+          return false;
+        }
+        if (!input.cooperadoId || !isAppDataWarm()) return false;
+        const data = getData();
+        const coopId = input.cooperativaId;
+        if (!coopId) return cooperadoPwaFinanceiroSnapshotsAusentes(input.cooperadoId, coopId);
+        const canon = resolverCooperadoIdCanonico(data, input.cooperadoId, coopId);
+        if (cooperadoPwaFinanceiroSnapshotsAusentes(canon, coopId)) return true;
+        return cooperadoTemDadosFinanceirosMinimos(data, canon, coopId);
+      })();
       const needsMotor =
         syncMotorPass ||
         persistidoTick > 0 ||
+        pilotPrecisaMotorLocal ||
         !persistidoMesmoBuildEarly?.display ||
         (input.dataReady && apresentacaoConsolidada);
 

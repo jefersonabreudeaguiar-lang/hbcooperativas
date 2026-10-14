@@ -18,6 +18,9 @@ import {
   type CooperadoPwaFichaResumoSnapshot,
 } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
+import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/cooperadoMobilePilotPerf";
+import { cooperadoPilotFinanceiroExibirComSnapshotsLocais } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
+import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import {
   cooperadoPwaUiSubscribesAppData,
   isCooperadoPwaMessengerMode,
@@ -207,9 +210,10 @@ function FichaCorridaPageInner() {
   const tabActive = useCooperadoTabPanelActive("/ficha-corrida");
   const { user, isCooperado, cooperadoId, check } = usePermissions();
   const messenger = isCooperadoPwaMessengerMode();
+  const pilotFinanceiroLeve = cooperadoMobilePilotSnapshotFirstInicio(user);
   const readModelsRevision = useCooperadoMessengerReadModelRevision();
-  /** Cooperado PWA: financeiro só relê após sync (responsável); entregas permanecem no fluxo atual. */
-  const financeiroDormant = messenger && isCooperado;
+  /** Cooperado PWA / piloto Jeferson: ficha lê snapshot local até AppData consolidar. */
+  const financeiroDormant = (messenger || pilotFinanceiroLeve) && isCooperado;
   /** PWA leve só desliga subscribe do AppData para cooperado; responsável continua com dados ao vivo. */
   const appDataPanelActive =
     tabActive && (isCooperado ? cooperadoPwaUiSubscribesAppData() : true);
@@ -246,7 +250,7 @@ function FichaCorridaPageInner() {
   );
 
   useLayoutEffect(() => {
-    if (!tabActive || !messenger || !isCooperado) return;
+    if (!tabActive || !(messenger || pilotFinanceiroLeve) || !isCooperado) return;
     ensureAppDataEagerWarm();
     if (isAppDataWarm()) setAppDataWarmTick((n) => n + 1);
     else {
@@ -254,18 +258,29 @@ function FichaCorridaPageInner() {
         waitForAppDataWarm().then((ok) => ok && setAppDataWarmTick((n) => n + 1))
       );
     }
-  }, [tabActive, messenger, isCooperado]);
+  }, [tabActive, messenger, pilotFinanceiroLeve, isCooperado]);
 
   useEffect(() => {
-    if (!messenger || !cooperadoId || !coopIdEarly) {
+    if (!(messenger || pilotFinanceiroLeve) || !cooperadoId || !coopIdEarly) {
       setFichaResumoSnap(null);
       return;
     }
     setFichaResumoSnap(lerCooperadoPwaFichaResumoSnapshot(cooperadoId, coopIdEarly));
-  }, [messenger, cooperadoId, coopIdEarly, readModelsRevision]);
+  }, [messenger, pilotFinanceiroLeve, cooperadoId, coopIdEarly, readModelsRevision]);
 
   useEffect(() => {
-    if (!tabActive || !messenger || !user || user.role !== "cooperado") return;
+    if (!pilotFinanceiroLeve || !cooperadoId || !coopIdEarly) return;
+    const onRefresh = () => {
+      setFichaResumoSnap(lerCooperadoPwaFichaResumoSnapshot(cooperadoId, coopIdEarly));
+    };
+    window.addEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
+    return () => window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
+  }, [pilotFinanceiroLeve, cooperadoId, coopIdEarly]);
+
+  useEffect(() => {
+    if (!tabActive || !(messenger || pilotFinanceiroLeve) || !user || user.role !== "cooperado") {
+      return;
+    }
     const run = () => rematerializarCooperadoPwaSnapshotsSeNecessario(user);
     if (typeof requestIdleCallback !== "undefined") {
       const id = requestIdleCallback(run, { timeout: 600 });
@@ -273,7 +288,7 @@ function FichaCorridaPageInner() {
     }
     const t = window.setTimeout(run, 0);
     return () => window.clearTimeout(t);
-  }, [tabActive, messenger, user?.id, readModelsRevision]);
+  }, [tabActive, messenger, pilotFinanceiroLeve, user?.id, readModelsRevision]);
 
   useEffect(() => {
     const c = searchParams.get("cooperado");
@@ -327,9 +342,10 @@ function FichaCorridaPageInner() {
   const apresentacaoFinanceiroUi =
     apresentacaoConsolidada ||
     (isCooperado &&
-      pagamentosHydratedCooperado &&
-      isCooperadoInstantResumeEnabled() &&
-      cooperadoLocalResumeReady(user));
+      (cooperadoPilotFinanceiroExibirComSnapshotsLocais(user) ||
+        (pagamentosHydratedCooperado &&
+          isCooperadoInstantResumeEnabled() &&
+          cooperadoLocalResumeReady(user))));
 
   useEffect(() => {
     if (!tabActive || messenger) return;
@@ -387,7 +403,9 @@ function FichaCorridaPageInner() {
   ]);
 
   const mesEmAberto = useMemo(() => {
-    if (messenger && fichaResumoSnap?.mesPrincipal) return fichaResumoSnap.mesPrincipal;
+    if ((messenger || pilotFinanceiroLeve) && fichaResumoSnap?.mesPrincipal) {
+      return fichaResumoSnap.mesPrincipal;
+    }
     if (!tabActive || !data || !cooperadoId) return getCurrentMesReferencia();
     if (isCooperado && paridadeCooperadoMobile?.mesesResumo[0]) {
       return paridadeCooperadoMobile.mesesResumo[0];

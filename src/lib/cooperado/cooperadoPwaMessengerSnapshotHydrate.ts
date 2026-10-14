@@ -8,6 +8,8 @@ import {
   isCooperadoPwaMessengerMode,
   persistirCooperadoPwaMessengerCaches,
 } from "@/lib/cooperado/cooperadoPwaMessengerMode";
+import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
+import { cooperadoRematerializarFinanceiroLocalSePossivel } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -68,14 +70,22 @@ export function cooperadoPwaFichaSnapshotPrecisaRematerializar(
 export function rematerializarCooperadoPwaSnapshotsSeNecessario(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
-  if (!user || user.role !== "cooperado" || !user.cooperadoId || !isCooperadoPwaMessengerMode()) {
-    return false;
-  }
+  if (!user || user.role !== "cooperado" || !user.cooperadoId) return false;
   if (!isAppDataWarm()) return false;
   const data = getData();
   const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
   if (!coopId) return false;
   const canon = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+
+  if (isCooperadoMobilePilot(user)) {
+    if (!cooperadoPwaFichaSnapshotPrecisaRematerializar(canon, coopId)) {
+      const cardOk = cooperadoPwaFinanceiroSnapshotsMaterializados(canon, coopId);
+      if (cardOk) return false;
+    }
+    return cooperadoRematerializarFinanceiroLocalSePossivel(user);
+  }
+
+  if (!isCooperadoPwaMessengerMode()) return false;
   if (!cooperadoPwaFichaSnapshotPrecisaRematerializar(canon, coopId)) return false;
   persistirCooperadoPwaMessengerCaches(user);
   return true;

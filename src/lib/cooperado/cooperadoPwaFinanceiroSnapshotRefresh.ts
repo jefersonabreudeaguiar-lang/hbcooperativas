@@ -20,6 +20,7 @@ import { getData, isAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
+import { isCooperadoMobilePilotPerfActive } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 
 /** Após troca de build ou purge — recria snapshots do AppData local (paridade com o browser). */
@@ -69,7 +70,7 @@ export function cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(
     clearCooperadoPwaDadosDesatualizados();
     return;
   }
-  if (!isCooperadoPwaMobileLeveUi()) return;
+  if (!isCooperadoPwaMobileLeveUi() && !isCooperadoMobilePilotPerfActive(user)) return;
   persistirInicioCardCooperadoNotificarPwaLeve(user);
   persistirCooperadoPwaFichaResumoSnapshotFromUser(user, true);
   persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, true);

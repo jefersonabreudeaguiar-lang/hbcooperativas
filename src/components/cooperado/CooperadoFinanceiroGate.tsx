@@ -57,6 +57,11 @@ import {
 } from "@/components/cooperado/CooperadoFinanceiroShellContext";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { cooperadoPwaInstantPaintReady } from "@/lib/cooperado/cooperadoPwaInstantResume";
+import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
+import {
+  cooperadoPilotFinanceiroExibirComSnapshotsLocais,
+  scheduleCooperadoPilotFinanceReadRecovery,
+} from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
 
 /** Após este tempo, o conteúdo pode seguir mesmo sem sync (shell já navegável). */
 const SYNC_HINT_MAX_MS = 18_000;
@@ -89,6 +94,13 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
     return cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, coopId);
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]);
+
+  useEffect(() => {
+    if (user?.role !== "cooperado" || !user.cooperadoId) return;
+    if (isCooperadoMobilePilot(user)) {
+      scheduleCooperadoPilotFinanceReadRecovery(user);
+    }
+  }, [user?.id, user?.role, user?.cooperadoId]);
 
   useEffect(() => {
     if (user?.role !== "cooperado" || !user.cooperadoId) return;
@@ -127,6 +139,13 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
           markCooperadoUserSyncVisible();
           requestCooperadoAppReleaseSync();
         }
+        clearCooperadoPostShellSyncStarted();
+        return;
+      }
+
+      if (isCooperadoMobilePilot(user)) {
+        cooperadoRematerializarFinanceiroLocalSePossivel(user);
+        scheduleCooperadoPilotFinanceReadRecovery(user);
         clearCooperadoPostShellSyncStarted();
         return;
       }
@@ -208,6 +227,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     user &&
     (inicioCardCacheProntoParaAbertura(cacheInicioCard) ||
       cooperadoLocalResumeReady(user) ||
+      cooperadoPilotFinanceiroExibirComSnapshotsLocais(user) ||
       (isCooperadoPwaMessengerMode() && cooperadoPwaInstantPaintReady(user)));
 
   const aguardandoDadosFinanceiros =
