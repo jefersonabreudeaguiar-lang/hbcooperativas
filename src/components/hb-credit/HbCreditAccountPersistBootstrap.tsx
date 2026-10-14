@@ -20,6 +20,7 @@ import {
   lerHbCreditAccountPersistido,
   lerHbCreditAccountPersistidoFlex,
 } from "@/lib/hb-credit/hbCreditAccountPersistencia";
+import { scheduleCooperadoPilotHbCreditAccountPersist } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
 
 /** Cache HB Créditos cooperado após login/sync (abre Minha Conta Coop na hora). */
 export function HbCreditAccountPersistBootstrap() {
@@ -65,6 +66,11 @@ export function HbCreditAccountPersistBootstrap() {
       });
     }
   };
+
+  useEffect(() => {
+    if (!hbOn || !user || user.role !== "cooperado") return;
+    scheduleCooperadoPilotHbCreditAccountPersist(user);
+  }, [hbOn, user?.id, user?.role]);
 
   useEffect(() => {
     if (!hbOn || !user || user.role !== "cooperado" || syncing) return;

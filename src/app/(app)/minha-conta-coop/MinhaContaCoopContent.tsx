@@ -65,6 +65,13 @@ import {
   hbCooperadoHubPage,
   hbCooperadoPrimaryBtn,
 } from "@/lib/hb-credit/hbCreditCooperadoUi";
+import { HbCreditCooperadoInicioPilot } from "@/components/hb-credit/HbCreditCooperadoInicioPilot";
+import { HbCreditCooperadoLoadingShellPilot } from "@/components/hb-credit/HbCreditCooperadoLoadingShellPilot";
+import {
+  cooperadoMobilePilotHbCreditDeferLimiteSyncOnOpen,
+  cooperadoPilotHbCreditHubIntroDone,
+  isCooperadoMobilePilotHbCreditUi,
+} from "@/lib/cooperado/cooperadoMobilePilotHbCredit";
 
 type Tab = "inicio" | "pagar" | "receber" | "extrato";
 
@@ -121,8 +128,10 @@ function MinhaContaCoopContent() {
   const [descricaoReceber, setDescricaoReceber] = useState("");
 
   const transferenciaCooperadoAtiva = isCooperadoTransferenciaCreditoEnabled();
+  const pilotHbUi = isCooperadoMobilePilotHbCreditUi(user);
+  const hbIntroPendente = pilotHbUi && user?.id ? !cooperadoPilotHbCreditHubIntroDone(user.id) : false;
 
-  const VALOR_RECEBER_SYNC_DEFER_MS = 1_500;
+  const VALOR_RECEBER_SYNC_DEFER_MS = pilotHbUi ? 2_500 : 1_500;
 
   const hbApiCooperadoId = useMemo(
     () => resolveHbCreditApiCooperadoId(user, cooperadoId),
@@ -185,6 +194,15 @@ function MinhaContaCoopContent() {
   );
 
   useEffect(() => {
+    if (!pilotHbUi) return;
+    try {
+      router.prefetch("/minha-conta-coop/escanear");
+    } catch {
+      /* ignore */
+    }
+  }, [pilotHbUi, router]);
+
+  useEffect(() => {
     const sync = () => setIsOffline(!navigator.onLine);
     sync();
     window.addEventListener("online", sync);
@@ -230,13 +248,26 @@ function MinhaContaCoopContent() {
     setError("");
     try {
       if (!background) {
-        void syncCreditLimiteFromFicha({
-          cnpj,
-          cooperadoId: hbApiCooperadoId,
-          creditosBaseCents: {},
-        }).catch(() => {
-          /* offline ou operacional indisponível — não bloqueia abertura da tela */
-        });
+        const deferLimite =
+          pilotHbUi && cooperadoMobilePilotHbCreditDeferLimiteSyncOnOpen();
+        const runLimiteSync = () => {
+          void syncCreditLimiteFromFicha({
+            cnpj,
+            cooperadoId: hbApiCooperadoId,
+            creditosBaseCents: {},
+          }).catch(() => {
+            /* offline ou operacional indisponível — não bloqueia abertura da tela */
+          });
+        };
+        if (deferLimite) {
+          if (typeof requestIdleCallback === "function") {
+            requestIdleCallback(runLimiteSync, { timeout: 12_000 });
+          } else {
+            window.setTimeout(runLimiteSync, 4_000);
+          }
+        } else {
+          runLimiteSync();
+        }
       }
       const acc = await fetchCreditAccount(cnpj, hbApiCooperadoId);
       const accObj = (acc.account as ContaCoopLimiteCooperado) ?? null;
@@ -266,7 +297,7 @@ function MinhaContaCoopContent() {
         notifyHbCreditAccountLoaded();
       }
     }
-  }, [cnpj, hbApiCooperadoId]);
+  }, [cnpj, hbApiCooperadoId, pilotHbUi]);
 
   useEffect(() => {
     if (!cnpj || !hbApiCooperadoId) return;
@@ -320,8 +351,17 @@ function MinhaContaCoopContent() {
 
   useEffect(() => {
     if (!auxSyncEnabled || !cnpj || !hbApiCooperadoId) return;
+    if (pilotHbUi) {
+      const run = () => void loadLedger({ background: true });
+      if (typeof requestIdleCallback === "function") {
+        const id = requestIdleCallback(run, { timeout: 1_800 });
+        return () => cancelIdleCallback(id);
+      }
+      const t = window.setTimeout(run, 400);
+      return () => window.clearTimeout(t);
+    }
     void loadLedger({ background: true });
-  }, [auxSyncEnabled, cnpj, hbApiCooperadoId, loadLedger]);
+  }, [auxSyncEnabled, cnpj, hbApiCooperadoId, loadLedger, pilotHbUi]);
 
   useEffect(() => {
     if (tab !== "extrato" || ledgerLoaded || ledgerLoading) return;
@@ -445,6 +485,9 @@ function MinhaContaCoopContent() {
   };
 
   if (loading && !account) {
+    if (pilotHbUi) {
+      return <HbCreditCooperadoLoadingShellPilot />;
+    }
     return (
       <div className="mx-auto max-w-lg space-y-3 pb-8">
         <PageSkeleton />
@@ -585,7 +628,28 @@ function MinhaContaCoopContent() {
 
       {tabEverOpened.inicio && (
         <div className={cn("space-y-4", tabPanelHidden("inicio"))}>
-          {!hasPin ? (
+          {pilotHbUi && user?.id ? (
+            <HbCreditCooperadoInicioPilot
+              userId={user.id}
+              showIntro={hbIntroPendente}
+              hasPin={hasPin}
+              pinResetPending={pinResetPending}
+              pagamentoBloqueado={pagamentoBloqueado}
+              accountBlocked={Boolean(account?.bloqueado)}
+              busy={busy}
+              pinSetup={pinSetup}
+              onPinSetupChange={setPinSetup}
+              onSalvarPin={() => void salvarPin()}
+              onSolicitarResetPin={solicitarResetPin}
+              showReceber={transferenciaCooperadoAtiva}
+              ledgerPreview={ledger.slice(0, 3)}
+              ledgerLoading={ledgerLoading && !ledger.length}
+              onTabPagar={() => handleTabChange("pagar")}
+              onTabReceber={() => handleTabChange("receber")}
+              onTabExtrato={() => handleTabChange("extrato")}
+              onEscanearQr={() => router.push("/minha-conta-coop/escanear")}
+            />
+          ) : !hasPin ? (
             <Card className="space-y-3 border-amber-200 bg-amber-50/40 !p-4">
               <div>
                 <h3 className="font-semibold text-gray-900">Crie seu PIN de pagamento</h3>

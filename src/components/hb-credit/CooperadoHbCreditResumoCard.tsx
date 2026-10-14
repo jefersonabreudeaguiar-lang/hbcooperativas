@@ -26,6 +26,7 @@ import {
 } from "@/lib/hb-credit/hbCreditAccountPersistencia";
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import { isCooperadoManualOperacionalSync } from "@/lib/performance/cooperadoColdStart";
+import { isCooperadoMobilePilotHbCreditUi } from "@/lib/cooperado/cooperadoMobilePilotHbCredit";
 
 type Props = {
   cnpj: string;
@@ -34,7 +35,10 @@ type Props = {
 export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
   const router = useRouter();
   const { user, cooperadoId } = usePermissions();
-  const cooperadoHbSemPoll = user?.role === "cooperado" && isCooperadoManualOperacionalSync();
+  const pilotHbFast = isCooperadoMobilePilotHbCreditUi(user);
+  const cooperadoHbSemPoll =
+    user?.role === "cooperado" &&
+    (isCooperadoManualOperacionalSync() || pilotHbFast);
   const hbApiCooperadoId = resolveHbCreditApiCooperadoId(user, cooperadoId);
   const [snap, setSnap] = useState<HbCreditAccountPersistido | null>(null);
 
