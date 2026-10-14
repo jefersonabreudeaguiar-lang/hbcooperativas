@@ -10,6 +10,7 @@ import { dispatchCooperadoPwaLeveUiSnapshotRefresh } from "@/lib/cooperado/coope
 import { requestCooperadoFinanceiroRecoverySync } from "@/services/syncRequest";
 import { grantCooperadoEventDrivenSync } from "@/lib/performance/cooperadoEventDrivenSync";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
+import { markCooperadoPrimeiraCargaSyncPending } from "@/lib/cooperado/cooperadoGaSyncPolicy";
 import { tryAckCooperadoAppReleaseWhenLocalReady } from "@/lib/cooperado/cooperadoMobileReleaseLocalAck";
 import { preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
 
@@ -70,18 +71,15 @@ export function scheduleCooperadoFinanceiroDisplayWarmup(
       const temCache = cooperadoFinanceiroCardCacheTemValor(user);
       const temLocal = cooperadoPilotAppDataTemFinanceiroLocal(user);
       if (!temCache && !temLocal) {
+        markCooperadoPrimeiraCargaSyncPending();
         const pull = () => {
           grantCooperadoEventDrivenSync();
           requestCooperadoFinanceiroRecoverySync();
         };
-        if (isCooperadoPwaMessengerMode()) {
-          if (typeof requestIdleCallback === "function") {
-            requestIdleCallback(pull, { timeout: 12_000 });
-          } else {
-            window.setTimeout(pull, 5_000);
-          }
+        if (typeof requestIdleCallback === "function") {
+          requestIdleCallback(pull, { timeout: 18_000 });
         } else {
-          pull();
+          window.setTimeout(pull, 8_000);
         }
       }
     })().finally(() => {

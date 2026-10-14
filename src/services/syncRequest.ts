@@ -15,6 +15,11 @@ import {
   grantCooperadoEventDrivenSync,
   isCooperadoEventDrivenSync,
 } from "@/lib/performance/cooperadoEventDrivenSync";
+import {
+  consumeCooperadoPrimeiraCargaSyncPending,
+  cooperadoGaBloqueiaOperacionalFullAutomatico,
+  cooperadoGaTemPrimeiraCargaSyncPending,
+} from "@/lib/cooperado/cooperadoGaSyncPolicy";
 import { getSession } from "@/services/dataStore";
 import {
   capStaffConferenciaSyncTierRequest,
@@ -94,6 +99,15 @@ export function requestSyncTier(
   options?: { force?: boolean; immediate?: boolean; userInitiated?: boolean; eventDriven?: boolean }
 ): void {
   if (
+    tier === "operacional_full" &&
+    cooperadoGaBloqueiaOperacionalFullAutomatico({
+      userInitiated: options?.userInitiated,
+      eventDriven: options?.eventDriven,
+    })
+  ) {
+    return;
+  }
+  if (
     !options?.userInitiated &&
     !options?.eventDriven &&
     cooperadoBloqueiaSyncOperacionalAutomatico()
@@ -102,6 +116,9 @@ export function requestSyncTier(
   }
   if (shouldBlockStaffAutoSyncDuringConferencia(options?.userInitiated)) {
     return;
+  }
+  if (tier === "operacional_full" && cooperadoGaTemPrimeiraCargaSyncPending()) {
+    consumeCooperadoPrimeiraCargaSyncPending();
   }
   ensureSchedulerBridge();
   const forceDefault = options?.force ?? defaultForceForSyncTier(tier);

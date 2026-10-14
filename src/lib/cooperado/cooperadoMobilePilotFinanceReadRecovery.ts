@@ -11,11 +11,9 @@ import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { persistirInicioCardCooperadoNotificarPwaLeve } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { persistirCooperadoPwaFichaResumoSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
-import { getData, isAppDataWarm, subscribe, waitForAppDataWarm } from "@/services/dataStore";
-import { requestCooperadoFinanceiroRecoverySync } from "@/services/syncRequest";
+import { getData, isAppDataWarm, waitForAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { cooperadoFinanceiroExibicaoCachePronto } from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
-import { cooperadoFinanceiroDisplayWarmupRanThisSession } from "@/lib/cooperado/cooperadoFinanceiroDisplayWarmup";
 
 function pilotFinanceCtx(user: Omit<User, "password">) {
   if (!user.cooperadoId) return null;
@@ -118,8 +116,6 @@ export function scheduleCooperadoPilotFinanceReadRecovery(
   const leaseKey = user.id;
   recoveryLeaseByUser.get(leaseKey)?.();
 
-  let cloudFallbackScheduled = false;
-
   const attempt = (): boolean => {
     const ctx = pilotFinanceCtx(user);
     if (!ctx) return false;
@@ -145,31 +141,23 @@ export function scheduleCooperadoPilotFinanceReadRecovery(
 
   if (attempt()) return;
 
-  const unsub = subscribe(() => {
-    if (attempt()) {
-      const release = recoveryLeaseByUser.get(leaseKey);
-      release?.();
-    }
-  });
-
   const release = () => {
-    unsub();
     recoveryLeaseByUser.delete(leaseKey);
   };
   recoveryLeaseByUser.set(leaseKey, release);
 
-  const scheduleCloudRead = () => {
-    if (cloudFallbackScheduled || attempt()) return;
-    if (cooperadoFinanceiroDisplayWarmupRanThisSession(user.id)) return;
-    cloudFallbackScheduled = true;
-    if (typeof navigator !== "undefined" && !navigator.onLine) return;
-    requestCooperadoFinanceiroRecoverySync();
+  const scheduleRetry = () => {
+    if (attempt()) {
+      release();
+    }
   };
 
   if (typeof requestIdleCallback === "function") {
-    requestIdleCallback(scheduleCloudRead, { timeout: 8_000 });
+    requestIdleCallback(scheduleRetry, { timeout: 4_000 });
+    requestIdleCallback(scheduleRetry, { timeout: 15_000 });
   } else {
-    window.setTimeout(scheduleCloudRead, 3_000);
+    window.setTimeout(scheduleRetry, 2_000);
+    window.setTimeout(scheduleRetry, 10_000);
   }
 }
 
@@ -179,5 +167,4 @@ export function cooperadoPilotFinanceRecoveryOnForeground(
 ): void {
   if (!user || !isCooperadoMobileGaPromoted(user)) return;
   cooperadoPilotForcarRematerializacaoFinanceira(user);
-  scheduleCooperadoPilotFinanceReadRecovery(user);
 }

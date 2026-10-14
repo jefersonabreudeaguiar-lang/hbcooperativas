@@ -29,6 +29,8 @@ import {
 } from "@/services/syncRequest";
 import type { CooperativaCloudRevision } from "@/lib/performance/cooperadoEventDrivenSync";
 import { resolveCooperadoForegroundStaleMs } from "@/lib/cooperado/cooperadoMobilePilotPerf";
+import { cooperadoGaDeferForegroundRevisionChecks } from "@/lib/cooperado/cooperadoGaSyncPolicy";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { getSession, isAppDataWarm } from "@/services/dataStore";
 
 export type CooperadoForegroundPullReason =
@@ -100,6 +102,8 @@ export async function runCooperadoForegroundOperacionalCheck(
     cooperativaId?: string;
   }
 ): Promise<boolean> {
+  const session = getSession();
+  if (cooperadoGaDeferForegroundRevisionChecks(session)) return false;
   if (isCooperadoPwaMessengerMode() && cooperadoPwaSuppressForegroundStaleCheck()) {
     return false;
   }
@@ -111,7 +115,9 @@ export async function runCooperadoForegroundOperacionalCheck(
   const { reason, remote } = evaluation;
 
   if (reason === "financeiro_desatualizado") {
-    requestCooperadoFinanceiroRecoverySync();
+    if (!session || !isCooperadoMobileGaPromoted(session)) {
+      requestCooperadoFinanceiroRecoverySync();
+    }
     return true;
   }
 
@@ -122,7 +128,7 @@ export async function runCooperadoForegroundOperacionalCheck(
   ) {
     const session = getSession();
     if (session?.role === "cooperado") {
-      persistirCooperadoPwaMessengerCaches(session);
+      persistirCooperadoPwaMessengerCaches(session, { light: true });
       if (rematerializarCooperadoPwaSnapshotsSeNecessario(session)) {
         clearCooperadoPwaDadosDesatualizados();
         return true;
@@ -159,6 +165,8 @@ export async function runCooperadoForegroundOperacionalCheck(
     }
   }
 
-  requestCooperadoStaffRevisionSync();
+  if (!session || !isCooperadoMobileGaPromoted(session)) {
+    requestCooperadoStaffRevisionSync();
+  }
   return true;
 }

@@ -5,10 +5,12 @@ import { isCooperadoEventDrivenSync } from "@/lib/performance/cooperadoEventDriv
 import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { cooperadoPwaSuppressForegroundStaleCheck } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
+import { cooperadoGaDeferForegroundRevisionChecks } from "@/lib/cooperado/cooperadoGaSyncPolicy";
+import { getSession } from "@/services/dataStore";
 
 /** Consulta leve na nuvem enquanto o app está em uso. */
 const REVISION_POLL_MS = 2 * 60_000;
-const REVISION_POLL_MESSENGER_MS = 45_000;
+const REVISION_POLL_MESSENGER_MS = 5 * 60_000;
 const MIN_GAP_BETWEEN_CHECKS_MS = 20_000;
 const MIN_GAP_BETWEEN_CHECKS_MESSENGER_MS = 12_000;
 const MIN_GAP_FOREGROUND_MS = 8_000;
@@ -53,6 +55,7 @@ export function useCooperadoStaffRevisionWatch({
 
     const check = async (foreground: boolean) => {
       if (cancelled || syncingRef.current) return;
+      if (cooperadoGaDeferForegroundRevisionChecks(getSession())) return;
       if (messenger && cooperadoPwaSuppressForegroundStaleCheck()) return;
       if (typeof navigator !== "undefined" && !navigator.onLine) return;
       if (typeof document !== "undefined" && document.hidden) return;
@@ -73,13 +76,15 @@ export function useCooperadoStaffRevisionWatch({
       if (document.visibilityState === "visible") void check(true);
     };
 
-    void check(true);
+    const bootDelay = messenger ? 90_000 : 25_000;
+    const bootTimer = window.setTimeout(() => void check(true), bootDelay);
     intervalId = window.setInterval(() => void check(false), pollMs);
     document.addEventListener("visibilitychange", onVisible);
 
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
+      window.clearTimeout(bootTimer);
       if (intervalId) window.clearInterval(intervalId);
     };
   }, [cnpj, cooperadoId, cooperativaId, enabled, syncing]);

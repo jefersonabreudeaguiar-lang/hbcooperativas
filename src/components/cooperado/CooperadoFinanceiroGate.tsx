@@ -239,6 +239,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
 
   const aguardandoDadosFinanceiros =
     cooperadoAtivo &&
+    !isCooperadoMobileGaPromoted(user) &&
     Boolean(bloqueiaEntrada) &&
     (syncingForUi || (lastSyncedAt == null && !syncWaitExceeded && !abrirComCacheInicio));
 

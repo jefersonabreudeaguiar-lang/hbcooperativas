@@ -33,7 +33,7 @@ export function cooperadoRematerializarFinanceiroLocalSePossivel(
   if (!coopId) return false;
   const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
   if (!cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId)) return false;
-  cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user);
+  cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user, { light: true });
   return true;
 }
 
@@ -62,11 +62,12 @@ export function scheduleCooperadoMessengerStaffRevisionPull(
 
 /** Cache limpo ou dados novos na nuvem — grava card, ficha e painel Início no celular. */
 export function cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(
-  user: Omit<User, "password"> | null | undefined
+  user: Omit<User, "password"> | null | undefined,
+  opts?: { light?: boolean }
 ): void {
   if (!user || user.role !== "cooperado") return;
   if (isCooperadoPwaMessengerMode()) {
-    persistirCooperadoPwaMessengerCaches(user);
+    persistirCooperadoPwaMessengerCaches(user, { light: opts?.light });
     clearCooperadoPwaDadosDesatualizados();
     return;
   }

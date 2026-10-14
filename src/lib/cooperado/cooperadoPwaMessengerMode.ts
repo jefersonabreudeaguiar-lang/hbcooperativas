@@ -43,22 +43,24 @@ function scheduleMessengerCacheMaterialization(
   window.setTimeout(run, 0);
 }
 
-/** Grava todos os snapshots locais após um sync bem-sucedido. */
+/** Grava snapshots locais — `light` evita entregas/read models na abertura (menos travamento). */
 export function persistirCooperadoPwaMessengerCaches(
-  user: Omit<User, "password"> | null | undefined
+  user: Omit<User, "password"> | null | undefined,
+  opts?: { light?: boolean }
 ): void {
   if (!user || user.role !== "cooperado" || !isCooperadoPwaMessengerMode()) return;
   persistirCooperadoPwaFichaResumoSnapshotFromUser(user, true);
   persistirInicioCardCooperadoNotificarPwaLeve(user);
   persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, true);
+  if (opts?.light) return;
   const runEntregasSnapshotPesado = () => {
     persistirCooperadoPwaEntregasResumosSnapshotFromUser(user);
     scheduleMessengerCacheMaterialization(user);
   };
   if (typeof requestIdleCallback !== "undefined") {
-    requestIdleCallback(runEntregasSnapshotPesado, { timeout: 3_500 });
+    requestIdleCallback(runEntregasSnapshotPesado, { timeout: 12_000 });
   } else {
-    window.setTimeout(runEntregasSnapshotPesado, 0);
+    window.setTimeout(runEntregasSnapshotPesado, 2_000);
   }
   void import("@/services/hbCreditAccountPersistenciaService").then(({ persistirHbCreditAccountCooperado }) => {
     void persistirHbCreditAccountCooperado(user);
