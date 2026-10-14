@@ -68,8 +68,8 @@ Aparelho **frio** (pós-instalação, purge época 3, ou deploy): sem snapshots 
 
 ## Links produção
 
-- Login: `https://hbcooperativas.vercel.app/login?hb-pwa=<APP_BUILD_VERSION>`
-- Instalar PWA (recomendado): `https://hbcooperativas.vercel.app/pwa-launch.html?next=%2Flogin%3Fhb-pwa%3D<build>%26next%3D%2Fdashboard`
+- Login (padrão cooperados): `https://hbcooperativas.vercel.app/login?hb-pwa=<APP_BUILD_VERSION>&next=/dashboard`
+- Instalar PWA: `https://hbcooperativas.vercel.app/pwa-launch.html?next=%2Flogin%3Fhb-pwa%3D<build>%26next%3D%2Fdashboard` (ou `start_url` do manifest após deploy)
 - Resgate cache: `https://hbcooperativas.vercel.app/pwa-rescue.html`
 
 ## Validar no celular

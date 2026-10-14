@@ -1,3 +1,5 @@
+import { buildCooperadoLoginPath } from "@/lib/cooperado/cooperadoCanonicalEntryUrl";
+
 /**
  * Decisão do guard inline no ícone (WebAPK) — evita mandar todo mundo ao pwa-rescue
  * (purge agressivo) quando só faltam flags de reparo na sessão.
@@ -19,7 +21,7 @@ export function evaluatePwaStandaloneLaunchGuard(input: {
   const repairOk = repairSessionOk || repairLocalOk;
   const buildOk = !seenBuild || seenBuild >= pageBuild - 1;
   const veryStale = seenBuild > 0 && seenBuild < pageBuild - 1;
-  const loginNext = `/login?hb-pwa=${pageBuild}`;
+  const loginNext = buildCooperadoLoginPath(pageBuild);
 
   if (repairOk && buildOk) return { action: "allow" };
   if (!buildOk || veryStale) {

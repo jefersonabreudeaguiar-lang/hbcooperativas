@@ -9,7 +9,7 @@ import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell"
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import { getSession } from "@/services/dataStore";
 import { repairBrowserProfileIfStale } from "@/lib/pwa/browserProfileRepair";
-import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { buildCooperadoLoginPath } from "@/lib/cooperado/cooperadoCanonicalEntryUrl";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 
 function protectedRouteInitialProfileRepairDone(): boolean {
@@ -46,7 +46,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   useLayoutEffect(() => {
     if (!loading && !user) {
-      router.replace(`/login?hb-pwa=${APP_BUILD_VERSION}`);
+      router.replace(buildCooperadoLoginPath());
     }
     if (!loading && user) {
       markRqlColdStartPhase("auth_ready");

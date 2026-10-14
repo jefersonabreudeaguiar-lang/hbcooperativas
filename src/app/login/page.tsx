@@ -14,7 +14,7 @@ import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AVISO_ACESSO_AUTOMATIZADO_RESUMO } from "@/config/politicaAcessoAutomatizado";
 import { isBicLabEnabledClient } from "@/lib/lab/bicLabGate";
 import { repairBrowserProfileIfStale } from "@/lib/pwa/browserProfileRepair";
-import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { ensureCooperadoLoginSearchParams } from "@/lib/cooperado/cooperadoCanonicalEntryUrl";
 import { prepareBrowserProfileForPwaInstall } from "@/lib/pwa/cooperadoPwaInstallPrepare";
 import { shouldShowBaixarAppInstallPromo } from "@/lib/pwa/baixarAppInstallPromo";
 import { PwaRepararAtalhoPanel } from "@/components/pwa/PwaRepararAtalhoPanel";
@@ -94,10 +94,11 @@ function LoginForm() {
   const sessaoExpirada = searchParams.get("sessao") === "expirada";
 
   useEffect(() => {
-    if (!searchParams.has("hb-pwa")) {
-      const q = new URLSearchParams(searchParams.toString());
-      q.set("hb-pwa", String(APP_BUILD_VERSION));
-      router.replace(`/login?${q.toString()}`);
+    const { params, changed } = ensureCooperadoLoginSearchParams(
+      new URLSearchParams(searchParams.toString())
+    );
+    if (changed) {
+      router.replace(`/login?${params.toString()}`);
       return;
     }
     void repairBrowserProfileIfStale({ includeStandalone: true }).then((reloaded) => {

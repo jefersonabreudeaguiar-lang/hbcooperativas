@@ -1,3 +1,5 @@
+import { buildCooperadoLoginPath } from "@/lib/cooperado/cooperadoCanonicalEntryUrl";
+import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { getAppBaseUrl } from "@/lib/security/appUrl";
 
 export type WebAppManifestJson = {
@@ -55,7 +57,7 @@ export function buildWebAppManifest(request?: Request): WebAppManifestJson {
     name: "HB Cooperativas",
     short_name: "HB Coop",
     description: "Gestão de cooperativas — entregas, mensalidades e ficha corrida",
-    start_url: `${origin}/pwa-launch.html`,
+    start_url: launch(buildCooperadoLoginPath(APP_BUILD_VERSION)),
     scope: `${origin}/`,
     display: "standalone",
     display_override: ["standalone", "minimal-ui"],

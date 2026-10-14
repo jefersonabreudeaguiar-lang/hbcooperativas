@@ -54,8 +54,12 @@
           hasSession = false;
         }
 
+        function defaultLoginTarget(pageBuild) {
+          return "/login?hb-pwa=" + pageBuild + "&next=%2Fdashboard";
+        }
+
         function resolveTarget(pageBuild) {
-          var target = "/login?hb-pwa=" + pageBuild;
+          var target = defaultLoginTarget(pageBuild);
           if (next && next.charAt(0) === "/") {
             target =
               next.indexOf("hb-pwa=") >= 0

@@ -7,7 +7,7 @@ import { AppIcon } from "@/components/ui/AppIcon";
 import { BaixarAppGuide, detectDevicePlatform } from "@/components/pwa/BaixarAppGuide";
 import { PLATFORM_NAME } from "@/utils/constants";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { buildCooperadoLoginPath } from "@/lib/cooperado/cooperadoCanonicalEntryUrl";
 import { PwaRepararAtalhoPanel } from "@/components/pwa/PwaRepararAtalhoPanel";
 import { BaixarAppInstallPanel } from "@/components/pwa/BaixarAppInstallPanel";
 import { prepareBrowserProfileForPwaInstall } from "@/lib/pwa/cooperadoPwaInstallPrepare";
@@ -15,7 +15,7 @@ import { prepareBrowserProfileForPwaInstall } from "@/lib/pwa/cooperadoPwaInstal
 export default function BaixarAppPage() {
   const { user } = useAuth();
   const platform = useMemo(() => detectDevicePlatform(), []);
-  const loginPreparado = `/login?hb-pwa=${APP_BUILD_VERSION}`;
+  const loginPreparado = buildCooperadoLoginPath();
   const voltarHref = user ? "/dashboard" : loginPreparado;
 
   useEffect(() => {
