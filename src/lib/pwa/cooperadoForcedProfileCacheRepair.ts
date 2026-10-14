@@ -3,11 +3,8 @@ import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { purgeCooperadoPwaSnapshotLocalStorageKeys } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
 import {
   BUILD_SEEN_KEY,
-  RELEASE_ALIGN_COOLDOWN_KEY,
-  RELEASE_ALIGN_SESSION_KEY,
-  RELEASE_NAV_MARK_KEY,
-  RELOAD_BURST_KEY,
   clearClientRuntimeCaches,
+  clearCooperadoReleaseAlignLocalKeys,
 } from "@/lib/pwa/clientRelease";
 import { markPwaRepairSessionForBuild } from "@/lib/pwa/cooperadoPwaInstallPrepare";
 import { fetchOfficialClientRelease } from "@/lib/pwa/fetchOfficialClientRelease";
@@ -40,26 +37,6 @@ export function cooperadoNeedsForcedProfileCacheRepair(user: Pick<User, "role" |
   return email.length > 0 && FORCED_COOPERADO_EMAILS.has(email);
 }
 
-function clearReleaseStuckKeys(): void {
-  const keys = [
-    RELEASE_ALIGN_COOLDOWN_KEY,
-    RELEASE_ALIGN_SESSION_KEY,
-    RELEASE_NAV_MARK_KEY,
-    RELOAD_BURST_KEY,
-    "hb-coop-release-shield-expected",
-    "hb-coop-release-pending-staff-build",
-    "hb-coop-mixed-dpl-align",
-  ];
-  for (const key of keys) {
-    try {
-      sessionStorage.removeItem(key);
-      localStorage.removeItem(key);
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
 /**
  * Limpa cache/SW + snapshots PWA locais e recarrega o destino pós-login.
  * Não apaga `coopeagriplla_session` nem AppData operacional.
@@ -86,7 +63,7 @@ export async function applyCooperadoForcedProfileCacheRepairIfNeeded(
 
   await clearClientRuntimeCaches();
   purgeCooperadoPwaSnapshotLocalStorageKeys();
-  clearReleaseStuckKeys();
+  clearCooperadoReleaseAlignLocalKeys();
 
   try {
     localStorage.setItem(BUILD_SEEN_KEY, String(cloudBuild));

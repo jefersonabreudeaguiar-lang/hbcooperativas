@@ -467,6 +467,29 @@ function markReleaseAlignSessionTarget(target: string): void {
   }
 }
 
+/** Chaves de align/release presas — cooperado PWA após purge global de cache UI. */
+export function clearCooperadoReleaseAlignLocalKeys(): void {
+  const keys = [
+    RELEASE_ALIGN_COOLDOWN_KEY,
+    RELEASE_ALIGN_SESSION_KEY,
+    RELEASE_NAV_MARK_KEY,
+    RELOAD_BURST_KEY,
+    RELEASE_SHIELD_EXPECTED_KEY,
+    RELEASE_URGENT_ALIGN_FP_KEY,
+    MIXED_DPL_ALIGN_SESSION_KEY,
+    "hb-coop-release-pending-staff-build",
+    "hb-coop-mixed-dpl-align",
+  ];
+  for (const key of keys) {
+    try {
+      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 export async function clearClientRuntimeCaches(): Promise<void> {
   if (typeof window === "undefined") return;
   try {

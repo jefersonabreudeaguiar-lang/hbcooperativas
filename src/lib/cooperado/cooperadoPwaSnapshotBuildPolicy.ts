@@ -1,8 +1,9 @@
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { clearCooperadoReleaseAlignLocalKeys } from "@/lib/pwa/clientRelease";
 
 const PWA_SNAPSHOTS_BUILD_KEY = "hb-coop-pwa-snapshots-materialized-build";
 /** Incrementar só quando precisar forçar purge de snapshots PWA cooperado na mesma faixa de build. */
-const PWA_SNAPSHOT_PURGE_EPOCH = 2;
+const PWA_SNAPSHOT_PURGE_EPOCH = 3;
 const PWA_SNAPSHOT_PURGE_EPOCH_KEY = "hb-coop-pwa-snapshots-purge-epoch";
 
 const PWA_SNAPSHOT_KEY_MARKERS = [
@@ -11,7 +12,25 @@ const PWA_SNAPSHOT_KEY_MARKERS = [
   "hb.coop.pwaEntregasResumos",
   "hb.coop.pwaFichaResumo",
   "hb.coop.readModels",
+  "hb.coop.reciboAssinadoLocal",
+  "hb.coop.operacionalMaterializedRev",
+  "hb.coop.pilotJeferson",
 ] as const;
+
+const SESSION_KEY = "coopeagriplla_session";
+const HB_OPERACIONAL_SYNCED_BUILD = "hb-coop-operacional-synced-build";
+
+function cooperadoSessionInLocalStorage(): boolean {
+  if (typeof localStorage === "undefined") return false;
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as { role?: string };
+    return parsed.role === "cooperado";
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Paridade cooperado: snapshot local só vale no **mesmo** build do bundle.
@@ -43,6 +62,14 @@ export function materializeCooperadoPwaSnapshotsForCurrentBuild(): void {
     const epochChanged = prevEpoch !== PWA_SNAPSHOT_PURGE_EPOCH;
     if (!buildChanged && !epochChanged) return;
     purgeCooperadoPwaSnapshotLocalStorageKeys();
+    if (cooperadoSessionInLocalStorage()) {
+      clearCooperadoReleaseAlignLocalKeys();
+      try {
+        localStorage.removeItem(HB_OPERACIONAL_SYNCED_BUILD);
+      } catch {
+        /* ignore */
+      }
+    }
     localStorage.setItem(PWA_SNAPSHOTS_BUILD_KEY, String(APP_BUILD_VERSION));
     localStorage.setItem(PWA_SNAPSHOT_PURGE_EPOCH_KEY, String(PWA_SNAPSHOT_PURGE_EPOCH));
   } catch {
