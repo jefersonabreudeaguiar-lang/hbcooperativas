@@ -9,7 +9,6 @@ import {
   lerInicioCardPersistidoFlexSemFiltroBuild,
   type InicioCardPersistido,
 } from "@/lib/cooperadoInicioCardPersistencia";
-import { cooperadoPwaSnapshotBuildReadable } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
 import { lerCooperadoPwaFichaResumoSnapshot } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
@@ -65,10 +64,7 @@ export function cooperadoFinanceiroExibicaoCachePronto(
   if (card?.display && cooperadoMotorTemObrigacaoReceber(card.display)) return true;
 
   const ficha = lerCooperadoPwaFichaResumoSnapshot(tenant.cooperadoId, tenant.cooperativaId);
-  if (ficha?.paridade) {
-    if ((ficha.paridade.valorLiquido ?? 0) > 0.005) return true;
-    if (cooperadoPwaSnapshotBuildReadable(ficha.appBuild) && ficha.v >= 2) return true;
-  }
+  if (ficha?.paridade && (ficha.paridade.valorLiquido ?? 0) > 0.005) return true;
 
   return false;
 }

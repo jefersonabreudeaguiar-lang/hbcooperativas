@@ -7,9 +7,9 @@ import {
 } from "@/lib/hb-credit/hbCreditAccountPersistencia";
 import { isCloudSessionActive } from "@/lib/security/clientSession";
 import { fetchCreditAccount } from "@/services/creditApiService";
-import { getData, isAppDataWarm } from "@/services/dataStore";
+import { getData, isAppDataWarm, preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { getUserCooperativaId } from "@/utils/cooperativa";
+import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { refreshContaCoopLimiteFromFicha } from "@/lib/hb-credit/syncContaCoopLimiteFromFicha";
 import { notifyHbCreditAccountCacheUpdated, notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import type { User } from "@/types";
@@ -19,11 +19,20 @@ export async function persistirHbCreditAccountCooperado(
   options?: { syncLimiteFromFicha?: boolean }
 ): Promise<boolean> {
   if (!user || user.role !== "cooperado" || !user.cooperadoId) return false;
-  if (!isAppDataWarm() || typeof navigator === "undefined" || !navigator.onLine) return false;
+  if (typeof navigator === "undefined" || !navigator.onLine) return false;
   if (!isCloudSessionActive()) return false;
 
+  if (!isAppDataWarm()) {
+    preloadAppData();
+    await waitForAppDataWarm(10_000);
+  }
+  if (!isAppDataWarm()) {
+    const cnpjSession = user.cooperativaCnpj ? normalizeCnpj(user.cooperativaCnpj) : "";
+    if (cnpjSession.length !== 14 || !user.cooperativaId) return false;
+  }
+
   const data = getData();
-  const cooperativaId = getUserCooperativaId(user, data);
+  const cooperativaId = getUserCooperativaId(user, data) ?? user.cooperativaId;
   if (!cooperativaId) return false;
 
   const cnpj = await resolveCooperativaCnpj(data, cooperativaId, user);

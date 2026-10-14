@@ -1,7 +1,9 @@
 import type { User } from "@/types";
 import { cooperadoFinanceiroExibicaoCachePronto } from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
+import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { cooperadoMobileDeferOperacionalSyncNaAbertura } from "@/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoPilotAppDataTemFinanceiroLocal } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
+import { cooperadoAppReleaseNeedsOperacionalSync } from "@/lib/performance/cooperadoEventDrivenSync";
 import { markCooperadoPrimeiraCargaSyncPending } from "@/lib/cooperado/cooperadoGaSyncPolicy";
 import {
   cooperadoLocalResumeReady,
@@ -46,6 +48,8 @@ export function cooperadoGaAparelhoPrecisaBootstrapNuvem(
   if (!user || user.role !== "cooperado" || !cooperadoMobileDeferOperacionalSyncNaAbertura(user)) {
     return false;
   }
+  if (cooperadoAppReleaseNeedsOperacionalSync()) return true;
+  if (cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) return true;
   if (cooperadoFinanceiroExibicaoCachePronto(user)) return false;
   if (cooperadoPilotAppDataTemFinanceiroLocal(user)) return false;
   if (cooperadoLocalResumeReady(user)) return false;

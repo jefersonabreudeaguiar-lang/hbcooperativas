@@ -13,7 +13,13 @@ import { persistirCooperadoPwaFichaResumoSnapshotFromUser } from "@/lib/cooperad
 import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { getData, isAppDataWarm, waitForAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
-import { cooperadoFinanceiroExibicaoCachePronto } from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
+import {
+  cooperadoFinanceiroCardCacheTemValor,
+  cooperadoFinanceiroExibicaoCachePronto,
+} from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
+import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
+import { scheduleCooperadoHbCreditLimiteAndAccountWarmup } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
+import { requestCooperadoFinanceiroRecoverySync } from "@/services/syncRequest";
 
 function pilotFinanceCtx(user: Omit<User, "password">) {
   if (!user.cooperadoId) return null;
@@ -152,12 +158,21 @@ export function scheduleCooperadoPilotFinanceReadRecovery(
     }
   };
 
+  const maybeCloudRecovery = () => {
+    if (cooperadoFinanceiroCardCacheTemValor(user)) return;
+    if (!cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) return;
+    requestCooperadoFinanceiroRecoverySync();
+    scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
+  };
+
   if (typeof requestIdleCallback === "function") {
     requestIdleCallback(scheduleRetry, { timeout: 4_000 });
     requestIdleCallback(scheduleRetry, { timeout: 15_000 });
+    requestIdleCallback(maybeCloudRecovery, { timeout: 6_000 });
   } else {
     window.setTimeout(scheduleRetry, 2_000);
     window.setTimeout(scheduleRetry, 10_000);
+    window.setTimeout(maybeCloudRecovery, 5_000);
   }
 }
 

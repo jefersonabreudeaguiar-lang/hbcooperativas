@@ -17,7 +17,10 @@ import {
   HB_CREDIT_ACCOUNT_CACHE_EVENT,
   HB_CREDIT_LIMITE_SYNCED_EVENT,
 } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import { refreshContaCoopLimiteFromFicha } from "@/lib/hb-credit/syncContaCoopLimiteFromFicha";
 import { persistirHbCreditAccountCooperado } from "@/services/hbCreditAccountPersistenciaService";
+import { getData, isAppDataWarm } from "@/services/dataStore";
+import { getUserCooperativaId } from "@/utils/cooperativa";
 import { fetchCreditAccount } from "@/services/creditApiService";
 import { useHbCreditAccountRevisionPoll } from "@/hooks/useHbCreditAccountRevisionPoll";
 import {
@@ -68,6 +71,17 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
 
     const syncFromCloud = async () => {
       if (user?.role === "cooperado") {
+        if (isAppDataWarm() && cnpj.length === 14 && hbApiCooperadoId) {
+          const data = getData();
+          const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
+          if (coopId) {
+            await refreshContaCoopLimiteFromFicha({
+              cnpj,
+              cooperadoId: hbApiCooperadoId,
+              cooperativaId: coopId,
+            }).catch(() => {});
+          }
+        }
         await persistirHbCreditAccountCooperado(user);
         refreshFromCache();
         return;

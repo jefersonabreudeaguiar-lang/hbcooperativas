@@ -70,6 +70,8 @@ import {
   requestCooperadoFinanceiroRecoverySync,
   requestVotacaoOperacionalSync,
 } from "@/services/syncRequest";
+import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
+import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { useCooperadoFluxoPadrao } from "@/hooks/useCooperadoFluxoPadrao";
 import { useCooperadoInicioValorReceberCardState } from "@/hooks/useCooperadoInicioValorReceberCardState";
@@ -256,14 +258,17 @@ function CooperadoDashboard() {
       !financeiroAusente ||
       recoverySyncRef.current ||
       typeof navigator === "undefined" ||
-      !navigator.onLine ||
-      (user && isCooperadoMobileGaPromoted(user))
+      !navigator.onLine
     ) {
+      return;
+    }
+    if (user && isCooperadoMobileGaPromoted(user) && !cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
       return;
     }
     recoverySyncRef.current = true;
     requestCooperadoFinanceiroRecoverySync();
-  }, [financeiroAusente, user?.id]);
+    scheduleCooperadoGaPrimeiraCargaSilenciosa(user ?? undefined);
+  }, [financeiroAusente, user?.id, user?.role]);
 
   const contaCoopSync = useAppDataSelectorForDomainsWhenActive(
     appDataUiOn && hbCredit.navEnabled,
@@ -302,6 +307,18 @@ function CooperadoDashboard() {
       carregandoValoresFinanceiros,
       leituraSomentePwa: messenger || inicioSnapshotFirst,
     });
+
+  const exibicaoZeroRecoveryRef = useRef(false);
+  useEffect(() => {
+    if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return;
+    if (exibicaoZeroRecoveryRef.current) return;
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    if (!cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) return;
+    exibicaoZeroRecoveryRef.current = true;
+    requestCooperadoFinanceiroRecoverySync();
+    scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
+    scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
+  }, [user?.id, user?.role, valorReceberCard.valor, hbCredit.navEnabled]);
 
   const [pwaInicioView, setPwaInicioView] = useState<CooperadoPwaInicioDashboardView | null>(() => {
     if (typeof window === "undefined" || !isCooperadoPwaMobileLeveUi()) return null;

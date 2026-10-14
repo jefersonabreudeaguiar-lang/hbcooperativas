@@ -267,8 +267,12 @@ function MinhaContaCoopContent() {
         } else {
           window.setTimeout(runLimiteSync, 4_000);
         }
-      } else {
-        runLimiteSync();
+      } else if (coopId) {
+        await refreshContaCoopLimiteFromFicha({
+          cnpj,
+          cooperadoId: hbApiCooperadoId,
+          cooperativaId: coopId,
+        }).catch(() => {});
       }
       const acc = await fetchCreditAccount(cnpj, hbApiCooperadoId);
       const accObj = (acc.account as ContaCoopLimiteCooperado) ?? null;
