@@ -30,6 +30,7 @@ assert(perf.includes("COOPERADO_MOBILE_PILOT_TAB_DOM_POLICY"), "política DOM pi
 assert(perf.includes("isCooperadoMobilePilotPerfActive"), "flag perf piloto");
 assert(perf.includes("resolveCooperadoForegroundStaleMs"), "stale MS piloto");
 assert(perf.includes("cooperadoCooperadoEntregasLeveUiForUser"), "entregas leve piloto");
+assert(perf.includes('"/ficha-corrida"'), "gate financeiro L1 inclui Financeiro");
 assert(indicator.includes("COOPERADO_MOBILE_PILOT_PENDING_REVISION"), "revisão piloto pendente");
 assert(indicator.includes("cooperadoMobilePilotShowHeaderStar"), "estrela header piloto");
 assert(star.includes("CooperadoMobilePilotStarBadge"), "componente estrela");

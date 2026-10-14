@@ -18,6 +18,7 @@ const PILOT_TAB_ENTREGAS_HREF = "/notas-pedido";
 
 const PILOT_FINANCE_GATE_L1_PATHS = [
   "/dashboard",
+  "/ficha-corrida",
   "/notas-pedido",
   "/precos",
 ] as const;

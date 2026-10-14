@@ -219,13 +219,13 @@ function FichaCorridaPageInner() {
       return lerCooperadoPwaFichaResumoSnapshot(user.cooperadoId, user.cooperativaId);
     }
   );
-  /** Piloto: só congela AppData quando já há snapshot — senão usa dados ao vivo (evita R$ 0). */
+  /** Piloto: dados ao vivo na aba Financeiro (snapshot vazio/stale congelava R$ 0). Mensageiro PWA mantém dormant. */
   const financeiroDormant = useMemo(() => {
     if (!isCooperado) return false;
     if (messenger) return true;
-    if (pilotFinanceiroLeve) return Boolean(fichaResumoSnap);
+    if (pilotFinanceiroLeve) return false;
     return false;
-  }, [isCooperado, messenger, pilotFinanceiroLeve, fichaResumoSnap]);
+  }, [isCooperado, messenger, pilotFinanceiroLeve]);
   /** PWA leve só desliga subscribe do AppData para cooperado; responsável continua com dados ao vivo. */
   const appDataPanelActive =
     tabActive && (isCooperado ? cooperadoPwaUiSubscribesAppData() : true);

@@ -72,6 +72,7 @@ import {
 import {
   getData,
   isAppDataWarm,
+  preloadAppData,
   saveDataSafe,
   subscribe,
   updateDataSafe,
@@ -138,6 +139,7 @@ import {
   scheduleCooperadoMessengerStaffRevisionPull,
 } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import { isCooperadoMobilePilotPerfActive } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
 import { cooperadoPwaMessengerPrecisaSyncOperacionalInicial } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
@@ -343,6 +345,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   }, [user?.id, user?.role]);
 
   const syncingRef = useRef(false);
+  const cooperadoUserRefreshQueuedRef = useRef(false);
   const lastSyncStartedAtRef = useRef(0);
   const cooperadoSilentRetryAtRef = useRef(0);
   const scheduleCooperadoSilentSyncRetry = useCallback(() => {
@@ -558,7 +561,13 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   const runSync = useCallback(async (opts?: SyncRunOptions) => {
     const userInitiatedRun = opts?.userInitiated === true;
     const currentUser = userRef.current;
-    if (!currentUser || syncingRef.current) return;
+    if (!currentUser) return;
+    if (syncingRef.current) {
+      if (userInitiatedRun && currentUser.role === "cooperado") {
+        cooperadoUserRefreshQueuedRef.current = true;
+      }
+      return;
+    }
     if (
       currentUser.role === "cooperado" &&
       isCooperadoManualOperacionalSync() &&
@@ -576,7 +585,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     if (!opts?.force && isAppIdle() && !isStaffGestao) return;
 
-    const warm = await waitForAppDataWarm();
+    let warm = await waitForAppDataWarm();
+    if (!warm && userInitiatedRun) {
+      preloadAppData({ eager: true });
+      warm = await waitForAppDataWarm(12_000);
+    }
     if (!warm) return;
 
     if (isH197CaptureEnabled()) {
@@ -940,6 +953,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (userRef.current?.role === "cooperado") {
         resetCooperadoUserSyncVisible();
       }
+      const queuedCooperadoRefresh = cooperadoUserRefreshQueuedRef.current;
+      cooperadoUserRefreshQueuedRef.current = false;
       const syncedAt = Date.now();
       setLastSyncedAt(syncedAt);
       if (userRef.current?.role === "cooperado" && completed) {
@@ -1021,7 +1036,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
         if (
           userRef.current?.role === "cooperado" &&
-          isCooperadoPwaMobileLeveUi() &&
+          (isCooperadoPwaMobileLeveUi() || isCooperadoMobilePilotPerfActive(userRef.current)) &&
           (completed || apresentacaoFinanceiraRestaurada)
         ) {
           cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(userRef.current);
@@ -1032,6 +1047,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
             clearCooperadoPwaDadosDesatualizados();
           }
         }
+      }
+      if (queuedCooperadoRefresh && userRef.current?.role === "cooperado") {
+        queueMicrotask(() => {
+          void runSync({ force: true, userInitiated: true });
+        });
       }
     }
   }, [markCooperadoPagamentosHydrated, scheduleCooperadoSilentSyncRetry]);

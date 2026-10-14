@@ -12,8 +12,8 @@ import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 export function CooperadoMobileBuildBadge() {
   const { user } = useAuth();
   const dadosDesatualizados = useCooperadoPwaDadosDesatualizados(user);
-  const { syncing } = useSyncStatus();
-  const showStaleBadge = dadosDesatualizados && !syncing;
+  const { syncingForUi } = useSyncStatus();
+  const showStaleBadge = dadosDesatualizados && !syncingForUi;
 
   return (
     <div className="flex items-center gap-0.5 shrink-0" role="group" aria-label="Versão e atualização">
@@ -32,7 +32,7 @@ export function CooperadoMobileBuildBadge() {
           desatualizado
         </span>
       )}
-      <CooperadoAtualizarButton variant="header" />
+      <CooperadoAtualizarButton variant="header" showLoveMessage />
     </div>
   );
 }

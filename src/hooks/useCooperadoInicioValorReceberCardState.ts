@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { AppData } from "@/types";
 import {
   cooperadoBicAutorizaZerarCardInicio,
@@ -35,7 +35,8 @@ import {
   lerCooperadoPwaFichaResumoSnapshot,
   resolveParidadeFromFichaResumoSnapshot,
 } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
-import { getData, isAppDataWarm } from "@/services/dataStore";
+import { getData, isAppDataWarm, preloadAppData, subscribe } from "@/services/dataStore";
+import { cooperadoPilotCardInicioLeituraRapida } from "@/lib/cooperado/cooperadoMobilePilotInicioValorLocal";
 import { cooperadoPwaFinanceiroSnapshotsAusentes } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
@@ -84,6 +85,18 @@ export function useCooperadoInicioValorReceberCardState(input: {
       (isCooperadoPwaMobileLeveUi() || isCooperadoMobilePilotPerfActive())
   );
 
+  const appDataWarmKey = useSyncExternalStore(
+    subscribe,
+    () => (isAppDataWarm() ? "1" : "0"),
+    () => "0"
+  );
+
+  useEffect(() => {
+    if (!leituraSomentePwa || !isCooperadoMobilePilotPerfActive()) return;
+    if (isAppDataWarm()) return;
+    preloadAppData();
+  }, [leituraSomentePwa, appDataWarmKey]);
+
   useEffect(() => {
     if (!leituraSomentePwa) return;
     const onRefresh = () => setPersistidoTick((n) => n + 1);
@@ -126,6 +139,25 @@ export function useCooperadoInicioValorReceberCardState(input: {
 
   const resolved = useMemo(() => {
     if (leituraSomentePwa) {
+      if (isCooperadoMobilePilotPerfActive() && input.cooperadoId) {
+        const pilotDisplay = cooperadoPilotCardInicioLeituraRapida(
+          input.cooperadoId,
+          input.cooperativaId
+        );
+        if (pilotDisplay && cooperadoMotorTemObrigacaoReceber(pilotDisplay)) {
+          return {
+            display: pilotDisplay,
+            latch: {
+              motorRevision: `pilotLocal:${appDataWarmKey}`,
+              display: pilotDisplay,
+              hadPendencia: true,
+            },
+            atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+            gravarPersistencia: isAppDataWarm(),
+          };
+        }
+      }
+
       const persistidoMesmoBuildEarly =
         persistido?.appBuild === APP_BUILD_VERSION ? persistido : null;
       const syncMotorPass = Boolean(input.syncing && isCooperadoUserSyncVisible());
@@ -135,7 +167,9 @@ export function useCooperadoInicioValorReceberCardState(input: {
         }
         if (!input.cooperadoId || !isAppDataWarm()) return false;
         const data = getData();
-        const coopId = input.cooperativaId;
+        const coopId =
+          input.cooperativaId ??
+          (data.cooperativas?.length === 1 ? data.cooperativas[0]?.id : undefined);
         if (!coopId) return cooperadoPwaFinanceiroSnapshotsAusentes(input.cooperadoId, coopId);
         const canon = resolverCooperadoIdCanonico(data, input.cooperadoId, coopId);
         if (cooperadoPwaFinanceiroSnapshotsAusentes(canon, coopId)) return true;
@@ -351,6 +385,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
     persistido,
     persistidoTick,
     leituraSomentePwa,
+    appDataWarmKey,
     ...(leituraSomentePwa ? [] : [hbDescontosRevision]),
   ]);
 

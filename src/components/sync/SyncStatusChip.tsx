@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw, Check } from "lucide-react";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
-import { isCooperadoEventDrivenSync } from "@/lib/performance/cooperadoEventDrivenSync";
+import { requestAppSyncImmediate } from "@/services/syncRequest";
 import {
-  requestAppSyncImmediate,
-  requestCooperadoManualRefreshSync,
-} from "@/services/syncRequest";
+  COOPERADO_ATUALIZAR_MENSAGEM_AMOR,
+  executarCooperadoAtualizarManual,
+} from "@/lib/cooperado/cooperadoAtualizarManual";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { cooperadoPwaMaterializarSnapshotsFinanceirosPosSync } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import { cn } from "@/utils/format";
@@ -145,41 +145,58 @@ export function StaffAtualizarButton({ className }: { className?: string }) {
 export function CooperadoAtualizarButton({
   className,
   variant = "default",
+  showLoveMessage = false,
 }: {
   className?: string;
   /** Header mobile: compacto ao lado da versão do app. */
   variant?: "default" | "header";
+  /** Exibe «Jesus te ama» enquanto atualiza (ex.: header mobile). */
+  showLoveMessage?: boolean;
 }) {
   const { user } = useAuth();
-  const { lastSyncedAt, syncing } = useSyncStatus();
+  const { lastSyncedAt, syncing, syncingForUi } = useSyncStatus();
   const [busy, setBusy] = useState(false);
   const startedAtRef = useRef(0);
-  const spinning = busy || syncing;
+  const sawSyncUiRef = useRef(false);
+  const spinning = busy || syncingForUi;
   const header = variant === "header";
 
   useEffect(() => {
-    if (!busy) return;
-    if (!syncing && lastSyncedAt != null && lastSyncedAt >= startedAtRef.current) {
-      cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user);
-      setBusy(false);
+    if (syncingForUi) sawSyncUiRef.current = true;
+    if (!busy) {
+      sawSyncUiRef.current = false;
       return;
     }
-    const id = window.setTimeout(() => setBusy(false), 50_000);
+    if (sawSyncUiRef.current && !syncingForUi) {
+      cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user);
+      setBusy(false);
+      sawSyncUiRef.current = false;
+      return;
+    }
+    if (!syncingForUi && lastSyncedAt != null && lastSyncedAt >= startedAtRef.current) {
+      cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user);
+      setBusy(false);
+      sawSyncUiRef.current = false;
+      return;
+    }
+    const id = window.setTimeout(() => setBusy(false), 90_000);
     return () => window.clearTimeout(id);
-  }, [busy, lastSyncedAt, syncing, user]);
+  }, [busy, lastSyncedAt, syncingForUi, user]);
+
+  const loveVisible = showLoveMessage && spinning;
 
   return (
+    <>
     <button
       type="button"
       onClick={() => {
-        if (busy || syncing) return;
+        if (busy || syncingForUi) return;
         startedAtRef.current = Date.now();
+        sawSyncUiRef.current = false;
         setBusy(true);
-        if (isCooperadoEventDrivenSync()) {
-          requestCooperadoManualRefreshSync();
-        } else {
-          requestAppSyncImmediate();
-        }
+        void executarCooperadoAtualizarManual().then((ok) => {
+          if (!ok) setBusy(false);
+        });
       }}
       disabled={spinning}
       className={cn(
@@ -199,6 +216,16 @@ export function CooperadoAtualizarButton({
       <RefreshCw size={header ? 11 : 12} className={cn("shrink-0", spinning && "animate-spin")} aria-hidden />
       {header ? null : "Atualizar"}
     </button>
+    {loveVisible ? (
+      <span
+        className="max-w-[7rem] truncate rounded-md bg-green-950/90 px-1.5 py-0.5 text-[9px] font-medium leading-tight text-green-50"
+        role="status"
+        aria-live="polite"
+      >
+        {COOPERADO_ATUALIZAR_MENSAGEM_AMOR}
+      </span>
+    ) : null}
+    </>
   );
 }
 
