@@ -1,6 +1,8 @@
 import { BUILD_SEEN_KEY } from "@/lib/pwa/clientRelease";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { fetchOfficialClientRelease } from "@/lib/pwa/fetchOfficialClientRelease";
+import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
+import { getSession } from "@/services/dataStore";
 
 export const PROFILE_REPAIR_RECENT_KEY = "hb-coop-profile-repair-at";
 export const PROFILE_REPAIR_RECENT_MS = 30_000;
@@ -27,6 +29,8 @@ function profileRepairCheckedRecently(): boolean {
 export type RepairBrowserProfileOptions = {
   /** Ícone instalado (PWA): também repara — antes ignorava só standalone. */
   includeStandalone?: boolean;
+  /** Piloto: segunda fase em idle (não adiar de novo). */
+  forceNetworkCheck?: boolean;
 };
 
 /**
@@ -40,6 +44,21 @@ export async function repairBrowserProfileIfStale(
   const standalone = window.matchMedia("(display-mode: standalone)").matches;
   if (standalone && !options?.includeStandalone) return false;
   if (profileRepairCheckedRecently()) return false;
+
+  const session = getSession();
+  if (session && isCooperadoMobilePilot(session) && !options?.forceNetworkCheck) {
+    markProfileRepairChecked();
+    const laterOpts = { ...options, forceNetworkCheck: true };
+    const runLater = () => {
+      void repairBrowserProfileIfStale(laterOpts);
+    };
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(runLater, { timeout: 15_000 });
+    } else {
+      window.setTimeout(runLater, 8_000);
+    }
+    return false;
+  }
 
   const official = await fetchOfficialClientRelease();
   let cloudBuild = official?.build ?? 0;

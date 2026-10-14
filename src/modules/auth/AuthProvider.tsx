@@ -26,6 +26,11 @@ import {
   applyCooperadoMobilePilotPerfDomFlag,
   cooperadoMobilePilotDeferAppDataEagerWarm,
 } from "@/lib/cooperado/cooperadoMobilePilotPerf";
+import {
+  cooperadoMobilePilotInitialAccountUser,
+  cooperadoMobilePilotInitialAuthLoading,
+} from "@/lib/cooperado/cooperadoMobilePilotAuthBootstrap";
+import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoPwaInstantPaintReady } from "@/lib/cooperado/cooperadoPwaInstantResume";
 import {
   getSession,
@@ -89,11 +94,13 @@ function enrichAccountSession(session: Omit<User, "password">): Omit<User, "pass
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   /** Igual ao SSR — sessão/localStorage só após hydrate (evita React #418). */
-  const [accountUser, setAccountUser] = useState<Omit<User, "password"> | null>(null);
+  const [accountUser, setAccountUser] = useState<Omit<User, "password"> | null>(
+    cooperadoMobilePilotInitialAccountUser
+  );
   const [viewportTick, setViewportTick] = useState(0);
   const [painelPrefTick, setPainelPrefTick] = useState(0);
   const [dataTick, setDataTick] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(cooperadoMobilePilotInitialAuthLoading);
   const router = useRouter();
   const experienceSigRef = useRef("");
   const appDataWarmRef = useRef(isAppDataWarm());
@@ -306,7 +313,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             "Não foi possível abrir sua sessão na nuvem. Aguarde alguns segundos e tente de novo.",
         };
       }
-      if (isCooperadoPwaMessengerMode()) {
+      if (isCooperadoPwaMessengerMode() || isCooperadoMobilePilot(safeUser)) {
         preloadAppData();
       } else {
         await waitForAppDataWarm(4000);
@@ -327,7 +334,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ) {
           return { ok: true as const, redirectTo, navigated: true as const };
         }
-        const reloaded = await repairBrowserProfileIfStale({ includeStandalone: true });
+        const reloaded =
+          role === "cooperado" && isCooperadoMobilePilot(safeUser)
+            ? false
+            : await repairBrowserProfileIfStale({ includeStandalone: true });
+        if (role === "cooperado" && isCooperadoMobilePilot(safeUser)) {
+          void repairBrowserProfileIfStale({ includeStandalone: true });
+        }
         if (reloaded) {
           return { ok: true as const, redirectTo, navigated: true as const };
         }

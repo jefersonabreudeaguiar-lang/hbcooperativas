@@ -2,11 +2,14 @@
  * Parse antecipado do AppData no <head> — antes do bundle React (cold start PWA cooperado).
  * Fail-closed: se JSON inválido, o app carrega pelo fluxo normal.
  */
+import { cooperadoMobilePilotInlineSessionHelperJs } from "@/lib/cooperado/cooperadoMobilePilotInlineSession";
+
 const STORAGE_KEY = "coopeagriplla_data";
 const SESSION_KEY = "coopeagriplla_session";
 
 export function buildInlineCooperadoAppDataWarmScript(): string {
-  return `(function(){try{if(typeof localStorage==="undefined")return;if(!localStorage.getItem("${SESSION_KEY}"))return;var parse=function(){try{var s=localStorage.getItem("${STORAGE_KEY}");if(!s)return;var w=window;w.__hbCoopParsedAppData=JSON.parse(s);}catch(e){try{delete window.__hbCoopParsedAppData;}catch(x){}}};try{var standalone=window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches;var mobile=window.matchMedia&&window.matchMedia("(max-width: 1023px)").matches;if(standalone&&mobile){if(typeof requestIdleCallback!=="undefined"){requestIdleCallback(parse,{timeout:320});}else{setTimeout(parse,0);}return;}}catch(x){}parse();}catch(e){try{delete window.__hbCoopParsedAppData;}catch(x){}}})();`;
+  const pilotFn = cooperadoMobilePilotInlineSessionHelperJs();
+  return `(function(){try{${pilotFn}if(typeof localStorage==="undefined")return;if(!localStorage.getItem("${SESSION_KEY}"))return;var parse=function(){try{var s=localStorage.getItem("${STORAGE_KEY}");if(!s)return;var w=window;w.__hbCoopParsedAppData=JSON.parse(s);}catch(e){try{delete window.__hbCoopParsedAppData;}catch(x){}}};var defer=false;try{var raw=localStorage.getItem("${SESSION_KEY}");if(raw){var sess=JSON.parse(raw);var standalone=window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches;var mobile=window.matchMedia&&window.matchMedia("(max-width: 1023px)").matches;if(hbCoopSessPilot(sess)&&(standalone||mobile))defer=true;if(standalone&&mobile&&!defer)defer=true;}}catch(x){}if(defer){if(typeof requestIdleCallback!=="undefined"){requestIdleCallback(parse,{timeout:120});}else{setTimeout(parse,0);}return;}parse();}catch(e){try{delete window.__hbCoopParsedAppData;}catch(x){}}})();`;
 }
 
 export function takeInlineParsedAppData(): unknown | null {
