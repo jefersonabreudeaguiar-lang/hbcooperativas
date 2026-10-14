@@ -9,7 +9,7 @@ import { HbCreditQrScanner } from "@/components/hb-credit/HbCreditQrScanner";
 import { HbCreditScannerErrorBoundary } from "@/components/hb-credit/HbCreditScannerErrorBoundary";
 import { Button } from "@/components/ui/Button";
 import { usePermissions } from "@/hooks/usePermissions";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppDataSelector } from "@/hooks/useAppData";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { prepareAndOpenHbCreditPaymentFromQrScan } from "@/lib/hb-credit/openHbCreditPaymentFromQr";
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
@@ -29,7 +29,6 @@ export default function EscanearQrContaCoopPage() {
 function EscanearQrContent() {
   const router = useRouter();
   const { user, cooperadoId } = usePermissions();
-  const data = useAppData();
   const [validating, setValidating] = useState(false);
   const [scanError, setScanError] = useState("");
 
@@ -38,17 +37,20 @@ function EscanearQrContent() {
     [user, cooperadoId]
   );
 
-  const cnpj = useMemo(() => {
-    if (!user || !data) return "";
-    if (user.cooperativaCnpj) return normalizeCnpj(user.cooperativaCnpj);
-    const coopId = getUserCooperativaId(user, data);
-    const coop = data.cooperativas.find((c) => c.id === coopId);
-    return coop?.cnpj ? normalizeCnpj(coop.cnpj) : "";
-  }, [user, data]);
+  const cnpj = useAppDataSelector(
+    (data) => {
+      if (!user) return "";
+      if (user.cooperativaCnpj) return normalizeCnpj(user.cooperativaCnpj);
+      const coopId = getUserCooperativaId(user, data);
+      const coop = data.cooperativas.find((c) => c.id === coopId);
+      return coop?.cnpj ? normalizeCnpj(coop.cnpj) : "";
+    },
+    [user?.id, user?.cooperativaCnpj, user?.cooperativaId]
+  );
 
   const handleScan = useCallback(
     (payload: string) => {
-      if (validating || !hbApiCooperadoId || cnpj.length !== 14) return;
+      if (validating || !hbApiCooperadoId || !cnpj || cnpj.length !== 14) return;
       setScanError("");
       setValidating(true);
       try {

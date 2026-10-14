@@ -38,9 +38,10 @@ export function HbCreditQrScanner({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const scanFrameRef = useRef<number | null>(null);
+  const scanTimerRef = useRef<number | null>(null);
   const scanningRef = useRef(false);
-  const lastScanAttemptRef = useRef(0);
+  const decodeInFlightRef = useRef(false);
+  const autoStartedRef = useRef(false);
   const onScanRef = useRef(onScan);
   const [liveActive, setLiveActive] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -52,9 +53,10 @@ export function HbCreditQrScanner({
 
   const stopLiveScan = useCallback(() => {
     scanningRef.current = false;
-    if (scanFrameRef.current != null) {
-      cancelAnimationFrame(scanFrameRef.current);
-      scanFrameRef.current = null;
+    decodeInFlightRef.current = false;
+    if (scanTimerRef.current != null) {
+      clearInterval(scanTimerRef.current);
+      scanTimerRef.current = null;
     }
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -102,8 +104,9 @@ export function HbCreditQrScanner({
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: "environment" },
-          width: { ideal: 1920, min: 640 },
-          height: { ideal: 1080, min: 480 },
+          width: { ideal: 1280, max: 1280 },
+          height: { ideal: 720, max: 720 },
+          frameRate: { ideal: 24, max: 30 },
         },
         audio: false,
       });
@@ -120,31 +123,20 @@ export function HbCreditQrScanner({
       await video.play();
       setLiveActive(true);
 
-      const tick = async () => {
-        if (!scanningRef.current) return;
-
-        const now = performance.now();
-        if (now - lastScanAttemptRef.current >= 120) {
-          lastScanAttemptRef.current = now;
-          try {
-            const payload = await decodeQrFromVideoFrame(video);
-            if (payload) {
-              emitScan(payload);
-              return;
-            }
-          } catch {
-            /* próximo frame */
-          }
-        }
-
-        scanFrameRef.current = requestAnimationFrame(() => {
-          void tick();
-        });
+      const runDecode = () => {
+        if (!scanningRef.current || decodeInFlightRef.current) return;
+        decodeInFlightRef.current = true;
+        void decodeQrFromVideoFrame(video)
+          .then((payload) => {
+            decodeInFlightRef.current = false;
+            if (payload) emitScan(payload);
+          })
+          .catch(() => {
+            decodeInFlightRef.current = false;
+          });
       };
 
-      scanFrameRef.current = requestAnimationFrame(() => {
-        void tick();
-      });
+      scanTimerRef.current = window.setInterval(runDecode, 320);
     } catch (e) {
       stopLiveScan();
       const message = humanizeCameraError(e);
@@ -155,13 +147,17 @@ export function HbCreditQrScanner({
     }
   }, [busy, disabled, emitScan, liveActive, onError, stopLiveScan]);
 
+  const startLiveScanRef = useRef(startLiveScan);
+  startLiveScanRef.current = startLiveScan;
+
   useEffect(() => {
-    if (!autoStartLiveScan || disabled) return;
+    if (!autoStartLiveScan || disabled || autoStartedRef.current) return;
+    autoStartedRef.current = true;
     const timer = window.setTimeout(() => {
-      void startLiveScan();
+      void startLiveScanRef.current();
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [autoStartLiveScan, disabled, startLiveScan]);
+  }, [autoStartLiveScan, disabled]);
 
   const handlePhotoCapture = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -217,8 +213,7 @@ export function HbCreditQrScanner({
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div
             className={cn(
-              "relative h-56 w-56 rounded-2xl border-2 border-green-400/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]",
-              liveActive && "animate-pulse"
+              "relative h-56 w-56 rounded-2xl border-2 border-green-400/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]"
             )}
           >
             <span className="absolute -top-1 -left-1 h-8 w-8 border-l-4 border-t-4 border-green-400 rounded-tl-lg" />

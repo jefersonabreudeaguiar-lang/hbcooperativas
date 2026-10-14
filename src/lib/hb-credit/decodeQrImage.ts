@@ -126,6 +126,7 @@ export async function decodeQrFromFile(file: File): Promise<string | null> {
   }
 }
 
+/** Leitura ao vivo — frame reduzido (evita travar o preview da câmera no celular). */
 export async function decodeQrFromVideoFrame(video: HTMLVideoElement): Promise<string | null> {
   if (video.readyState < 2 || video.videoWidth <= 0 || video.videoHeight <= 0) {
     return null;
@@ -134,11 +135,24 @@ export async function decodeQrFromVideoFrame(video: HTMLVideoElement): Promise<s
   const native = await decodeWithNative(video);
   if (native) return native;
 
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  const maxDim = 512;
+  const scale = Math.min(1, maxDim / Math.max(vw, vh));
+  const cw = Math.max(1, Math.floor(vw * scale));
+  const ch = Math.max(1, Math.floor(vh * scale));
+
   const canvas = document.createElement("canvas");
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  canvas.width = cw;
+  canvas.height = ch;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  return decodeQrFromImageData(ctx.getImageData(0, 0, canvas.width, canvas.height));
+  ctx.drawImage(video, 0, 0, cw, ch);
+  const imageData = ctx.getImageData(0, 0, cw, ch);
+  const center = cropCenterImageData(imageData, 0.78);
+  if (center) {
+    const fromCenter = decodeJsQrImageData(center);
+    if (fromCenter) return fromCenter;
+  }
+  return decodeJsQrImageData(imageData);
 }
