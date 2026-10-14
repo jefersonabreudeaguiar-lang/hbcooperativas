@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { persistirCooperadoPwaInicioDashboardSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
 import { persistirCooperadoPwaEntregasResumosSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
 import { persistirInicioCardCooperadoNotificarPwaLeve } from "@/lib/cooperado/cooperadoPwaLeveUi";
@@ -13,7 +14,13 @@ export function CooperadoPwaResumeLifecycle() {
   const { user } = useAuth();
 
   useEffect(() => {
-    if (!user || user.role !== "cooperado" || !isCooperadoPwaMobileLeveUi()) return;
+    if (
+      !user ||
+      user.role !== "cooperado" ||
+      (!isCooperadoPwaMobileLeveUi() && !cooperadoMobilePilotSnapshotFirstInicio(user))
+    ) {
+      return;
+    }
 
     const flush = () => {
       if (!isAppDataWarm()) return;

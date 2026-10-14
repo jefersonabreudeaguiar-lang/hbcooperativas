@@ -4,6 +4,10 @@ import {
 } from "@/lib/performance/cooperadoBottomTabRoutes";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { isAppStandalone } from "@/services/cooperadoAppInstallService";
+import {
+  isCooperadoTabPinnedForSession,
+  resolveCooperadoMobileTabCacheLimitPilotBonus,
+} from "@/lib/cooperado/cooperadoMobilePilotPerf";
 
 export { COOPERADO_BOTTOM_TAB_HREFS, isCooperadoBottomTabPath };
 
@@ -42,14 +46,15 @@ export function isCooperadoMobileBrowserTabKeepAlive(): boolean {
 
 /** LRU enxuto — 3 abas no padrão (rápido); 2 em aparelho fraco; browser mobile cooperado ≈ 1 painel pesado. */
 export function getCooperadoMobileTabCacheLimit(lowMemoryDevice: boolean): number {
+  const pilotBonus = resolveCooperadoMobileTabCacheLimitPilotBonus();
   if (typeof window !== "undefined" && isCooperadoPwaMessengerMode()) {
     /** PWA: LRU 2 — DOM monta só o necessário (ver cooperadoMobileTabDomPolicy). */
-    return 2;
+    return 2 + pilotBonus;
   }
   if (isCooperadoMobileBrowserTabKeepAlive()) {
-    return lowMemoryDevice ? 2 : 3;
+    return (lowMemoryDevice ? 2 : 3) + pilotBonus;
   }
-  return lowMemoryDevice ? 2 : 4;
+  return (lowMemoryDevice ? 2 : 4) + pilotBonus;
 }
 
 /** Início — preferir manter montado no LRU (P1). */
@@ -82,7 +87,9 @@ export function pickCooperadoTabCacheEviction(
   activeHref: string,
   lowMemoryDevice: boolean
 ): string | undefined {
-  const candidates = order.filter((h) => h !== activeHref && !isCooperadoTabPinned(h));
+  const candidates = order.filter(
+    (h) => h !== activeHref && !isCooperadoTabPinned(h) && !isCooperadoTabPinnedForSession(h)
+  );
   if (candidates.length === 0) return undefined;
 
   const lightCached = candidates.filter((h) =>

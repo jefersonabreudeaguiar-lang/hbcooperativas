@@ -10,7 +10,13 @@ import {
   type ReactNode,
 } from "react";
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
-import { COOPERADO_MOBILE_TAB_DOM_POLICY } from "@/lib/performance/cooperadoMobileTabDomPolicy";
+import {
+  COOPERADO_PILOT_TRIPLE_MOUNT_HREFS,
+  cooperadoPilotBottomTabHrefs,
+  cooperadoPilotTripleMountEnabled,
+  isCooperadoTabPinnedForSession,
+  resolveCooperadoMobileTabDomPolicy,
+} from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { cn } from "@/utils/format";
 import { CooperadoTabPanelProvider } from "@/lib/performance/cooperadoTabPanelContext";
 import {
@@ -27,6 +33,7 @@ import {
   COOPERADO_PINNED_TAB_HREFS,
   isCooperadoPinnedDualMountEnabled,
   setCooperadoPinnedPairCachesReady,
+  setCooperadoPilotBottomTabsCachesReady,
 } from "@/lib/performance/cooperadoPinnedTabFastPath";
 import { isCooperadoTabRouteLoadingElement } from "@/lib/performance/cooperadoTabPanelCache";
 import { useCooperadoEffectiveTabPath } from "@/hooks/useCooperadoEffectiveTabPath";
@@ -75,7 +82,7 @@ function publishKeepAliveDomState(state: {
         );
         document.documentElement.setAttribute(
           "data-cooperado-tab-dom-policy",
-          COOPERADO_MOBILE_TAB_DOM_POLICY
+          resolveCooperadoMobileTabDomPolicy()
         );
       } catch {
         /* ignore */
@@ -90,7 +97,7 @@ function publishKeepAliveDomState(state: {
     );
     document.documentElement.setAttribute(
       "data-cooperado-tab-dom-policy",
-      COOPERADO_MOBILE_TAB_DOM_POLICY
+      resolveCooperadoMobileTabDomPolicy()
     );
   } catch {
     /* ignore */
@@ -154,6 +161,13 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
       Boolean(cacheRef.current[COOPERADO_TAB_PIN_HREF]) &&
       Boolean(cacheRef.current[COOPERADO_TAB_FINANCEIRO_HREF]);
     setCooperadoPinnedPairCachesReady(ready);
+
+    if (cooperadoPilotTripleMountEnabled()) {
+      const allBottom = cooperadoPilotBottomTabHrefs().every((h) => Boolean(cacheRef.current[h]));
+      setCooperadoPilotBottomTabsCachesReady(allBottom);
+    } else {
+      setCooperadoPilotBottomTabsCachesReady(false);
+    }
   }, [enabled, mobile, onTab, pathname, deferredChildren, cacheVersion, effectivePath]);
 
   const pinnedDualReady =
@@ -175,7 +189,16 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
       return [...new Set([...orderRef.current, ...Object.keys(cacheRef.current)])];
     }
     const active = effectivePath;
-    if (active === "/notas-pedido") {
+    const pilotTriple = cooperadoPilotTripleMountEnabled();
+    const tripleReady =
+      pilotTriple &&
+      COOPERADO_PILOT_TRIPLE_MOUNT_HREFS.every((h) => Boolean(cacheRef.current[h]));
+
+    if (pilotTriple && tripleReady && COOPERADO_PILOT_TRIPLE_MOUNT_HREFS.includes(active)) {
+      return [...COOPERADO_PILOT_TRIPLE_MOUNT_HREFS];
+    }
+
+    if (active === "/notas-pedido" && !pilotTriple) {
       return [active];
     }
     if (
@@ -233,16 +256,24 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
       const { panel, warm } = resolvePanel(href, activePath);
       if (!panel) return null;
       const pinnedPair =
-        pinnedDualReady && isCooperadoTabPinned(href) && isCooperadoTabPinned(activePath);
+        (pinnedDualReady && isCooperadoTabPinned(href) && isCooperadoTabPinned(activePath)) ||
+        (cooperadoPilotTripleMountEnabled() &&
+          isCooperadoTabPinnedForSession(href) &&
+          isCooperadoTabPinnedForSession(activePath));
       const financeDormantPanel =
         href === COOPERADO_TAB_FINANCEIRO_HREF && !active && (warm || pinnedPair);
+      const entregasDormantPanel =
+        href === "/notas-pedido" &&
+        !active &&
+        cooperadoPilotTripleMountEnabled() &&
+        (warm || pinnedPair);
       return (
         <div
           key={href}
           className={cn(
             active
               ? "relative z-[1] w-full min-h-0"
-              : financeDormantPanel
+              : financeDormantPanel || entregasDormantPanel
                 ? "relative w-full min-h-0 max-h-0 overflow-hidden opacity-0 pointer-events-none [content-visibility:auto] [contain-intrinsic-size:0_500px]"
                 : "hidden [content-visibility:hidden]"
           )}

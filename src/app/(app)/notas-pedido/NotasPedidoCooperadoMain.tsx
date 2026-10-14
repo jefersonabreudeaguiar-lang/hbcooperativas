@@ -45,7 +45,7 @@ import {
   isCooperadoManualOperacionalSync,
   scheduleCooperadoPostInteractiveTask,
 } from "@/lib/performance/cooperadoColdStart";
-import { isCooperadoPwaMobileEntregasLeve } from "@/lib/cooperado/cooperadoPwaMobileEntregas";
+import { cooperadoCooperadoEntregasLeveUiForUser } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import {
   ensureCooperadoNotasFreshForEnvio,
   type CooperadoPwaEnvioSyncResult,
@@ -409,7 +409,7 @@ export default function NotasPedidoCooperadoMain() {
   const appDataUiOn = cooperadoPwaUiSubscribesAppData() && tabActive;
   const data = useCooperadoPanelAppData(appDataUiOn, ["notas", "shell", "financeiro", "operacional"]);
   const { check, user, isCooperado, isDiretoria, cooperadoId } = usePermissions();
-  const entregasPwaLeve = isCooperado && isCooperadoPwaMobileEntregasLeve();
+  const entregasPwaLeve = isCooperado && cooperadoCooperadoEntregasLeveUiForUser(user);
   const { syncing, syncingForUi } = useSyncStatus();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -420,10 +420,15 @@ export default function NotasPedidoCooperadoMain() {
   const [pwaPreparandoEnvio, setPwaPreparandoEnvio] = useState(false);
   const [pwaEntregasResumosSnap, setPwaEntregasResumosSnap] =
     useState<CooperadoPwaEntregasResumosSnapshot | null>(() => {
-      if (typeof window === "undefined" || !isCooperadoPwaMobileEntregasLeve()) return null;
-      const session = getSession();
-      if (!session?.cooperadoId) return null;
-      return lerCooperadoPwaEntregasResumosForResume(session.cooperadoId, session.cooperativaId);
+      if (typeof window === "undefined") return null;
+      const sessionUser = getSession();
+      if (!sessionUser?.cooperadoId || !cooperadoCooperadoEntregasLeveUiForUser(sessionUser)) {
+        return null;
+      }
+      return lerCooperadoPwaEntregasResumosForResume(
+        sessionUser.cooperadoId,
+        sessionUser.cooperativaId
+      );
     });
   const [conferirModal, setConferirModal] = useState(false);
   const [rejectModal, setRejectModal] = useState(false);

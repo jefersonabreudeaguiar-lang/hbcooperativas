@@ -28,6 +28,7 @@ import {
   requestCooperadoStaffRevisionSync,
 } from "@/services/syncRequest";
 import type { CooperativaCloudRevision } from "@/lib/performance/cooperadoEventDrivenSync";
+import { resolveCooperadoForegroundStaleMs } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { getSession, isAppDataWarm } from "@/services/dataStore";
 
 export type CooperadoForegroundPullReason =
@@ -80,8 +81,12 @@ export async function evaluateCooperadoForegroundOperacionalPull(
     };
   }
 
-  if (!isCooperadoPwaMessengerMode() && cooperadoOperacionalSyncStale()) {
-    return { reason: "stale_local_sync", remote };
+  if (!isCooperadoPwaMessengerMode()) {
+    const sessionUser = getSession();
+    const staleMs = resolveCooperadoForegroundStaleMs(sessionUser);
+    if (cooperadoOperacionalSyncStale(staleMs)) {
+      return { reason: "stale_local_sync", remote };
+    }
   }
 
   return null;

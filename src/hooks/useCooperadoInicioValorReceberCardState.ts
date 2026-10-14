@@ -20,6 +20,7 @@ import {
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { isCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import { isCooperadoMobilePilotPerfActive } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import {
   COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
   dispatchCooperadoPwaLeveUiSnapshotRefresh,
@@ -75,7 +76,10 @@ export function useCooperadoInicioValorReceberCardState(input: {
     );
   });
 
-  const leituraSomentePwa = Boolean(input.leituraSomentePwa && isCooperadoPwaMobileLeveUi());
+  const leituraSomentePwa = Boolean(
+    input.leituraSomentePwa &&
+      (isCooperadoPwaMobileLeveUi() || isCooperadoMobilePilotPerfActive())
+  );
 
   useEffect(() => {
     if (!leituraSomentePwa) return;

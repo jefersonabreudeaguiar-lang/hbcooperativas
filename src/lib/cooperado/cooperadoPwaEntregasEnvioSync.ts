@@ -5,6 +5,7 @@ import type { User } from "@/types";
 import type { NotaPedido } from "@/types";
 import { isCooperadoPwaMobileEntregasSyncDeferUntilEnvio } from "@/lib/cooperado/cooperadoPwaMobileEntregas";
 import { grantCooperadoEventDrivenSync } from "@/lib/performance/cooperadoEventDrivenSync";
+import { scheduleCooperadoPilotPostEnvioSync } from "@/lib/cooperado/cooperadoMobilePilotPerfSync";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolveCooperativaCnpj, syncNotasPedidoFromCloud } from "@/services/notaPedidoCloudService";
 import { syncContratosFromCloud } from "@/services/cooperativaSyncCloudService";
@@ -91,6 +92,7 @@ export async function ensureCooperadoNotasFreshForEnvio(
       /* offline — contratos locais */
     }
     markCooperadoEnvioSyncFresh();
+    void scheduleCooperadoPilotPostEnvioSync(user, coopId);
     return { ok: true };
   } catch {
     return {

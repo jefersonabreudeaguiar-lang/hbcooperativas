@@ -10,10 +10,16 @@ import {
 } from "@/lib/performance/cooperadoMobileTabKeepAlive";
 import { setCooperadoOptimisticTab } from "@/lib/performance/cooperadoOptimisticTabNavigation";
 import { warmCooperadoTabRouteChunk } from "@/lib/performance/prefetchCooperadoTabRouteChunks";
+import { isCooperadoBottomTabPath } from "@/lib/performance/cooperadoBottomTabRoutes";
+import {
+  cooperadoPilotBottomTabHrefs,
+  cooperadoPilotInstantBottomTabSwitchEnabled,
+} from "@/lib/cooperado/cooperadoMobilePilotPerf";
 
 const OFF = new Set(["false", "0", "no", "off"]);
 
 let pinnedPairCachesReady = false;
+let pilotBottomTabsCachesReady = false;
 
 /** Sinal do keep-alive: Início e Financeiro já foram visitados e estão no cache. */
 export function setCooperadoPinnedPairCachesReady(ready: boolean): void {
@@ -24,6 +30,38 @@ export function isCooperadoPinnedPairCachesReady(): boolean {
   return pinnedPairCachesReady;
 }
 
+export function setCooperadoPilotBottomTabsCachesReady(ready: boolean): void {
+  pilotBottomTabsCachesReady = ready;
+}
+
+export function isCooperadoPilotBottomTabsCachesReady(): boolean {
+  return pilotBottomTabsCachesReady;
+}
+
+/**
+ * Piloto Jeferson — troca instantânea entre as 4 abas inferiores quando todas estão em cache.
+ */
+export function tryCooperadoPilotInstantBottomTabSwitch(
+  currentEffectiveHref: string,
+  targetHref: string
+): boolean {
+  if (!cooperadoPilotInstantBottomTabSwitchEnabled()) return false;
+  if (!pilotBottomTabsCachesReady) return false;
+  if (!isCooperadoBottomTabPath(currentEffectiveHref) || !isCooperadoBottomTabPath(targetHref)) {
+    return false;
+  }
+  if (currentEffectiveHref === targetHref) return false;
+
+  setCooperadoOptimisticTab(targetHref);
+  if (typeof window === "undefined") return true;
+  try {
+    window.history.replaceState(window.history.state, "", targetHref);
+  } catch {
+    return false;
+  }
+  return true;
+}
+
 /**
  * Troca só entre Início ↔ Financeiro sem router.push (evita RSC lento).
  * URL + otimista atualizam; painéis já montados no dual-mount.
@@ -32,6 +70,9 @@ export function tryCooperadoPinnedInstantTabSwitch(
   currentEffectiveHref: string,
   targetHref: string
 ): boolean {
+  if (tryCooperadoPilotInstantBottomTabSwitch(currentEffectiveHref, targetHref)) {
+    return true;
+  }
   if (!isCooperadoPinnedDualMountEnabled() || !pinnedPairCachesReady) return false;
   if (!isCooperadoTabPinned(currentEffectiveHref) || !isCooperadoTabPinned(targetHref)) {
     return false;
@@ -70,10 +111,13 @@ type PrefetchRouter = { prefetch: (href: string) => void };
 
 /** Aquece JS + rotas das duas abas críticas cedo (não espera post-interactive de 2,8s). */
 export function scheduleCooperadoPinnedTabsEagerWarm(router: PrefetchRouter): void {
-  if (!isCooperadoPinnedDualMountEnabled() || typeof window === "undefined") return;
+  if (typeof window === "undefined") return;
+  const pilot = cooperadoPilotInstantBottomTabSwitchEnabled();
+  if (!pilot && !isCooperadoPinnedDualMountEnabled()) return;
 
   const run = () => {
-    for (const href of COOPERADO_PINNED_TAB_HREFS) {
+    const hrefs = pilot ? cooperadoPilotBottomTabHrefs() : COOPERADO_PINNED_TAB_HREFS;
+    for (const href of hrefs) {
       warmCooperadoTabRouteChunk(href);
       try {
         router.prefetch(href);

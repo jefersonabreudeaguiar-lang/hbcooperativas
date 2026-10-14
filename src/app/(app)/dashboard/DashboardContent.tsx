@@ -117,6 +117,7 @@ import {
 } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { isCooperadoAppUser } from "@/permissions";
 import { getSession } from "@/services/dataStore";
+import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 
 const DASHBOARD_INICIO_DOMAINS: AppDataNotifyDomain[] = ["shell", "notas", "financeiro", "operacional"];
 
@@ -163,6 +164,7 @@ function CooperadoDashboard() {
   const inicioPwaLeve = isCooperadoPwaMobileLeveUi();
   const appDataUiOn = cooperadoPwaUiSubscribesAppData() && tabActive;
   const { user } = useAuth();
+  const inicioSnapshotFirst = inicioPwaLeve || cooperadoMobilePilotSnapshotFirstInicio(user);
   const router = useRouter();
   const irEnviarFotoEntrega = useCallback(() => {
     setCooperadoOptimisticTab("/notas-pedido");
@@ -196,7 +198,7 @@ function CooperadoDashboard() {
   }, [user?.id]);
 
   useEffect(() => {
-    if (!inicioPwaLeve) {
+    if (!inicioSnapshotFirst) {
       warmupCooperadoFinanceiroTabChunk();
       return;
     }
@@ -207,7 +209,7 @@ function CooperadoDashboard() {
     }
     const t = window.setTimeout(warm, 200);
     return () => window.clearTimeout(t);
-  }, [inicioPwaLeve]);
+  }, [inicioSnapshotFirst]);
 
   useEffect(() => {
     if (messenger || isCooperadoManualOperacionalSync()) return;
@@ -233,7 +235,7 @@ function CooperadoDashboard() {
 
   /** Modo mensageiro: HB só no runSync (Atualizar) — sem pilot periódico na UI. */
   useSyncContaCoopValorReceberPilot(
-    !messenger && !inicioPwaLeve && contaCoopSync
+    !messenger && !inicioSnapshotFirst && contaCoopSync
       ? { ...contaCoopSync, user, initialDelayMs: 3_000 }
       : undefined
   );
@@ -259,7 +261,7 @@ function CooperadoDashboard() {
       syncing: syncingForUi,
       apresentacaoConsolidada,
       carregandoValoresFinanceiros,
-      leituraSomentePwa: messenger || inicioPwaLeve,
+      leituraSomentePwa: messenger || inicioSnapshotFirst,
     });
 
   const [pwaInicioView, setPwaInicioView] = useState<CooperadoPwaInicioDashboardView | null>(() => {
@@ -276,7 +278,7 @@ function CooperadoDashboard() {
 
   const refreshPwaInicioView = useCallback(
     (opts?: { rebuildFromAppData?: boolean }) => {
-      if (!inicioPwaLeve || !user?.cooperadoId) return;
+      if (!inicioSnapshotFirst || !user?.cooperadoId) return;
       const coopId = cooperativaIdCard ?? user.cooperativaId;
       const cooperadoId = cooperadoIdCard ?? user.cooperadoId;
       if (!coopId || !cooperadoId) return;
@@ -293,7 +295,7 @@ function CooperadoDashboard() {
       const built = persistirCooperadoPwaInicioDashboardSnapshot(cooperadoId, coopId, user, true);
       if (built?.view) setPwaInicioView(built.view);
     },
-    [inicioPwaLeve, user, cooperadoIdCard, cooperativaIdCard]
+    [inicioSnapshotFirst, user, cooperadoIdCard, cooperativaIdCard]
   );
 
   useEffect(() => {
@@ -308,14 +310,14 @@ function CooperadoDashboard() {
   }, [messenger, lastSyncedAt, refreshPwaInicioView]);
 
   useEffect(() => {
-    if (!inicioPwaLeve || !user?.cooperadoId) return;
+    if (!inicioSnapshotFirst || !user?.cooperadoId) return;
     if (!apresentacaoConsolidada || lastSyncedAt == null) return;
     void import("@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh").then((mod) => {
       mod.cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user);
       refreshPwaInicioView({ rebuildFromAppData: true });
     });
   }, [
-    inicioPwaLeve,
+    inicioSnapshotFirst,
     apresentacaoConsolidada,
     lastSyncedAt,
     user?.id,
@@ -324,19 +326,19 @@ function CooperadoDashboard() {
   ]);
 
   useEffect(() => {
-    if (!inicioPwaLeve) return;
+    if (!inicioSnapshotFirst) return;
     const onRefresh = () => {
       // Snapshots já foram gravados pelo sync; só reler cache (evita rebuild pesado do AppData).
       refreshPwaInicioView();
     };
     window.addEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
     return () => window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
-  }, [inicioPwaLeve, refreshPwaInicioView]);
+  }, [inicioSnapshotFirst, refreshPwaInicioView]);
 
   useLayoutEffect(() => {
-    if (!inicioPwaLeve || !tabActive) return;
+    if (!inicioSnapshotFirst || !tabActive) return;
     refreshPwaInicioView();
-  }, [inicioPwaLeve, tabActive, refreshPwaInicioView]);
+  }, [inicioSnapshotFirst, tabActive, refreshPwaInicioView]);
 
   const inicioDomainsRevision = useAppDataDomainsRevisionWhenActive(appDataUiOn, DASHBOARD_INICIO_DOMAINS);
   const deferredInicioRevision = useDeferredValue(inicioDomainsRevision);
@@ -355,7 +357,7 @@ function CooperadoDashboard() {
   ]);
 
   const view =
-    messenger || inicioPwaLeve ? pwaInicioView ?? pwaInicioViewStickyRef.current : viewLive;
+    messenger || inicioSnapshotFirst ? pwaInicioView ?? pwaInicioViewStickyRef.current : viewLive;
 
   const mesAtual = getCurrentMesReferencia();
   const nomeFromSnapshot =

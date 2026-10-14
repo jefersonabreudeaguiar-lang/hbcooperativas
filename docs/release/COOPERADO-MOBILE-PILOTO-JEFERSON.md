@@ -11,7 +11,9 @@
 | E-mail | `jefersonabreudeaguiar@gmail.com` |
 | `cooperadoId` | `c_1781981564381_w67gg` |
 
-Código: `isCooperadoMobilePilot()` em `src/lib/cooperado/cooperadoMobilePilot.ts`.
+Código: `isCooperadoMobilePilot()` em `src/lib/cooperado/cooperadoMobilePilot.ts`.  
+Performance piloto: `src/lib/cooperado/cooperadoMobilePilotPerf.ts` — checklist em `docs/release/COOPERADO-MOBILE-PILOTO-JEFERSON-PERF-CHECKLIST.md`.  
+**Estrela amarela** no header (só Jeferson): `cooperadoMobilePilotIndicator.ts` — visível enquanto `PENDING_REVISION > PROMOTED_REVISION`.
 
 ## Fluxo obrigatório
 

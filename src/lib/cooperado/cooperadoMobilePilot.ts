@@ -1,7 +1,7 @@
 import type { User } from "@/types";
 import { normalizeAuthEmail } from "@/lib/security/appCreator";
 import { isCooperadoAppUser, resolveAppUserRole } from "@/permissions";
-import { resolveCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { resolveExperienceUser } from "@/lib/mobileExperience";

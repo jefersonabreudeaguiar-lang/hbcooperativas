@@ -61,11 +61,13 @@ import { CooperadoFinanceiroSyncBanner } from "@/components/cooperado/CooperadoF
 import { useMobileTabScrollRestore } from "@/hooks/useMobileTabScrollRestore";
 import type { MobileTabScrollMode } from "@/lib/performance/mobileTabScrollMemory";
 import { CooperadoApresentacaoFinanceiraGate } from "@/components/cooperado/CooperadoApresentacaoFinanceiraGate";
+import { applyCooperadoMobilePilotPerfDomFlag } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoMobileTabKeepAlive";
 import { StaffMobileTabKeepAlive } from "@/components/performance/StaffMobileTabKeepAlive";
 import { CooperadoPwaResumeLifecycle } from "@/components/cooperado/CooperadoPwaResumeLifecycle";
 import { CooperadoPwaMessengerAppDataWarm } from "@/components/cooperado/CooperadoPwaMessengerAppDataWarm";
 import { CooperadoMobileBuildBadge } from "@/components/cooperado/CooperadoMobileBuildBadge";
+import { CooperadoMobilePilotStarBadge } from "@/components/cooperado/CooperadoMobilePilotStarBadge";
 import { CooperadoMobileReleaseBar } from "@/components/cooperado/CooperadoMobileReleaseBar";
 import { StaffMobileReleaseBar } from "@/components/layout/StaffMobileReleaseBar";
 import type { Resource } from "@/types";
@@ -147,7 +149,10 @@ function BrandHeader({ compact = false }: { compact?: boolean }) {
     <div className="flex items-center gap-3">
       <AppIcon size={compact ? "sm" : "md"} />
       <div className="min-w-0">
-        <p className={cn("font-bold leading-tight truncate", compact ? "text-sm" : "text-sm")}>{PLATFORM_NAME}</p>
+        <p className={cn("font-bold leading-tight truncate flex items-center gap-1", compact ? "text-sm" : "text-sm")}>
+          <span className="truncate">{PLATFORM_NAME}</span>
+          <CooperadoMobilePilotStarBadge />
+        </p>
         <p className="text-xs text-green-300 truncate">
           {coopNome || PLATFORM_TAGLINE}
         </p>
@@ -474,6 +479,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
   useLayoutEffect(() => {
     try {
+      applyCooperadoMobilePilotPerfDomFlag(navUser);
       if (!navUser) {
         document.documentElement.setAttribute("data-hb-shell-mode", "loading");
         return;

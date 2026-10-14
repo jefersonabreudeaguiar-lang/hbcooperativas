@@ -1,12 +1,10 @@
 "use client";
 
 import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
+import { cooperadoApresentacaoFinanceiraConsolidadaForSession } from "@/lib/cooperado/cooperadoApresentacaoFinanceiraPilot";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
-import {
-  cooperadoApresentacaoFinanceiraConsolidada,
-  cooperadoCarregandoValoresFinanceiros,
-} from "@/lib/cooperadoApresentacaoFinanceira";
 import {
   cooperadoLocalResumeReady,
   isCooperadoManualOperacionalSync,
@@ -37,6 +35,7 @@ const CooperadoApresentacaoFinanceiraContext = createContext<CooperadoApresentac
 /** Folha L1 — selectors de gate financeiro isolados da casca das abas. */
 function CooperadoApresentacaoFinanceiraGateInner({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const pathname = usePathname();
   const { syncing, syncingForUi, cooperadoPagamentosHydrated, lastSyncedAt } = useSyncStatus();
   const offline = typeof navigator !== "undefined" && !navigator.onLine;
 
@@ -104,8 +103,13 @@ function CooperadoApresentacaoFinanceiraGateInner({ children }: { children: Reac
         : undefined,
   };
 
-  const apresentacaoConsolidada = cooperadoApresentacaoFinanceiraConsolidada(input);
-  const carregandoValoresFinanceiros = cooperadoCarregandoValoresFinanceiros(input);
+  const apresentacaoConsolidada = cooperadoApresentacaoFinanceiraConsolidadaForSession(
+    input,
+    user,
+    pathname
+  );
+  const carregandoValoresFinanceiros =
+    input.role !== "cooperado" ? false : !apresentacaoConsolidada;
 
   const value = useMemo<CooperadoApresentacaoFinanceiraValue>(
     () => ({

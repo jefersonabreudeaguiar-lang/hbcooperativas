@@ -27,7 +27,12 @@ import {
 } from "@/services/entregaCooperadoService";
 import { textoInformativoDivisaoEntrega, nomesParticipantesDivisao } from "@/services/divisaoEntregaService";
 import { useAppDataSnapshotForDomainsWhenActive } from "@/hooks/useAppData";
-import { isCooperadoPwaMobileEntregasLeve } from "@/lib/cooperado/cooperadoPwaMobileEntregas";
+import { useAuth } from "@/modules/auth/AuthProvider";
+import {
+  cooperadoCooperadoEntregasLeveUiForUser,
+  cooperadoMobilePilotEntregasVirtualizeMinRows,
+} from "@/lib/cooperado/cooperadoMobilePilotPerf";
+import { CooperadoEntregasSemanaVirtualList } from "@/components/cooperado/CooperadoEntregasSemanaVirtualList";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { NotaStatusTimeline } from "@/components/notas/NotaStatusTimeline";
 import { Button } from "@/components/ui/Button";
@@ -367,7 +372,9 @@ export const CooperadoEntregasPorMes = memo(function CooperadoEntregasPorMes({
   onExcluir,
   getEscolaLabel,
 }: CooperadoEntregasPorMesProps) {
-  const entregasLeve = isCooperadoPwaMobileEntregasLeve();
+  const { user } = useAuth();
+  const entregasLeve = cooperadoCooperadoEntregasLeveUiForUser(user);
+  const virtualizeMin = cooperadoMobilePilotEntregasVirtualizeMinRows(user);
   const data = useAppDataSnapshotForDomainsWhenActive(painelRotaAtiva, ["notas"]);
   const [expandidaId, setExpandidaId] = useState<string | null>(null);
   const [mesAberto, setMesAberto] = useState<string | null>(() => resumos[0]?.mesReferencia ?? null);
@@ -452,26 +459,53 @@ export const CooperadoEntregasPorMes = memo(function CooperadoEntregasPorMes({
                       <Package size={14} />
                       {semana.rotulo}
                     </p>
-                    <div className="space-y-3">
-                      {semana.entregas.map((entrega) => {
-                        const nota = notaPrincipal(entrega);
-                        const cooperadoId = nota.cooperadoId;
-                        return (
-                          <EntregaSemanaItem
-                            key={entrega.id}
-                            entrega={entrega}
-                            escola={getEscolaLabel(nota)}
-                            expandida={expandidaId === entrega.id}
-                            recémEnviada={ultimaNotaEnviadaIds.includes(entrega.id)}
-                            onToggle={() => setExpandidaId((cur) => (cur === entrega.id ? null : entrega.id))}
-                            onReenviar={() => onReenviar(nota)}
-                            onExcluir={() => onExcluir(nota)}
-                            data={data}
-                            cooperadoId={cooperadoId}
-                          />
-                        );
-                      })}
-                    </div>
+                    {semana.entregas.length >= virtualizeMin ? (
+                      <CooperadoEntregasSemanaVirtualList
+                        entregas={semana.entregas}
+                        renderItem={(entrega) => {
+                          const nota = notaPrincipal(entrega);
+                          const cooperadoId = nota.cooperadoId;
+                          return (
+                            <EntregaSemanaItem
+                              entrega={entrega}
+                              escola={getEscolaLabel(nota)}
+                              expandida={expandidaId === entrega.id}
+                              recémEnviada={ultimaNotaEnviadaIds.includes(entrega.id)}
+                              onToggle={() =>
+                                setExpandidaId((cur) => (cur === entrega.id ? null : entrega.id))
+                              }
+                              onReenviar={() => onReenviar(nota)}
+                              onExcluir={() => onExcluir(nota)}
+                              data={data}
+                              cooperadoId={cooperadoId}
+                            />
+                          );
+                        }}
+                      />
+                    ) : (
+                      <div className="space-y-3">
+                        {semana.entregas.map((entrega) => {
+                          const nota = notaPrincipal(entrega);
+                          const cooperadoId = nota.cooperadoId;
+                          return (
+                            <EntregaSemanaItem
+                              key={entrega.id}
+                              entrega={entrega}
+                              escola={getEscolaLabel(nota)}
+                              expandida={expandidaId === entrega.id}
+                              recémEnviada={ultimaNotaEnviadaIds.includes(entrega.id)}
+                              onToggle={() =>
+                                setExpandidaId((cur) => (cur === entrega.id ? null : entrega.id))
+                              }
+                              onReenviar={() => onReenviar(nota)}
+                              onExcluir={() => onExcluir(nota)}
+                              data={data}
+                              cooperadoId={cooperadoId}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
