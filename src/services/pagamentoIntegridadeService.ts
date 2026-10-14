@@ -22,9 +22,8 @@ import {
   pagamentoIdsPotencialmenteRegressivos,
   type PagamentoDowngradeBloqueado,
 } from "@/services/pagamentoRegistroMerge";
-import { getSession } from "@/services/dataStore";
 import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
-import { isStaffRole } from "@/lib/security/staffAccessPolicy";
+import { isStaffSessionActiveInStorage } from "@/lib/staff/staffSessionRoleHint";
 import { normalizeCnpj } from "@/utils/cooperativa";
 
 function appDataTemOperacionalCloudAuthoritativo(data: AppData): boolean {
@@ -37,8 +36,7 @@ function appDataTemOperacionalCloudAuthoritativo(data: AppData): boolean {
 
 /** Só no aparelho do responsável — cooperado mobile mantém reparo legado. */
 function staffPreservaFichaPagaOperacionalAutoritativo(data: AppData): boolean {
-  const session = getSession();
-  if (!session?.role || !isStaffRole(session.role)) return false;
+  if (!isStaffSessionActiveInStorage()) return false;
   return appDataTemOperacionalCloudAuthoritativo(data);
 }
 

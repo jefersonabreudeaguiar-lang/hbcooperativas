@@ -520,7 +520,8 @@ function listarMesesPendentesPagamentoResponsavelOperacional(
   cooperativaId?: string
 ): string[] {
   const mesesSet = new Set<string>();
-  for (const f of data.fichaCorrida) {
+  const fichas = data.fichaCorrida ?? [];
+  for (const f of fichas) {
     if (!fichaPertenceCooperado(data, f, cooperadoId, cooperativaId)) continue;
     if (!fichaValidaNoExtrato(data, f)) continue;
     if (f.status === "pendente" || f.status === "pago") {
@@ -541,7 +542,7 @@ function listarMesesPendentesPagamentoResponsavelOperacional(
       pendentes.push(mes);
       continue;
     }
-    const temFichaPendente = data.fichaCorrida.some(
+    const temFichaPendente = fichas.some(
       (f) =>
         fichaPertenceCooperado(data, f, cooperadoId, cooperativaId) &&
         f.mesReferencia === mes &&

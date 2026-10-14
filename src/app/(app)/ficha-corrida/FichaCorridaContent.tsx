@@ -520,7 +520,7 @@ function FichaCorridaPageInner() {
 
   const meses = useMemo(() => {
     if (!data) return [getCurrentMesReferencia()];
-    const set = new Set(data.fichaCorrida.map((f) => f.mesReferencia));
+    const set = new Set((data.fichaCorrida ?? []).map((f) => f.mesReferencia));
     set.add(getCurrentMesReferencia());
     return [...set].sort().reverse();
   }, [data]);

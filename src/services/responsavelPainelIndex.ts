@@ -43,17 +43,17 @@ function cooperadoIdsDaCooperativa(data: AppData, coopId: string): Set<string> {
 function candidatosCooperadoPagamento(data: AppData, coopId: string): Set<string> {
   const coopIds = cooperadoIdsDaCooperativa(data, coopId);
   const candidatos = new Set<string>();
-  for (const f of data.fichaCorrida) {
+  for (const f of data.fichaCorrida ?? []) {
     if (!coopIds.has(f.cooperadoId)) continue;
     if (f.status === "pendente" || f.status === "pago") candidatos.add(f.cooperadoId);
   }
-  for (const p of data.pagamentosCooperado) {
+  for (const p of data.pagamentosCooperado ?? []) {
     if (p.cooperativaId !== coopId) continue;
     if (p.status === "aguardando_confirmacao" || p.status === "confirmado") {
       candidatos.add(p.cooperadoId);
     }
   }
-  for (const v of data.valoresAvulsosReceber) {
+  for (const v of data.valoresAvulsosReceber ?? []) {
     if (v.cooperativaId !== coopId) continue;
     if (!coopIds.has(v.cooperadoId)) continue;
     if (v.status === "pendente") candidatos.add(v.cooperadoId);
@@ -83,7 +83,7 @@ function appDataParaPainelResponsavel(data: AppData): AppData {
 function buildPainelCache(data: AppData, coopId: string): PainelCache {
   const excluidas = idsNotasPedidoExcluidas(data, coopId);
   const filaNotas: NotaPedido[] = [];
-  for (const n of data.notasPedido) {
+  for (const n of data.notasPedido ?? []) {
     const candidata = sanitizarNotaParaFilaConferencia(n);
     if (!notaElegivelParaFilaConferenciaResponsavel(candidata)) continue;
     if (!notaPertenceCooperativa(data, n, coopId)) continue;
