@@ -16,11 +16,13 @@ import { cn } from "@/utils/format";
 import {
   hbCooperadoPrimaryBtn,
   hbCooperadoSurfaceCard,
+  hbCooperadoSurfaceCardDark,
   hbCooperadoValueBox,
 } from "@/lib/hb-credit/hbCreditCooperadoUi";
 
 type Props = {
   userId: string;
+  darkHub?: boolean;
   showIntro: boolean;
   hasPin: boolean;
   pinResetPending: boolean;
@@ -42,6 +44,7 @@ type Props = {
 
 export function HbCreditCooperadoInicioPilot({
   userId,
+  darkHub = false,
   showIntro,
   hasPin,
   pinResetPending,
@@ -71,14 +74,14 @@ export function HbCreditCooperadoInicioPilot({
   if (showWelcome) {
     return (
       <div className="space-y-4">
-        <div className={cn(hbCooperadoSurfaceCard, "p-5 sm:p-6")}>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-600">
+        <div className={cn(darkHub ? hbCooperadoSurfaceCardDark : hbCooperadoSurfaceCard, "p-5 sm:p-6")}>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-400">
             Bem-vindo
           </p>
-          <h2 className="mt-2 text-xl font-bold tracking-tight text-gray-900">
+          <h2 className={cn("mt-2 text-xl font-bold tracking-tight", darkHub ? "text-white" : "text-gray-900")}>
             Sua conta HB Créditos
           </h2>
-          <p className="mt-2 text-sm leading-relaxed text-gray-600">
+          <p className={cn("mt-2 text-sm leading-relaxed", darkHub ? "text-slate-300" : "text-gray-600")}>
             Pague nos mercados parceiros com saldo da cooperativa — simples como um banco no celular.
           </p>
           <ul className="mt-5 space-y-3">
@@ -99,16 +102,29 @@ export function HbCreditCooperadoInicioPilot({
                 text: "Quando acumular, pode liberar no valor a receber do mês.",
               },
             ].map((step) => (
-              <li key={step.title} className="flex gap-3 rounded-2xl bg-emerald-50/80 px-3 py-3">
+              <li
+                key={step.title}
+                className={cn(
+                  "flex gap-3 rounded-2xl px-3 py-3",
+                  darkHub ? "bg-white/5 ring-1 ring-white/10" : "bg-emerald-50/80"
+                )}
+              >
                 <span
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-800 shadow-sm"
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm",
+                    darkHub ? "bg-emerald-500/20 text-emerald-300" : "bg-white text-emerald-800"
+                  )}
                   aria-hidden
                 >
                   <step.icon size={20} />
                 </span>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-900">{step.title}</p>
-                  <p className="text-xs leading-relaxed text-gray-600">{step.text}</p>
+                  <p className={cn("text-sm font-semibold", darkHub ? "text-white" : "text-gray-900")}>
+                    {step.title}
+                  </p>
+                  <p className={cn("text-xs leading-relaxed", darkHub ? "text-slate-400" : "text-gray-600")}>
+                    {step.text}
+                  </p>
                 </div>
               </li>
             ))}
@@ -131,6 +147,7 @@ export function HbCreditCooperadoInicioPilot({
         onReceber={onTabReceber}
         onPagar={onTabPagar}
         onExtrato={onTabExtrato}
+        darkHub={darkHub}
       />
 
       {!hasPin ? (
@@ -210,7 +227,11 @@ export function HbCreditCooperadoInicioPilot({
             <ChevronRight size={14} aria-hidden />
           </button>
         </div>
-        <HbCreditCooperadoLedgerList entries={ledgerPreview} loading={ledgerLoading} />
+        <HbCreditCooperadoLedgerList
+          entries={ledgerPreview}
+          loading={ledgerLoading}
+          darkHub={darkHub}
+        />
       </div>
     </div>
   );

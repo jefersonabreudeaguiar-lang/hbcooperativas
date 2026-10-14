@@ -14,7 +14,7 @@ interface ContaCoopSegmentTabsProps<T extends string> {
   onChange: (tab: T) => void;
   className?: string;
   /** Estilo premium cooperado (HB Créditos). */
-  variant?: "default" | "cooperado";
+  variant?: "default" | "cooperado" | "cooperado-dark";
 }
 
 export function ContaCoopSegmentTabs<T extends string>({
@@ -24,12 +24,13 @@ export function ContaCoopSegmentTabs<T extends string>({
   className,
   variant = "default",
 }: ContaCoopSegmentTabsProps<T>) {
-  const cooperado = variant === "cooperado";
+  const cooperado = variant === "cooperado" || variant === "cooperado-dark";
+  const cooperadoDark = variant === "cooperado-dark";
   return (
     <div
       className={cn(
         "flex rounded-2xl p-1 gap-1",
-        cooperado ? "bg-emerald-900/[0.06]" : "bg-gray-100",
+        cooperadoDark ? "bg-white/5 ring-1 ring-white/10" : cooperado ? "bg-emerald-900/[0.06]" : "bg-gray-100",
         className
       )}
       role="tablist"
@@ -44,10 +45,14 @@ export function ContaCoopSegmentTabs<T extends string>({
           className={cn(
             "flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all",
             active === tab.id
-              ? cooperado
-                ? "bg-white text-emerald-900 shadow-sm"
-                : "bg-white text-green-900 shadow-sm"
-              : "text-gray-600 hover:text-gray-900"
+              ? cooperadoDark
+                ? "bg-emerald-500 text-white shadow-sm"
+                : cooperado
+                  ? "bg-white text-emerald-900 shadow-sm"
+                  : "bg-white text-green-900 shadow-sm"
+              : cooperadoDark
+                ? "text-slate-300 hover:text-white"
+                : "text-gray-600 hover:text-gray-900"
           )}
         >
           {tab.label}

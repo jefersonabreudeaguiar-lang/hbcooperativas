@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, CreditCard, PieChart, Truck, Wallet,
   Percent, Building2,   Landmark, Megaphone, MapPin, Car, FileText,
   CalendarCheck, LogOut, Menu, X, Building, ClipboardList, Receipt, User, Tag,
-  BookOpen, FileCheck, Shield, MessageSquareWarning, Vote, Download, ShoppingCart, Scale,
+  BookOpen, FileCheck, Shield, MessageSquareWarning, Vote, Download, ShoppingCart, Scale, QrCode,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useState, startTransition } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -53,6 +53,12 @@ import { isStaffBottomTabPath } from "@/lib/performance/staffBottomTabRoutes";
 import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetch";
 import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 import { useMobileBottomTabSwitchFeedback } from "@/lib/performance/tabSwitchFeedback";
+import {
+  COOPERADO_PILOT_HB_PAY_TAB_HREF,
+  cooperadoPilotBottomNavItemActive,
+  cooperadoPilotMobileBottomNavEnabled,
+  isCooperadoPilotHbPayBottomTab,
+} from "@/lib/cooperado/cooperadoMobilePilotBottomNav";
 import {
   markRqlShellInteractive,
   markRqlShellVisual,
@@ -253,6 +259,10 @@ export function MobileNav() {
   const shell = useAppShellNavigationContext();
   const navUser = shell?.navUser;
   const mobileItems = shell?.mobileMenu ?? [];
+  const pilotHbBottomNav = cooperadoPilotMobileBottomNavEnabled(
+    navUser,
+    Boolean(shell?.moduleNavEligible)
+  );
 
   useLayoutEffect(() => {
     if (!navUser || !isCooperadoAppUser(navUser)) return;
@@ -322,10 +332,12 @@ export function MobileNav() {
         <nav className="flex bg-white border-t-2 border-green-200">
         {mobileItems.map((item) => {
           const tabPath = isCooperadoAppUser(navUser!) ? effectiveTabPath : pathname;
-          const active =
-            tabPath === item.href || (item.href !== "/dashboard" && tabPath.startsWith(item.href));
+          const active = pilotHbBottomNav
+            ? cooperadoPilotBottomNavItemActive(pathname, item.href)
+            : tabPath === item.href || (item.href !== "/dashboard" && tabPath.startsWith(item.href));
           const isCooperadoNav = isCooperadoAppUser(navUser);
           const mobileTabUx = isCooperadoNav || isStaffBottomTabPath(item.href);
+          const pilotPayTab = pilotHbBottomNav && isCooperadoPilotHbPayBottomTab(item.href);
           return (
             <Link
               key={item.href}
@@ -334,10 +346,20 @@ export function MobileNav() {
               aria-current={active ? "page" : undefined}
               prefetch={
                 isCooperadoNav
-                  ? item.href === COOPERADO_FINANCEIRO_TAB_HREF || isCooperadoBottomTabPath(item.href)
+                  ? item.href === COOPERADO_FINANCEIRO_TAB_HREF ||
+                    isCooperadoBottomTabPath(item.href) ||
+                    item.href === COOPERADO_PILOT_HB_PAY_TAB_HREF
                   : isStaffBottomTabPath(item.href) || item.href === "/notas-pedido"
               }
               onTouchStart={() => {
+                if (isCooperadoNav && pilotPayTab) {
+                  try {
+                    router.prefetch(item.href);
+                  } catch {
+                    /* ignore */
+                  }
+                  return;
+                }
                 if (isCooperadoNav && isCooperadoBottomTabPath(item.href)) {
                   setCooperadoOptimisticTab(item.href);
                   cooperadoTabWarmOnTouchStart(item.href);
@@ -384,10 +406,13 @@ export function MobileNav() {
               className={cn(
                 "flex-1 flex flex-col items-center justify-center min-w-0 px-0.5 select-none hb-mobile-tab-link",
                 mobileTabUx ? "min-h-[72px] py-2 gap-1" : "py-2 text-[10px] sm:text-xs gap-0.5",
+                pilotPayTab && "-mt-2",
                 active
-                  ? mobileTabUx
-                    ? "text-green-800 bg-green-50"
-                    : "text-green-700"
+                  ? pilotPayTab
+                    ? "text-white"
+                    : mobileTabUx
+                      ? "text-green-800 bg-green-50"
+                      : "text-green-700"
                   : mobileTabUx
                     ? "text-gray-700"
                     : "text-gray-500"
@@ -397,23 +422,38 @@ export function MobileNav() {
                 data-hb-tab-icon={mobileTabUx ? "" : undefined}
                 className={cn(
                   "flex items-center justify-center rounded-xl",
-                  mobileTabUx && "w-11 h-11",
-                  active && mobileTabUx
-                    ? "bg-green-700 text-white"
-                    : active
-                      ? "text-green-700"
-                      : mobileTabUx
+                  pilotPayTab ? "h-12 w-12 rounded-2xl shadow-lg shadow-emerald-900/30" : mobileTabUx && "w-11 h-11",
+                  pilotPayTab
+                    ? active
+                      ? "bg-emerald-500 text-white ring-2 ring-emerald-300/50"
+                      : "bg-emerald-600 text-white"
+                    : active && mobileTabUx
+                      ? "bg-green-700 text-white"
+                      : active
                         ? "text-green-700"
-                        : "text-gray-400"
+                        : mobileTabUx
+                          ? "text-green-700"
+                          : "text-gray-400"
                 )}
               >
-                {navIcon(item.href, item.resource, mobileTabUx ? 24 : 20)}
+                {pilotPayTab ? (
+                  <QrCode size={26} strokeWidth={2.25} />
+                ) : (
+                  navIcon(item.href, item.resource, mobileTabUx ? 24 : 20)
+                )}
               </span>
               <span
                 className={cn(
                   "truncate w-full text-center leading-tight",
                   mobileTabUx
-                    ? cn("text-[11px] sm:text-xs px-0.5", active ? "font-bold text-green-900" : "font-semibold")
+                    ? cn(
+                        "text-[10px] sm:text-[11px] px-0.5",
+                        pilotPayTab
+                          ? "font-bold text-emerald-800"
+                          : active
+                            ? "font-bold text-green-900"
+                            : "font-semibold"
+                      )
                     : ""
                 )}
               >

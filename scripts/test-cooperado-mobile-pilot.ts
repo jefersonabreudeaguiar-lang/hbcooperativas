@@ -11,6 +11,7 @@ const perf = readFileSync(join(ROOT, "src/lib/cooperado/cooperadoMobilePilotPerf
 const indicator = readFileSync(join(ROOT, "src/lib/cooperado/cooperadoMobilePilotIndicator.ts"), "utf8");
 const star = readFileSync(join(ROOT, "src/components/cooperado/CooperadoMobilePilotStarBadge.tsx"), "utf8");
 const hbPilot = readFileSync(join(ROOT, "src/lib/cooperado/cooperadoMobilePilotHbCredit.ts"), "utf8");
+const bottomNav = readFileSync(join(ROOT, "src/lib/cooperado/cooperadoMobilePilotBottomNav.ts"), "utf8");
 
 function assert(cond: boolean, msg: string) {
   if (!cond) {
@@ -33,5 +34,6 @@ assert(indicator.includes("COOPERADO_MOBILE_PILOT_PENDING_REVISION"), "revisão 
 assert(indicator.includes("cooperadoMobilePilotShowHeaderStar"), "estrela header piloto");
 assert(star.includes("CooperadoMobilePilotStarBadge"), "componente estrela");
 assert(hbPilot.includes("isCooperadoMobilePilotHbCreditUi"), "HB Créditos UI piloto");
+assert(bottomNav.includes("COOPERADO_PILOT_HB_PAY_TAB_HREF"), "aba Pagar piloto");
 
 console.log("test-cooperado-mobile-pilot.ts done.");

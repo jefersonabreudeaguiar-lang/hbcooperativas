@@ -6,11 +6,16 @@ import type { ContaCoopLedgerEntry } from "@/modules/hb-credit/types";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { formatLedgerEntryLabel } from "@/lib/hb-credit/ledgerLabels";
 import { cn } from "@/utils/format";
-import { hbCooperadoLedgerRow, hbCooperadoSurfaceCard } from "@/lib/hb-credit/hbCreditCooperadoUi";
+import {
+  hbCooperadoLedgerRow,
+  hbCooperadoSurfaceCard,
+  hbCooperadoSurfaceCardDark,
+} from "@/lib/hb-credit/hbCreditCooperadoUi";
 
 type Props = {
   entries: ContaCoopLedgerEntry[];
   loading: boolean;
+  darkHub?: boolean;
 };
 
 function ledgerIcon(tipo: string, amountCents: number) {
@@ -33,33 +38,35 @@ function mercadoSubtitle(entry: ContaCoopLedgerEntry): string | null {
   return null;
 }
 
-export function HbCreditCooperadoLedgerList({ entries, loading }: Props) {
+export function HbCreditCooperadoLedgerList({ entries, loading, darkHub = false }: Props) {
+  const surface = darkHub ? hbCooperadoSurfaceCardDark : hbCooperadoSurfaceCard;
   if (loading && !entries.length) {
     return (
-      <div className={cn(hbCooperadoSurfaceCard, "px-4 py-10")}>
+      <div className={cn(surface, "px-4 py-10")}>
         <PageSkeleton />
-        <p className="mt-3 text-center text-xs text-gray-500">Carregando movimentações…</p>
+        <p className={cn("mt-3 text-center text-xs", darkHub ? "text-slate-400" : "text-gray-500")}>
+          Carregando movimentações…
+        </p>
       </div>
     );
   }
 
   if (!entries.length) {
     return (
-      <div
-        className={cn(
-          hbCooperadoSurfaceCard,
-          "px-6 py-14 text-center"
-        )}
-      >
-        <p className="text-sm font-medium text-gray-800">Nenhuma movimentação ainda</p>
-        <p className="mt-1 text-xs text-gray-500">Pagamentos e ajustes do seu crédito aparecem aqui.</p>
+      <div className={cn(surface, "px-6 py-14 text-center")}>
+        <p className={cn("text-sm font-medium", darkHub ? "text-slate-200" : "text-gray-800")}>
+          Nenhuma movimentação ainda
+        </p>
+        <p className={cn("mt-1 text-xs", darkHub ? "text-slate-500" : "text-gray-500")}>
+          Pagamentos e ajustes do seu crédito aparecem aqui.
+        </p>
       </div>
     );
   }
 
   return (
-    <div className={cn(hbCooperadoSurfaceCard, "overflow-hidden")}>
-      <div className="divide-y divide-emerald-100/80">
+    <div className={cn(surface, "overflow-hidden")}>
+      <div className={cn("divide-y", darkHub ? "divide-white/10" : "divide-emerald-100/80")}>
         {entries.map((entry) => {
           const Icon = ledgerIcon(String(entry.tipo), entry.amountCents);
           const subtitle = mercadoSubtitle(entry);

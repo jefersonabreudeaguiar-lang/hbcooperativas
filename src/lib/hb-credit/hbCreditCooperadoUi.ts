@@ -45,3 +45,23 @@ export const hbCooperadoValueBox =
 
 export const hbCooperadoIconTile =
   "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-green-700 text-white shadow-sm";
+
+/** Hub HB Créditos — tema escuro (piloto Jeferson). */
+export const hbCooperadoHubPageDark = "mx-auto max-w-lg space-y-5 pb-24 px-1 text-slate-100";
+
+export const hbCooperadoSurfaceCardDark =
+  "rounded-3xl border border-white/10 bg-slate-900/75 shadow-xl shadow-black/20 backdrop-blur-md";
+
+export const hbCooperadoSegmentWrapDark = "flex rounded-2xl bg-white/5 p-1 gap-1 ring-1 ring-white/10";
+
+export const hbCooperadoSegmentActiveDark =
+  "flex-1 rounded-xl px-2 py-2.5 text-xs sm:text-sm font-semibold bg-emerald-500 text-white shadow-sm";
+
+export const hbCooperadoSegmentIdleDark =
+  "flex-1 rounded-xl px-2 py-2.5 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white transition-colors";
+
+export const hbCooperadoQuickActionBtnDark =
+  "flex min-h-[4.5rem] flex-col items-center justify-center gap-2 rounded-2xl border border-white/10 bg-slate-900/60 px-2 py-3 shadow-sm transition-colors hover:bg-slate-800/80 disabled:opacity-45 disabled:pointer-events-none";
+
+export const hbCooperadoQuickActionIconDark =
+  "flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-300";
