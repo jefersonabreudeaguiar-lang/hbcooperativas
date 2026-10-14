@@ -25,6 +25,8 @@ export function cooperadoApresentacaoFinanceiraConsolidadaForSession(
   if (input.exibirComDadosLocais) return true;
   if (cooperadoPilotFinanceiroExibirComSnapshotsLocais(user)) return true;
   if (cooperadoPilotAppDataTemFinanceiroLocal(user)) return true;
-  if (input.dadosFinanceirosConsistentes === false) return false;
-  return input.cooperadoPagamentosHydrated;
+  if (input.dadosFinanceirosConsistentes === false) {
+    return cooperadoPilotAppDataTemFinanceiroLocal(user);
+  }
+  return input.cooperadoPagamentosHydrated || cooperadoPilotAppDataTemFinanceiroLocal(user);
 }

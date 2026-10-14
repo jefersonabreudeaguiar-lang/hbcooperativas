@@ -37,6 +37,7 @@ import {
 } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import { getData, isAppDataWarm, preloadAppData, subscribe } from "@/services/dataStore";
 import { cooperadoPilotCardInicioLeituraRapida } from "@/lib/cooperado/cooperadoMobilePilotInicioValorLocal";
+import { useAuth } from "@/modules/auth/AuthProvider";
 import { cooperadoPwaFinanceiroSnapshotsAusentes } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
@@ -62,6 +63,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
   snapshot: InicioCardMotorSnapshot;
   atualizando: boolean;
 } {
+  const { user: sessionUser } = useAuth();
   const latchRef = useRef<InicioCardLatchState | null>(null);
   const tenantKeyRef = useRef("");
 
@@ -127,6 +129,8 @@ export function useCooperadoInicioValorReceberCardState(input: {
   const hbDescontosRevision = useContaCoopDescontosRevision();
 
   const apresentacaoConsolidada = input.apresentacaoConsolidada ?? false;
+  const apresentacaoCard =
+    isCooperadoMobilePilotPerfActive() ? true : apresentacaoConsolidada;
   const carregandoFinanceiro =
     Boolean(input.syncing) ||
     (!input.dataReady && !cooperadoMotorTemObrigacaoReceber(persistido?.display ?? SNAPSHOT_VAZIO));
@@ -142,7 +146,8 @@ export function useCooperadoInicioValorReceberCardState(input: {
       if (isCooperadoMobilePilotPerfActive() && input.cooperadoId) {
         const pilotDisplay = cooperadoPilotCardInicioLeituraRapida(
           input.cooperadoId,
-          input.cooperativaId
+          input.cooperativaId,
+          sessionUser
         );
         if (pilotDisplay && cooperadoMotorTemObrigacaoReceber(pilotDisplay)) {
           return {
@@ -180,7 +185,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
         persistidoTick > 0 ||
         pilotPrecisaMotorLocal ||
         !persistidoMesmoBuildEarly?.display ||
-        (input.dataReady && apresentacaoConsolidada);
+        (input.dataReady && apresentacaoCard);
 
       const data =
         needsMotor || !persistidoMesmoBuildEarly?.display
@@ -211,8 +216,8 @@ export function useCooperadoInicioValorReceberCardState(input: {
               data,
               cooperadoId: input.cooperadoId,
               cooperativaId: cooperativaIdCard,
-              apresentacaoConsolidada,
-              carregandoFinanceiro: carregandoFinanceiro && !apresentacaoConsolidada,
+              apresentacaoConsolidada: apresentacaoCard,
+              carregandoFinanceiro: carregandoFinanceiro && !apresentacaoCard,
               prevLatch: null,
               persistido: null,
               dataReady: input.dataReady,
@@ -329,8 +334,8 @@ export function useCooperadoInicioValorReceberCardState(input: {
           data: dataLatch,
           cooperadoId: input.cooperadoId,
           cooperativaId: cooperativaIdLatch,
-          apresentacaoConsolidada,
-          carregandoFinanceiro: carregandoFinanceiro && !apresentacaoConsolidada,
+          apresentacaoConsolidada: apresentacaoCard,
+          carregandoFinanceiro: carregandoFinanceiro && !apresentacaoCard,
           prevLatch: null,
           persistido: null,
           dataReady: input.dataReady,
@@ -367,7 +372,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
       data: input.data,
       cooperadoId: input.cooperadoId,
       cooperativaId: input.cooperativaId,
-      apresentacaoConsolidada,
+      apresentacaoConsolidada: apresentacaoCard,
       carregandoFinanceiro,
       prevLatch: omitirPersistido ? null : latchRef.current,
       persistido: omitirPersistido ? null : persistido,
@@ -386,6 +391,9 @@ export function useCooperadoInicioValorReceberCardState(input: {
     persistidoTick,
     leituraSomentePwa,
     appDataWarmKey,
+    sessionUser?.id,
+    sessionUser?.cooperativaId,
+    apresentacaoCard,
     ...(leituraSomentePwa ? [] : [hbDescontosRevision]),
   ]);
 

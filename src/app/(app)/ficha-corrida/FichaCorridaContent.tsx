@@ -19,7 +19,10 @@ import {
 } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/cooperadoMobilePilotPerf";
-import { cooperadoPilotFinanceiroExibirComSnapshotsLocais } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
+import {
+  cooperadoPilotAppDataTemFinanceiroLocal,
+  cooperadoPilotFinanceiroExibirComSnapshotsLocais,
+} from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
 import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import {
   cooperadoPwaUiSubscribesAppData,
@@ -352,6 +355,7 @@ function FichaCorridaPageInner() {
     apresentacaoConsolidada ||
     (isCooperado &&
       (cooperadoPilotFinanceiroExibirComSnapshotsLocais(user) ||
+        cooperadoPilotAppDataTemFinanceiroLocal(user) ||
         (pagamentosHydratedCooperado &&
           isCooperadoInstantResumeEnabled() &&
           cooperadoLocalResumeReady(user))));

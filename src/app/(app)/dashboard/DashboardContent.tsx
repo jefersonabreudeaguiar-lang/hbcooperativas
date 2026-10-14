@@ -120,7 +120,7 @@ import { getSession } from "@/services/dataStore";
 import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { scheduleCooperadoPilotHbCreditRouteWarmup } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
 import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
-import { cooperadoPilotForcarRematerializacaoFinanceira } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
+import { scheduleCooperadoPilotFinanceBootstrapOnce } from "@/lib/cooperado/cooperadoMobilePilotFinanceBootstrap";
 
 const DASHBOARD_INICIO_DOMAINS: AppDataNotifyDomain[] = ["shell", "notas", "financeiro", "operacional"];
 
@@ -221,7 +221,7 @@ function CooperadoDashboard() {
 
   useEffect(() => {
     if (!user || !isCooperadoMobilePilot(user)) return;
-    cooperadoPilotForcarRematerializacaoFinanceira(user);
+    scheduleCooperadoPilotFinanceBootstrapOnce(user);
   }, [user?.id, user?.cooperadoId]);
 
   useEffect(() => {
