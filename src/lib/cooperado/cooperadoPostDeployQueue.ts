@@ -9,6 +9,7 @@ import {
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import {
   cooperadoPostDeployAckMatches,
+  clearCooperadoPostDeployDegraded,
   markCooperadoPostDeployAck,
   setCooperadoPostDeployQueueActive,
 } from "@/lib/cooperado/cooperadoPostDeploySession";
@@ -78,9 +79,20 @@ export async function runCooperadoPostDeployQueue(opts: {
       eventDriven: true,
     });
 
-    const synced = await opts.waitForOperacionalSync();
+    let synced = await opts.waitForOperacionalSync();
     if (!synced) {
-      return { ok: false, error: "Não foi possível sincronizar com a cooperativa. Verifique a internet e tente de novo." };
+      requestSyncTier("operacional_full", {
+        force: true,
+        immediate: true,
+        eventDriven: true,
+      });
+      synced = await opts.waitForOperacionalSync();
+    }
+    if (!synced) {
+      return {
+        ok: false,
+        error: "Não foi possível sincronizar com a cooperativa. Verifique a internet e tente de novo.",
+      };
     }
 
     opts.onPhase?.("materializar_ui");
@@ -104,6 +116,7 @@ export async function runCooperadoPostDeployQueue(opts: {
       persistOperacionalSyncedAppBuild();
     }
     markCooperadoPostDeployAck(policy.releaseEpoch, APP_BUILD_VERSION);
+    clearCooperadoPostDeployDegraded();
     opts.onPhase?.("done");
     return { ok: true };
   } catch (e) {

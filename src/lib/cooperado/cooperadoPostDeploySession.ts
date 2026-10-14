@@ -2,6 +2,7 @@ import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 
 const ACK_KEY = "hb.coop.postDeployAck.v1";
 const QUEUE_ACTIVE_KEY = "hb.coop.postDeployQueueActive";
+const DEGRADED_KEY = "hb.coop.postDeployDegraded.v1";
 
 export type CooperadoPostDeployAck = {
   build: number;
@@ -64,9 +65,37 @@ export function markCooperadoPostDeployAck(epoch: number, build = APP_BUILD_VERS
 }
 
 export function cooperadoPostDeployUiReady(releaseEpoch?: number): boolean {
+  if (cooperadoPostDeployDegraded()) return false;
   const ack = readCooperadoPostDeployAck();
   if (!ack) return false;
   if (ack.build !== APP_BUILD_VERSION) return false;
   if (releaseEpoch != null && ack.epoch !== releaseEpoch) return false;
   return true;
+}
+
+export function cooperadoPostDeployDegraded(): boolean {
+  if (typeof sessionStorage === "undefined") return false;
+  try {
+    return sessionStorage.getItem(DEGRADED_KEY) === String(APP_BUILD_VERSION);
+  } catch {
+    return false;
+  }
+}
+
+export function markCooperadoPostDeployDegraded(): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(DEGRADED_KEY, String(APP_BUILD_VERSION));
+  } catch {
+    /* quota */
+  }
+}
+
+export function clearCooperadoPostDeployDegraded(): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.removeItem(DEGRADED_KEY);
+  } catch {
+    /* ignore */
+  }
 }

@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { CooperadoReleasePolicy } from "@/lib/cooperado/cooperadoReleasePolicy";
+import {
+  embeddedCooperadoReleasePolicy,
+  mergeCooperadoReleasePolicy,
+  type CooperadoReleasePolicy,
+} from "@/lib/cooperado/cooperadoReleasePolicy";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 
 const CACHE_MS = 60_000;
@@ -11,24 +15,20 @@ let sharedAt = 0;
 let inflight: Promise<CooperadoReleasePolicy> | null = null;
 
 async function fetchPolicy(): Promise<CooperadoReleasePolicy> {
-  const res = await fetch("/api/app/cooperado-release", { cache: "no-store" });
-  if (!res.ok) {
-    return {
-      minBuild: APP_BUILD_VERSION,
-      recommendedBuild: APP_BUILD_VERSION,
-      releaseEpoch: 1,
-      message: "",
-      serverBuild: APP_BUILD_VERSION,
-    };
+  try {
+    const res = await fetch("/api/app/cooperado-release", { cache: "no-store" });
+    if (!res.ok) return embeddedCooperadoReleasePolicy();
+    const data = (await res.json()) as CooperadoReleasePolicy & { ok?: boolean };
+    return mergeCooperadoReleasePolicy({
+      minBuild: data.minBuild,
+      recommendedBuild: data.recommendedBuild,
+      releaseEpoch: data.releaseEpoch,
+      message: data.message,
+      serverBuild: data.serverBuild,
+    });
+  } catch {
+    return embeddedCooperadoReleasePolicy();
   }
-  const data = (await res.json()) as CooperadoReleasePolicy & { ok?: boolean };
-  return {
-    minBuild: data.minBuild ?? APP_BUILD_VERSION,
-    recommendedBuild: data.recommendedBuild ?? APP_BUILD_VERSION,
-    releaseEpoch: data.releaseEpoch ?? 1,
-    message: data.message ?? "",
-    serverBuild: data.serverBuild ?? APP_BUILD_VERSION,
-  };
 }
 
 export function useCooperadoReleasePolicy(): {
@@ -46,6 +46,13 @@ export function useCooperadoReleasePolicy(): {
       setLoading(false);
       return;
     }
+    const fallbackTimer = window.setTimeout(() => {
+      const embedded = embeddedCooperadoReleasePolicy();
+      shared = embedded;
+      sharedAt = Date.now();
+      setPolicy(embedded);
+      setLoading(false);
+    }, 6_000);
     if (!inflight) {
       inflight = fetchPolicy()
         .then((p) => {
@@ -58,9 +65,11 @@ export function useCooperadoReleasePolicy(): {
         });
     }
     void inflight.then((p) => {
+      window.clearTimeout(fallbackTimer);
       setPolicy(p);
       setLoading(false);
     });
+    return () => window.clearTimeout(fallbackTimer);
   }, []);
 
   return { policy, loading, clientBuild: APP_BUILD_VERSION };

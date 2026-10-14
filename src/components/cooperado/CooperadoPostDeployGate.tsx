@@ -12,6 +12,11 @@ import {
   waitForCooperadoSyncSettled,
   type PostDeployGatePhase,
 } from "@/lib/cooperado/cooperadoPostDeployQueue";
+import {
+  clearCooperadoPostDeployDegraded,
+  markCooperadoPostDeployDegraded,
+} from "@/lib/cooperado/cooperadoPostDeploySession";
+import { requestCooperadoFinanceiroRecoverySync } from "@/services/syncRequest";
 import { Button } from "@/components/ui/Button";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 
@@ -25,6 +30,8 @@ const PHASE_LABEL: Record<PostDeployGatePhase, string> = {
   error: "Não foi possível concluir",
 };
 
+const AUTO_RELOAD_MS = 5_000;
+
 /**
  * Cooperado: após deploy, garante bundle mínimo + fila operacional/HB antes do dashboard.
  */
@@ -35,6 +42,7 @@ export function CooperadoPostDeployGate({ children }: { children: React.ReactNod
   const [phase, setPhase] = useState<PostDeployGatePhase>("idle");
   const [error, setError] = useState("");
   const [released, setReleased] = useState(false);
+  const [reloadCancelled, setReloadCancelled] = useState(false);
   const runRef = useRef(false);
   const syncReadRef = useRef({ syncing: syncingForUi, lastSyncedAt });
   syncReadRef.current = { syncing: syncingForUi, lastSyncedAt };
@@ -53,6 +61,7 @@ export function CooperadoPostDeployGate({ children }: { children: React.ReactNod
   const runQueue = useCallback(async () => {
     if (!user || !policy || user.role !== "cooperado") return;
     setError("");
+    clearCooperadoPostDeployDegraded();
     const result = await runCooperadoPostDeployQueue({
       user,
       policy,
@@ -67,7 +76,7 @@ export function CooperadoPostDeployGate({ children }: { children: React.ReactNod
       setPhase("error");
       setError(result.error);
     }
-  }, [user, policy, syncingForUi, lastSyncedAt]);
+  }, [user, policy]);
 
   useEffect(() => {
     if (!cooperado || loading || !policy) return;
@@ -84,6 +93,21 @@ export function CooperadoPostDeployGate({ children }: { children: React.ReactNod
     runRef.current = true;
     void runQueue();
   }, [cooperado, loading, policy, needsGate, needsReload, released, runQueue]);
+
+  useEffect(() => {
+    if (!needsReload || reloadCancelled || !policy) return;
+    const t = window.setTimeout(() => {
+      window.location.href = cooperadoPostDeployReloadHref(policy);
+    }, AUTO_RELOAD_MS);
+    return () => window.clearTimeout(t);
+  }, [needsReload, reloadCancelled, policy]);
+
+  const continuarComRessalva = () => {
+    markCooperadoPostDeployDegraded();
+    requestCooperadoFinanceiroRecoverySync();
+    setReleased(true);
+    setPhase("done");
+  };
 
   if (!cooperado) {
     return <>{children}</>;
@@ -103,11 +127,11 @@ export function CooperadoPostDeployGate({ children }: { children: React.ReactNod
     <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-gradient-to-b from-green-950 to-green-900 px-6 text-center text-white">
       <p className="text-xs font-semibold uppercase tracking-widest text-green-200/90">HB Cooperativas</p>
       <h1 className="mt-3 text-xl font-bold sm:text-2xl">
-        {needsReload ? "Atualize o aplicativo" : "Atualizando seus dados"}
+        {needsReload ? "Atualizando para a versão nova" : "Atualizando seus dados"}
       </h1>
       <p className="mt-2 max-w-sm text-sm text-green-100/90">
         {needsReload
-          ? `Seu app (v${clientBuild}) está abaixo da versão mínima (v${policy?.minBuild ?? "—"}). É necessário abrir a versão nova para todos os cooperados verem as mesmas correções.`
+          ? `Seu app (v${clientBuild}) será atualizado para v${policy?.minBuild ?? APP_BUILD_VERSION}. Todos os cooperados usam a mesma versão em produção.`
           : policy?.message ||
             "Sincronizando ficha, A receber, Financeiro e HB Créditos com a nuvem."}
       </p>
@@ -118,16 +142,27 @@ export function CooperadoPostDeployGate({ children }: { children: React.ReactNod
       </p>
 
       {needsReload && policy && (
-        <Button
-          type="button"
-          className="mt-6"
-          size="lg"
-          onClick={() => {
-            window.location.href = cooperadoPostDeployReloadHref(policy);
-          }}
-        >
-          Abrir versão v{policy.minBuild}
-        </Button>
+        <div className="mt-6 flex flex-col gap-2">
+          <Button
+            type="button"
+            size="lg"
+            onClick={() => {
+              window.location.href = cooperadoPostDeployReloadHref(policy);
+            }}
+          >
+            Abrir v{policy.minBuild} agora
+          </Button>
+          {!reloadCancelled && (
+            <p className="text-[11px] text-green-200/70">Redirecionando automaticamente em alguns segundos…</p>
+          )}
+          <button
+            type="button"
+            className="text-xs text-green-200/80 underline"
+            onClick={() => setReloadCancelled(true)}
+          >
+            Cancelar redirecionamento automático
+          </button>
+        </div>
       )}
 
       {!needsReload && phase === "error" && (
@@ -143,6 +178,13 @@ export function CooperadoPostDeployGate({ children }: { children: React.ReactNod
           >
             Tentar de novo
           </Button>
+          <button
+            type="button"
+            className="text-xs text-green-100/90 underline"
+            onClick={continuarComRessalva}
+          >
+            Continuar e sincronizar em segundo plano
+          </button>
         </div>
       )}
 
