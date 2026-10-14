@@ -31,6 +31,7 @@ import {
   cooperadoMobilePilotInitialAuthLoading,
 } from "@/lib/cooperado/cooperadoMobilePilotAuthBootstrap";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { scheduleEmpacotarModeloAparelhoJeferson } from "@/lib/cooperado/cooperadoAparelhoJefersonPacote";
 import { cooperadoPwaInstantPaintReady } from "@/lib/cooperado/cooperadoPwaInstantResume";
 import {
   getSession,
@@ -317,6 +318,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         preloadAppData();
       } else {
         await waitForAppDataWarm(4000);
+      }
+      if (role === "cooperado" && isCooperadoMobileGaPromoted(safeUser)) {
+        scheduleEmpacotarModeloAparelhoJeferson(safeUser);
       }
       if (role === "cooperado") {
         markCooperadoPostLoginFinanceSync();

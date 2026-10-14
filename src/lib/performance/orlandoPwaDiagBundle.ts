@@ -3,6 +3,10 @@
  */
 import type { User } from "@/types";
 import { buildCooperadoFinanceiroParidadeProbe } from "@/lib/cooperado/cooperadoFinanceiroParidadeProbe";
+import {
+  buildCooperadoAparelhoJefersonDiagnostico,
+  formatCooperadoAparelhoJefersonDiagnosticoText,
+} from "@/lib/cooperado/cooperadoAparelhoJefersonDiagnostico";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import {
   buildRqlWhatsappCompareClipboardText,
@@ -21,6 +25,7 @@ export function buildOrlandoFullDiagClipboardText(
   const rql = buildRqlPerfRouteReport();
   const parity = buildMessagingParityReport(rql);
   const fin = buildCooperadoFinanceiroParidadeProbe(user);
+  const aparelho = buildCooperadoAparelhoJefersonDiagnostico(user);
   const coldMs = measureRqlColdStartSpanMs();
 
   const hops = rql.routeTransitions
@@ -41,6 +46,11 @@ export function buildOrlandoFullDiagClipboardText(
     "",
     "--- ÚLTIMAS TROCAS DE ABA (paint) ---",
     hops || "(nenhuma — repita o roteiro trocando Início/Entregas/Preços/Financeiro)",
+    "",
+    "--- APARELHO vs MODELO JEFERSON ---",
+    aparelho
+      ? formatCooperadoAparelhoJefersonDiagnosticoText(aparelho).split("\n").slice(0, 22).join("\n")
+      : "(gere logado como cooperado)",
     "",
     "--- PARIDADE A RECEBER (cooperado vs motor responsável) ---",
   ];

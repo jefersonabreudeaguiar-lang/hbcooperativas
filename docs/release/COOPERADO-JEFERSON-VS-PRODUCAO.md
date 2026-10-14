@@ -1,43 +1,80 @@
-# Comparativo: Jeferson vs demais cooperados (mobile)
+# Diagnóstico completo: aparelho Jeferson vs demais cooperados
 
-## Resumo
+## O que combinamos vs o que aconteceu
 
-No **código atual**, Jeferson e qualquer cooperado logado com `role === cooperado` entram no mesmo ramo: `isCooperadoMobileGaPromoted` (experiência piloto promovida).  
-`isCooperadoMobilePilot` (só Jeferson) serve **apenas** à estrela de revisão no header.
+- **Combinado:** o piloto Jeferson (`isCooperadoMobilePilot`) não viraria um “produto paralelo” — só estrela de revisão no header.
+- **Feito:** a **experiência** do piloto foi promovida para todos via `isCooperadoMobileGaPromoted` (todo `role === cooperado`).
+- **Confusão:** outra conta no **mesmo** celular do Jeferson funciona; Orlando no **seu** celular não. Isso prova que o gap é **aparelho**, não e-mail.
 
-A sensação de “Jeferson não trava e os outros travam” costuma vir de **estado do aparelho**, não de ramo diferente no bundle.
+## Diferença exata (camadas)
 
-## Tabela — flags no código
+### 1. Conta (só Jeferson)
 
-| Item | Jeferson | Outro cooperado |
-|------|----------|-----------------|
-| `isCooperadoMobilePilot` (estrela) | Sim | Não |
-| `isCooperadoMobileGaPromoted` (perf PWA, cache, gate) | Sim | Sim |
-| `data-cooperado-pilot-perf="1"` | Sim | Sim |
-| PWA mensageiro (standalone + mobile) | Se instalado | Se instalado |
-| Bloqueio `operacional_full` automático (build 372+) | Sim | Sim |
-| Painel responsável no mesmo e-mail | Sim (outro login) | Não |
+| Item | Jeferson | Outros |
+|------|----------|--------|
+| `isCooperadoMobilePilot` (estrela amarela) | Sim | Não |
+| `isCooperadoMobileGaPromoted` (GA mobile) | Sim | Sim |
 
-## Tabela — comportamento que **parecia** produção antiga
+Nenhum outro ramo de negócio depende do e-mail do Jeferson.
 
-Ramo legado (`!isCooperadoMobileGaPromoted`) ainda existia em pontos isolados. Cooperado GA com ficha “bloqueada” caía em:
+### 2. Runtime (antes do build 378)
 
-- `falhaCarregarFicha` → `solicitarRecuperacaoFinanceiroCooperado` + `requestAppSyncImmediate`
-- `solicitarRecuperacaoFinanceiroCooperado` sem checagem GA
-- Primeira carga automática no warmup (18s) no PWA
+| Item | Celular Jeferson (típico) | Outros cooperados (típico) |
+|------|---------------------------|---------------------------|
+| PWA **instalado** (`standalone`) | Sim | Muitas vezes **não** — só link no Chrome |
+| `isCooperadoPwaMobileLeveUi` | Sim | **Não** (exigia standalone) |
+| `isCooperadoPwaMessengerMode` | Sim | **Não** |
+| UI lê **snapshots** + menos AppData na tela | Sim | Não — mais parse/sync na abertura |
+| `data-cooperado-pilot-perf="1"` | Sim | Sim (GA) |
 
-**Jeferson** em uso diário: cache de card/ficha quente, `hb-coop-operacional-synced-build` já alinhado → **não** entrava nesses gatilhos.  
-**Outros** após purge época 3 / deploy: sem snapshot, `bloqueiaEntrada` true → **rajada de sync** e parse do AppData → travamento.
+**Essa era a diferença estrutural mais importante:** o Jeferson usava o **modo mensageiro PWA**; quem abria só pelo navegador caía num caminho mais pesado, mesmo com o mesmo login.
 
-## Alinhamento (meta = Jeferson)
+**Build 378+:** cooperado GA em viewport mobile ativa **leve + mensageiro** também no navegador (mesmo pacote do PWA do Jeferson).
 
-1. Cooperado GA: **não** recovery automático em `falhaCarregarFicha` / `solicitarRecuperacaoFinanceiroCooperado`.
-2. PWA mensageiro: **sem** primeira carga automática; nuvem só em **Atualizar**.
-3. `isCooperadoMobileGaPromoted`: `role === cooperado` → sempre GA (evita cair no legado).
+### 3. Armazenamento local (aparelho “quente”)
 
-## Como validar no celular
+O celular do Jeferson acumula, com o uso:
 
-- Header: build `APP_BUILD_VERSION` (ex.: v373+).
-- `<html data-cooperado-pilot-perf="1">` para cooperado.
-- Estrela amarela: só Jeferson (revisão piloto).
-- Travou? Anotar se há loop de reload ou só “Atualizando dados…” sem toque responder.
+| Chave / conceito | Função |
+|------------------|--------|
+| `coopeagriplla_session` | Sessão |
+| `coopeagriplla_data` | AppData operacional parseado |
+| `hb.coop.inicioCard.*` | Card “A receber” instantâneo |
+| `hb.coop.pwaInicioDash.*` | Snapshot do Início |
+| `hb.coop.pwaFichaResumo.*` | Snapshot Financeiro |
+| `hb.coop.pwaEntregasResumos.*` | Snapshot Entregas |
+| `hb.coop.readModels.*` | Read models escopados |
+| `hb-coop-operacional-synced-build` | Build em que o operacional foi aceito |
+| `hb-coop-pwa-snapshots-materialized-build` | Registro de materialização PWA |
+
+Aparelho **frio** (pós-instalação, purge época 3, ou deploy): sem snapshots → abertura dependia de sync; builds 376–377 erraram ao **cortar** a primeira carga ou **fingir** sync sem dados.
+
+**Build 377+:** `scheduleCooperadoGaPrimeiraCargaSilenciosa` — uma carga pós-interação.  
+**Build 378+:** `empacotarModeloAparelhoJeferson` — após login/sync, grava o mesmo pacote de snapshots que o Jeferson tem.
+
+### 4. Código de diagnóstico (homolog)
+
+- `buildCooperadoAparelhoJefersonDiagnostico(user)` — relatório JSON + texto.
+- Incluído no pacote Orlando (`buildOrlandoFullDiagClipboardText`).
+- Lista `modeloJeferson.faltando` quando o aparelho ainda não está alinhado.
+
+## Fluxo alvo (todos = modelo Jeferson)
+
+1. Login cooperado GA → shell imediato (`cooperadoInstantShellReady` / GA).
+2. Sem cache local → bootstrap nuvem **silencioso** após interação (`cooperadoGaColdBootstrap`).
+3. Após AppData/sync → **empacotar** snapshots + card (`cooperadoAparelhoJefersonPacote`).
+4. Sync operacional completo no dia a dia → botão **Atualizar** (sem rajada na abertura).
+5. Estrela no header → **somente** Jeferson (`isCooperadoMobilePilot`).
+
+## Links produção
+
+- Login: `https://hbcooperativas.vercel.app/login?hb-pwa=<APP_BUILD_VERSION>`
+- Instalar PWA (recomendado): `https://hbcooperativas.vercel.app/pwa-launch.html?next=%2Flogin%3Fhb-pwa%3D<build>%26next%3D%2Fdashboard`
+- Resgate cache: `https://hbcooperativas.vercel.app/pwa-rescue.html`
+
+## Validar no celular
+
+1. Header: `v<build>` atual.
+2. Homolog: pacote diagnóstico → seção **APARELHO vs MODELO JEFERSON** com `paridade_completa: SIM`.
+3. Se `faltando: modo_mensageiro` em build &lt; 378 → atualizar app.
+4. Se `bootstrap_nuvem: true` → aguardar ~10 s online ou tocar **Atualizar** uma vez.

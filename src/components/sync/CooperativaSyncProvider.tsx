@@ -138,6 +138,7 @@ import {
   cooperadoRematerializarFinanceiroLocalSePossivel,
   scheduleCooperadoMessengerStaffRevisionPull,
 } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
+import { empacotarModeloAparelhoJeferson } from "@/lib/cooperado/cooperadoAparelhoJefersonPacote";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { isCooperadoMobilePilotPerfActive } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
@@ -1047,6 +1048,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           (completed || apresentacaoFinanceiraRestaurada)
         ) {
           cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(userRef.current);
+          empacotarModeloAparelhoJeferson(userRef.current);
           if (completed) {
             persistOperacionalSyncedAppBuild();
           }

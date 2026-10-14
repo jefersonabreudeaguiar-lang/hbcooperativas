@@ -17,6 +17,7 @@ import {
   requestCooperadoPrimeiraCargaSync,
   requestSyncTier,
 } from "@/services/syncRequest";
+import { scheduleEmpacotarModeloAparelhoJeferson } from "@/lib/cooperado/cooperadoAparelhoJefersonPacote";
 
 const BOOTSTRAP_SESSION_KEY = "hb.coop.gaColdBootstrap.v1";
 
@@ -76,8 +77,12 @@ export function scheduleCooperadoGaPrimeiraCargaSilenciosa(
   markBootstrapScheduled(user.id);
 
   const fire = () => {
-    if (!cooperadoGaAparelhoPrecisaBootstrapNuvem(user)) return;
+    if (!cooperadoGaAparelhoPrecisaBootstrapNuvem(user)) {
+      scheduleEmpacotarModeloAparelhoJeferson(user);
+      return;
+    }
     dispatchGaPrimeiraCargaSilenciosa();
+    scheduleEmpacotarModeloAparelhoJeferson(user);
   };
 
   if (isCooperadoInstantResumeEnabled()) {
