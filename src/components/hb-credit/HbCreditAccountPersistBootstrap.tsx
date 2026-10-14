@@ -20,7 +20,10 @@ import {
   lerHbCreditAccountPersistido,
   lerHbCreditAccountPersistidoFlex,
 } from "@/lib/hb-credit/hbCreditAccountPersistencia";
-import { scheduleCooperadoPilotHbCreditAccountPersist } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
+import {
+  scheduleCooperadoHbCreditLimiteAndAccountWarmup,
+  scheduleCooperadoPilotHbCreditAccountPersist,
+} from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
 
 /** Cache HB Créditos cooperado após login/sync (abre Minha Conta Coop na hora). */
 export function HbCreditAccountPersistBootstrap() {
@@ -77,7 +80,13 @@ export function HbCreditAccountPersistBootstrap() {
     if (!cooperadoPagamentosHydrated || lastSyncedAt == null) return;
     if (lastSyncedRef.current === lastSyncedAt) return;
     lastSyncedRef.current = lastSyncedAt;
-    const cancelIdle = scheduleContaCoopAuxSync(persist, { idleTimeoutMs: 15_000, fallbackMs: 5_000 });
+    const cancelIdle = scheduleContaCoopAuxSync(
+      () => {
+        scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
+        persist();
+      },
+      { idleTimeoutMs: 15_000, fallbackMs: 5_000 }
+    );
     return () => cancelIdle();
   }, [hbOn, user, syncing, lastSyncedAt, cooperadoPagamentosHydrated]);
 

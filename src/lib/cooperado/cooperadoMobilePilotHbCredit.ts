@@ -28,7 +28,7 @@ export function markCooperadoPilotHbCreditHubIntroDone(userId: string): void {
   }
 }
 
-/** Abertura: cache primeiro; sync pesado só em idle. */
+/** Abertura Minha Conta: limite da ficha/entregas na hora (GA — evita saldo zerado). */
 export function cooperadoMobilePilotHbCreditDeferLimiteSyncOnOpen(): boolean {
-  return true;
+  return false;
 }

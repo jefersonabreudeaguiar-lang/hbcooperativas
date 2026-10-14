@@ -118,7 +118,10 @@ import {
 import { isCooperadoAppUser } from "@/permissions";
 import { getSession } from "@/services/dataStore";
 import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/cooperadoMobilePilotPerf";
-import { scheduleCooperadoPilotHbCreditRouteWarmup } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
+import {
+  scheduleCooperadoHbCreditLimiteAndAccountWarmup,
+  scheduleCooperadoPilotHbCreditRouteWarmup,
+} from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { scheduleCooperadoPilotFinanceBootstrapOnce } from "@/lib/cooperado/cooperadoMobilePilotFinanceBootstrap";
 
@@ -218,6 +221,11 @@ function CooperadoDashboard() {
     if (!hbCredit.navEnabled || !user) return;
     scheduleCooperadoPilotHbCreditRouteWarmup(user, (href) => router.prefetch(href));
   }, [hbCredit.navEnabled, user?.id, router]);
+
+  useEffect(() => {
+    if (!hbCredit.navEnabled || !user || user.role !== "cooperado") return;
+    scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
+  }, [hbCredit.navEnabled, user?.id, user?.cooperadoId]);
 
   useEffect(() => {
     if (!user || !isCooperadoMobileGaPromoted(user)) return;

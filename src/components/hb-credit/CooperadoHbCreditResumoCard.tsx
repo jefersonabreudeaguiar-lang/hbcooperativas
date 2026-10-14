@@ -90,9 +90,14 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
       }
     };
 
+    const needsCloud =
+      !readCache()?.account ||
+      (readCache()?.account &&
+        (readCache()?.account?.limiteLiberadoCents ?? 0) <= 0 &&
+        (readCache()?.account?.valorDisponivelCents ?? 0) <= 0);
+
     if (cooperadoHbSemPoll) {
-      /** Uma leitura na nuvem se não há cache — sem poll nem warmup global. */
-      if (!readCache()?.account) void syncFromCloud();
+      if (needsCloud) void syncFromCloud();
     } else {
       void syncFromCloud();
     }
@@ -100,7 +105,7 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
     const onCache = () => refreshFromCache();
     const onCloud = () => {
       refreshFromCache();
-      if (!cooperadoHbSemPoll) void syncFromCloud();
+      void syncFromCloud();
     };
     window.addEventListener(HB_CREDIT_ACCOUNT_CACHE_EVENT, onCache);
     window.addEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onCloud);
