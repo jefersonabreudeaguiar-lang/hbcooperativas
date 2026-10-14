@@ -123,8 +123,21 @@ import {
   scheduleCooperadoHbCreditLimiteAndAccountWarmup,
   scheduleCooperadoPilotHbCreditRouteWarmup,
 } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
+import { resolveCooperadoHbCreditCnpjDigits } from "@/lib/hb-credit/resolveCooperadoHbCreditCnpj";
+import type { HbCreditFlagState } from "@/hooks/useHbCreditEnabled";
 
 const DASHBOARD_INICIO_DOMAINS: AppDataNotifyDomain[] = ["shell", "notas", "financeiro", "operacional"];
+
+function CooperadoHbCreditInicioSection({
+  hbCredit,
+  cnpjDigits,
+}: {
+  hbCredit: HbCreditFlagState;
+  cnpjDigits: string;
+}) {
+  if (!hbCredit.navEnabled || cnpjDigits.length !== 14) return null;
+  return <CooperadoHbCreditResumoCard cnpj={cnpjDigits} />;
+}
 
 function contaCoopValorReceberPilotOptsFromData(
   data: AppData | null,
@@ -179,6 +192,11 @@ function CooperadoDashboard() {
     });
   }, [router]);
   const hbCredit = useHbCreditEnabled(user);
+  const appDataReady = useAppDataReady();
+  const cnpjHbDigits = useMemo(
+    () => resolveCooperadoHbCreditCnpjDigits(user),
+    [user?.id, user?.cooperativaId, user?.cooperativaCnpj, appDataReady]
+  );
   const { syncingForUi, lastSyncedAt } = useSyncStatus();
   const fluxo = useCooperadoFluxoPadrao();
   const { apresentacaoConsolidada, carregandoValoresFinanceiros } = fluxo;
@@ -411,6 +429,7 @@ function CooperadoDashboard() {
             />
             <EnviarFotoEntregaInicioCard onEnviar={irEnviarFotoEntrega} />
           </div>
+          <CooperadoHbCreditInicioSection hbCredit={hbCredit} cnpjDigits={cnpjHbDigits} />
         </div>
       ) : (
         <CooperadoDashboardInicioView
@@ -419,6 +438,7 @@ function CooperadoDashboard() {
           cardFinanceiroAtualizando={cardFinanceiroAtualizando}
           irEnviarFotoEntrega={irEnviarFotoEntrega}
           hbCredit={hbCredit}
+          cnpjHbFallback={cnpjHbDigits}
         />
       )}
     </CooperadoInicioCooperadoLiveRoot>
@@ -431,12 +451,14 @@ function CooperadoDashboardInicioView({
   cardFinanceiroAtualizando,
   irEnviarFotoEntrega,
   hbCredit,
+  cnpjHbFallback,
 }: {
   view: CooperadoPwaInicioDashboardView;
   valorReceberCard: ReturnType<typeof useCooperadoInicioValorReceberCardState>["snapshot"];
   cardFinanceiroAtualizando: boolean;
   irEnviarFotoEntrega: () => void;
   hbCredit: ReturnType<typeof useHbCreditEnabled>;
+  cnpjHbFallback: string;
 }) {
   const {
     cooperadoId,
@@ -516,9 +538,10 @@ function CooperadoDashboardInicioView({
         </AlertBanner>
       )}
 
-      {hbCredit.navEnabled && cnpjDigits.length === 14 && (
-        <CooperadoHbCreditResumoCard cnpj={cnpjDigits} />
-      )}
+      <CooperadoHbCreditInicioSection
+        hbCredit={hbCredit}
+        cnpjDigits={cnpjDigits.length === 14 ? cnpjDigits : cnpjHbFallback}
+      />
 
       <InicioResolvidosPanel itens={resolvidos} />
     </div>

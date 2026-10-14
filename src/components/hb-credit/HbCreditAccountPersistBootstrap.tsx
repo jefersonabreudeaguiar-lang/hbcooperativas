@@ -29,7 +29,8 @@ import {
 /** Cache HB Créditos cooperado após login/sync (abre Minha Conta Coop na hora). */
 export function HbCreditAccountPersistBootstrap() {
   const { user } = useAuth();
-  const hbOn = useHbCreditEnabled();
+  const hbCredit = useHbCreditEnabled(user);
+  const hbNavOn = hbCredit.navEnabled;
   const pathname = usePathname();
   const { syncing, lastSyncedAt, cooperadoPagamentosHydrated } = useSyncStatus();
   const dataRevision = useSyncExternalStore(
@@ -43,7 +44,7 @@ export function HbCreditAccountPersistBootstrap() {
   const idleCleanupRef = useRef<(() => void) | undefined>(undefined);
 
   useEffect(() => {
-    if (!hbOn || !user || user.role !== "cooperado" || !isAppDataWarm()) {
+    if (!hbNavOn || !user || user.role !== "cooperado" || !isAppDataWarm()) {
       setCoopCnpj("");
       return;
     }
@@ -58,7 +59,7 @@ export function HbCreditAccountPersistBootstrap() {
     return () => {
       cancelled = true;
     };
-  }, [hbOn, user?.id, user?.cooperativaId, dataRevision, user]);
+  }, [hbNavOn, user?.id, user?.cooperativaId, dataRevision, user]);
 
   const hbApiCooperadoId =
     user?.role === "cooperado" ? resolveHbCreditApiCooperadoId(user, user.cooperadoId) : "";
@@ -72,12 +73,12 @@ export function HbCreditAccountPersistBootstrap() {
   };
 
   useEffect(() => {
-    if (!hbOn || !user || user.role !== "cooperado") return;
+    if (!hbNavOn || !user || user.role !== "cooperado") return;
     scheduleCooperadoPilotHbCreditAccountPersist(user);
-  }, [hbOn, user?.id, user?.role]);
+  }, [hbNavOn, user?.id, user?.role]);
 
   useEffect(() => {
-    if (!hbOn || !user || user.role !== "cooperado" || syncing) return;
+    if (!hbNavOn || !user || user.role !== "cooperado" || syncing) return;
     if (!cooperadoPagamentosHydrated || lastSyncedAt == null) return;
     if (lastSyncedRef.current === lastSyncedAt) return;
     lastSyncedRef.current = lastSyncedAt;
@@ -90,12 +91,12 @@ export function HbCreditAccountPersistBootstrap() {
       { idleTimeoutMs: 15_000, fallbackMs: 5_000 }
     );
     return () => cancelIdle();
-  }, [hbOn, user, syncing, lastSyncedAt, cooperadoPagamentosHydrated]);
+  }, [hbNavOn, user, syncing, lastSyncedAt, cooperadoPagamentosHydrated]);
 
   const cooperadoSyncManual = isCooperadoManualOperacionalSync();
 
   useEffect(() => {
-    if (!hbOn || user?.role !== "cooperado" || !cooperadoSyncManual) return;
+    if (!hbNavOn || user?.role !== "cooperado" || !cooperadoSyncManual) return;
     if (!coopCnpj || !hbApiCooperadoId) return;
     const cached =
       lerHbCreditAccountPersistido(coopCnpj, hbApiCooperadoId) ??
@@ -103,28 +104,28 @@ export function HbCreditAccountPersistBootstrap() {
     if (cached?.account) return;
     const cancelIdle = scheduleContaCoopAuxSync(persist, { idleTimeoutMs: 10_000, fallbackMs: 3_000 });
     return () => cancelIdle();
-  }, [hbOn, user?.id, user?.role, cooperadoSyncManual, coopCnpj, hbApiCooperadoId]);
+  }, [hbNavOn, user?.id, user?.role, cooperadoSyncManual, coopCnpj, hbApiCooperadoId]);
 
   useEffect(() => {
-    if (!hbOn || user?.role !== "cooperado" || cooperadoSyncManual) return;
+    if (!hbNavOn || user?.role !== "cooperado" || cooperadoSyncManual) return;
     const onLimiteSynced = () => persist();
     window.addEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
     return () => window.removeEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
-  }, [hbOn, user?.id, user?.role, cooperadoSyncManual]);
+  }, [hbNavOn, user?.id, user?.role, cooperadoSyncManual]);
 
   useEffect(() => {
-    if (!hbOn || user?.role !== "cooperado" || cooperadoSyncManual) return;
+    if (!hbNavOn || user?.role !== "cooperado" || cooperadoSyncManual) return;
     const onOnline = () => persist();
     window.addEventListener("online", onOnline);
     return () => window.removeEventListener("online", onOnline);
-  }, [hbOn, user?.id, user?.role, cooperadoSyncManual]);
+  }, [hbNavOn, user?.id, user?.role, cooperadoSyncManual]);
 
   useHbCreditAccountRevisionPoll({
     cnpj: coopCnpj,
     cooperadoId: hbApiCooperadoId,
     enabled:
       !cooperadoSyncManual &&
-      hbOn &&
+      hbNavOn &&
       user?.role === "cooperado" &&
       Boolean(coopCnpj && hbApiCooperadoId) &&
       !pathname?.includes("minha-conta-coop"),

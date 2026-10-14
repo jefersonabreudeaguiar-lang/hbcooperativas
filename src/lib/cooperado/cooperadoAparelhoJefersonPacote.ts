@@ -12,6 +12,7 @@ import { persistirCooperadoPwaMessengerCaches } from "@/lib/cooperado/cooperadoP
 import { cooperadoPwaMaterializarSnapshotsFinanceirosPosSync } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import { dispatchCooperadoPwaLeveUiSnapshotRefresh } from "@/lib/cooperado/cooperadoPwaLeveUiEvents";
 import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
+import { scheduleCooperadoHbCreditLimiteAndAccountWarmup } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
 import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { isAppDataWarm, preloadAppData } from "@/services/dataStore";
 
@@ -39,6 +40,7 @@ export function empacotarModeloAparelhoJeferson(
 
   dispatchCooperadoPwaLeveUiSnapshotRefresh();
   tryAckCooperadoAppReleaseWhenLocalReady(user);
+  scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
 }
 
 /** Após login ou sync — não bloqueia o 1º frame. */

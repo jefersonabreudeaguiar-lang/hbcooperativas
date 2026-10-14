@@ -405,7 +405,7 @@ function filterMenuForUser(
   return items.filter((item) => canUser(user, item.resource, "view") || item.href === "/meu-cadastro");
 }
 
-/** Cooperado: HB Créditos no menu para todos quando a UI pública está ativa (não depende só do fetch /api/credit/status). */
+/** Cooperado: HB Créditos no Início/atalhos — padrão app (card + Minha Conta), fail-open com UI pública. */
 export function isHbCreditCooperadoNavEligible(
   user: Pick<User, "role" | "cooperadoId">,
   creditStatus: "loading" | "enabled" | "disabled" | "error",
@@ -413,6 +413,7 @@ export function isHbCreditCooperadoNavEligible(
 ): boolean {
   if (!isContaCoopUiPublic()) return false;
   if (!isCooperadoAppUser(user)) return false;
+  if (isHbCreditEnabledClient()) return true;
   if (creditStatus === "disabled") return false;
   return serverConfirmed || creditStatus === "loading" || creditStatus === "error" || creditStatus === "enabled";
 }
