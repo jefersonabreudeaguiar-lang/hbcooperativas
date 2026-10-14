@@ -13,25 +13,45 @@ import { preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
 
 let warmupInFlight: Promise<void> | null = null;
 
+function financeWarmupSessionKey(userId: string): string {
+  return `hb.coop.financeDisplayWarmup.v1:${userId}`;
+}
+
+function financeWarmupAlreadyRanThisSession(userId: string): boolean {
+  if (typeof sessionStorage === "undefined") return false;
+  try {
+    return sessionStorage.getItem(financeWarmupSessionKey(userId)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markFinanceWarmupSession(userId: string): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(financeWarmupSessionKey(userId), "1");
+  } catch {
+    /* quota */
+  }
+}
+
 /**
  * Padrão HB Créditos: idle → materializa cache local → só então sync leve se ainda vazio.
- * Não bloqueia abas; uma execução compartilhada por rajada.
+ * Uma vez por sessão do cooperado (evita rajada de sync após atualização).
  */
 export function scheduleCooperadoFinanceiroDisplayWarmup(
   user: Omit<User, "password"> | null | undefined
 ): void {
-  if (!cooperadoFinanceiroDisplayWarmupEligible(user)) return;
+  if (!cooperadoFinanceiroDisplayWarmupEligible(user) || !user?.id) return;
+  if (financeWarmupAlreadyRanThisSession(user.id)) return;
 
   const run = () => {
     if (warmupInFlight) return;
+    markFinanceWarmupSession(user.id);
     warmupInFlight = (async () => {
       preloadAppData();
       const warm = await waitForAppDataWarm(12_000);
-      if (!warm) {
-        grantCooperadoEventDrivenSync();
-        requestCooperadoFinanceiroRecoverySync();
-        return;
-      }
+      if (!warm) return;
 
       cooperadoPilotForcarRematerializacaoFinanceira(user);
       persistirInicioCardValorReceberCooperado(user);

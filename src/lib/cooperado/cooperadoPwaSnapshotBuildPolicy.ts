@@ -1,8 +1,10 @@
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
-import { clearCooperadoReleaseAlignLocalKeys } from "@/lib/pwa/clientRelease";
 
 const PWA_SNAPSHOTS_BUILD_KEY = "hb-coop-pwa-snapshots-materialized-build";
-/** Incrementar só quando precisar forçar purge de snapshots PWA cooperado na mesma faixa de build. */
+/**
+ * Incrementar só para limpeza **única** global (todos os cooperados).
+ * Não usar bump de `APP_BUILD_VERSION` para purge — evita travar após cada deploy.
+ */
 const PWA_SNAPSHOT_PURGE_EPOCH = 3;
 const PWA_SNAPSHOT_PURGE_EPOCH_KEY = "hb-coop-pwa-snapshots-purge-epoch";
 
@@ -16,21 +18,6 @@ const PWA_SNAPSHOT_KEY_MARKERS = [
   "hb.coop.operacionalMaterializedRev",
   "hb.coop.pilotJeferson",
 ] as const;
-
-const SESSION_KEY = "coopeagriplla_session";
-const HB_OPERACIONAL_SYNCED_BUILD = "hb-coop-operacional-synced-build";
-
-function cooperadoSessionInLocalStorage(): boolean {
-  if (typeof localStorage === "undefined") return false;
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return false;
-    const parsed = JSON.parse(raw) as { role?: string };
-    return parsed.role === "cooperado";
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Paridade cooperado: snapshot local só vale no **mesmo** build do bundle.
@@ -52,7 +39,10 @@ export function purgeCooperadoPwaSnapshotLocalStorageKeys(): void {
   for (const key of keys) localStorage.removeItem(key);
 }
 
-/** Ao subir build ou época de purge, descarta snapshots PWA (início/ficha/entregas). Idempotente na mesma sessão. */
+/**
+ * Registra build atual; purge pesado só quando `PWA_SNAPSHOT_PURGE_EPOCH` sobe (uma vez por época).
+ * Troca de build sozinha não apaga cache — leitura cross-build + rematerialização cobrem o deploy.
+ */
 export function materializeCooperadoPwaSnapshotsForCurrentBuild(): void {
   if (typeof localStorage === "undefined") return;
   try {
@@ -60,18 +50,14 @@ export function materializeCooperadoPwaSnapshotsForCurrentBuild(): void {
     const prevEpoch = Number(localStorage.getItem(PWA_SNAPSHOT_PURGE_EPOCH_KEY) || 0);
     const buildChanged = prevBuild !== APP_BUILD_VERSION;
     const epochChanged = prevEpoch !== PWA_SNAPSHOT_PURGE_EPOCH;
-    if (!buildChanged && !epochChanged) return;
-    purgeCooperadoPwaSnapshotLocalStorageKeys();
-    if (cooperadoSessionInLocalStorage()) {
-      clearCooperadoReleaseAlignLocalKeys();
-      try {
-        localStorage.removeItem(HB_OPERACIONAL_SYNCED_BUILD);
-      } catch {
-        /* ignore */
-      }
+
+    if (epochChanged) {
+      purgeCooperadoPwaSnapshotLocalStorageKeys();
+      localStorage.setItem(PWA_SNAPSHOT_PURGE_EPOCH_KEY, String(PWA_SNAPSHOT_PURGE_EPOCH));
     }
-    localStorage.setItem(PWA_SNAPSHOTS_BUILD_KEY, String(APP_BUILD_VERSION));
-    localStorage.setItem(PWA_SNAPSHOT_PURGE_EPOCH_KEY, String(PWA_SNAPSHOT_PURGE_EPOCH));
+    if (buildChanged) {
+      localStorage.setItem(PWA_SNAPSHOTS_BUILD_KEY, String(APP_BUILD_VERSION));
+    }
   } catch {
     /* quota / private mode */
   }
