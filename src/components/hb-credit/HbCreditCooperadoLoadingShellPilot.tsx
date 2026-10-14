@@ -7,12 +7,12 @@ import { cn } from "@/utils/format";
 export function HbCreditCooperadoLoadingShellPilot() {
   return (
     <div className={cn("px-4 animate-pulse pt-1")}>
-      <div className="h-4 w-24 rounded bg-emerald-500/20" />
-      <div className="mt-2 h-8 w-40 rounded bg-white/10" />
+      <div className="h-4 w-24 rounded bg-emerald-100" />
+      <div className="mt-2 h-8 w-40 rounded bg-gray-200" />
       <div className={cn(hbCooperadoHeroCard, "mt-4 h-36")}>
         <span className={hbCooperadoHeroGlow} aria-hidden />
       </div>
-      <p className="mt-4 text-center text-xs text-slate-400">Abrindo HB Créditos…</p>
+      <p className="mt-4 text-center text-xs text-gray-500">Abrindo HB Créditos…</p>
     </div>
   );
 }

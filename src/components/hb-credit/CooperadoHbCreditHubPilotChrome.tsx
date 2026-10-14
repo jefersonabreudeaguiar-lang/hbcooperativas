@@ -2,11 +2,11 @@
 
 import { useLayoutEffect, type ReactNode } from "react";
 import { cn } from "@/utils/format";
-import { hbCooperadoHubPageDark } from "@/lib/hb-credit/hbCreditCooperadoUi";
+import { hbCooperadoHubPage } from "@/lib/hb-credit/hbCreditCooperadoUi";
 
 const ATTR = "data-hb-credit-pilot-hub";
 
-/** Modo escuro premium do hub HB Créditos — só piloto Jeferson. */
+/** Shell do hub HB Créditos no piloto — fundo claro (alinhado ao Início do app). */
 export function CooperadoHbCreditHubPilotChrome({
   enabled,
   children,
@@ -27,8 +27,8 @@ export function CooperadoHbCreditHubPilotChrome({
   return (
     <div
       className={cn(
-        "min-h-[100dvh] bg-gradient-to-b from-slate-950 via-emerald-950/95 to-slate-900",
-        hbCooperadoHubPageDark
+        "min-h-[100dvh] bg-gradient-to-b from-emerald-50 via-green-50/95 to-white text-gray-900",
+        hbCooperadoHubPage
       )}
     >
       {children}

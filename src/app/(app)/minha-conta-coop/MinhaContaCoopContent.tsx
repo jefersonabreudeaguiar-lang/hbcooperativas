@@ -553,20 +553,15 @@ function MinhaContaCoopContent() {
 
   return (
     <CooperadoHbCreditHubPilotChrome enabled={pilotHbUi}>
-    <div className={cn(pilotHbUi ? "px-4" : cn(hbCooperadoHubPage, "px-4"))}>
+    <div className={cn(hbCooperadoHubPage, "px-4")}>
       <header className="space-y-1 pt-1">
-        <p
-          className={cn(
-            "text-[11px] font-semibold uppercase tracking-[0.2em]",
-            pilotHbUi ? "text-emerald-400" : "text-emerald-600"
-          )}
-        >
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-600">
           HB Créditos
         </p>
-        <h1 className={cn("text-2xl font-bold tracking-tight", pilotHbUi ? "text-white" : "text-gray-900")}>
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900">
           Sua conta
         </h1>
-        <p className={cn("text-sm leading-relaxed", pilotHbUi ? "text-slate-400" : "text-gray-500")}>
+        <p className="text-sm leading-relaxed text-gray-500">
           Pague no mercado com QR e PIN{transferenciaCooperadoAtiva ? ", ou receba de outro cooperado" : ""}.
         </p>
       </header>
@@ -583,14 +578,7 @@ function MinhaContaCoopContent() {
         </AlertBanner>
       )}
       {isOffline && (
-        <div
-          className={cn(
-            "flex items-center gap-2 rounded-xl border px-3 py-2 text-sm",
-            pilotHbUi
-              ? "border-amber-500/30 bg-amber-500/10 text-amber-100"
-              : "border-gray-200 bg-gray-50 text-gray-600"
-          )}
-        >
+        <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
           <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
           Sem internet — valores podem estar desatualizados
         </div>
@@ -645,7 +633,7 @@ function MinhaContaCoopContent() {
         tabs={segmentTabs}
         active={tab}
         onChange={handleTabChange}
-        variant={pilotHbUi ? "cooperado-dark" : "cooperado"}
+        variant="cooperado"
       />
 
       {tabEverOpened.inicio && (
@@ -653,7 +641,7 @@ function MinhaContaCoopContent() {
           {pilotHbUi && user?.id ? (
             <HbCreditCooperadoInicioPilot
               userId={user.id}
-              darkHub={pilotHbUi}
+              darkHub={false}
               showIntro={hbIntroPendente}
               hasPin={hasPin}
               pinResetPending={pinResetPending}
