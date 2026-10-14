@@ -5,6 +5,8 @@ import { CooperadoAtualizarButton } from "@/components/sync/SyncStatusChip";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useCooperadoPwaDadosDesatualizados } from "@/hooks/useCooperadoPwaDadosDesatualizados";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
+import { cooperadoPostDeployUiReady } from "@/lib/cooperado/cooperadoPostDeploySession";
+import { useCooperadoReleasePolicy } from "@/hooks/useCooperadoReleasePolicy";
 
 /**
  * Versão do bundle no celular do cooperado + Atualizar sutil (snapshots A receber / Financeiro).
@@ -13,7 +15,11 @@ export function CooperadoMobileBuildBadge() {
   const { user } = useAuth();
   const dadosDesatualizados = useCooperadoPwaDadosDesatualizados(user);
   const { syncingForUi } = useSyncStatus();
+  const { policy } = useCooperadoReleasePolicy();
   const showStaleBadge = dadosDesatualizados && !syncingForUi;
+  const releaseReady =
+    user?.role === "cooperado" &&
+    cooperadoPostDeployUiReady(policy?.releaseEpoch);
 
   return (
     <div className="flex items-center gap-0.5 shrink-0" role="group" aria-label="Versão e atualização">
@@ -24,6 +30,14 @@ export function CooperadoMobileBuildBadge() {
       >
         v{APP_BUILD_VERSION}
       </span>
+      {releaseReady && (
+        <span
+          className="rounded-md bg-emerald-400/95 px-1 py-0.5 text-[9px] font-semibold text-emerald-950"
+          title="Dados desta versão sincronizados com a cooperativa (A receber / Financeiro / HB)"
+        >
+          ok
+        </span>
+      )}
       {showStaleBadge && (
         <span
           className="max-w-[5.5rem] truncate rounded-md bg-amber-500/95 px-1 py-0.5 text-[9px] font-semibold leading-tight text-amber-950"

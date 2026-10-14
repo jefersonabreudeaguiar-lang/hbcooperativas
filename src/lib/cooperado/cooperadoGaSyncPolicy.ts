@@ -1,5 +1,6 @@
 import type { User } from "@/types";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { cooperadoPostDeployQueueActive } from "@/lib/cooperado/cooperadoPostDeploySession";
 import { isPwaColdStartWindow } from "@/lib/pwa/clientRelease";
 import { getSession } from "@/services/dataStore";
 
@@ -41,6 +42,7 @@ export function cooperadoGaBloqueiaOperacionalFullAutomatico(opts?: {
   userInitiated?: boolean;
   eventDriven?: boolean;
 }): boolean {
+  if (cooperadoPostDeployQueueActive()) return false;
   if (opts?.userInitiated) return false;
   const session = getSession();
   if (!session || session.role !== "cooperado" || !isCooperadoMobileGaPromoted(session)) {

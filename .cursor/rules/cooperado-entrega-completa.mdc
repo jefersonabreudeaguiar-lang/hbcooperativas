@@ -1,0 +1,24 @@
+---
+description: Entrega cooperado 100% — UI visível para todos, sync e verificação obrigatórios
+alwaysApply: true
+---
+
+# Cooperado — entrega completa em todo commit
+
+## Regra principal
+
+Todo commit/push que afete **cooperado** (Início, A receber, Financeiro, HB Créditos, sync, PWA) deve ser **100% executável no app** para **todos** os cooperados GA (`role === cooperado`), não só piloto Jeferson.
+
+## Checklist antes de commit
+
+1. **UI**: se a feature promete mostrar valor/texto na tela do cooperado, o fluxo padrão (login canônico `hb-pwa` + dashboard) deve exibir — sem depender só de cache antigo ou de «Atualizar» manual, exceto quando documentado.
+2. **Dados**: mudanças que dependem de nuvem devem passar pela fila pós-deploy (`CooperadoPostDeployGate`) ou por sync explícito testado (`operacional_full`, `sync-limite`, `credit/account`).
+3. **Paridade GA**: não introduzir ramo só `isCooperadoMobilePilot` para comportamento de produção; piloto = diagnóstico/estrela, GA = `isCooperadoMobileGaPromoted`.
+4. **Comprovação**: indicar no PR/test plan como validar no celular (badge `vN` + selo **ok** após fila, valores em Início/Financeiro/HB).
+5. **Build**: bump `APP_BUILD_VERSION` + `public/sw.js` quando o cooperado precisa receber JS novo; alinhar `COOPERADO_MIN_BUILD` na Vercel no deploy.
+
+## Proibido
+
+- «Ack» de release ou cache pronto com UI zerada sem prova (recibo/ficha alinhada).
+- Sync cooperado bloqueado sem bypass na fila pós-deploy.
+- Commit que só altera backend sem caminho até a UI do cooperado, quando o pedido era visível no app.

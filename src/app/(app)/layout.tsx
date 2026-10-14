@@ -4,6 +4,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { getPrivateAppRobotsMetadata } from "@/lib/security/crawlerPolicy";
 import { CooperativaSyncProvider } from "@/components/sync/CooperativaSyncProvider";
 import { CooperadoFinanceiroGate } from "@/components/cooperado/CooperadoFinanceiroGate";
+import { CooperadoPostDeployGate } from "@/components/cooperado/CooperadoPostDeployGate";
 import { HbCreditNavPrefetch } from "@/hooks/useHbCreditNavPrefetch";
 import { AppSchedulerBootstrap } from "@/components/performance/AppSchedulerBootstrap";
 import { AppIdleSecondaryBootstraps } from "@/components/performance/AppIdleSecondaryBootstraps";
@@ -24,7 +25,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <AppIdleSecondaryBootstraps />
         <GestaoAccessGuard>
           <AppShell>
-            <CooperadoFinanceiroGate>{children}</CooperadoFinanceiroGate>
+            <CooperadoPostDeployGate>
+              <CooperadoFinanceiroGate>{children}</CooperadoFinanceiroGate>
+            </CooperadoPostDeployGate>
           </AppShell>
         </GestaoAccessGuard>
       </CooperativaSyncProvider>
