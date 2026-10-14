@@ -58,7 +58,11 @@ import {
 } from "@/components/cooperado/CooperadoFinanceiroShellContext";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { cooperadoPwaInstantPaintReady } from "@/lib/cooperado/cooperadoPwaInstantResume";
-import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import {
+  cooperadoMobileDeferOperacionalSyncNaAbertura,
+  isCooperadoMobileGaPromoted,
+} from "@/lib/cooperado/cooperadoMobilePilot";
+import { tryAckCooperadoAppReleaseWhenLocalReady } from "@/lib/cooperado/cooperadoMobileReleaseLocalAck";
 import {
   cooperadoPilotAppDataTemFinanceiroLocal,
   cooperadoPilotFinanceiroExibirComSnapshotsLocais,
@@ -124,7 +128,8 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
         if (
           !cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId) &&
           lastSyncedAt == null &&
-          !syncingForUi
+          !syncingForUi &&
+          !isCooperadoMobileGaPromoted(user)
         ) {
           pullFinanceiroImediato();
         }
@@ -137,7 +142,9 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
 
       if (isCooperadoPwaMessengerMode() || isCooperadoMobileGaPromoted(user)) {
         cooperadoRematerializarFinanceiroLocalSePossivel(user);
+        tryAckCooperadoAppReleaseWhenLocalReady(user);
         if (
+          !cooperadoMobileDeferOperacionalSyncNaAbertura(user) &&
           isCooperadoPwaMessengerMode() &&
           cooperadoPwaMessengerPrecisaSyncOperacionalInicial(user)
         ) {

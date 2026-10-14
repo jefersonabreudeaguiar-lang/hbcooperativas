@@ -167,9 +167,9 @@ export function scheduleCooperadoPilotFinanceReadRecovery(
   };
 
   if (typeof requestIdleCallback === "function") {
-    requestIdleCallback(scheduleCloudRead, { timeout: 1_500 });
+    requestIdleCallback(scheduleCloudRead, { timeout: 8_000 });
   } else {
-    window.setTimeout(scheduleCloudRead, 800);
+    window.setTimeout(scheduleCloudRead, 3_000);
   }
 }
 

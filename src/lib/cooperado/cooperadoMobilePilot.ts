@@ -62,6 +62,16 @@ export function isCooperadoMobilePilot(
 /** Alias explícito — produção cooperado = experiência Jeferson. */
 export const isCooperadoMobileExperienciaJeferson = isCooperadoMobileGaPromoted;
 
+/**
+ * PWA/browser cooperado GA: sync operacional completo só no «Atualizar» (não na abertura).
+ * Evita travar a UI após deploy quando `hb-coop-operacional-synced-build` ≠ build atual.
+ */
+export function cooperadoMobileDeferOperacionalSyncNaAbertura(
+  user: Omit<User, "password"> | null | undefined
+): boolean {
+  return isCooperadoMobileGaPromoted(user);
+}
+
 /** Ramo legado “produção antiga” vs piloto — hoje todo cooperado no app usa o ramo piloto. */
 export function cooperadoMobilePilotOrDefault<T>(
   user: Omit<User, "password"> | null | undefined,

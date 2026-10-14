@@ -117,6 +117,7 @@ import {
 } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { isCooperadoAppUser } from "@/permissions";
 import { getSession } from "@/services/dataStore";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import {
   scheduleCooperadoHbCreditLimiteAndAccountWarmup,
@@ -233,12 +234,18 @@ function CooperadoDashboard() {
   }, [messenger, user?.id, user?.cooperadoId]);
 
   useEffect(() => {
-    if (!financeiroAusente || recoverySyncRef.current || typeof navigator === "undefined" || !navigator.onLine) {
+    if (
+      !financeiroAusente ||
+      recoverySyncRef.current ||
+      typeof navigator === "undefined" ||
+      !navigator.onLine ||
+      (user && isCooperadoMobileGaPromoted(user))
+    ) {
       return;
     }
     recoverySyncRef.current = true;
     requestCooperadoFinanceiroRecoverySync();
-  }, [financeiroAusente]);
+  }, [financeiroAusente, user?.id]);
 
   const contaCoopSync = useAppDataSelectorForDomainsWhenActive(
     appDataUiOn && hbCredit.navEnabled,

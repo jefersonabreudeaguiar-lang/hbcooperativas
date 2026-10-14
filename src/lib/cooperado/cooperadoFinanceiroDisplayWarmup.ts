@@ -9,6 +9,8 @@ import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoIn
 import { dispatchCooperadoPwaLeveUiSnapshotRefresh } from "@/lib/cooperado/cooperadoPwaLeveUiEvents";
 import { requestCooperadoFinanceiroRecoverySync } from "@/services/syncRequest";
 import { grantCooperadoEventDrivenSync } from "@/lib/performance/cooperadoEventDrivenSync";
+import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
+import { tryAckCooperadoAppReleaseWhenLocalReady } from "@/lib/cooperado/cooperadoMobileReleaseLocalAck";
 import { preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
 
 let warmupInFlight: Promise<void> | null = null;
@@ -54,19 +56,33 @@ export function scheduleCooperadoFinanceiroDisplayWarmup(
     if (warmupInFlight) return;
     markFinanceWarmupSession(user.id);
     warmupInFlight = (async () => {
-      preloadAppData();
-      const warm = await waitForAppDataWarm(12_000);
+      if (!isCooperadoPwaMessengerMode()) {
+        preloadAppData();
+      }
+      const warm = await waitForAppDataWarm(isCooperadoPwaMessengerMode() ? 20_000 : 12_000);
       if (!warm) return;
 
       cooperadoPilotForcarRematerializacaoFinanceira(user);
       persistirInicioCardValorReceberCooperado(user);
       dispatchCooperadoPwaLeveUiSnapshotRefresh();
+      tryAckCooperadoAppReleaseWhenLocalReady(user);
 
       const temCache = cooperadoFinanceiroCardCacheTemValor(user);
       const temLocal = cooperadoPilotAppDataTemFinanceiroLocal(user);
       if (!temCache && !temLocal) {
-        grantCooperadoEventDrivenSync();
-        requestCooperadoFinanceiroRecoverySync();
+        const pull = () => {
+          grantCooperadoEventDrivenSync();
+          requestCooperadoFinanceiroRecoverySync();
+        };
+        if (isCooperadoPwaMessengerMode()) {
+          if (typeof requestIdleCallback === "function") {
+            requestIdleCallback(pull, { timeout: 12_000 });
+          } else {
+            window.setTimeout(pull, 5_000);
+          }
+        } else {
+          pull();
+        }
       }
     })().finally(() => {
       warmupInFlight = null;

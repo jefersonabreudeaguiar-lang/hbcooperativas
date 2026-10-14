@@ -102,6 +102,7 @@ export function cooperadoPwaMessengerPrecisaSyncOperacionalInicial(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   if (!user || user.role !== "cooperado" || !isCooperadoPwaMessengerMode()) return false;
+  if (isCooperadoMobileGaPromoted(user)) return false;
   if (cooperadoAppReleaseNeedsOperacionalSync()) {
     if (isCooperadoMobileGaPromoted(user) && isAppDataWarm()) {
       const data = getData();

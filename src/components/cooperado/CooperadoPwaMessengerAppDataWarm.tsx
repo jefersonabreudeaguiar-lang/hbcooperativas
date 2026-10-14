@@ -21,8 +21,8 @@ export function CooperadoPwaMessengerAppDataWarm() {
     const run = () => {
       const hydrate = () => rematerializarCooperadoPwaSnapshotsSeNecessario(user);
       if (!isAppDataWarm()) {
-        preloadAppData({ eager: true });
-        void waitForAppDataWarm().then((ok) => {
+        preloadAppData();
+        void waitForAppDataWarm(20_000).then((ok) => {
           if (ok) hydrate();
         });
         return;
@@ -32,7 +32,7 @@ export function CooperadoPwaMessengerAppDataWarm() {
 
     scheduleCooperadoPaintFirst(() => {
       if (typeof requestIdleCallback !== "undefined") {
-        idleId = requestIdleCallback(run, { timeout: 320 });
+        idleId = requestIdleCallback(run, { timeout: 2_500 });
       } else {
         timeoutId = window.setTimeout(run, 80);
       }

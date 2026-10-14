@@ -143,6 +143,8 @@ import { isCooperadoMobilePilotPerfActive } from "@/lib/cooperado/cooperadoMobil
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
 import { cooperadoPwaMessengerPrecisaSyncOperacionalInicial } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
+import { cooperadoMobileDeferOperacionalSyncNaAbertura } from "@/lib/cooperado/cooperadoMobilePilot";
+import { tryAckCooperadoAppReleaseWhenLocalReady } from "@/lib/cooperado/cooperadoMobileReleaseLocalAck";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 /** Intervalo mínimo entre pulls de operacional só para votação (bem menor que sync completa). */
@@ -407,6 +409,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     (currentUser: Omit<User, "password">) => {
       if (cooperadoRematerializarFinanceiroLocalSePossivel(currentUser)) {
         markCooperadoPagamentosHydrated();
+        tryAckCooperadoAppReleaseWhenLocalReady(currentUser);
         return;
       }
       if (!isAppDataWarm() || !currentUser.cooperadoId) return;
@@ -419,6 +422,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         !cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, coopId)
       ) {
         markCooperadoPagamentosHydrated();
+        tryAckCooperadoAppReleaseWhenLocalReady(currentUser);
       }
     },
     [markCooperadoPagamentosHydrated]
@@ -1106,12 +1110,16 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     let initialDelay: ReturnType<typeof setTimeout> | undefined;
     if (cooperadoSemAutoSync) {
-      if (
+      const deferReleaseOnOpen =
+        user?.role === "cooperado" && cooperadoMobileDeferOperacionalSyncNaAbertura(user);
+      const needsAutoRelease =
         user?.role === "cooperado" &&
+        !deferReleaseOnOpen &&
         (cooperadoAppReleaseNeedsOperacionalSync() ||
           (isCooperadoPwaMessengerMode() &&
-            cooperadoPwaMessengerPrecisaSyncOperacionalInicial(user)))
-      ) {
+            cooperadoPwaMessengerPrecisaSyncOperacionalInicial(user)));
+
+      if (needsAutoRelease) {
         if (isCooperadoPwaMessengerMode()) {
           scheduleCooperadoPostShellSync(() => {
             markCooperadoUserSyncVisible();
@@ -1124,7 +1132,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         }
       } else if (user?.role === "cooperado" && !document.hidden) {
         scheduleCooperadoPostShellSync(() => {
-          if (isCooperadoPwaMessengerMode()) {
+          prepararFinanceiroLocalCooperado(user);
+          if (isCooperadoPwaMessengerMode() || deferReleaseOnOpen) {
             scheduleCooperadoMessengerStaffRevisionPull(user, coopId);
             return;
           }
@@ -1135,9 +1144,14 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         });
       }
     } else if (user?.role === "cooperado" && isCooperadoInstantResumeEnabled()) {
-      if (cooperadoAppReleaseNeedsOperacionalSync()) {
+      if (
+        cooperadoAppReleaseNeedsOperacionalSync() &&
+        !cooperadoMobileDeferOperacionalSyncNaAbertura(user)
+      ) {
         prepararFinanceiroLocalCooperado(user);
         requestCooperadoAppReleaseSync();
+      } else if (user?.role === "cooperado" && cooperadoMobileDeferOperacionalSyncNaAbertura(user)) {
+        scheduleCooperadoPostShellSync(() => prepararFinanceiroLocalCooperado(user));
       } else if (!document.hidden) {
         markUserActivity();
         scheduleCooperadoColdStartSync(() => {
