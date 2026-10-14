@@ -31,6 +31,8 @@ const PHASE_LABEL: Record<PostDeployGatePhase, string> = {
 };
 
 const AUTO_RELOAD_MS = 5_000;
+/** Após este tempo na fila, entra no app e mantém sync em segundo plano (sem fechar). */
+const AUTO_BACKGROUND_MS = 22_000;
 
 /**
  * Cooperado: após deploy, garante bundle mínimo + fila operacional/HB antes do dashboard.
@@ -102,12 +104,19 @@ export function CooperadoPostDeployGate({ children }: { children: React.ReactNod
     return () => window.clearTimeout(t);
   }, [needsReload, reloadCancelled, policy]);
 
-  const continuarComRessalva = () => {
+  const continuarEmSegundoPlano = useCallback(() => {
     markCooperadoPostDeployDegraded();
     requestCooperadoFinanceiroRecoverySync();
     setReleased(true);
     setPhase("done");
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!cooperado || released || needsReload || phase === "error") return;
+    if (phase !== "sync_operacional" && phase !== "materializar_ui" && phase !== "idle") return;
+    const t = window.setTimeout(() => continuarEmSegundoPlano(), AUTO_BACKGROUND_MS);
+    return () => window.clearTimeout(t);
+  }, [cooperado, released, needsReload, phase, continuarEmSegundoPlano]);
 
   if (!cooperado) {
     return <>{children}</>;
@@ -181,7 +190,7 @@ export function CooperadoPostDeployGate({ children }: { children: React.ReactNod
           <button
             type="button"
             className="text-xs text-green-100/90 underline"
-            onClick={continuarComRessalva}
+            onClick={continuarEmSegundoPlano}
           >
             Continuar e sincronizar em segundo plano
           </button>
@@ -189,9 +198,24 @@ export function CooperadoPostDeployGate({ children }: { children: React.ReactNod
       )}
 
       {!needsReload && phase !== "error" && phase !== "done" && (
-        <div className="mt-8 h-1.5 w-48 overflow-hidden rounded-full bg-white/20">
-          <div className="h-full w-1/2 animate-pulse rounded-full bg-white/80" />
-        </div>
+        <>
+          <div className="mt-8 h-1.5 w-48 overflow-hidden rounded-full bg-white/20">
+            <div className="h-full w-1/2 animate-pulse rounded-full bg-white/80" />
+          </div>
+          <p className="mt-4 text-[11px] text-green-200/75">
+            Não feche o app nos primeiros instantes. Depois pode usar as abas normalmente.
+          </p>
+          <button
+            type="button"
+            className="mt-4 text-sm font-medium text-white underline decoration-white/50"
+            onClick={continuarEmSegundoPlano}
+          >
+            Continuar usando o app agora
+          </button>
+          <p className="mt-2 text-[10px] text-green-200/60">
+            A sincronização segue em segundo plano (selo sync… no topo até ficar ok).
+          </p>
+        </>
       )}
     </div>
   );

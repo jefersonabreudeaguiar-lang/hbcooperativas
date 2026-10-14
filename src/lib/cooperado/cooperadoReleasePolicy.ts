@@ -9,7 +9,7 @@ export type CooperadoReleasePolicy = {
 };
 
 const DEFAULT_MESSAGE =
-  "Nova versão do app. Aguarde a sincronização com a cooperativa para ver A receber, Financeiro e HB Créditos atualizados.";
+  "Nova versão do app. A sincronização costuma levar de 20 segundos a 1 minuto. Você pode continuar usando o app — não precisa fechar; os dados atualizam em segundo plano.";
 
 function parsePositiveInt(raw: string | undefined, fallback: number): number {
   const n = Number(String(raw ?? "").trim());
