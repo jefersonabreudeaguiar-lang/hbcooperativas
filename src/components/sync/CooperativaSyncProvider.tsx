@@ -131,6 +131,10 @@ import { scheduleCooperadoPostShellSync } from "@/lib/performance/cooperadoPostS
 import { fetchCooperativaCloudRevision } from "@/services/cooperativaSyncRevisionService";
 import { notifyAppSubtleUpdate } from "@/lib/cooperadoSubtleUpdate";
 import { requestCooperadoAppReleaseSync, type SyncRunOptions } from "@/services/syncRequest";
+import {
+  staffResponsavelLifecycleSyncRequest,
+  staffResponsavelOpeningSyncRequest,
+} from "@/lib/staff/staffResponsavelSyncPolicy";
 import { purgarInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { scheduleCooperadoPwaOperacionalParidadePull } from "@/lib/cooperado/cooperadoPwaFinanceiroParidadeRefresh";
 import {
@@ -1166,12 +1170,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         });
       }
     } else if (staff && isCooperadoInstantResumeEnabled()) {
-      // HX 9.1.1 — financeiro_delta: pagamentos/ficha da nuvem sem bidirectional_full (evita fila Pagar falsa).
       if (!document.hidden) {
         markUserActivity();
         scheduleStaffPostInteractiveTask(() => {
           markNextCooperadoSyncSilent();
-          void runSync({ silent: true, tier: "financeiro_delta" });
+          void runSync(staffResponsavelOpeningSyncRequest());
         });
       }
     } else {
@@ -1191,7 +1194,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (staff && Date.now() - lastSyncStartedAtRef.current < getSyncMinGapMs(user?.role ?? "cooperado")) {
         return;
       }
-      void runSync(staff ? { silent: true, tier: "financeiro_delta" } : undefined);
+      const staffOpts = staff ? staffResponsavelLifecycleSyncRequest() : undefined;
+      void runSync(staffOpts);
     });
 
     const onVisible = () => {
@@ -1208,7 +1212,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (staff && Date.now() - lastSyncStartedAtRef.current < getSyncMinGapMs(user?.role ?? "cooperado")) {
         return;
       }
-      void runSync(staff ? { silent: true, tier: "financeiro_delta" } : undefined);
+      const staffOpts = staff ? staffResponsavelLifecycleSyncRequest() : undefined;
+      void runSync(staffOpts);
     };
     document.addEventListener("visibilitychange", onVisible);
 
@@ -1223,7 +1228,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       }
       markUserActivity();
       if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
-      void runSync(staff ? { silent: true, tier: "financeiro_delta" } : undefined);
+      const staffOpts = staff ? staffResponsavelLifecycleSyncRequest() : undefined;
+      void runSync(staffOpts);
     };
     window.addEventListener("online", onOnline);
 

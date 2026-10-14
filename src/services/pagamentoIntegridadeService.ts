@@ -22,16 +22,24 @@ import {
   pagamentoIdsPotencialmenteRegressivos,
   type PagamentoDowngradeBloqueado,
 } from "@/services/pagamentoRegistroMerge";
+import { getSession } from "@/services/dataStore";
 import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
+import { isStaffRole } from "@/lib/security/staffAccessPolicy";
 import { normalizeCnpj } from "@/utils/cooperativa";
 
-/** Nuvem operacional é fonte da verdade — não rebaixar ficha paga por slice local incompleto (ex.: staff notas_delta). */
 function appDataTemOperacionalCloudAuthoritativo(data: AppData): boolean {
   for (const coop of data.cooperativas ?? []) {
     const digits = normalizeCnpj(coop.cnpj ?? "");
     if (digits.length === 14 && isOperacionalCloudAuthoritative(digits)) return true;
   }
   return false;
+}
+
+/** Só no aparelho do responsável — cooperado mobile mantém reparo legado. */
+function staffPreservaFichaPagaOperacionalAutoritativo(data: AppData): boolean {
+  const session = getSession();
+  if (!session?.role || !isStaffRole(session.role)) return false;
+  return appDataTemOperacionalCloudAuthoritativo(data);
 }
 
 export {
@@ -189,7 +197,7 @@ export function cooperadoMesComFichaPagaSemPagamentoCooperativa(
  * Ficha/nota marcada como paga sem registro em pagamentosCooperado (ex.: sync incompleto) volta a pendente/conferida.
  */
 export function repararIntegridadePagamentosCooperativa(data: AppData): AppData {
-  if (appDataTemOperacionalCloudAuthoritativo(data)) return data;
+  if (staffPreservaFichaPagaOperacionalAutoritativo(data)) return data;
 
   const now = new Date().toISOString();
   let changed = false;
