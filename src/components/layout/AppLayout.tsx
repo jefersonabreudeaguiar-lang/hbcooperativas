@@ -73,6 +73,7 @@ import { StaffMobileTabKeepAlive } from "@/components/performance/StaffMobileTab
 import { CooperadoPwaResumeLifecycle } from "@/components/cooperado/CooperadoPwaResumeLifecycle";
 import { CooperadoPwaMessengerAppDataWarm } from "@/components/cooperado/CooperadoPwaMessengerAppDataWarm";
 import { CooperadoMobileBuildBadge } from "@/components/cooperado/CooperadoMobileBuildBadge";
+import { CooperadoPostDeployGate } from "@/components/cooperado/CooperadoPostDeployGate";
 import { CooperadoMobilePilotStarBadge } from "@/components/cooperado/CooperadoMobilePilotStarBadge";
 import { CooperadoMobileReleaseBar } from "@/components/cooperado/CooperadoMobileReleaseBar";
 import { StaffMobileReleaseBar } from "@/components/layout/StaffMobileReleaseBar";
@@ -581,7 +582,11 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
   const routePanelsWrapped =
     navUser && isCooperadoAppUser(navUser)
-      ? <CooperadoApresentacaoFinanceiraGate>{routePanels}</CooperadoApresentacaoFinanceiraGate>
+      ? (
+          <CooperadoPostDeployGate>
+            <CooperadoApresentacaoFinanceiraGate>{routePanels}</CooperadoApresentacaoFinanceiraGate>
+          </CooperadoPostDeployGate>
+        )
       : routePanels;
 
   return (

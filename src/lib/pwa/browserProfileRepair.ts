@@ -46,6 +46,11 @@ export async function repairBrowserProfileIfStale(
   if (profileRepairCheckedRecently()) return false;
 
   const session = getSession();
+  /** Responsável/gestão: não limpar SW/cache no mesmo fluxo do cooperado (evita tela preta no painel). */
+  if (session && session.role !== "cooperado") {
+    markProfileRepairChecked();
+    return false;
+  }
   if (session && isCooperadoMobileGaPromoted(session) && !options?.forceNetworkCheck) {
     markProfileRepairChecked();
     const laterOpts = { ...options, forceNetworkCheck: true };

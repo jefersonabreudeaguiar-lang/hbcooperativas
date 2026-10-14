@@ -66,6 +66,10 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       setProfileRepairDone(false);
       return;
     }
+    if (user.role !== "cooperado") {
+      setProfileRepairDone(true);
+      return;
+    }
     let cancelled = false;
     const session = getSession();
     const instantCoop =
