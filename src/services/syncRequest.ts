@@ -20,6 +20,7 @@ import {
   cooperadoGaBloqueiaOperacionalFullAutomatico,
   cooperadoGaTemPrimeiraCargaSyncPending,
 } from "@/lib/cooperado/cooperadoGaSyncPolicy";
+import { cooperadoMobileDeferOperacionalSyncNaAbertura } from "@/lib/cooperado/cooperadoMobilePilot";
 import { getSession } from "@/services/dataStore";
 import {
   capStaffConferenciaSyncTierRequest,
@@ -150,6 +151,13 @@ export function requestCooperadoStaffRevisionSync(): void {
  */
 export function requestCooperadoFinanceiroRecoverySync(): void {
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
+  const session = getSession();
+  if (
+    session?.role === "cooperado" &&
+    cooperadoMobileDeferOperacionalSyncNaAbertura(session)
+  ) {
+    return;
+  }
   if (isCooperadoManualOperacionalSync() && isCooperadoEventDrivenSync()) {
     grantCooperadoEventDrivenSync();
     markNextCooperadoSyncSilent();

@@ -30,6 +30,8 @@ export function isCooperadoMobileGaPromoted(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   if (!user) return false;
+  /** Sessão cooperado — GA mesmo antes do AppData aquecer (abertura Orlando / demais). */
+  if (user.role === "cooperado") return true;
   const data = isAppDataWarm() ? getData() : null;
   const effective = resolveExperienceUser(user, data) ?? user;
   const role = resolveAppUserRole(effective, data);

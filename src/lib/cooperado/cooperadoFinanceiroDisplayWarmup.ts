@@ -12,6 +12,7 @@ import { grantCooperadoEventDrivenSync } from "@/lib/performance/cooperadoEventD
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { markCooperadoPrimeiraCargaSyncPending } from "@/lib/cooperado/cooperadoGaSyncPolicy";
 import { tryAckCooperadoAppReleaseWhenLocalReady } from "@/lib/cooperado/cooperadoMobileReleaseLocalAck";
+import { cooperadoMobileDeferOperacionalSyncNaAbertura } from "@/lib/cooperado/cooperadoMobilePilot";
 import { preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
 
 let warmupInFlight: Promise<void> | null = null;
@@ -53,6 +54,8 @@ export function scheduleCooperadoFinanceiroDisplayWarmup(
   if (!cooperadoFinanceiroDisplayWarmupEligible(user) || !user?.id) return;
   if (financeWarmupAlreadyRanThisSession(user.id)) return;
 
+  const deferSyncNaAbertura = cooperadoMobileDeferOperacionalSyncNaAbertura(user);
+
   const run = () => {
     if (warmupInFlight) return;
     markFinanceWarmupSession(user.id);
@@ -60,8 +63,16 @@ export function scheduleCooperadoFinanceiroDisplayWarmup(
       if (!isCooperadoPwaMessengerMode()) {
         preloadAppData();
       }
-      const warm = await waitForAppDataWarm(isCooperadoPwaMessengerMode() ? 20_000 : 12_000);
-      if (!warm) return;
+      const warmMs = isCooperadoPwaMessengerMode()
+        ? 20_000
+        : deferSyncNaAbertura
+          ? 5_000
+          : 12_000;
+      const warm = await waitForAppDataWarm(warmMs);
+      if (!warm) {
+        if (deferSyncNaAbertura) tryAckCooperadoAppReleaseWhenLocalReady(user);
+        return;
+      }
 
       cooperadoPilotForcarRematerializacaoFinanceira(user);
       persistirInicioCardValorReceberCooperado(user);
@@ -71,6 +82,8 @@ export function scheduleCooperadoFinanceiroDisplayWarmup(
       const temCache = cooperadoFinanceiroCardCacheTemValor(user);
       const temLocal = cooperadoPilotAppDataTemFinanceiroLocal(user);
       if (!temCache && !temLocal && !isCooperadoPwaMessengerMode()) {
+        /** GA: nuvem completa só no «Atualizar» — evita operacional_full em Orlando e demais sem cache. */
+        if (deferSyncNaAbertura) return;
         markCooperadoPrimeiraCargaSyncPending();
         const pull = () => {
           grantCooperadoEventDrivenSync();
