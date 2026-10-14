@@ -18,6 +18,7 @@ import {
   filtrarInicioCardPersistidoLeituraBic,
   cooperadoMotorTemObrigacaoReceber,
 } from "@/lib/cooperadoInicioCardPolicy";
+import { lerInicioCardFinanceiroExibicao } from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
 import { lerInicioCardPersistidoFlex } from "@/lib/cooperadoInicioCardPersistencia";
 
 /** Snapshots v2 gravados após sync — inclusive saldo zerado (não exige “a receber” > 0). */
@@ -25,10 +26,15 @@ export function cooperadoPwaFinanceiroSnapshotsMaterializados(
   cooperadoId: string,
   cooperativaId: string | undefined
 ): boolean {
-  const card = filtrarInicioCardPersistidoLeituraBic(
-    lerInicioCardPersistidoFlex(cooperadoId, cooperativaId)
-  );
-  if (card?.display && cooperadoPwaSnapshotBuildReadable(card.appBuild)) return true;
+  const card =
+    lerInicioCardFinanceiroExibicao(cooperadoId, cooperativaId) ??
+    filtrarInicioCardPersistidoLeituraBic(
+      lerInicioCardPersistidoFlex(cooperadoId, cooperativaId)
+    );
+  if (card?.display) {
+    if (cooperadoMotorTemObrigacaoReceber(card.display)) return true;
+    if (cooperadoPwaSnapshotBuildReadable(card.appBuild)) return true;
+  }
   if (!cooperativaId) return false;
   const ficha = lerCooperadoPwaFichaResumoSnapshot(cooperadoId, cooperativaId);
   return Boolean(

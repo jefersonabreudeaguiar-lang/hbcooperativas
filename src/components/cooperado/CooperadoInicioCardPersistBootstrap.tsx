@@ -15,7 +15,7 @@ import {
 } from "@/lib/cooperado/cooperadoPwaFinanceiroParidadeRefresh";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
-import { cooperadoPilotForcarRematerializacaoFinanceira } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
+import { scheduleCooperadoFinanceiroDisplayWarmup } from "@/lib/cooperado/cooperadoFinanceiroDisplayWarmup";
 
 /**
  * Mantém cache do card “A receber” após login/sync e quando AppData local muda.
@@ -36,7 +36,7 @@ export function CooperadoInicioCardPersistBootstrap() {
     if (isCooperadoPwaMessengerMode()) return;
     if (!user || user.role !== "cooperado" || !isAppDataWarm()) return;
     if (isCooperadoMobileGaPromoted(user)) {
-      cooperadoPilotForcarRematerializacaoFinanceira(user);
+      scheduleCooperadoFinanceiroDisplayWarmup(user);
       return;
     }
     persistirInicioCardCooperadoNotificarPwaLeve(user);

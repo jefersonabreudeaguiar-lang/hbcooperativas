@@ -41,11 +41,12 @@ import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
-import { filtrarInicioCardPersistidoLeituraBic } from "@/lib/cooperadoInicioCardPolicy";
+import { inicioCardCacheProntoParaAbertura } from "@/lib/cooperadoInicioCardPersistencia";
 import {
-  inicioCardCacheProntoParaAbertura,
-  lerInicioCardPersistidoFlex,
-} from "@/lib/cooperadoInicioCardPersistencia";
+  cooperadoFinanceiroExibicaoCachePronto,
+  lerInicioCardFinanceiroExibicao,
+} from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
+import { scheduleCooperadoFinanceiroDisplayWarmup } from "@/lib/cooperado/cooperadoFinanceiroDisplayWarmup";
 import {
   getCooperadoRunSyncSessionLease,
   saveAppDataIfSyncLeaseCurrent,
@@ -84,9 +85,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
     if (!coopId) return null;
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    return filtrarInicioCardPersistidoLeituraBic(
-      lerInicioCardPersistidoFlex(cooperadoId, coopId)
-    );
+    return lerInicioCardFinanceiroExibicao(cooperadoId, coopId);
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]);
 
   const bloqueiaEntrada = useAppDataSelector((data) => {
@@ -100,6 +99,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
   useEffect(() => {
     if (user?.role !== "cooperado" || !user.cooperadoId) return;
     if (isCooperadoMobileGaPromoted(user)) {
+      scheduleCooperadoFinanceiroDisplayWarmup(user);
       scheduleCooperadoPilotFinanceReadRecovery(user);
       scheduleCooperadoPilotFinanceBootstrapOnce(user);
     }
@@ -229,6 +229,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     cooperadoAtivo &&
     user &&
     (inicioCardCacheProntoParaAbertura(cacheInicioCard) ||
+      cooperadoFinanceiroExibicaoCachePronto(user) ||
       cooperadoLocalResumeReady(user) ||
       cooperadoPilotFinanceiroExibirComSnapshotsLocais(user) ||
       cooperadoPilotAppDataTemFinanceiroLocal(user) ||

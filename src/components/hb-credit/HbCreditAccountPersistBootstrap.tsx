@@ -20,6 +20,7 @@ import {
   lerHbCreditAccountPersistido,
   lerHbCreditAccountPersistidoFlex,
 } from "@/lib/hb-credit/hbCreditAccountPersistencia";
+import { scheduleCooperadoFinanceiroDisplayWarmup } from "@/lib/cooperado/cooperadoFinanceiroDisplayWarmup";
 import {
   scheduleCooperadoHbCreditLimiteAndAccountWarmup,
   scheduleCooperadoPilotHbCreditAccountPersist,
@@ -83,6 +84,7 @@ export function HbCreditAccountPersistBootstrap() {
     const cancelIdle = scheduleContaCoopAuxSync(
       () => {
         scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
+        scheduleCooperadoFinanceiroDisplayWarmup(user);
         persist();
       },
       { idleTimeoutMs: 15_000, fallbackMs: 5_000 }

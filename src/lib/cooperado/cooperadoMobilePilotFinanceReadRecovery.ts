@@ -14,6 +14,7 @@ import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado
 import { getData, isAppDataWarm, subscribe, waitForAppDataWarm } from "@/services/dataStore";
 import { requestCooperadoFinanceiroRecoverySync } from "@/services/syncRequest";
 import { getUserCooperativaId } from "@/utils/cooperativa";
+import { cooperadoFinanceiroExibicaoCachePronto } from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
 
 function pilotFinanceCtx(user: Omit<User, "password">) {
   if (!user.cooperadoId) return null;
@@ -38,14 +39,12 @@ export function cooperadoPilotAppDataTemFinanceiroLocal(
   return cooperadoTemDadosFinanceirosMinimos(getData(), ctx.cooperadoId, ctx.cooperativaId);
 }
 
-/** Há snapshot de card/ficha no build atual — pode pintar antes do sync. */
+/** Há cache local legível (card/ficha) — pode pintar antes do sync, como HB Créditos. */
 export function cooperadoPilotFinanceiroExibirComSnapshotsLocais(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return false;
-  const ctx = pilotFinanceCtx(user);
-  if (!ctx) return false;
-  return cooperadoPwaFinanceiroSnapshotsMaterializados(ctx.cooperadoId, ctx.cooperativaId);
+  return cooperadoFinanceiroExibicaoCachePronto(user);
 }
 
 /** Recria card + ficha a partir do AppData local (O(leitura)); dispara refresh da UI. */

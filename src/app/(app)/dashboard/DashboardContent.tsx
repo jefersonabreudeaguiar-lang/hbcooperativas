@@ -122,8 +122,7 @@ import {
   scheduleCooperadoHbCreditLimiteAndAccountWarmup,
   scheduleCooperadoPilotHbCreditRouteWarmup,
 } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
-import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
-import { scheduleCooperadoPilotFinanceBootstrapOnce } from "@/lib/cooperado/cooperadoMobilePilotFinanceBootstrap";
+import { scheduleCooperadoFinanceiroDisplayWarmup } from "@/lib/cooperado/cooperadoFinanceiroDisplayWarmup";
 
 const DASHBOARD_INICIO_DOMAINS: AppDataNotifyDomain[] = ["shell", "notas", "financeiro", "operacional"];
 
@@ -228,9 +227,9 @@ function CooperadoDashboard() {
   }, [hbCredit.navEnabled, user?.id, user?.cooperadoId]);
 
   useEffect(() => {
-    if (!user || !isCooperadoMobileGaPromoted(user)) return;
-    scheduleCooperadoPilotFinanceBootstrapOnce(user);
-  }, [user?.id, user?.cooperadoId]);
+    if (!user || user.role !== "cooperado") return;
+    scheduleCooperadoFinanceiroDisplayWarmup(user);
+  }, [user?.id, user?.cooperadoId, user?.role]);
 
   useEffect(() => {
     if (messenger || isCooperadoManualOperacionalSync()) return;
