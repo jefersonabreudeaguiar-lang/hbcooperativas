@@ -70,7 +70,7 @@ export function scheduleCooperadoFinanceiroDisplayWarmup(
 
       const temCache = cooperadoFinanceiroCardCacheTemValor(user);
       const temLocal = cooperadoPilotAppDataTemFinanceiroLocal(user);
-      if (!temCache && !temLocal) {
+      if (!temCache && !temLocal && !isCooperadoPwaMessengerMode()) {
         markCooperadoPrimeiraCargaSyncPending();
         const pull = () => {
           grantCooperadoEventDrivenSync();

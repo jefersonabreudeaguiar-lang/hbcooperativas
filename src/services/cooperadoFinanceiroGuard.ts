@@ -8,6 +8,8 @@ import {
   limparFichaObsoletaCooperado,
 } from "@/services/fichaSyncGuard";
 import { isCooperadoManualOperacionalSync } from "@/lib/performance/cooperadoColdStart";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { getSession } from "@/services/dataStore";
 import { requestAppSync, requestCooperadoFinanceiroRecoverySync } from "@/services/syncRequest";
 import { saveDataSafe, getData } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -58,6 +60,8 @@ export function cooperadoDadosFinanceirosConsistentesParaApresentacao(
 
 /** Dispara sync de recuperação com antirajada. */
 export function solicitarRecuperacaoFinanceiroCooperado(): void {
+  const session = getSession();
+  if (session && isCooperadoMobileGaPromoted(session)) return;
   const now = Date.now();
   if (now - lastRecoveryRequestAt < RECOVERY_GAP_MS) return;
   lastRecoveryRequestAt = now;

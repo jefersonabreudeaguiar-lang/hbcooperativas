@@ -245,12 +245,13 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
 
   const falhaCarregarFicha =
     cooperadoAtivo &&
+    !isCooperadoMobileGaPromoted(user) &&
     Boolean(bloqueiaEntrada) &&
     !syncingForUi &&
     (syncWaitExceeded || lastSyncedAt != null);
 
   useEffect(() => {
-    if (!falhaCarregarFicha) return;
+    if (!falhaCarregarFicha || isCooperadoMobileGaPromoted(user)) return;
     solicitarRecuperacaoFinanceiroCooperado();
     scheduleCooperadoPostShellSync(() => {
       if (!isCooperadoManualOperacionalSync()) {

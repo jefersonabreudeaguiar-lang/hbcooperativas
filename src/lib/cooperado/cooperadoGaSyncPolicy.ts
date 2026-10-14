@@ -47,7 +47,6 @@ export function cooperadoGaBloqueiaOperacionalFullAutomatico(opts?: {
     return false;
   }
   if (cooperadoGaTemPrimeiraCargaSyncPending()) return false;
-  if (opts?.eventDriven && !isPwaColdStartWindow()) return false;
   return true;
 }
 
