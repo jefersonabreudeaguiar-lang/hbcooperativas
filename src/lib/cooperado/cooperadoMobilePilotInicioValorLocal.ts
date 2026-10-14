@@ -1,11 +1,12 @@
 import type { AppData } from "@/types";
 import {
   cooperadoMotorTemObrigacaoReceber,
+  filtrarInicioCardPersistidoLeituraBic,
   sanitizeInicioCardSnapshotFluxoBic,
   type InicioCardMotorSnapshot,
 } from "@/lib/cooperadoInicioCardPolicy";
 import { resolverMotorCardInicioParidadeFinanceiro } from "@/lib/cooperado/cooperadoInicioCardParidadeMotor";
-import { lerInicioCardPersistidoFlex } from "@/lib/cooperadoInicioCardPersistencia";
+import { lerInicioCardPersistidoFlexSemFiltroBuild } from "@/lib/cooperadoInicioCardPersistencia";
 import { isCooperadoMobilePilotPerfActive } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import {
   fichaPertenceCooperado,
@@ -59,7 +60,9 @@ export function cooperadoPilotInicioCardPersistidoExibicao(
   cooperativaId?: string
 ): InicioCardMotorSnapshot | null {
   if (!isCooperadoMobilePilotPerfActive()) return null;
-  const raw = lerInicioCardPersistidoFlex(cooperadoId, cooperativaId);
+  const raw = filtrarInicioCardPersistidoLeituraBic(
+    lerInicioCardPersistidoFlexSemFiltroBuild(cooperadoId, cooperativaId)
+  );
   if (!raw?.display) return null;
   const display = sanitizeInicioCardSnapshotFluxoBic(raw.display);
   if (!cooperadoMotorTemObrigacaoReceber(display)) return null;

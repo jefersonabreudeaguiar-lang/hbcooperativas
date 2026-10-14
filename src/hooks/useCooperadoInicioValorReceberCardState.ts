@@ -16,6 +16,8 @@ import {
   INICIO_CARD_STORAGE_VERSION,
   gravarInicioCardPersistidoFlex,
   lerInicioCardPersistidoFlex,
+  lerInicioCardPersistidoFlexSemFiltroBuild,
+  type InicioCardPersistido,
 } from "@/lib/cooperadoInicioCardPersistencia";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { isCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
@@ -48,6 +50,20 @@ const SNAPSHOT_VAZIO: InicioCardMotorSnapshot = {
   valorRecibo: 0,
   aguardandoAssinatura: false,
 };
+
+function persistidoExibicaoPwaLeve(
+  persistido: InicioCardPersistido | null | undefined
+): InicioCardPersistido | null {
+  if (!persistido?.display) return null;
+  if (persistido.appBuild === APP_BUILD_VERSION) return persistido;
+  if (
+    isCooperadoMobilePilotPerfActive() &&
+    cooperadoMotorTemObrigacaoReceber(persistido.display)
+  ) {
+    return persistido;
+  }
+  return null;
+}
 
 export function useCooperadoInicioValorReceberCardState(input: {
   data: AppData | null;
@@ -109,9 +125,15 @@ export function useCooperadoInicioValorReceberCardState(input: {
   const persistido = useMemo(() => {
     if (!input.cooperadoId) return bootPersistido;
     if (leituraSomentePwa) {
-      return (
-        lerInicioCardPersistidoResume(input.cooperadoId, input.cooperativaId) ?? bootPersistido
-      );
+      const fromResume = lerInicioCardPersistidoResume(input.cooperadoId, input.cooperativaId);
+      if (fromResume) return fromResume;
+      if (isCooperadoMobilePilotPerfActive()) {
+        const crossBuild = filtrarInicioCardPersistidoLeituraBic(
+          lerInicioCardPersistidoFlexSemFiltroBuild(input.cooperadoId, input.cooperativaId)
+        );
+        if (crossBuild) return crossBuild;
+      }
+      return bootPersistido;
     }
     return (
       filtrarInicioCardPersistidoLeituraBic(
@@ -163,8 +185,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
         }
       }
 
-      const persistidoMesmoBuildEarly =
-        persistido?.appBuild === APP_BUILD_VERSION ? persistido : null;
+      const persistidoMesmoBuildEarly = persistidoExibicaoPwaLeve(persistido);
       const syncMotorPass = Boolean(input.syncing && isCooperadoUserSyncVisible());
       const pilotPrecisaMotorLocal = (() => {
         if (!isCooperadoMobilePilotPerfActive() || persistidoMesmoBuildEarly?.display) {
