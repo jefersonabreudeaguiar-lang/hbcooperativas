@@ -16,7 +16,7 @@ Todo commit/push que afete **cooperado** (Início, A receber, Financeiro, HB Cr�
 3. **Paridade GA**: não introduzir ramo só `isCooperadoMobilePilot` para comportamento de produção; piloto = diagnóstico/estrela, GA = `isCooperadoMobileGaPromoted`.
 4. **Comprovação**: indicar no PR/test plan como validar no celular (badge `vN` + selo **ok** após fila, valores em Início/Financeiro/HB).
 5. **Build**: bump `APP_BUILD_VERSION` + `public/sw.js` — isso já força `minBuild` e `releaseEpoch` no servidor (todo cooperado passa pela fila pós-deploy). Env na Vercel só se precisar epoch extra sem novo código.
-6. **Resiliência**: gate com retry, fallback de política embutida, «Continuar em segundo plano» sem travar o app; selo **ok** só após fila completa.
+6. **Resiliência**: sync pós-deploy **silencioso** (sem tela bloqueante); selo **ok** no header quando ack completo; **Atualizar** como fallback.
 
 ## Proibido
 

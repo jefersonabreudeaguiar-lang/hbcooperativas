@@ -8,8 +8,7 @@ export type CooperadoReleasePolicy = {
   serverBuild: number;
 };
 
-const DEFAULT_MESSAGE =
-  "Nova versão do app. A sincronização costuma levar de 20 segundos a 1 minuto. Você pode continuar usando o app — não precisa fechar; os dados atualizam em segundo plano.";
+const DEFAULT_MESSAGE = "";
 
 function parsePositiveInt(raw: string | undefined, fallback: number): number {
   const n = Number(String(raw ?? "").trim());
