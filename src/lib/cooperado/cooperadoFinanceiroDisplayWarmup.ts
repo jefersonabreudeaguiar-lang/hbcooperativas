@@ -35,6 +35,11 @@ function markFinanceWarmupSession(userId: string): void {
   }
 }
 
+/** Evita recovery/sync duplicado na mesma sessão (FinanceiroGate + Dashboard). */
+export function cooperadoFinanceiroDisplayWarmupRanThisSession(userId: string): boolean {
+  return financeWarmupAlreadyRanThisSession(userId);
+}
+
 /**
  * Padrão HB Créditos: idle → materializa cache local → só então sync leve se ainda vazio.
  * Uma vez por sessão do cooperado (evita rajada de sync após atualização).

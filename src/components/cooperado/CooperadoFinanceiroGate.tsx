@@ -64,7 +64,6 @@ import {
   cooperadoPilotFinanceiroExibirComSnapshotsLocais,
   scheduleCooperadoPilotFinanceReadRecovery,
 } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
-import { scheduleCooperadoPilotFinanceBootstrapOnce } from "@/lib/cooperado/cooperadoMobilePilotFinanceBootstrap";
 
 /** Após este tempo, o conteúdo pode seguir mesmo sem sync (shell já navegável). */
 const SYNC_HINT_MAX_MS = 18_000;
@@ -98,11 +97,9 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (user?.role !== "cooperado" || !user.cooperadoId) return;
-    if (isCooperadoMobileGaPromoted(user)) {
-      scheduleCooperadoFinanceiroDisplayWarmup(user);
-      scheduleCooperadoPilotFinanceReadRecovery(user);
-      scheduleCooperadoPilotFinanceBootstrapOnce(user);
-    }
+    if (!isCooperadoMobileGaPromoted(user)) return;
+    scheduleCooperadoFinanceiroDisplayWarmup(user);
+    scheduleCooperadoPilotFinanceReadRecovery(user);
   }, [user?.id, user?.role, user?.cooperadoId]);
 
   useEffect(() => {
@@ -116,7 +113,9 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     };
 
     if (consumeCooperadoPostLoginFinanceSync()) {
-      pullFinanceiroImediato();
+      if (!isCooperadoMobileGaPromoted(user)) {
+        pullFinanceiroImediato();
+      }
     } else if (isAppDataWarm()) {
       const data = getData();
       const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
@@ -136,19 +135,15 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
       if (!cooperadoPostShellSyncPermitido()) return;
       markCooperadoPostShellSyncStarted();
 
-      if (isCooperadoPwaMessengerMode()) {
+      if (isCooperadoPwaMessengerMode() || isCooperadoMobileGaPromoted(user)) {
         cooperadoRematerializarFinanceiroLocalSePossivel(user);
-        if (cooperadoPwaMessengerPrecisaSyncOperacionalInicial(user)) {
+        if (
+          isCooperadoPwaMessengerMode() &&
+          cooperadoPwaMessengerPrecisaSyncOperacionalInicial(user)
+        ) {
           markCooperadoUserSyncVisible();
           requestCooperadoAppReleaseSync();
         }
-        clearCooperadoPostShellSyncStarted();
-        return;
-      }
-
-      if (isCooperadoMobileGaPromoted(user)) {
-        scheduleCooperadoPilotFinanceBootstrapOnce(user);
-        scheduleCooperadoPilotFinanceReadRecovery(user);
         clearCooperadoPostShellSyncStarted();
         return;
       }

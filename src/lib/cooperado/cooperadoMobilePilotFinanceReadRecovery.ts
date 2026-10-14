@@ -15,6 +15,7 @@ import { getData, isAppDataWarm, subscribe, waitForAppDataWarm } from "@/service
 import { requestCooperadoFinanceiroRecoverySync } from "@/services/syncRequest";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { cooperadoFinanceiroExibicaoCachePronto } from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
+import { cooperadoFinanceiroDisplayWarmupRanThisSession } from "@/lib/cooperado/cooperadoFinanceiroDisplayWarmup";
 
 function pilotFinanceCtx(user: Omit<User, "password">) {
   if (!user.cooperadoId) return null;
@@ -88,10 +89,32 @@ export function cooperadoPilotForcarRematerializacaoFinanceira(
  * Piloto Jeferson: após purge de snapshot (novo build) ou AppData atrasado,
  * detecta dados locais e rematerializa; se ainda vazio, pede sync financeiro leve (leitura).
  */
+const RECOVERY_SESSION_KEY = "hb.coop.financeReadRecovery.v1";
+
+function financeRecoveryAlreadyRanThisSession(userId: string): boolean {
+  if (typeof sessionStorage === "undefined") return false;
+  try {
+    return sessionStorage.getItem(`${RECOVERY_SESSION_KEY}:${userId}`) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markFinanceRecoverySession(userId: string): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(`${RECOVERY_SESSION_KEY}:${userId}`, "1");
+  } catch {
+    /* quota */
+  }
+}
+
 export function scheduleCooperadoPilotFinanceReadRecovery(
   user: Omit<User, "password"> | null | undefined
 ): void {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return;
+  if (financeRecoveryAlreadyRanThisSession(user.id)) return;
+  markFinanceRecoverySession(user.id);
   const leaseKey = user.id;
   recoveryLeaseByUser.get(leaseKey)?.();
 
@@ -137,6 +160,7 @@ export function scheduleCooperadoPilotFinanceReadRecovery(
 
   const scheduleCloudRead = () => {
     if (cloudFallbackScheduled || attempt()) return;
+    if (cooperadoFinanceiroDisplayWarmupRanThisSession(user.id)) return;
     cloudFallbackScheduled = true;
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
     requestCooperadoFinanceiroRecoverySync();

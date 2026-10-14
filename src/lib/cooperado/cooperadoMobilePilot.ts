@@ -23,7 +23,7 @@ function cooperadoIdMatchesPilot(cooperadoId: string, coopId: string | undefined
 }
 
 /**
- * Cooperado no app — comportamento mobile promovido do piloto Jeferson (GA).
+ * Cooperado no app — mesma experiência mobile do piloto Jeferson (produção padrão GA).
  * Responsável no celular com painel cooperado também entra quando `resolveExperienceUser` for cooperado.
  */
 export function isCooperadoMobileGaPromoted(
@@ -59,7 +59,10 @@ export function isCooperadoMobilePilot(
   return cooperadoIdMatchesPilot(cooperadoId, coopId);
 }
 
-/** Ramo piloto vs GA — use em toda mudança nova de mobile cooperado. */
+/** Alias explícito — produção cooperado = experiência Jeferson. */
+export const isCooperadoMobileExperienciaJeferson = isCooperadoMobileGaPromoted;
+
+/** Ramo legado “produção antiga” vs piloto — hoje todo cooperado no app usa o ramo piloto. */
 export function cooperadoMobilePilotOrDefault<T>(
   user: Omit<User, "password"> | null | undefined,
   pilotValue: T,

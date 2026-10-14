@@ -20,6 +20,7 @@ import {
 } from "@/lib/cooperadoInicioCardPolicy";
 import { lerInicioCardFinanceiroExibicao } from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
 import { lerInicioCardPersistidoFlex } from "@/lib/cooperadoInicioCardPersistencia";
+import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 
 /** Snapshots v2 gravados após sync — inclusive saldo zerado (não exige “a receber” > 0). */
 export function cooperadoPwaFinanceiroSnapshotsMaterializados(
@@ -101,7 +102,19 @@ export function cooperadoPwaMessengerPrecisaSyncOperacionalInicial(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   if (!user || user.role !== "cooperado" || !isCooperadoPwaMessengerMode()) return false;
-  if (cooperadoAppReleaseNeedsOperacionalSync()) return true;
+  if (cooperadoAppReleaseNeedsOperacionalSync()) {
+    if (isCooperadoMobileGaPromoted(user) && isAppDataWarm()) {
+      const data = getData();
+      const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
+      if (coopId && user.cooperadoId) {
+        const canon = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+        if (cooperadoTemDadosFinanceirosMinimos(data, canon, coopId)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
   const data = isAppDataWarm() ? getData() : null;
   const coopId = data
     ? getUserCooperativaId(user, data) ?? user.cooperativaId
