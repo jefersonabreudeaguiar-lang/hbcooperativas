@@ -34,10 +34,7 @@ export function isCooperadoMobileGaPromoted(
   const effective = resolveExperienceUser(user, data) ?? user;
   const role = resolveAppUserRole(effective, data);
   if (role === "cooperado") return true;
-  if (!isCooperadoAppUser(effective) && role !== "cooperado") {
-    return false;
-  }
-  return true;
+  return isCooperadoAppUser(effective);
 }
 
 /**
