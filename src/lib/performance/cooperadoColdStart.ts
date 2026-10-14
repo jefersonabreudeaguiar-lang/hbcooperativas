@@ -22,6 +22,7 @@ import {
 } from "@/lib/performance/cooperadoEventDrivenSync";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
+import { cooperadoMobilePilotDeferAppDataEagerWarm } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 
 /** Mesma chave que `cooperadoEventDrivenSync` — evita import circular no cold start. */
 const HB_OPERACIONAL_SYNCED_BUILD = "hb-coop-operacional-synced-build";
@@ -103,8 +104,9 @@ export function shouldSkipCooperadoSecondaryMountSync(): boolean {
 
 export function ensureCooperadoAppDataEagerWarm(): void {
   if (!isCooperadoInstantResumeEnabled()) return;
-  /** PWA mensageiro: não parsear JSON gigante no 1º frame (tela branca). */
-  if (isCooperadoPwaMessengerMode()) {
+  const session = getSession();
+  /** PWA mensageiro / piloto Jeferson: pintar shell antes do parse gigante (tela branca). */
+  if (isCooperadoPwaMessengerMode() || cooperadoMobilePilotDeferAppDataEagerWarm(session)) {
     preloadAppData();
     return;
   }

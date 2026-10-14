@@ -4,6 +4,7 @@ import { useLayoutEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { cooperadoInstantShellReady } from "@/lib/performance/cooperadoColdStart";
+import { cooperadoPwaInstantPaintReady } from "@/lib/cooperado/cooperadoPwaInstantResume";
 import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import { getSession } from "@/services/dataStore";
@@ -35,7 +36,12 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     if (!loading && user) {
       markRqlColdStartPhase("auth_ready");
     }
-    if (!loading || cooperadoInstantShellReady(getSession())) {
+    const session = getSession();
+    if (
+      !loading ||
+      cooperadoInstantShellReady(session) ||
+      (session && cooperadoPwaInstantPaintReady(session))
+    ) {
       dismissCooperadoBootShell();
     }
   }, [user, loading, router]);
@@ -48,7 +54,8 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     const session = getSession();
     const instantCoop =
-      user.role === "cooperado" && cooperadoInstantShellReady(session);
+      user.role === "cooperado" &&
+      (cooperadoInstantShellReady(session) || cooperadoPwaInstantPaintReady(user));
     if (instantCoop) {
       setProfileRepairDone(true);
     }
@@ -61,7 +68,13 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     };
   }, [loading, user?.id]);
 
-  if (loading && user && cooperadoInstantShellReady(getSession()) && profileRepairDone) {
+  const sessionForPaint = getSession();
+  const cooperadoPaintWhileAuth =
+    Boolean(user) &&
+    user!.role === "cooperado" &&
+    (cooperadoInstantShellReady(sessionForPaint) ||
+      cooperadoPwaInstantPaintReady(user!));
+  if (loading && user && cooperadoPaintWhileAuth && profileRepairDone) {
     return <>{children}</>;
   }
 

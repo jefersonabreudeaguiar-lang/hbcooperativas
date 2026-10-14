@@ -23,6 +23,11 @@ import {
 import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import {
+  applyCooperadoMobilePilotPerfDomFlag,
+  cooperadoMobilePilotDeferAppDataEagerWarm,
+} from "@/lib/cooperado/cooperadoMobilePilotPerf";
+import { cooperadoPwaInstantPaintReady } from "@/lib/cooperado/cooperadoPwaInstantResume";
+import {
   getSession,
   login as doLogin,
   loginCreatorAdminPortal,
@@ -123,11 +128,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ensureCooperadoAppDataEagerWarm();
     }
     refresh();
+    applyCooperadoMobilePilotPerfDomFlag(getSession());
   }, [refresh]);
 
   useLayoutEffect(() => {
-    if (!loading) dismissCooperadoBootShell();
-  }, [loading]);
+    const session = getSession();
+    if (
+      !loading ||
+      (session &&
+        session.role === "cooperado" &&
+        (cooperadoPwaInstantPaintReady(session) || cooperadoMobilePilotDeferAppDataEagerWarm(session)))
+    ) {
+      dismissCooperadoBootShell();
+    }
+  }, [loading, accountUser?.id]);
 
   useEffect(() => {
     const warm = () => {
@@ -138,7 +152,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
     if (isCooperadoInstantResumeEnabled()) {
-      if (!isAppDataWarm() && !isCooperadoPwaMessengerMode()) warm();
+      const session = getSession();
+      if (
+        !isAppDataWarm() &&
+        !isCooperadoPwaMessengerMode() &&
+        !cooperadoMobilePilotDeferAppDataEagerWarm(session)
+      ) {
+        warm();
+      }
       return;
     }
     if (typeof requestIdleCallback !== "undefined") {

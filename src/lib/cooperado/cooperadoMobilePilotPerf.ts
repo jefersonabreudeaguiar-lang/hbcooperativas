@@ -141,6 +141,16 @@ export function cooperadoMobilePilotPostEnvioForegroundSync(
   return isCooperadoMobilePilotPerfActive(user);
 }
 
+/**
+ * Piloto: não fazer parse eager do AppData no 1º frame (evita tela branca).
+ * Mesma ideia do modo mensageiro PWA.
+ */
+export function cooperadoMobilePilotDeferAppDataEagerWarm(
+  user?: Omit<User, "password"> | null
+): boolean {
+  return isCooperadoMobilePilotPerfActive(user);
+}
+
 /** Entregas leve: PWA GA ou piloto Jeferson mobile. */
 export function cooperadoCooperadoEntregasLeveUiForUser(
   user?: Omit<User, "password"> | null

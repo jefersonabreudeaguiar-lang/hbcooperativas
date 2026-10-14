@@ -20,6 +20,7 @@ import {
   type CooperadoPwaEntregasResumosSnapshot,
 } from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import { isCooperadoMobilePilotPerfActive } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { isCooperadoInstantResumeEnabled, cooperadoInstantShellReady } from "@/lib/performance/cooperadoColdStart";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { cooperadoPwaSnapshotBuildReadable } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
@@ -130,7 +131,9 @@ export function lerCooperadoPwaEntregasResumosForResume(
 /** Libera pintura do app cooperado PWA sem esperar parse completo do AppData. */
 export function cooperadoPwaInstantPaintReady(user: Omit<User, "password"> | null): boolean {
   if (!isCooperadoInstantResumeEnabled() || !user || user.role !== "cooperado") return false;
-  if (!isCooperadoPwaMobileLeveUi() || !getSession()) return false;
+  if (!getSession()) return false;
+  const pilotPaint = isCooperadoMobilePilotPerfActive(user);
+  if (!isCooperadoPwaMobileLeveUi() && !pilotPaint) return false;
   if (!user.cooperadoId) return cooperadoInstantShellReady(user);
 
   const coopId = user.cooperativaId;
