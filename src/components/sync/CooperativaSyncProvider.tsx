@@ -143,7 +143,10 @@ import { isCooperadoMobilePilotPerfActive } from "@/lib/cooperado/cooperadoMobil
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
 import { cooperadoPwaMessengerPrecisaSyncOperacionalInicial } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
-import { cooperadoMobileDeferOperacionalSyncNaAbertura } from "@/lib/cooperado/cooperadoMobilePilot";
+import {
+  cooperadoMobileDeferOperacionalSyncNaAbertura,
+  isCooperadoMobileGaPromoted,
+} from "@/lib/cooperado/cooperadoMobilePilot";
 import { tryAckCooperadoAppReleaseWhenLocalReady } from "@/lib/cooperado/cooperadoMobileReleaseLocalAck";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
@@ -394,7 +397,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       setCooperadoPagamentosHydrated(true);
       return;
     }
-    if (isCooperadoManualOperacionalSync()) {
+    if (isCooperadoManualOperacionalSync() || isCooperadoMobileGaPromoted(user)) {
       setCooperadoPagamentosHydrated(true);
       return;
     }

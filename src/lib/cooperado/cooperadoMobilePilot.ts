@@ -61,6 +61,13 @@ export function isCooperadoMobilePilot(
 /** Alias explícito — produção cooperado = experiência Jeferson. */
 export const isCooperadoMobileExperienciaJeferson = isCooperadoMobileGaPromoted;
 
+/** Abertura fluida (shell + abas) — não bloquear UI no financeiro enquanto AppData aquece. */
+export function cooperadoMobilePadraoJefersonAberturaFluida(
+  user: Omit<User, "password"> | null | undefined
+): boolean {
+  return isCooperadoMobileGaPromoted(user);
+}
+
 /**
  * PWA/browser cooperado GA: sync operacional completo só no «Atualizar» (não na abertura).
  * Evita travar a UI após deploy quando `hb-coop-operacional-synced-build` ≠ build atual.

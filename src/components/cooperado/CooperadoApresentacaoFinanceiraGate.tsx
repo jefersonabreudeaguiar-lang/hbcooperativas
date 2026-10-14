@@ -19,6 +19,8 @@ import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTe
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { isAppDataWarm } from "@/services/dataStore";
 import { cooperadoFinanceiroBloqueiaEntradaApp } from "@/services/fichaSyncGuard";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { cooperadoPwaInstantPaintReady } from "@/lib/cooperado/cooperadoPwaInstantResume";
 
 export type CooperadoApresentacaoFinanceiraValue = {
   apresentacaoConsolidada: boolean;
@@ -38,6 +40,7 @@ function CooperadoApresentacaoFinanceiraGateInner({ children }: { children: Reac
   const pathname = usePathname();
   const { syncing, syncingForUi, cooperadoPagamentosHydrated, lastSyncedAt } = useSyncStatus();
   const offline = typeof navigator !== "undefined" && !navigator.onLine;
+  const padraoJeferson = Boolean(user && isCooperadoMobileGaPromoted(user));
 
   const exibirComFatiaFinanceiraLocal = useAppDataSelector(
     (data) => {
@@ -53,6 +56,10 @@ function CooperadoApresentacaoFinanceiraGateInner({ children }: { children: Reac
 
   const exibirComDadosLocais = Boolean(
     user?.role === "cooperado" &&
+      (padraoJeferson &&
+        (cooperadoLocalResumeReady(user) ||
+          cooperadoPwaInstantPaintReady(user) ||
+          cooperadoPagamentosHydrated)) ||
       ((isCooperadoManualOperacionalSync() && cooperadoLocalResumeReady(user)) ||
         exibirComFatiaFinanceiraLocal)
   );
@@ -60,6 +67,9 @@ function CooperadoApresentacaoFinanceiraGateInner({ children }: { children: Reac
   const financeiroUiGate = useAppDataSelector(
     (data) => {
       if (user?.role !== "cooperado" || !user.cooperadoId) {
+        return { aguardandoFatia: false, consistentes: true };
+      }
+      if (padraoJeferson && !isAppDataWarm()) {
         return { aguardandoFatia: false, consistentes: true };
       }
       if (!isAppDataWarm()) {

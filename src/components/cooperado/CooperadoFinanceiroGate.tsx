@@ -13,6 +13,7 @@ import { solicitarRecuperacaoFinanceiroCooperado } from "@/services/cooperadoFin
 import {
   cooperadoLocalResumeReady,
   isCooperadoManualOperacionalSync,
+  isCooperadoUserSyncVisible,
   shouldSkipCooperadoSecondaryMountSync,
 } from "@/lib/performance/cooperadoColdStart";
 import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
@@ -91,13 +92,16 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     return lerInicioCardFinanceiroExibicao(cooperadoId, coopId);
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]);
 
+  const padraoJeferson = Boolean(user && isCooperadoMobileGaPromoted(user));
+
   const bloqueiaEntrada = useAppDataSelector((data) => {
+    if (padraoJeferson) return false;
     if (!data || !user?.cooperadoId || user.role !== "cooperado") return false;
     const coopId = getUserCooperativaId(user, data);
     if (!coopId) return true;
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
     return cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, coopId);
-  }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]);
+  }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role, padraoJeferson]);
 
   useEffect(() => {
     if (user?.role !== "cooperado" || !user.cooperadoId) return;
@@ -202,7 +206,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
 
   const cooperadoAtivo = user?.role === "cooperado" && Boolean(user?.cooperadoId);
   const aguardandoSyncInicial =
-    cooperadoAtivo && Boolean(bloqueiaEntrada) && lastSyncedAt == null;
+    cooperadoAtivo && !padraoJeferson && Boolean(bloqueiaEntrada) && lastSyncedAt == null;
 
   useEffect(() => {
     if (!aguardandoSyncInicial) {
@@ -230,7 +234,8 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
   const abrirComCacheInicio =
     cooperadoAtivo &&
     user &&
-    (inicioCardCacheProntoParaAbertura(cacheInicioCard) ||
+    (padraoJeferson ||
+      inicioCardCacheProntoParaAbertura(cacheInicioCard) ||
       cooperadoFinanceiroExibicaoCachePronto(user) ||
       cooperadoLocalResumeReady(user) ||
       cooperadoPilotFinanceiroExibirComSnapshotsLocais(user) ||
@@ -267,15 +272,19 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
   }
 
   let mensagemStatus: string | null = null;
-  if (aguardandoDadosFinanceiros && !isAppDataWarm()) {
-    mensagemStatus = "Atualizando dados da nuvem… Você já pode usar as abas.";
-  } else if (aguardandoDadosFinanceiros || syncingForUi) {
+  if (!padraoJeferson) {
+    if (aguardandoDadosFinanceiros && !isAppDataWarm()) {
+      mensagemStatus = "Atualizando dados da nuvem… Você já pode usar as abas.";
+    } else if (aguardandoDadosFinanceiros || syncingForUi) {
+      mensagemStatus = "Atualizando dados…";
+    }
+  } else if (syncingForUi && isCooperadoUserSyncVisible()) {
     mensagemStatus = "Atualizando dados…";
   }
 
   const shellState: CooperadoFinanceiroShellState = {
     aguardandoDadosFinanceiros: Boolean(aguardandoDadosFinanceiros),
-    bloqueiaEntrada: Boolean(bloqueiaEntrada),
+    bloqueiaEntrada: padraoJeferson ? false : Boolean(bloqueiaEntrada),
     mensagemStatus,
   };
 
