@@ -1,7 +1,7 @@
 import type { User } from "@/types";
 import { cooperadoFinanceiroExibicaoCachePronto } from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
 import { cooperadoPwaInstantPaintReady } from "@/lib/cooperado/cooperadoPwaInstantResume";
-import { cooperadoInstantShellReady, cooperadoLocalResumeReady } from "@/lib/performance/cooperadoColdStart";
+import { cooperadoLocalResumeReady } from "@/lib/performance/cooperadoColdStart";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import {
   cooperadoAppReleaseNeedsOperacionalSync,
@@ -21,10 +21,6 @@ export function tryAckCooperadoAppReleaseWhenLocalReady(
 ): void {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return;
   if (!cooperadoAppReleaseNeedsOperacionalSync()) return;
-  if (cooperadoInstantShellReady(user) && !isAppDataWarm()) {
-    persistOperacionalSyncedAppBuild();
-    return;
-  }
   if (!isAppDataWarm() || !user.cooperadoId) return;
 
   const data = getData();

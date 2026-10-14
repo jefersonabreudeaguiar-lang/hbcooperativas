@@ -7,12 +7,9 @@ import {
 } from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
 import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { dispatchCooperadoPwaLeveUiSnapshotRefresh } from "@/lib/cooperado/cooperadoPwaLeveUiEvents";
-import { requestCooperadoFinanceiroRecoverySync } from "@/services/syncRequest";
-import { grantCooperadoEventDrivenSync } from "@/lib/performance/cooperadoEventDrivenSync";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
-import { markCooperadoPrimeiraCargaSyncPending } from "@/lib/cooperado/cooperadoGaSyncPolicy";
 import { tryAckCooperadoAppReleaseWhenLocalReady } from "@/lib/cooperado/cooperadoMobileReleaseLocalAck";
-import { cooperadoMobileDeferOperacionalSyncNaAbertura } from "@/lib/cooperado/cooperadoMobilePilot";
+import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
 import { preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
 
 let warmupInFlight: Promise<void> | null = null;
@@ -54,8 +51,6 @@ export function scheduleCooperadoFinanceiroDisplayWarmup(
   if (!cooperadoFinanceiroDisplayWarmupEligible(user) || !user?.id) return;
   if (financeWarmupAlreadyRanThisSession(user.id)) return;
 
-  const deferSyncNaAbertura = cooperadoMobileDeferOperacionalSyncNaAbertura(user);
-
   const run = () => {
     if (warmupInFlight) return;
     markFinanceWarmupSession(user.id);
@@ -63,14 +58,10 @@ export function scheduleCooperadoFinanceiroDisplayWarmup(
       if (!isCooperadoPwaMessengerMode()) {
         preloadAppData();
       }
-      const warmMs = isCooperadoPwaMessengerMode()
-        ? 20_000
-        : deferSyncNaAbertura
-          ? 5_000
-          : 12_000;
+      const warmMs = isCooperadoPwaMessengerMode() ? 20_000 : 12_000;
       const warm = await waitForAppDataWarm(warmMs);
       if (!warm) {
-        if (deferSyncNaAbertura) tryAckCooperadoAppReleaseWhenLocalReady(user);
+        scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
         return;
       }
 
@@ -82,18 +73,7 @@ export function scheduleCooperadoFinanceiroDisplayWarmup(
       const temCache = cooperadoFinanceiroCardCacheTemValor(user);
       const temLocal = cooperadoPilotAppDataTemFinanceiroLocal(user);
       if (!temCache && !temLocal && !isCooperadoPwaMessengerMode()) {
-        /** GA: nuvem completa só no «Atualizar» — evita operacional_full em Orlando e demais sem cache. */
-        if (deferSyncNaAbertura) return;
-        markCooperadoPrimeiraCargaSyncPending();
-        const pull = () => {
-          grantCooperadoEventDrivenSync();
-          requestCooperadoFinanceiroRecoverySync();
-        };
-        if (typeof requestIdleCallback === "function") {
-          requestIdleCallback(pull, { timeout: 18_000 });
-        } else {
-          window.setTimeout(pull, 8_000);
-        }
+        scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
       }
     })().finally(() => {
       warmupInFlight = null;

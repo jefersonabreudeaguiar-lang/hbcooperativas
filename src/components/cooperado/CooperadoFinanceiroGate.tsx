@@ -64,6 +64,7 @@ import {
   isCooperadoMobileGaPromoted,
 } from "@/lib/cooperado/cooperadoMobilePilot";
 import { tryAckCooperadoAppReleaseWhenLocalReady } from "@/lib/cooperado/cooperadoMobileReleaseLocalAck";
+import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
 import {
   cooperadoPilotAppDataTemFinanceiroLocal,
   cooperadoPilotFinanceiroExibirComSnapshotsLocais,
@@ -123,6 +124,8 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     if (consumeCooperadoPostLoginFinanceSync()) {
       if (!isCooperadoMobileGaPromoted(user)) {
         pullFinanceiroImediato();
+      } else {
+        scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
       }
     } else if (isAppDataWarm()) {
       const data = getData();
