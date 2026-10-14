@@ -1166,12 +1166,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         });
       }
     } else if (staff && isCooperadoInstantResumeEnabled()) {
-      // HX 9.1.1 — não forçar operacional_full na abertura (trava o painel); delta silencioso + pull de notas na rota.
+      // HX 9.1.1 — financeiro_delta: pagamentos/ficha da nuvem sem bidirectional_full (evita fila Pagar falsa).
       if (!document.hidden) {
         markUserActivity();
         scheduleStaffPostInteractiveTask(() => {
           markNextCooperadoSyncSilent();
-          void runSync({ silent: true, tier: "notas_delta" });
+          void runSync({ silent: true, tier: "financeiro_delta" });
         });
       }
     } else {
@@ -1191,7 +1191,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (staff && Date.now() - lastSyncStartedAtRef.current < getSyncMinGapMs(user?.role ?? "cooperado")) {
         return;
       }
-      void runSync();
+      void runSync(staff ? { silent: true, tier: "financeiro_delta" } : undefined);
     });
 
     const onVisible = () => {
@@ -1208,7 +1208,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (staff && Date.now() - lastSyncStartedAtRef.current < getSyncMinGapMs(user?.role ?? "cooperado")) {
         return;
       }
-      void runSync();
+      void runSync(staff ? { silent: true, tier: "financeiro_delta" } : undefined);
     };
     document.addEventListener("visibilitychange", onVisible);
 
@@ -1223,7 +1223,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       }
       markUserActivity();
       if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
-      void runSync();
+      void runSync(staff ? { silent: true, tier: "financeiro_delta" } : undefined);
     };
     window.addEventListener("online", onOnline);
 

@@ -22,6 +22,17 @@ import {
   pagamentoIdsPotencialmenteRegressivos,
   type PagamentoDowngradeBloqueado,
 } from "@/services/pagamentoRegistroMerge";
+import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
+import { normalizeCnpj } from "@/utils/cooperativa";
+
+/** Nuvem operacional é fonte da verdade — não rebaixar ficha paga por slice local incompleto (ex.: staff notas_delta). */
+function appDataTemOperacionalCloudAuthoritativo(data: AppData): boolean {
+  for (const coop of data.cooperativas ?? []) {
+    const digits = normalizeCnpj(coop.cnpj ?? "");
+    if (digits.length === 14 && isOperacionalCloudAuthoritative(digits)) return true;
+  }
+  return false;
+}
 
 export {
   aplicarPreservacaoPagamentosConfirmadosNoOperacional,
@@ -137,12 +148,18 @@ export function sanitizarOperacionalSyncPayload(
 export function cooperadoMesTemPagamentoRegistrado(
   data: AppData,
   cooperadoId: string,
-  mesReferencia: string
+  mesReferencia: string,
+  cooperativaId?: string
 ): boolean {
-  const coopId = data.cooperados?.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const coopId =
+    cooperativaId ?? data.cooperados?.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const ids = new Set<string>([cooperadoId]);
+  if (data.cooperados?.length && coopId) {
+    ids.add(resolverCooperadoIdCanonico(data, cooperadoId, coopId));
+  }
   return (data.pagamentosCooperado ?? []).some(
     (p) =>
-      pagamentoPertenceCooperado(data, p, cooperadoId, coopId) &&
+      [...ids].some((id) => pagamentoPertenceCooperado(data, p, id, coopId)) &&
       (p.status === "aguardando_confirmacao" || p.status === "confirmado") &&
       pagamentoCobreMes(p, mesReferencia)
   );
@@ -172,12 +189,18 @@ export function cooperadoMesComFichaPagaSemPagamentoCooperativa(
  * Ficha/nota marcada como paga sem registro em pagamentosCooperado (ex.: sync incompleto) volta a pendente/conferida.
  */
 export function repararIntegridadePagamentosCooperativa(data: AppData): AppData {
+  if (appDataTemOperacionalCloudAuthoritativo(data)) return data;
+
   const now = new Date().toISOString();
   let changed = false;
 
   const fichaCorrida = (data.fichaCorrida ?? []).map((f) => {
     if (f.status !== "pago") return f;
-    if (cooperadoMesTemPagamentoRegistrado(data, f.cooperadoId, f.mesReferencia)) return f;
+    if (
+      cooperadoMesTemPagamentoRegistrado(data, f.cooperadoId, f.mesReferencia, f.cooperativaId)
+    ) {
+      return f;
+    }
     changed = true;
     return { ...f, status: "pendente" as const, updatedAt: now };
   });
@@ -186,7 +209,11 @@ export function repararIntegridadePagamentosCooperativa(data: AppData): AppData 
     if (n.status !== "pago") return n;
     const fichasNota = fichaCorrida.filter((f) => f.notaPedidoId === n.id);
     if (fichasNota.some((f) => f.status === "pago")) return n;
-    if (cooperadoMesTemPagamentoRegistrado(data, n.cooperadoId, n.mesReferencia)) return n;
+    if (
+      cooperadoMesTemPagamentoRegistrado(data, n.cooperadoId, n.mesReferencia, n.cooperativaId)
+    ) {
+      return n;
+    }
     changed = true;
     return { ...n, status: "conferida" as const, updatedAt: now };
   });
