@@ -8,7 +8,7 @@ import {
   isCooperadoPwaMessengerMode,
   persistirCooperadoPwaMessengerCaches,
 } from "@/lib/cooperado/cooperadoPwaMessengerMode";
-import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoRematerializarFinanceiroLocalSePossivel } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
@@ -77,7 +77,7 @@ export function rematerializarCooperadoPwaSnapshotsSeNecessario(
   if (!coopId) return false;
   const canon = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
 
-  if (isCooperadoMobilePilot(user)) {
+  if (isCooperadoMobileGaPromoted(user)) {
     if (!cooperadoPwaFichaSnapshotPrecisaRematerializar(canon, coopId)) {
       const cardOk = cooperadoPwaFinanceiroSnapshotsMaterializados(canon, coopId);
       if (cardOk) return false;

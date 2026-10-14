@@ -1,5 +1,5 @@
 import type { User } from "@/types";
-import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { dispatchCooperadoPwaLeveUiSnapshotRefresh } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { cooperadoRematerializarFinanceiroLocalSePossivel } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import {
@@ -42,7 +42,7 @@ export function cooperadoPilotAppDataTemFinanceiroLocal(
 export function cooperadoPilotFinanceiroExibirComSnapshotsLocais(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
-  if (!user || user.role !== "cooperado" || !isCooperadoMobilePilot(user)) return false;
+  if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return false;
   const ctx = pilotFinanceCtx(user);
   if (!ctx) return false;
   return cooperadoPwaFinanceiroSnapshotsMaterializados(ctx.cooperadoId, ctx.cooperativaId);
@@ -52,7 +52,7 @@ export function cooperadoPilotFinanceiroExibirComSnapshotsLocais(
 export function tentarCooperadoPilotFinanceiroRematerializacaoLocal(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
-  if (!user || user.role !== "cooperado" || !isCooperadoMobilePilot(user)) return false;
+  if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return false;
   if (!cooperadoPilotAppDataTemFinanceiroLocal(user)) return false;
   const ok = cooperadoRematerializarFinanceiroLocalSePossivel(user);
   if (ok) dispatchCooperadoPwaLeveUiSnapshotRefresh();
@@ -65,7 +65,7 @@ const recoveryLeaseByUser = new Map<string, () => void>();
 export function cooperadoPilotForcarRematerializacaoFinanceira(
   user: Omit<User, "password"> | null | undefined
 ): void {
-  if (!user || user.role !== "cooperado" || !isCooperadoMobilePilot(user)) return;
+  if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return;
 
   const run = () => {
     if (!isAppDataWarm()) return;
@@ -92,7 +92,7 @@ export function cooperadoPilotForcarRematerializacaoFinanceira(
 export function scheduleCooperadoPilotFinanceReadRecovery(
   user: Omit<User, "password"> | null | undefined
 ): void {
-  if (!user || user.role !== "cooperado" || !isCooperadoMobilePilot(user)) return;
+  if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return;
   const leaseKey = user.id;
   recoveryLeaseByUser.get(leaseKey)?.();
 
@@ -154,7 +154,7 @@ export function scheduleCooperadoPilotFinanceReadRecovery(
 export function cooperadoPilotFinanceRecoveryOnForeground(
   user: Omit<User, "password"> | null | undefined
 ): void {
-  if (!user || !isCooperadoMobilePilot(user)) return;
+  if (!user || !isCooperadoMobileGaPromoted(user)) return;
   cooperadoPilotForcarRematerializacaoFinanceira(user);
   scheduleCooperadoPilotFinanceReadRecovery(user);
 }

@@ -15,7 +15,7 @@ import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
 export const COOPERADO_MOBILE_PILOT_PENDING_REVISION = 10;
 
 /** Última revisão já liberada para todos (GA). */
-export const COOPERADO_MOBILE_PILOT_PROMOTED_REVISION = 0;
+export const COOPERADO_MOBILE_PILOT_PROMOTED_REVISION = 10;
 
 export function cooperadoMobilePilotHasUnpromotedChanges(): boolean {
   return COOPERADO_MOBILE_PILOT_PENDING_REVISION > COOPERADO_MOBILE_PILOT_PROMOTED_REVISION;

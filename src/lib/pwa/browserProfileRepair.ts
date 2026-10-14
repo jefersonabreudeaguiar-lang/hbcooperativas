@@ -1,7 +1,7 @@
 import { BUILD_SEEN_KEY } from "@/lib/pwa/clientRelease";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { fetchOfficialClientRelease } from "@/lib/pwa/fetchOfficialClientRelease";
-import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { getSession } from "@/services/dataStore";
 
 export const PROFILE_REPAIR_RECENT_KEY = "hb-coop-profile-repair-at";
@@ -46,7 +46,7 @@ export async function repairBrowserProfileIfStale(
   if (profileRepairCheckedRecently()) return false;
 
   const session = getSession();
-  if (session && isCooperadoMobilePilot(session) && !options?.forceNetworkCheck) {
+  if (session && isCooperadoMobileGaPromoted(session) && !options?.forceNetworkCheck) {
     markProfileRepairChecked();
     const laterOpts = { ...options, forceNetworkCheck: true };
     const runLater = () => {

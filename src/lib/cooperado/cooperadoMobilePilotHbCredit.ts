@@ -1,5 +1,5 @@
 import type { User } from "@/types";
-import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 
 const INTRO_KEY_PREFIX = "hb.coop.pilotJeferson.hbCreditHubIntro.v1:";
 
@@ -7,7 +7,7 @@ const INTRO_KEY_PREFIX = "hb.coop.pilotJeferson.hbCreditHubIntro.v1:";
 export function isCooperadoMobilePilotHbCreditUi(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
-  return Boolean(user && user.role === "cooperado" && isCooperadoMobilePilot(user));
+  return Boolean(user && user.role === "cooperado" && isCooperadoMobileGaPromoted(user));
 }
 
 export function cooperadoPilotHbCreditHubIntroDone(userId: string): boolean {

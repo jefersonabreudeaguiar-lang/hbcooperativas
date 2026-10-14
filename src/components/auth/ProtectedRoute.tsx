@@ -10,13 +10,13 @@ import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import { getSession } from "@/services/dataStore";
 import { repairBrowserProfileIfStale } from "@/lib/pwa/browserProfileRepair";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
-import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 
 function protectedRouteInitialProfileRepairDone(): boolean {
   if (typeof window === "undefined") return false;
   const session = getSession();
   if (!session) return false;
-  if (isCooperadoMobilePilot(session)) return true;
+  if (isCooperadoMobileGaPromoted(session)) return true;
   if (
     session.role === "cooperado" &&
     (cooperadoInstantShellReady(session) || cooperadoPwaInstantPaintReady(session))
@@ -70,7 +70,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     const session = getSession();
     const instantCoop =
       user.role === "cooperado" &&
-      (isCooperadoMobilePilot(user) ||
+      (isCooperadoMobileGaPromoted(user) ||
         cooperadoInstantShellReady(session) ||
         cooperadoPwaInstantPaintReady(user));
     if (instantCoop) {
@@ -89,7 +89,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const cooperadoPaintWhileAuth =
     Boolean(user) &&
     user!.role === "cooperado" &&
-    (isCooperadoMobilePilot(user!) ||
+    (isCooperadoMobileGaPromoted(user!) ||
       cooperadoInstantShellReady(sessionForPaint) ||
       cooperadoPwaInstantPaintReady(user!));
   if (loading && user && cooperadoPaintWhileAuth && profileRepairDone) {

@@ -14,7 +14,7 @@ import {
   shouldRunCooperadoPwaParidadeHooks,
 } from "@/lib/cooperado/cooperadoPwaFinanceiroParidadeRefresh";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
-import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoPilotForcarRematerializacaoFinanceira } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
 
 /**
@@ -35,7 +35,7 @@ export function CooperadoInicioCardPersistBootstrap() {
   useEffect(() => {
     if (isCooperadoPwaMessengerMode()) return;
     if (!user || user.role !== "cooperado" || !isAppDataWarm()) return;
-    if (isCooperadoMobilePilot(user)) {
+    if (isCooperadoMobileGaPromoted(user)) {
       cooperadoPilotForcarRematerializacaoFinanceira(user);
       return;
     }

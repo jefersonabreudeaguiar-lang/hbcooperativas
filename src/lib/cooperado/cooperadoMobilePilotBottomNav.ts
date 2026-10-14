@@ -1,5 +1,5 @@
 import type { User, Resource } from "@/types";
-import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 
 export const COOPERADO_PILOT_HB_PAY_TAB_HREF = "/minha-conta-coop/escanear";
 
@@ -15,7 +15,7 @@ export function cooperadoPilotMobileBottomNavItems(
   user: Omit<User, "password"> | null | undefined,
   hbNavEligible: boolean
 ): CooperadoPilotBottomNavItem[] {
-  if (!user || user.role !== "cooperado" || !isCooperadoMobilePilot(user) || !hbNavEligible) {
+  if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user) || !hbNavEligible) {
     return baseItems;
   }
   if (baseItems.some((i) => i.href === COOPERADO_PILOT_HB_PAY_TAB_HREF)) return baseItems;
@@ -53,5 +53,5 @@ export function cooperadoPilotMobileBottomNavEnabled(
   user: Omit<User, "password"> | null | undefined,
   hbNavEligible: boolean
 ): boolean {
-  return Boolean(user && user.role === "cooperado" && isCooperadoMobilePilot(user) && hbNavEligible);
+  return Boolean(user && user.role === "cooperado" && isCooperadoMobileGaPromoted(user) && hbNavEligible);
 }

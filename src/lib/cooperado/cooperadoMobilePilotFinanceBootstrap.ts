@@ -1,5 +1,5 @@
 import type { User } from "@/types";
-import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { executarCooperadoAtualizarManual } from "@/lib/cooperado/cooperadoAtualizarManual";
 import { cooperadoPilotForcarRematerializacaoFinanceira } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
 import { cooperadoPilotMotorCardInicioTemValor } from "@/lib/cooperado/cooperadoMobilePilotInicioValorLocal";
@@ -18,7 +18,7 @@ let bootstrapUserId: string | null = null;
 export function scheduleCooperadoPilotFinanceBootstrapOnce(
   user: Omit<User, "password"> | null | undefined
 ): void {
-  if (!user || user.role !== "cooperado" || !isCooperadoMobilePilot(user)) return;
+  if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return;
   if (bootstrapUserId === user.id) return;
   bootstrapUserId = user.id;
 

@@ -23,8 +23,23 @@ function cooperadoIdMatchesPilot(cooperadoId: string, coopId: string | undefined
 }
 
 /**
- * Verdadeiro só para cooperado Jeferson no app mobile/PWA (experiência cooperado).
- * Demais cooperados permanecem no comportamento de produção (GA).
+ * Cooperado no app — comportamento mobile promovido do piloto Jeferson (GA).
+ * Responsável no celular com painel cooperado também entra quando `resolveExperienceUser` for cooperado.
+ */
+export function isCooperadoMobileGaPromoted(
+  user: Omit<User, "password"> | null | undefined
+): boolean {
+  if (!user) return false;
+  const data = isAppDataWarm() ? getData() : null;
+  const effective = resolveExperienceUser(user, data) ?? user;
+  if (!isCooperadoAppUser(effective) && resolveAppUserRole(effective, data) !== "cooperado") {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Verdadeiro só para cooperado Jeferson — usado na estrela de revisão piloto (ciclos futuros).
  */
 export function isCooperadoMobilePilot(
   user: Omit<User, "password"> | null | undefined
@@ -50,5 +65,5 @@ export function cooperadoMobilePilotOrDefault<T>(
   pilotValue: T,
   productionValue: T
 ): T {
-  return isCooperadoMobilePilot(user) ? pilotValue : productionValue;
+  return isCooperadoMobileGaPromoted(user) ? pilotValue : productionValue;
 }

@@ -57,7 +57,7 @@ import {
 } from "@/components/cooperado/CooperadoFinanceiroShellContext";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { cooperadoPwaInstantPaintReady } from "@/lib/cooperado/cooperadoPwaInstantResume";
-import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import {
   cooperadoPilotAppDataTemFinanceiroLocal,
   cooperadoPilotFinanceiroExibirComSnapshotsLocais,
@@ -99,7 +99,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (user?.role !== "cooperado" || !user.cooperadoId) return;
-    if (isCooperadoMobilePilot(user)) {
+    if (isCooperadoMobileGaPromoted(user)) {
       scheduleCooperadoPilotFinanceReadRecovery(user);
       scheduleCooperadoPilotFinanceBootstrapOnce(user);
     }
@@ -146,7 +146,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
         return;
       }
 
-      if (isCooperadoMobilePilot(user)) {
+      if (isCooperadoMobileGaPromoted(user)) {
         scheduleCooperadoPilotFinanceBootstrapOnce(user);
         scheduleCooperadoPilotFinanceReadRecovery(user);
         clearCooperadoPostShellSyncStarted();

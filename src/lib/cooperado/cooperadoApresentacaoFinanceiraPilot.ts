@@ -3,7 +3,7 @@ import {
   cooperadoApresentacaoFinanceiraConsolidada,
   type CooperadoSyncPresentationInput,
 } from "@/lib/cooperadoApresentacaoFinanceira";
-import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoPilotFinanceGateLiveL1Path } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import {
   cooperadoPilotAppDataTemFinanceiroLocal,
@@ -18,7 +18,7 @@ export function cooperadoApresentacaoFinanceiraConsolidadaForSession(
   user: Omit<User, "password"> | null | undefined,
   pathname: string
 ): boolean {
-  if (!user || !isCooperadoMobilePilot(user) || !cooperadoPilotFinanceGateLiveL1Path(pathname)) {
+  if (!user || !isCooperadoMobileGaPromoted(user) || !cooperadoPilotFinanceGateLiveL1Path(pathname)) {
     return cooperadoApresentacaoFinanceiraConsolidada(input);
   }
   if (input.role !== "cooperado") return true;

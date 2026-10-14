@@ -30,7 +30,7 @@ import {
   cooperadoMobilePilotInitialAccountUser,
   cooperadoMobilePilotInitialAuthLoading,
 } from "@/lib/cooperado/cooperadoMobilePilotAuthBootstrap";
-import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoPwaInstantPaintReady } from "@/lib/cooperado/cooperadoPwaInstantResume";
 import {
   getSession,
@@ -313,7 +313,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             "Não foi possível abrir sua sessão na nuvem. Aguarde alguns segundos e tente de novo.",
         };
       }
-      if (isCooperadoPwaMessengerMode() || isCooperadoMobilePilot(safeUser)) {
+      if (isCooperadoPwaMessengerMode() || isCooperadoMobileGaPromoted(safeUser)) {
         preloadAppData();
       } else {
         await waitForAppDataWarm(4000);
@@ -335,10 +335,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { ok: true as const, redirectTo, navigated: true as const };
         }
         const reloaded =
-          role === "cooperado" && isCooperadoMobilePilot(safeUser)
+          role === "cooperado" && isCooperadoMobileGaPromoted(safeUser)
             ? false
             : await repairBrowserProfileIfStale({ includeStandalone: true });
-        if (role === "cooperado" && isCooperadoMobilePilot(safeUser)) {
+        if (role === "cooperado" && isCooperadoMobileGaPromoted(safeUser)) {
           void repairBrowserProfileIfStale({ includeStandalone: true });
         }
         if (reloaded) {

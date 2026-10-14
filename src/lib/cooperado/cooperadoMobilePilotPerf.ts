@@ -7,7 +7,7 @@ import {
 } from "@/lib/performance/cooperadoMobileTabKeepAlive";
 import { COOPERADO_FOREGROUND_STALE_MS } from "@/lib/performance/cooperadoEventDrivenSync";
 import { COOPERADO_MOBILE_TAB_DOM_POLICY } from "@/lib/performance/cooperadoMobileTabDomPolicy";
-import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { isCooperadoPwaMobileEntregasLeve } from "@/lib/cooperado/cooperadoPwaMobileEntregas";
 
 /** Bump ao mudar política de abas/DOM só do piloto Jeferson. */
@@ -25,11 +25,11 @@ const PILOT_FINANCE_GATE_L1_PATHS = [
 
 const ATTR_PILOT_PERF = "data-cooperado-pilot-perf";
 
-/** Piloto ativo — sessão Jeferson ou flag DOM (shell já autenticou). */
+/** Perf mobile cooperado GA (ex-piloto Jeferson) — cooperado autenticado ou flag DOM. */
 export function isCooperadoMobilePilotPerfActive(
   user?: Omit<User, "password"> | null
 ): boolean {
-  if (user && isCooperadoMobilePilot(user)) return true;
+  if (user && isCooperadoMobileGaPromoted(user)) return true;
   if (typeof document !== "undefined") {
     return document.documentElement.getAttribute(ATTR_PILOT_PERF) === "1";
   }
@@ -40,7 +40,7 @@ export function applyCooperadoMobilePilotPerfDomFlag(
   user: Omit<User, "password"> | null | undefined
 ): void {
   if (typeof document === "undefined") return;
-  if (user && isCooperadoMobilePilot(user)) {
+  if (user && isCooperadoMobileGaPromoted(user)) {
     document.documentElement.setAttribute(ATTR_PILOT_PERF, "1");
     return;
   }
