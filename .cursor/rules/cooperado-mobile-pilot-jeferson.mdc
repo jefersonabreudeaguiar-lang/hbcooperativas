@@ -1,0 +1,38 @@
+---
+description: Piloto mobile cooperado — mudanças só no Jeferson até aprovação para GA
+alwaysApply: true
+---
+
+# Piloto mobile cooperado (Jeferson)
+
+## Política (obrigatória a partir de out/2026)
+
+Toda alteração de **comportamento** no app **mobile cooperado** (abas L0/L1, keep-alive, PWA, cache, performance de UI, snapshots, navegação otimista) deve:
+
+1. Usar `isCooperadoMobilePilot(user)` ou `cooperadoMobilePilotOrDefault(user, novo, atual)` de `@/lib/cooperado/cooperadoMobilePilot`.
+2. Manter o ramo **não-piloto** idêntico ao comportamento de **produção (GA)** atual.
+3. **Não** generalizar para todos no mesmo PR, salvo promoção explícita após aprovação do Jeferson.
+
+Documentação humana: `docs/release/COOPERADO-MOBILE-PILOTO-JEFERSON.md`.
+
+## Implementação
+
+```ts
+// Novo comportamento — exemplo
+const policy = cooperadoMobilePilotOrDefault(navUser, "362-piloto-x", COOPERADO_MOBILE_TAB_DOM_POLICY);
+```
+
+- Piloto: `c_1781981564381_w67gg` / `jefersonabreudeaguiar@gmail.com`.
+- Promoção para GA: commit dedicado que remove o ramo piloto ou iguala `production` ao valor aprovado.
+
+## Exceções (combinar com o usuário)
+
+- Correção de **segurança** ou **indisponibilidade total** (login quebrado para todos).
+- Scripts **globais** no `layout`/`sw.js` — preferir preview Vercel ou flag; não afetar todos sem OK.
+- Mudanças **somente staff** / desktop / API sem impacto na UX mobile cooperado.
+
+## Proibido sem promoção
+
+- `git add -A` com refactors amplos em mobile cooperado.
+- Remover ramo GA antes da aprovação.
+- Duplicar políticas de piloto fora de `cooperadoMobilePilot.ts`.
