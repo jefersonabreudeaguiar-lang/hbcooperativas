@@ -6,7 +6,10 @@ import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { persistirCooperadoPwaFichaResumoSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import { persistirCooperadoPwaInicioDashboardSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
-import { scheduleCooperadoPilotFinanceReadRecovery } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
+import {
+  cooperadoPilotFinanceRecoveryOnForeground,
+  scheduleCooperadoPilotFinanceReadRecovery,
+} from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
 import { persistirCooperadoPwaEntregasResumosSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
 import { persistirInicioCardCooperadoNotificarPwaLeve } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { isAppDataWarm } from "@/services/dataStore";
@@ -37,6 +40,9 @@ export function CooperadoPwaResumeLifecycle() {
     };
 
     const onVisibility = () => {
+      if (document.visibilityState === "visible" && cooperadoMobilePilotSnapshotFirstInicio(user)) {
+        cooperadoPilotFinanceRecoveryOnForeground(user);
+      }
       if (document.visibilityState === "hidden") flush();
     };
 

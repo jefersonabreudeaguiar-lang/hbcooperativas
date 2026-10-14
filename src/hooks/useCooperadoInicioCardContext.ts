@@ -15,6 +15,7 @@ import {
   COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
   isCooperadoPwaMobileLeveUi,
 } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 
 const INICIO_CARD_DOMAINS: AppDataNotifyDomain[] = ["shell", "notas", "financeiro"];
 
@@ -31,10 +32,12 @@ export function useCooperadoInicioCardContext(user: Omit<User, "password"> | nul
   dataReady: boolean;
 } | null {
   const pwaLeveUi = isCooperadoPwaMobileLeveUi();
+  const pilotInicioSnapshot = cooperadoMobilePilotSnapshotFirstInicio(user);
+  const leituraLocalInicio = pwaLeveUi || pilotInicioSnapshot;
   const [pwaMessengerDataEpoch, setPwaMessengerDataEpoch] = useState(0);
 
   useEffect(() => {
-    if (!pwaLeveUi) return;
+    if (!leituraLocalInicio) return;
     const bump = () => setPwaMessengerDataEpoch((n) => n + 1);
     window.addEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, bump);
     if (!isAppDataWarm()) {
@@ -43,17 +46,19 @@ export function useCooperadoInicioCardContext(user: Omit<User, "password"> | nul
       });
     }
     return () => window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, bump);
-  }, [pwaLeveUi]);
+  }, [leituraLocalInicio]);
 
   const subscribeDomains = useCallback(
     (onChange: () => void) => {
-      const domains: AppDataNotifyDomain[] = pwaLeveUi ? ["financeiro", "notas"] : INICIO_CARD_DOMAINS;
+      const domains: AppDataNotifyDomain[] = leituraLocalInicio
+        ? ["financeiro", "notas"]
+        : INICIO_CARD_DOMAINS;
       const unsubs = domains.map((d) => subscribeAppDataDomain(d, onChange));
       return () => {
         for (const u of unsubs) u();
       };
     },
-    [pwaLeveUi]
+    [leituraLocalInicio]
   );
 
   const revisionKey = useSyncExternalStore(

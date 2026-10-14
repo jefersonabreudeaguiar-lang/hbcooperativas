@@ -212,8 +212,20 @@ function FichaCorridaPageInner() {
   const messenger = isCooperadoPwaMessengerMode();
   const pilotFinanceiroLeve = cooperadoMobilePilotSnapshotFirstInicio(user);
   const readModelsRevision = useCooperadoMessengerReadModelRevision();
-  /** Cooperado PWA / piloto Jeferson: ficha lê snapshot local até AppData consolidar. */
-  const financeiroDormant = (messenger || pilotFinanceiroLeve) && isCooperado;
+  const [fichaResumoSnap, setFichaResumoSnap] = useState<CooperadoPwaFichaResumoSnapshot | null>(
+    () => {
+      if (typeof window === "undefined" || !user?.cooperadoId || !user.cooperativaId) return null;
+      if (!messenger && !pilotFinanceiroLeve) return null;
+      return lerCooperadoPwaFichaResumoSnapshot(user.cooperadoId, user.cooperativaId);
+    }
+  );
+  /** Piloto: só congela AppData quando já há snapshot — senão usa dados ao vivo (evita R$ 0). */
+  const financeiroDormant = useMemo(() => {
+    if (!isCooperado) return false;
+    if (messenger) return true;
+    if (pilotFinanceiroLeve) return Boolean(fichaResumoSnap);
+    return false;
+  }, [isCooperado, messenger, pilotFinanceiroLeve, fichaResumoSnap]);
   /** PWA leve só desliga subscribe do AppData para cooperado; responsável continua com dados ao vivo. */
   const appDataPanelActive =
     tabActive && (isCooperado ? cooperadoPwaUiSubscribesAppData() : true);
@@ -245,9 +257,6 @@ function FichaCorridaPageInner() {
   const [abaMesPagamentoResponsavel, setAbaMesPagamentoResponsavel] = useState<"pendente" | string>("pendente");
   const [pixStepVisited, setPixStepVisited] = useState(false);
   const coopIdEarly = user && data ? getUserCooperativaId(user, data) : user?.cooperativaId;
-  const [fichaResumoSnap, setFichaResumoSnap] = useState<CooperadoPwaFichaResumoSnapshot | null>(
-    null
-  );
 
   useLayoutEffect(() => {
     if (!tabActive || !(messenger || pilotFinanceiroLeve) || !isCooperado) return;

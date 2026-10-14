@@ -8,7 +8,10 @@ import {
 } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { getData, isAppDataWarm, subscribe } from "@/services/dataStore";
+import { persistirInicioCardCooperadoNotificarPwaLeve } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import { persistirCooperadoPwaFichaResumoSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
+import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
+import { getData, isAppDataWarm, subscribe, waitForAppDataWarm } from "@/services/dataStore";
 import { requestCooperadoFinanceiroRecoverySync } from "@/services/syncRequest";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 
@@ -58,6 +61,30 @@ export function tentarCooperadoPilotFinanceiroRematerializacaoLocal(
 
 const recoveryLeaseByUser = new Map<string, () => void>();
 
+/** Rematerializa card + ficha do AppData local e notifica Início/Financeiro (piloto). */
+export function cooperadoPilotForcarRematerializacaoFinanceira(
+  user: Omit<User, "password"> | null | undefined
+): void {
+  if (!user || user.role !== "cooperado" || !isCooperadoMobilePilot(user)) return;
+
+  const run = () => {
+    if (!isAppDataWarm()) return;
+    rematerializarCooperadoPwaSnapshotsSeNecessario(user);
+    tentarCooperadoPilotFinanceiroRematerializacaoLocal(user);
+    persistirInicioCardCooperadoNotificarPwaLeve(user);
+    persistirCooperadoPwaFichaResumoSnapshotFromUser(user, true);
+    dispatchCooperadoPwaLeveUiSnapshotRefresh();
+  };
+
+  if (isAppDataWarm()) {
+    run();
+    return;
+  }
+  void waitForAppDataWarm(12_000).then((warm) => {
+    if (warm) run();
+  });
+}
+
 /**
  * Piloto Jeferson: após purge de snapshot (novo build) ou AppData atrasado,
  * detecta dados locais e rematerializa; se ainda vazio, pede sync financeiro leve (leitura).
@@ -67,7 +94,7 @@ export function scheduleCooperadoPilotFinanceReadRecovery(
 ): void {
   if (!user || user.role !== "cooperado" || !isCooperadoMobilePilot(user)) return;
   const leaseKey = user.id;
-  if (recoveryLeaseByUser.has(leaseKey)) return;
+  recoveryLeaseByUser.get(leaseKey)?.();
 
   let cloudFallbackScheduled = false;
 
@@ -117,8 +144,17 @@ export function scheduleCooperadoPilotFinanceReadRecovery(
   };
 
   if (typeof requestIdleCallback === "function") {
-    requestIdleCallback(scheduleCloudRead, { timeout: 4_000 });
+    requestIdleCallback(scheduleCloudRead, { timeout: 1_500 });
   } else {
-    window.setTimeout(scheduleCloudRead, 2_500);
+    window.setTimeout(scheduleCloudRead, 800);
   }
+}
+
+/** Re-tenta rematerialização (ex.: abriu Início ainda zerado). */
+export function cooperadoPilotFinanceRecoveryOnForeground(
+  user: Omit<User, "password"> | null | undefined
+): void {
+  if (!user || !isCooperadoMobilePilot(user)) return;
+  cooperadoPilotForcarRematerializacaoFinanceira(user);
+  scheduleCooperadoPilotFinanceReadRecovery(user);
 }
