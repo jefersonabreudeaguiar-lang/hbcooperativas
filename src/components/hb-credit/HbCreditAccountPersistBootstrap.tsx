@@ -101,7 +101,13 @@ export function HbCreditAccountPersistBootstrap() {
     const cached =
       lerHbCreditAccountPersistido(coopCnpj, hbApiCooperadoId) ??
       lerHbCreditAccountPersistidoFlex(hbApiCooperadoId, coopCnpj);
-    if (cached?.account) return;
+    const acc = cached?.account;
+    if (
+      acc &&
+      ((acc.limiteLiberadoCents ?? 0) > 0 || (acc.valorDisponivelCents ?? 0) > 0 || (acc.valorUsadoCents ?? 0) > 0)
+    ) {
+      return;
+    }
     const cancelIdle = scheduleContaCoopAuxSync(persist, { idleTimeoutMs: 10_000, fallbackMs: 3_000 });
     return () => cancelIdle();
   }, [hbNavOn, user?.id, user?.role, cooperadoSyncManual, coopCnpj, hbApiCooperadoId]);

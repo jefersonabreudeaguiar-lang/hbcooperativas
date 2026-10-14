@@ -20,8 +20,8 @@ import {
   fetchCreditLedger,
   requestCooperadoPinReset,
   setCreditFinancialPin,
-  syncCreditLimiteFromFicha,
 } from "@/services/creditApiService";
+import { refreshContaCoopLimiteFromFicha } from "@/lib/hb-credit/syncContaCoopLimiteFromFicha";
 import { isCooperadoTransferenciaCreditoEnabled } from "@/config/cooperadoTransferenciaCredito";
 import {
   storeHbCreditCooperadoReceberDraft,
@@ -248,27 +248,27 @@ function MinhaContaCoopContent() {
     if (!background) setLedgerLoaded(false);
     setError("");
     try {
-      if (!background) {
-        const deferLimite =
-          pilotHbUi && cooperadoMobilePilotHbCreditDeferLimiteSyncOnOpen();
-        const runLimiteSync = () => {
-          void syncCreditLimiteFromFicha({
-            cnpj,
-            cooperadoId: hbApiCooperadoId,
-            creditosBaseCents: {},
-          }).catch(() => {
-            /* offline ou operacional indisponível — não bloqueia abertura da tela */
-          });
-        };
-        if (deferLimite) {
-          if (typeof requestIdleCallback === "function") {
-            requestIdleCallback(runLimiteSync, { timeout: 12_000 });
-          } else {
-            window.setTimeout(runLimiteSync, 4_000);
-          }
+      const coopId = user ? getUserCooperativaId(user, getData()) : undefined;
+      const runLimiteSync = () => {
+        if (!coopId) return;
+        void refreshContaCoopLimiteFromFicha({
+          cnpj,
+          cooperadoId: hbApiCooperadoId,
+          cooperativaId: coopId,
+        }).catch(() => {
+          /* offline ou operacional indisponível — não bloqueia abertura da tela */
+        });
+      };
+      const deferLimite =
+        !background && pilotHbUi && cooperadoMobilePilotHbCreditDeferLimiteSyncOnOpen();
+      if (deferLimite) {
+        if (typeof requestIdleCallback === "function") {
+          requestIdleCallback(runLimiteSync, { timeout: 12_000 });
         } else {
-          runLimiteSync();
+          window.setTimeout(runLimiteSync, 4_000);
         }
+      } else {
+        runLimiteSync();
       }
       const acc = await fetchCreditAccount(cnpj, hbApiCooperadoId);
       const accObj = (acc.account as ContaCoopLimiteCooperado) ?? null;
@@ -298,7 +298,7 @@ function MinhaContaCoopContent() {
         notifyHbCreditAccountLoaded();
       }
     }
-  }, [cnpj, hbApiCooperadoId, pilotHbUi]);
+  }, [cnpj, hbApiCooperadoId, pilotHbUi, user]);
 
   useEffect(() => {
     if (!cnpj || !hbApiCooperadoId) return;

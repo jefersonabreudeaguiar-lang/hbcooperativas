@@ -5,7 +5,6 @@ import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditAp
 import { isCloudSessionActive } from "@/lib/security/clientSession";
 import { persistirHbCreditAccountCooperado } from "@/services/hbCreditAccountPersistenciaService";
 import { notifyHbCreditAccountCacheUpdated } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
-import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -47,11 +46,11 @@ export function scheduleCooperadoHbCreditLimiteAndAccountWarmup(
       if (!cooperativaId) return;
       const cnpj = await resolveCooperativaCnpj(data, cooperativaId, user);
       if (!cnpj) return;
+      /** sync-limite do cooperado exige cooperadoId = JWT (403 se usar só o id canônico). */
       const apiId = resolveHbCreditApiCooperadoId(user, user.cooperadoId);
-      const canon = resolverCooperadoIdCanonico(data, apiId, cooperativaId);
       await refreshContaCoopLimiteFromFicha({
         cnpj,
-        cooperadoId: canon,
+        cooperadoId: apiId,
         cooperativaId,
       }).catch(() => {});
       const ok = await persistirHbCreditAccountCooperado(user);

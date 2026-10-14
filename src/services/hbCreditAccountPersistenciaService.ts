@@ -10,11 +10,13 @@ import { fetchCreditAccount } from "@/services/creditApiService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
+import { refreshContaCoopLimiteFromFicha } from "@/lib/hb-credit/syncContaCoopLimiteFromFicha";
 import { notifyHbCreditAccountCacheUpdated, notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import type { User } from "@/types";
 
 export async function persistirHbCreditAccountCooperado(
-  user: Omit<User, "password"> | null | undefined
+  user: Omit<User, "password"> | null | undefined,
+  options?: { syncLimiteFromFicha?: boolean }
 ): Promise<boolean> {
   if (!user || user.role !== "cooperado" || !user.cooperadoId) return false;
   if (!isAppDataWarm() || typeof navigator === "undefined" || !navigator.onLine) return false;
@@ -28,7 +30,15 @@ export async function persistirHbCreditAccountCooperado(
   if (!cnpj) return false;
 
   const cooperadoId = user.cooperadoId;
+  const syncLimite = options?.syncLimiteFromFicha !== false;
   try {
+    if (syncLimite) {
+      await refreshContaCoopLimiteFromFicha({
+        cnpj,
+        cooperadoId,
+        cooperativaId,
+      }).catch(() => {});
+    }
     const acc = await fetchCreditAccount(cnpj, cooperadoId);
     gravarHbCreditAccountPersistido(cnpj, cooperadoId, {
       v: HB_CREDIT_ACCOUNT_STORAGE_VERSION,
