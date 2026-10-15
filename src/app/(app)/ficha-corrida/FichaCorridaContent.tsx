@@ -19,6 +19,7 @@ import {
   type CooperadoPwaFichaResumoSnapshot,
 } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
+import { scheduleCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
 import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import {
   cooperadoPilotAppDataTemFinanceiroLocal,
@@ -302,6 +303,11 @@ function FichaCorridaPageInner() {
     window.addEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
     return () => window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
   }, [pilotFinanceiroLeve, cooperadoId, coopIdEarly]);
+
+  useEffect(() => {
+    if (!tabActive || !isCooperado || !user || user.role !== "cooperado") return;
+    scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user);
+  }, [tabActive, isCooperado, user?.id]);
 
   useEffect(() => {
     if (!tabActive || !(messenger || pilotFinanceiroLeve) || !user || user.role !== "cooperado") {

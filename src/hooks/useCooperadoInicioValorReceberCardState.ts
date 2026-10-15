@@ -34,7 +34,10 @@ import {
 import { lerInicioCardPersistidoResume } from "@/lib/cooperado/cooperadoPwaInstantResume";
 import { inicioCardMotorFromParidadeFinanceiro } from "@/lib/cooperado/cooperadoFinanceiroParidadeInicioBridge";
 import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
-import { cooperadoGaValorReceberExibicaoIndeterminada } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
+import {
+  cooperadoGaValorReceberExibicaoIndeterminada,
+} from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
+import { resolverMotorCardInicioParidadeFinanceiro } from "@/lib/cooperado/cooperadoInicioCardParidadeMotor";
 import {
   lerCooperadoPwaFichaResumoSnapshot,
   resolveParidadeFromFichaResumoSnapshot,
@@ -190,7 +193,11 @@ export function useCooperadoInicioValorReceberCardState(input: {
       const persistidoMesmoBuildEarly = persistidoExibicaoPwaLeve(persistido);
       const syncMotorPass = Boolean(input.syncing && isCooperadoUserSyncVisible());
       const pilotPrecisaMotorLocal = (() => {
-        if (!isCooperadoMobilePilotPerfActive() || persistidoMesmoBuildEarly?.display) {
+        if (!isCooperadoMobilePilotPerfActive()) return false;
+        if (
+          persistidoMesmoBuildEarly?.display &&
+          cooperadoMotorTemObrigacaoReceber(persistidoMesmoBuildEarly.display)
+        ) {
           return false;
         }
         if (!input.cooperadoId || !isAppDataWarm()) return false;
@@ -203,10 +210,13 @@ export function useCooperadoInicioValorReceberCardState(input: {
         if (cooperadoPwaFinanceiroSnapshotsAusentes(canon, coopId)) return true;
         return cooperadoTemDadosFinanceirosMinimos(data, canon, coopId);
       })();
+      const gaParidadeWarm =
+        isCooperadoMobilePilotPerfActive() && isAppDataWarm() && Boolean(input.cooperadoId);
       const needsMotor =
         syncMotorPass ||
         persistidoTick > 0 ||
         pilotPrecisaMotorLocal ||
+        Boolean(gaParidadeWarm) ||
         !persistidoMesmoBuildEarly?.display ||
         (input.dataReady && apresentacaoCard);
 
@@ -291,6 +301,30 @@ export function useCooperadoInicioValorReceberCardState(input: {
           atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
           gravarPersistencia: false,
         };
+      }
+
+      if (fromMotor && cooperadoMotorTemObrigacaoReceber(fromMotor.display)) {
+        return { ...fromMotor, gravarPersistencia: true };
+      }
+
+      if (dataLatch && input.cooperadoId && cooperativaIdLatch) {
+        const paridadeMotor = resolverMotorCardInicioParidadeFinanceiro(
+          dataLatch,
+          input.cooperadoId,
+          cooperativaIdLatch
+        );
+        if (cooperadoMotorTemObrigacaoReceber(paridadeMotor.motor)) {
+          return {
+            display: paridadeMotor.motor,
+            latch: {
+              motorRevision: paridadeMotor.revision,
+              display: paridadeMotor.motor,
+              hadPendencia: true,
+            },
+            atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+            gravarPersistencia: true,
+          };
+        }
       }
 
       if (fromMotor) {

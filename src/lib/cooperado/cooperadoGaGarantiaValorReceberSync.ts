@@ -21,6 +21,7 @@ import { cooperadoPwaFichaParidadeSnapshotDivergeDeAppData } from "@/lib/coopera
 import { scheduleCooperadoHbCreditLimiteAndAccountWarmup } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
 import { markCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
 import { requestSyncTier } from "@/services/syncRequest";
+import { runCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
 
 const GARANTIA_DELAYS_MS = [5_000, 15_000, 30_000, 60_000, 120_000, 180_000] as const;
 
@@ -58,6 +59,7 @@ function pullNuvemFinanceiro(user: Omit<User, "password">, attempt: number): voi
     requestCooperadoGaFinanceiroExibicaoRecoverySync({ garantia: true });
   }
   scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
+  void runCooperadoGaSyncBaseInformacoesFinanceiras(user, { force: attempt >= 1 });
   if (!isAppDataWarm() || !user.cooperadoId) return;
   const data = getData();
   const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;

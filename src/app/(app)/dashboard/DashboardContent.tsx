@@ -75,6 +75,7 @@ import {
   cooperadoGaValorReceberExibicaoResolvida,
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { scheduleCooperadoGarantiaValorReceberUntilResolvido } from "@/lib/cooperado/cooperadoGaGarantiaValorReceberSync";
+import { scheduleCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
 import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { useCooperadoFluxoPadrao } from "@/hooks/useCooperadoFluxoPadrao";
@@ -318,6 +319,7 @@ function CooperadoDashboard() {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
     if (!cooperadoGaValorReceberExibicaoResolvida(user)) {
       scheduleCooperadoGarantiaValorReceberUntilResolvido(user);
+      scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user, { force: true });
     }
     if (exibicaoZeroRecoveryRef.current) return;
     if (!cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) return;

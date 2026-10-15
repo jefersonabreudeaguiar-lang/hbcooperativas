@@ -67,7 +67,7 @@ export function cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return false;
   if (cooperadoGaExibicaoFinanceiraConfiavel(user)) return false;
   if (cooperadoAppReleaseNeedsOperacionalSync()) return true;
-  if (!isAppDataWarm()) return false;
+  if (!isAppDataWarm()) return true;
   const data = getData();
   const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
   if (!coopId || !user.cooperadoId) return false;
@@ -95,7 +95,10 @@ export function cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(
   ) {
     return true;
   }
-  return false;
+  if (cardSemValor && cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId)) {
+    return true;
+  }
+  return cooperadoGaExibicaoFinanceiraAindaZerada(user);
 }
 
 /** Valor a receber comprovado no card ou zero legítimo com fatia local alinhada. */
