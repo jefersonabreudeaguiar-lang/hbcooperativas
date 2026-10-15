@@ -723,7 +723,14 @@ export function cooperadoPendentePagamentoResponsavel(
   }
 
   const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId);
-  if (!aguardando) return true;
+  if (!aguardando) {
+    for (const mes of mesReferencia ? [mesReferencia] : meses) {
+      if (cooperadoMesComFichaPagaSemPagamentoCooperativa(data, cooperadoId, mes, coopId)) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   const cobertos = new Set(getMesesReferenciaPagamento(aguardando));
   const mesesSemCobertura = meses.filter((m) => !cobertos.has(m));

@@ -30,5 +30,5 @@ export function projetarAppDataFinanceiroParaCreditoBase(data: AppData, cnpj?: s
     !operacionalAutoritativo ||
     (coopId != null && cooperativaTemNotasConferidasSemFichaLocal(data, coopId));
   const base = precisaReconciliarNotas ? reconciliarFichaFromNotasConferidas(data) : data;
-  return posProcessarIntegridadePagamentosCooperativa(base);
+  return posProcessarIntegridadePagamentosCooperativa(base, { reconciliarLivroCaixa: false });
 }

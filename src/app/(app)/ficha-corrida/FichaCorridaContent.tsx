@@ -136,7 +136,8 @@ import {
   isCooperadoInstantResumeEnabled,
   isCooperadoManualOperacionalSync,
 } from "@/lib/performance/cooperadoColdStart";
-import { requestAppSync, requestAppSyncImmediate } from "@/services/syncRequest";
+import { requestAppSync, requestAppSyncImmediate, requestSyncTier } from "@/services/syncRequest";
+import { pagamentoIdFromOrigemId } from "@/services/livroCaixaService";
 import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
 import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExibirAguardandoAssinatura";
 import { materializarCooperadoPwaAposAssinaturaReciboLocal } from "@/lib/cooperado/cooperadoPwaLeveUi";
@@ -367,6 +368,10 @@ function FichaCorridaPageInner() {
         void resolveCooperativaCnpj(data, coopIdEarly, user).then((cnpj) => {
           if (cnpj) void runCooperadoForegroundOperacionalCheck(cnpj);
         });
+        return;
+      }
+      if (!isCooperado) {
+        requestSyncTier("financeiro_delta", { force: false });
         return;
       }
       requestAppSync();
@@ -1505,8 +1510,8 @@ function FichaCorridaPageInner() {
       const ajustesFichaMes = nextData.ajustesFichaMes.filter(
         (a) => a.cooperativaId === coopId && mesesPagar.includes(a.mesReferencia)
       );
-      const livroCaixa = (nextData.livroCaixa ?? []).filter((l) =>
-        l.origemId?.includes(pagamento.id)
+      const livroCaixa = (nextData.livroCaixa ?? []).filter(
+        (l) => pagamentoIdFromOrigemId(l.origemId) === pagamento.id
       );
       const nuvem = await registrarPagamentoCooperadoNaNuvem(cnpj, {
         pagamento,

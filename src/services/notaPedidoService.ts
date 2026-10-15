@@ -3224,7 +3224,9 @@ export function registrarPagamentoCooperado(
           coopId
         )
       : getResumoPagamentoCooperado(next, cooperadoCanonico, mesPrincipal, coopId));
-  if (resumo.valorLiquido <= 0 || resumo.fichaIds.length === 0) return data;
+  const temEscopoPagamento =
+    resumo.fichaIds.length > 0 || (resumo.notaPedidoIds?.length ?? 0) > 0;
+  if (resumo.valorLiquido <= 0 || !temEscopoPagamento) return next;
 
   const now = new Date().toISOString();
   const cooperado = data.cooperados.find((c) => c.id === cooperadoCanonico);

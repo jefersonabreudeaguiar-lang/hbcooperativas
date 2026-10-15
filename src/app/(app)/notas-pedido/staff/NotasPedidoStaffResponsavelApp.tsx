@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import {
   useAppDataSelector,
-  useAppDataSnapshotForDomains,
+  useAppDataSnapshotForDomainsWhenActive,
 } from "@/hooks/useAppData";
 import {
   markNotaConferenciaDecididaLocalmente,
@@ -658,7 +658,7 @@ export default function NotasPedidoStaffMain() {
       }),
     [isCooperado, vistaResponsavel, conferirModal, anexarModal, abaCooperado]
   );
-  const data = useAppDataSnapshotForDomains(staffNotifyDomains);
+  const data = useAppDataSnapshotForDomainsWhenActive(tabActive, staffNotifyDomains);
 
   const [contratoInstId, setContratoInstId] = useState("");
   const [anexarSucesso, setAnexarSucesso] = useState(false);
@@ -1835,7 +1835,7 @@ export default function NotasPedidoStaffMain() {
     filaBadgeCount,
     removerNotaDaFilaSticky,
     touchNotaNaFilaSticky,
-  } = useResponsavelFilaConferencia(coopId, isCooperado, filaDetalhada);
+  } = useResponsavelFilaConferencia(coopId, isCooperado, filaDetalhada, tabActive);
 
   useEffect(() => {
     if (!filaDetalhada) return;

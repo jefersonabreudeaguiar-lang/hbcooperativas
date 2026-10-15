@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, TrendingUp, TrendingDown, Wallet, Send, FileText, Search, Download } from "lucide-react";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppDataSnapshotForDomains } from "@/hooks/useAppData";
+import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { canUser } from "@/permissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -52,7 +53,7 @@ import { LivroCaixaPlanilhaTable } from "@/components/livro-caixa/LivroCaixaPlan
 import { LivroCaixaResumoCooperadosTable } from "@/components/livro-caixa/LivroCaixaResumoCooperadosTable";
 import {
   calcularResumoOperacionalLivroCaixa,
-  calcularResumoPorCooperadoLivroCaixa,
+  calcularResumoPorCooperadoLivroCaixaCompleto,
 } from "@/services/livroCaixaResumoCooperado";
 import type { LivroCaixaLancamento } from "@/types";
 import { imprimirDocumentoHtml } from "@/utils/relatorioHtml";
@@ -64,8 +65,10 @@ import { downloadLivroCaixaPacoteContabilZip } from "@/utils/livroCaixaExportDow
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import type { LivroCaixaOrigem, LivroCaixaTipo, Action, Resource } from "@/types";
 
+const LIVRO_CAIXA_DATA_DOMAINS: AppDataNotifyDomain[] = ["financeiro", "operacional"];
+
 export default function LivroCaixaPage() {
-  const data = useAppData();
+  const data = useAppDataSnapshotForDomains(LIVRO_CAIXA_DATA_DOMAINS);
   const { user, accountUser } = useAuth();
   const permUser = accountUser ?? user;
   const router = useRouter();
@@ -143,10 +146,16 @@ export default function LivroCaixaPage() {
     return reconciliarLivroCaixaContabilCooperativa(data, coopId);
   }, [data, coopId]);
 
+  const livroReconcilePersistedRef = useRef(false);
   useEffect(() => {
-    if (!dataCaixa || !data || !coopId) return;
-    if (dataCaixa !== data) updateData(() => dataCaixa);
-  }, [data, dataCaixa, coopId]);
+    livroReconcilePersistedRef.current = false;
+  }, [coopId]);
+  useEffect(() => {
+    if (!data || !coopId || livroReconcilePersistedRef.current) return;
+    const reconciled = reconciliarLivroCaixaContabilCooperativa(data, coopId);
+    livroReconcilePersistedRef.current = true;
+    if (reconciled !== data) updateData(() => reconciled);
+  }, [data, coopId]);
 
   useEffect(() => {
     if (!dataCaixa || !coopId || periodoInicializadoRef.current) return;
@@ -183,9 +192,9 @@ export default function LivroCaixaPage() {
   );
 
   const resumoPorCooperado = useMemo(() => {
-    if (!dataCaixa) return [];
-    return calcularResumoPorCooperadoLivroCaixa(dataCaixa, lancamentosVisao);
-  }, [dataCaixa, lancamentosVisao]);
+    if (!dataCaixa || !coopId) return [];
+    return calcularResumoPorCooperadoLivroCaixaCompleto(dataCaixa, lancamentosVisao, coopId);
+  }, [dataCaixa, coopId, lancamentosVisao]);
 
   const saldoInicialMes = useMemo(
     () => (dataCaixa && coopId ? saldoLivroCaixaAntesMes(dataCaixa, coopId, mes) : 0),

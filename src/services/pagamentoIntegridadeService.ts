@@ -305,9 +305,13 @@ export function alinharFichaComPagamentosCooperativa(data: AppData): AppData {
 }
 
 /** Reparo + alinhamento — evita voltar para pendente após PIX/assinatura. */
-export function posProcessarIntegridadePagamentosCooperativa(data: AppData): AppData {
+export function posProcessarIntegridadePagamentosCooperativa(
+  data: AppData,
+  opts?: { reconciliarLivroCaixa?: boolean }
+): AppData {
   let next = promoverPagamentosAguardandoConfirmadosPeloResponsavel(data);
   next = alinharFichaComPagamentosCooperativa(repararIntegridadePagamentosCooperativa(next));
+  if (opts?.reconciliarLivroCaixa === false) return next;
   const coopIds = [...new Set(next.cooperativas.map((c) => c.id))];
   for (const coopId of coopIds) {
     next = reconciliarLivroCaixaContabilCooperativa(next, coopId);
