@@ -10,6 +10,11 @@ import {
   cooperadoPilotFinanceRecoveryOnForeground,
   scheduleCooperadoPilotFinanceReadRecovery,
 } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
+import {
+  cancelCooperadoGaFinanceiroExibicaoRefresh,
+  scheduleCooperadoGaFinanceiroExibicaoRefresh,
+} from "@/lib/cooperado/cooperadoGaFinanceiroExibicaoRefreshSchedule";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { persistirCooperadoPwaEntregasResumosSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
 import { persistirInicioCardCooperadoNotificarPwaLeve } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { isAppDataWarm } from "@/services/dataStore";
@@ -29,6 +34,9 @@ export function CooperadoPwaResumeLifecycle() {
 
     if (cooperadoMobilePilotSnapshotFirstInicio(user)) {
       scheduleCooperadoPilotFinanceReadRecovery(user);
+    }
+    if (isCooperadoMobileGaPromoted(user)) {
+      scheduleCooperadoGaFinanceiroExibicaoRefresh(user);
     }
 
     const flush = () => {
@@ -53,6 +61,7 @@ export function CooperadoPwaResumeLifecycle() {
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
+      cancelCooperadoGaFinanceiroExibicaoRefresh();
     };
   }, [user?.id, user?.role, user?.cooperadoId, user?.cooperativaId]);
 

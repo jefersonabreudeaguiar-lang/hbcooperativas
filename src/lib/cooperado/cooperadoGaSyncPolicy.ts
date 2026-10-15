@@ -5,6 +5,35 @@ import { isPwaColdStartWindow } from "@/lib/pwa/clientRelease";
 import { getSession } from "@/services/dataStore";
 
 const PRIMEIRA_CARGA_KEY = "hb-cooperado-primeira-carga-pending";
+const FINANCE_EXIBICAO_SYNC_KEY = "hb-cooperado-ga-finance-exibicao-sync-pending";
+
+/** Uma operacional_full silenciosa GA quando a UI financeira está zerada sem prova local. */
+export function markCooperadoGaFinanceExibicaoSyncPending(): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(FINANCE_EXIBICAO_SYNC_KEY, "1");
+  } catch {
+    /* quota */
+  }
+}
+
+export function cooperadoGaTemFinanceExibicaoSyncPending(): boolean {
+  if (typeof sessionStorage === "undefined") return false;
+  try {
+    return sessionStorage.getItem(FINANCE_EXIBICAO_SYNC_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function consumeCooperadoGaFinanceExibicaoSyncPending(): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.removeItem(FINANCE_EXIBICAO_SYNC_KEY);
+  } catch {
+    /* quota */
+  }
+}
 
 /** Cooperado sem fatia financeira local — permite um operacional_full automático na sessão. */
 export function markCooperadoPrimeiraCargaSyncPending(): void {
@@ -49,6 +78,7 @@ export function cooperadoGaBloqueiaOperacionalFullAutomatico(opts?: {
     return false;
   }
   if (cooperadoGaTemPrimeiraCargaSyncPending()) return false;
+  if (opts?.eventDriven && cooperadoGaTemFinanceExibicaoSyncPending()) return false;
   return true;
 }
 

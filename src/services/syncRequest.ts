@@ -16,10 +16,14 @@ import {
   isCooperadoEventDrivenSync,
 } from "@/lib/performance/cooperadoEventDrivenSync";
 import {
+  consumeCooperadoGaFinanceExibicaoSyncPending,
   consumeCooperadoPrimeiraCargaSyncPending,
   cooperadoGaBloqueiaOperacionalFullAutomatico,
+  cooperadoGaTemFinanceExibicaoSyncPending,
   cooperadoGaTemPrimeiraCargaSyncPending,
+  markCooperadoGaFinanceExibicaoSyncPending,
 } from "@/lib/cooperado/cooperadoGaSyncPolicy";
+import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { getSession } from "@/services/dataStore";
 import {
   capStaffConferenciaSyncTierRequest,
@@ -120,6 +124,9 @@ export function requestSyncTier(
   if (tier === "operacional_full" && cooperadoGaTemPrimeiraCargaSyncPending()) {
     consumeCooperadoPrimeiraCargaSyncPending();
   }
+  if (tier === "operacional_full" && cooperadoGaTemFinanceExibicaoSyncPending()) {
+    consumeCooperadoGaFinanceExibicaoSyncPending();
+  }
   ensureSchedulerBridge();
   const forceDefault = options?.force ?? defaultForceForSyncTier(tier);
   const capped = capStaffConferenciaSyncTierRequest(
@@ -150,7 +157,57 @@ export function requestCooperadoStaffRevisionSync(): void {
  */
 export function requestCooperadoFinanceiroRecoverySync(): void {
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
+  const session = getSession();
+  if (
+    session?.role === "cooperado" &&
+    cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(session)
+  ) {
+    requestCooperadoGaFinanceiroExibicaoRecoverySync();
+    return;
+  }
   if (isCooperadoManualOperacionalSync() && isCooperadoEventDrivenSync()) {
+    grantCooperadoEventDrivenSync();
+    markNextCooperadoSyncSilent();
+    requestSyncTier("operacional_full", { force: true, immediate: true, eventDriven: true });
+    return;
+  }
+  markCooperadoUserSyncVisible();
+  requestSyncTier("operacional_full", { force: true, immediate: true, userInitiated: true });
+}
+
+const GA_FINANCE_EXIBICAO_CLOUD_SESSION = "hb.coop.gaFinanceExibicaoCloud.v1";
+
+function gaFinanceExibicaoCloudRecoveryJaUsada(userId: string): boolean {
+  if (typeof sessionStorage === "undefined") return true;
+  try {
+    return sessionStorage.getItem(`${GA_FINANCE_EXIBICAO_CLOUD_SESSION}:${userId}`) === "1";
+  } catch {
+    return true;
+  }
+}
+
+function markGaFinanceExibicaoCloudRecoverySession(userId: string): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(`${GA_FINANCE_EXIBICAO_CLOUD_SESSION}:${userId}`, "1");
+  } catch {
+    /* quota */
+  }
+}
+
+/**
+ * GA — uma operacional_full silenciosa por sessão quando A receber/Financeiro zerados
+ * sem cache confiável (ex.: após manutenção de snapshots).
+ */
+export function requestCooperadoGaFinanceiroExibicaoRecoverySync(): void {
+  if (typeof navigator !== "undefined" && !navigator.onLine) return;
+  const session = getSession();
+  if (!session || session.role !== "cooperado") return;
+  if (!cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(session)) return;
+  if (gaFinanceExibicaoCloudRecoveryJaUsada(session.id)) return;
+  markGaFinanceExibicaoCloudRecoverySession(session.id);
+  markCooperadoGaFinanceExibicaoSyncPending();
+  if (isCooperadoEventDrivenSync()) {
     grantCooperadoEventDrivenSync();
     markNextCooperadoSyncSilent();
     requestSyncTier("operacional_full", { force: true, immediate: true, eventDriven: true });

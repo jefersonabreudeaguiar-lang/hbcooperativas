@@ -9,6 +9,9 @@ import { lerHbCreditAccountPersistidoFlex } from "@/lib/hb-credit/hbCreditAccoun
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoAppReleaseNeedsOperacionalSync } from "@/lib/performance/cooperadoEventDrivenSync";
+import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { cooperadoPwaFinanceiroSnapshotsAusentes } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
+import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
@@ -62,5 +65,28 @@ export function cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(
   if (!coopId || !user.cooperadoId) return false;
   const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
   if (cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId)) return true;
+  if (cooperadoPwaFinanceiroSnapshotsAusentes(cooperadoId, coopId)) {
+    if (cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId)) return true;
+    const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
+    if (paridade.valorLiquido > 0.01) return true;
+  }
+  const card = lerInicioCardFinanceiroExibicao(cooperadoId, coopId);
+  const cardSemValor =
+    !card?.display || !cooperadoMotorTemObrigacaoReceber(card.display);
+  if (
+    cardSemValor &&
+    (cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId) ||
+      leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId).valorLiquido > 0.01)
+  ) {
+    return true;
+  }
   return false;
+}
+
+/** Card/HB ainda sem valor exibível — útil para polling escalonado. */
+export function cooperadoGaExibicaoFinanceiraAindaZerada(
+  user: Omit<User, "password"> | null | undefined
+): boolean {
+  if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return false;
+  return !cooperadoGaExibicaoFinanceiraConfiavel(user);
 }

@@ -116,15 +116,23 @@ export async function runCooperadoFleetCachePurgeOnce(): Promise<void> {
 
 const ENTREGA_DEFER_MS = 90_000;
 
+let afterMaintenanceCallback: (() => void) | null = null;
+
 /**
  * Agenda manutenção 1× por época — após interação, sem bloquear o primeiro frame.
+ * `onAfterMaintenance` roda após purge (ex.: rematerializar card/ficha financeira).
  */
-export function scheduleCooperadoSafeFleetMaintenanceOnce(): void {
+export function scheduleCooperadoSafeFleetMaintenanceOnce(
+  onAfterMaintenance?: () => void
+): void {
   if (typeof window === "undefined") return;
-  if (cooperadoFleetCachePurgeAlreadyDone()) return;
+  if (cooperadoFleetCachePurgeAlreadyDone()) {
+    return;
+  }
   if (!cooperadoFleetCachePurgeTarget()) return;
   if (maintenanceScheduled) return;
   maintenanceScheduled = true;
+  afterMaintenanceCallback = onAfterMaintenance ?? null;
 
   const attempt = () => {
     if (cooperadoFleetCachePurgeAlreadyDone()) return;
@@ -133,8 +141,12 @@ export function scheduleCooperadoSafeFleetMaintenanceOnce(): void {
       return;
     }
     void runCooperadoSafeFleetLocalMaintenanceOnce().then((done) => {
-      if (!done && !cooperadoFleetCachePurgeAlreadyDone()) {
+      if (done) {
+        afterMaintenanceCallback?.();
+        afterMaintenanceCallback = null;
+      } else if (!cooperadoFleetCachePurgeAlreadyDone()) {
         maintenanceScheduled = false;
+        afterMaintenanceCallback = null;
       }
     });
   };

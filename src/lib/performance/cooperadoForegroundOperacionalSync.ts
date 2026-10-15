@@ -24,8 +24,10 @@ import {
 import { persistirCooperadoPwaMessengerCaches } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { runCooperadoMessengerOperacionalLightPull } from "@/lib/cooperado/cooperadoMessengerOperacionalLightPull";
 import { runCooperadoNotasContratosLightPull } from "@/lib/cooperado/cooperadoNotasContratosLightPull";
+import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import {
   requestCooperadoFinanceiroRecoverySync,
+  requestCooperadoGaFinanceiroExibicaoRecoverySync,
   requestCooperadoStaffRevisionSync,
 } from "@/services/syncRequest";
 import type { CooperativaCloudRevision } from "@/lib/performance/cooperadoEventDrivenSync";
@@ -116,7 +118,11 @@ export async function runCooperadoForegroundOperacionalCheck(
   const { reason, remote } = evaluation;
 
   if (reason === "financeiro_desatualizado") {
-    if (!session || !isCooperadoMobileGaPromoted(session)) {
+    if (session && isCooperadoMobileGaPromoted(session)) {
+      if (cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(session)) {
+        requestCooperadoGaFinanceiroExibicaoRecoverySync();
+      }
+    } else {
       requestCooperadoFinanceiroRecoverySync();
     }
     return true;

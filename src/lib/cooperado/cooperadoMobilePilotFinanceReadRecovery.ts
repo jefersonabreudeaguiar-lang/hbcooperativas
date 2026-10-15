@@ -19,7 +19,7 @@ import {
 } from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
 import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { scheduleCooperadoHbCreditLimiteAndAccountWarmup } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
-import { requestCooperadoFinanceiroRecoverySync } from "@/services/syncRequest";
+import { requestCooperadoGaFinanceiroExibicaoRecoverySync } from "@/services/syncRequest";
 
 function pilotFinanceCtx(user: Omit<User, "password">) {
   if (!user.cooperadoId) return null;
@@ -161,7 +161,7 @@ export function scheduleCooperadoPilotFinanceReadRecovery(
   const maybeCloudRecovery = () => {
     if (cooperadoFinanceiroCardCacheTemValor(user)) return;
     if (!cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) return;
-    requestCooperadoFinanceiroRecoverySync();
+    requestCooperadoGaFinanceiroExibicaoRecoverySync();
     scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
   };
 
