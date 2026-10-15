@@ -24,6 +24,7 @@ import {
   valorLiquidoFromResumoPartes,
 } from "@/services/notaPedidoService";
 import { formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia } from "@/utils/format";
+import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import {
   mesesComValoresAvulsos,
   temValoresAvulsosPendentesMes,
@@ -222,6 +223,21 @@ export function cooperadoExibirValorReceberInicio(
           : formatMesReferencia(bicVal.mes)
         : bicVal.mesLabel;
     if (bicVal.valor <= 0 || mesesBic.length === 0) {
+      const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+      if (paridade.valorLiquido > 0.005) {
+        const mesesPar =
+          paridade.mesesResumo.length > 0 ? paridade.mesesResumo : paridade.consolidado.meses;
+        const mesPar = mesesPar[mesesPar.length - 1] ?? bicVal.mes;
+        return {
+          exibir: true,
+          mes: mesPar,
+          meses: mesesPar.length ? [...mesesPar] : mesPar ? [mesPar] : mesesBic,
+          mesLabel: paridade.mesLabel?.trim() || mesLabelBic,
+          valor: paridade.valorLiquido,
+          valorRecibo: 0,
+          aguardandoAssinatura: false,
+        };
+      }
       return {
         exibir: false,
         mes: bicVal.mes,

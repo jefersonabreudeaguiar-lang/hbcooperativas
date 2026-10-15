@@ -1,5 +1,9 @@
 import type { User } from "@/types";
-import { cooperadoMotorTemObrigacaoReceber } from "@/lib/cooperadoInicioCardPolicy";
+import {
+  cooperadoMotorTemObrigacaoReceber,
+  type InicioCardMotorSnapshot,
+} from "@/lib/cooperadoInicioCardPolicy";
+import { cooperadoPilotMotorCardInicioTemValor } from "@/lib/cooperado/cooperadoMobilePilotInicioValorLocal";
 import {
   cooperadoFinanceiroCardCacheTemValor,
   lerInicioCardFinanceiroExibicao,
@@ -46,6 +50,10 @@ export function cooperadoGaExibicaoFinanceiraConfiavel(
   const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
   if (!coopId) return false;
   const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
+  if (paridade.valorLiquido > 0.01 && !cooperadoFinanceiroCardCacheTemValor(user)) {
+    return false;
+  }
   if (cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId)) return false;
   if (!cooperadoTemReciboAssinadoLocalSemPendenciaUi(data, cooperadoId, coopId)) return false;
   const card = lerInicioCardFinanceiroExibicao(cooperadoId, coopId);
@@ -88,6 +96,40 @@ export function cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(
     return true;
   }
   return false;
+}
+
+/** Valor a receber comprovado no card ou zero legítimo com fatia local alinhada. */
+export function cooperadoGaValorReceberExibicaoResolvida(
+  user: Omit<User, "password"> | null | undefined
+): boolean {
+  if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return true;
+  if (cooperadoFinanceiroCardCacheTemValor(user)) return true;
+  if (cooperadoGaExibicaoFinanceiraConfiavel(user)) return true;
+  if (!isAppDataWarm() || !user.cooperadoId) return false;
+  const data = getData();
+  const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
+  if (!coopId) return false;
+  const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+  if (!cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId)) return false;
+  if (cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId)) return false;
+  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
+  if (paridade.valorLiquido > 0.01) {
+    return cooperadoPilotMotorCardInicioTemValor(data, cooperadoId, coopId);
+  }
+  return cooperadoPilotMotorCardInicioTemValor(data, cooperadoId, coopId) === false;
+}
+
+/**
+ * Não exibir R$ 0,00 fixo — mostrar “Atualizando…” até sync ou prova de zero.
+ */
+export function cooperadoGaValorReceberExibicaoIndeterminada(
+  user: Omit<User, "password"> | null | undefined,
+  display?: InicioCardMotorSnapshot | null
+): boolean {
+  if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return false;
+  if (display && cooperadoMotorTemObrigacaoReceber(display)) return false;
+  if (cooperadoGaValorReceberExibicaoResolvida(user)) return false;
+  return true;
 }
 
 /** Card/HB ainda sem valor exibível — útil para polling escalonado. */

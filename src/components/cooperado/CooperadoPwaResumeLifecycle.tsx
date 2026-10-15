@@ -15,6 +15,10 @@ import {
   scheduleCooperadoGaFinanceiroExibicaoRefresh,
 } from "@/lib/cooperado/cooperadoGaFinanceiroExibicaoRefreshSchedule";
 import {
+  cancelCooperadoGarantiaValorReceberSync,
+  scheduleCooperadoGarantiaValorReceberUntilResolvido,
+} from "@/lib/cooperado/cooperadoGaGarantiaValorReceberSync";
+import {
   cancelCooperadoReleaseIntegrityWatch,
   scheduleCooperadoReleaseIntegrityWatch,
 } from "@/lib/cooperado/cooperadoReleaseIntegrityWatch";
@@ -41,6 +45,7 @@ export function CooperadoPwaResumeLifecycle() {
     }
     if (isCooperadoMobileGaPromoted(user)) {
       scheduleCooperadoGaFinanceiroExibicaoRefresh(user);
+      scheduleCooperadoGarantiaValorReceberUntilResolvido(user);
       scheduleCooperadoReleaseIntegrityWatch(user);
     }
 
@@ -67,6 +72,7 @@ export function CooperadoPwaResumeLifecycle() {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
       cancelCooperadoGaFinanceiroExibicaoRefresh();
+      cancelCooperadoGarantiaValorReceberSync();
       cancelCooperadoReleaseIntegrityWatch();
     };
   }, [user?.id, user?.role, user?.cooperadoId, user?.cooperativaId]);

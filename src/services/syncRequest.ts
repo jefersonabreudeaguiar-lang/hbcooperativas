@@ -23,7 +23,10 @@ import {
   cooperadoGaTemPrimeiraCargaSyncPending,
   markCooperadoGaFinanceExibicaoSyncPending,
 } from "@/lib/cooperado/cooperadoGaSyncPolicy";
-import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
+import {
+  cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem,
+  cooperadoGaValorReceberExibicaoResolvida,
+} from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { getSession } from "@/services/dataStore";
 import {
   capStaffConferenciaSyncTierRequest,
@@ -176,6 +179,31 @@ export function requestCooperadoFinanceiroRecoverySync(): void {
 }
 
 const GA_FINANCE_EXIBICAO_CLOUD_SESSION = "hb.coop.gaFinanceExibicaoCloud.v1";
+const GA_FINANCE_GARANTIA_COUNT_PREFIX = "hb.coop.gaFinanceGarantiaCount";
+const GA_FINANCE_GARANTIA_MAX = 4;
+
+function gaFinanceGarantiaCount(userId: string): number {
+  if (typeof sessionStorage === "undefined") return GA_FINANCE_GARANTIA_MAX;
+  try {
+    const raw = sessionStorage.getItem(`${GA_FINANCE_GARANTIA_COUNT_PREFIX}:${userId}`);
+    const n = raw ? parseInt(raw, 10) : 0;
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return GA_FINANCE_GARANTIA_MAX;
+  }
+}
+
+function bumpGaFinanceGarantiaCount(userId: string): number {
+  const next = gaFinanceGarantiaCount(userId) + 1;
+  if (typeof sessionStorage !== "undefined") {
+    try {
+      sessionStorage.setItem(`${GA_FINANCE_GARANTIA_COUNT_PREFIX}:${userId}`, String(next));
+    } catch {
+      /* quota */
+    }
+  }
+  return next;
+}
 
 function gaFinanceExibicaoCloudRecoveryJaUsada(userId: string): boolean {
   if (typeof sessionStorage === "undefined") return true;
@@ -199,13 +227,24 @@ function markGaFinanceExibicaoCloudRecoverySession(userId: string): void {
  * GA — uma operacional_full silenciosa por sessão quando A receber/Financeiro zerados
  * sem cache confiável (ex.: após manutenção de snapshots).
  */
-export function requestCooperadoGaFinanceiroExibicaoRecoverySync(): void {
+export function requestCooperadoGaFinanceiroExibicaoRecoverySync(opts?: {
+  garantia?: boolean;
+}): void {
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   const session = getSession();
   if (!session || session.role !== "cooperado") return;
-  if (!cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(session)) return;
-  if (gaFinanceExibicaoCloudRecoveryJaUsada(session.id)) return;
-  markGaFinanceExibicaoCloudRecoverySession(session.id);
+  if (opts?.garantia) {
+    if (cooperadoGaValorReceberExibicaoResolvida(session)) return;
+  } else if (!cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(session)) {
+    return;
+  }
+  if (opts?.garantia) {
+    if (bumpGaFinanceGarantiaCount(session.id) > GA_FINANCE_GARANTIA_MAX) return;
+  } else if (gaFinanceExibicaoCloudRecoveryJaUsada(session.id)) {
+    return;
+  } else {
+    markGaFinanceExibicaoCloudRecoverySession(session.id);
+  }
   markCooperadoGaFinanceExibicaoSyncPending();
   if (isCooperadoEventDrivenSync()) {
     grantCooperadoEventDrivenSync();

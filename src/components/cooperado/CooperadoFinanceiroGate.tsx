@@ -69,6 +69,10 @@ import {
 } from "@/lib/cooperado/cooperadoGaFinanceiroExibicaoRefreshSchedule";
 import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
 import {
+  cancelCooperadoGarantiaValorReceberSync,
+  scheduleCooperadoGarantiaValorReceberUntilResolvido,
+} from "@/lib/cooperado/cooperadoGaGarantiaValorReceberSync";
+import {
   cooperadoPilotAppDataTemFinanceiroLocal,
   cooperadoPilotFinanceiroExibirComSnapshotsLocais,
   scheduleCooperadoPilotFinanceReadRecovery,
@@ -114,6 +118,8 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     scheduleCooperadoPilotFinanceReadRecovery(user);
     scheduleCooperadoGaFinanceiroExibicaoRefresh(user);
     scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
+    scheduleCooperadoGarantiaValorReceberUntilResolvido(user);
+    return () => cancelCooperadoGarantiaValorReceberSync();
   }, [user?.id, user?.role, user?.cooperadoId]);
 
   useEffect(() => {

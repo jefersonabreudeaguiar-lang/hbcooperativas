@@ -56,10 +56,11 @@ export function CooperadoInicioValorReceberCard({
   const modoValor = base.valor > 0;
   const mesLabel = base.mesLabel.trim() || "—";
   const visualPendencia = temPendencia(base);
+  const aguardandoValor = atualizando && !modoValor && !modoRecibo && !modoAssinaturaComAberto;
 
   const shellClass = modoRecibo
     ? "bg-gradient-to-br from-emerald-600 to-green-700 text-white border border-emerald-500"
-    : modoValor || modoAssinaturaComAberto || (visualPendencia && atualizando)
+    : modoValor || modoAssinaturaComAberto || aguardandoValor || (visualPendencia && atualizando)
       ? "bg-gradient-to-br from-amber-500 to-amber-600 text-white"
       : "bg-white text-gray-900 border-2 border-amber-200";
 
@@ -73,7 +74,9 @@ export function CooperadoInicioValorReceberCard({
 
   const valorGrande = modoRecibo
     ? formatCurrency(base.valorRecibo)
-    : formatCurrency(base.valor);
+    : aguardandoValor
+      ? "—"
+      : formatCurrency(base.valor);
 
   const subtitulo = atualizando
     ? "Atualizando valores…"

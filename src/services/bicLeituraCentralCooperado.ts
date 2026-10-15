@@ -42,6 +42,7 @@ import {
   cooperadoQuantoVouReceberParaApresentacao,
 } from "@/lib/cooperadoApresentacaoFinanceira";
 import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
+import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 
 export type BicCentralProjecaoOpts = BicProjecaoFinanceiraCooperadoOpts & {
   apresentacaoConsolidada?: boolean;
@@ -386,6 +387,24 @@ export function bicCentralResolveInicioParaExibicao(
           valor,
           valorRecibo: modoRecibo ? m6.valorRecibo : 0,
           aguardandoAssinatura: modoRecibo,
+        },
+        consolidated
+      );
+    }
+    const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+    if (paridade.valorLiquido > 0.005) {
+      const mesesPar =
+        paridade.mesesResumo.length > 0 ? paridade.mesesResumo : paridade.consolidado.meses;
+      const mesPar = mesesPar[mesesPar.length - 1] ?? m6.mes;
+      return cooperadoInicioParaCardsDefinitivos(
+        {
+          exibir: true,
+          mes: mesPar,
+          meses: mesesPar.length ? [...mesesPar] : mesPar ? [mesPar] : m6.meses,
+          mesLabel: paridade.mesLabel?.trim() || m6.mesLabel,
+          valor: paridade.valorLiquido,
+          valorRecibo: 0,
+          aguardandoAssinatura: false,
         },
         consolidated
       );

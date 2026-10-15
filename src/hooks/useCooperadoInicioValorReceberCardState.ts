@@ -33,6 +33,8 @@ import {
 } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
 import { lerInicioCardPersistidoResume } from "@/lib/cooperado/cooperadoPwaInstantResume";
 import { inicioCardMotorFromParidadeFinanceiro } from "@/lib/cooperado/cooperadoFinanceiroParidadeInicioBridge";
+import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { cooperadoGaValorReceberExibicaoIndeterminada } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import {
   lerCooperadoPwaFichaResumoSnapshot,
   resolveParidadeFromFichaResumoSnapshot,
@@ -380,6 +382,32 @@ export function useCooperadoInicioValorReceberCardState(input: {
         };
       }
 
+      if (dataLatch && input.cooperadoId && cooperativaIdLatch) {
+        const paridadeLive = leituraFinanceiraParidadeCooperado(
+          dataLatch,
+          input.cooperadoId,
+          cooperativaIdLatch
+        );
+        if (paridadeLive.valorLiquido > 0.005) {
+          const display = inicioCardMotorFromParidadeFinanceiro(
+            dataLatch,
+            input.cooperadoId,
+            cooperativaIdLatch,
+            paridadeLive
+          );
+          return {
+            display,
+            latch: {
+              motorRevision: `paridadeLive:${paridadeLive.valorLiquido}`,
+              display,
+              hadPendencia: true,
+            },
+            atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+            gravarPersistencia: true,
+          };
+        }
+      }
+
       return {
         display: SNAPSHOT_VAZIO,
         latch: { motorRevision: "", display: SNAPSHOT_VAZIO, hadPendencia: false },
@@ -441,7 +469,12 @@ export function useCooperadoInicioValorReceberCardState(input: {
     leituraSomentePwa,
   ]);
 
+  const exibicaoIndeterminada =
+    sessionUser?.role === "cooperado" &&
+    cooperadoGaValorReceberExibicaoIndeterminada(sessionUser, resolved.display);
+
   const atualizando =
+    exibicaoIndeterminada ||
     resolved.atualizando ||
     (Boolean(input.carregandoValoresFinanceiros) &&
       cooperadoMotorTemObrigacaoReceber(resolved.display)) ||
