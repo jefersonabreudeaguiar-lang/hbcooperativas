@@ -33,6 +33,7 @@ import {
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import { isCooperadoManualOperacionalSync } from "@/lib/performance/cooperadoColdStart";
 import { isCooperadoMobilePilotHbCreditUi } from "@/lib/cooperado/cooperadoMobilePilotHbCredit";
+import { clearCooperadoOptimisticTab } from "@/lib/performance/cooperadoOptimisticTabNavigation";
 
 type Props = {
   cnpj: string;
@@ -51,6 +52,7 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
   const abrirHbCreditos = useCallback(
     (e?: { preventDefault?: () => void }) => {
       e?.preventDefault?.();
+      clearCooperadoOptimisticTab();
       try {
         router.push("/minha-conta-coop");
       } catch {

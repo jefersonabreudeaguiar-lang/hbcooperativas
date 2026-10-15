@@ -584,10 +584,15 @@ export function getCooperadoShellMenusBeforeDataWarm(
   const mobileBase = COOPERADO_MENU.filter((i) =>
     (COOPERADO_BOTTOM_TAB_HREFS as readonly string[]).includes(i.href)
   );
+  const hbWarmEligible =
+    isContaCoopUiPublic() &&
+    Boolean((user as Pick<User, "cooperadoId">).cooperadoId?.trim());
+  const withHb = (items: { href: string; label: string; resource: Resource }[]) =>
+    appendHbCreditMenuItem(items, navUser, false, hbWarmEligible, hbWarmEligible);
   return {
-    desktopMenu: filterMenuForUser(COOPERADO_MENU, navUser),
+    desktopMenu: withHb(filterMenuForUser(COOPERADO_MENU, navUser)),
     mobileMenu: filterMenuForUser(mobileBase, navUser),
-    drawerMenu: filterMenuForUser(COOPERADO_DRAWER_MENU, navUser),
+    drawerMenu: withHb(filterMenuForUser(COOPERADO_DRAWER_MENU, navUser)),
   };
 }
 

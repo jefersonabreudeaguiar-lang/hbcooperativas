@@ -25,6 +25,10 @@ export function clearCooperadoOptimisticTab(expected?: string): void {
 /** Limpa otimista só quando o Next confirmou a mesma aba. */
 export function reconcileCooperadoOptimisticTab(pathname: string): void {
   if (optimisticHref == null) return;
+  if (!isCooperadoBottomTabPath(pathname)) {
+    clearCooperadoOptimisticTab();
+    return;
+  }
   if (pathname === optimisticHref) {
     clearCooperadoOptimisticTab(pathname);
   }
@@ -40,6 +44,7 @@ export function subscribeCooperadoOptimisticTab(onChange: () => void): () => voi
 }
 
 export function resolveCooperadoEffectiveTabPath(pathname: string): string {
+  if (!isCooperadoBottomTabPath(pathname)) return pathname;
   if (optimisticHref && isCooperadoBottomTabPath(optimisticHref)) return optimisticHref;
   return pathname;
 }
