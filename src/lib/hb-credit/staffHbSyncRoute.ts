@@ -33,3 +33,17 @@ export function isStaffHbCoopBackgroundSyncRoute(pathname?: string): boolean {
     (prefix) => p === prefix || p.startsWith(`${prefix}/`)
   );
 }
+
+/** Poll cooperativa-wide de descontos HB — só onde o relatório/ficha depende (evita lote em Cooperados/Dashboard). */
+const STAFF_HB_COOP_PERIODIC_DESCONTOS_PREFIXES = [
+  "/relatorios",
+  "/ficha-corrida",
+] as const;
+
+export function isStaffHbCoopPeriodicDescontosSyncRoute(pathname?: string): boolean {
+  const p = pathname ?? (typeof window !== "undefined" ? window.location.pathname : "");
+  if (!p) return false;
+  return STAFF_HB_COOP_PERIODIC_DESCONTOS_PREFIXES.some(
+    (prefix) => p === prefix || p.startsWith(`${prefix}/`)
+  );
+}

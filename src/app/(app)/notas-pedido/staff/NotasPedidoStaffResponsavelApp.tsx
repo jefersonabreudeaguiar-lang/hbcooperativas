@@ -2205,9 +2205,12 @@ export default function NotasPedidoStaffMain() {
   useEffect(() => {
     if (isCooperado || !coopId) return;
     if (responsavelPrimeiroPullAgendadoRef.current) return;
-    const d = getData();
-    const filaVazia = !d || countNotasFilaConferenciaResponsavel(d, coopId) === 0;
-    puxarNotasResponsavelDaNuvem({ forceFull: filaVazia });
+    const t = window.setTimeout(() => {
+      const d = getData();
+      const filaVazia = !d || countNotasFilaConferenciaResponsavel(d, coopId) === 0;
+      puxarNotasResponsavelDaNuvem({ forceFull: filaVazia });
+    }, 400);
+    return () => window.clearTimeout(t);
   }, [vistaResponsavel, isCooperado, coopId, puxarNotasResponsavelDaNuvem]);
 
   const filaRecuperacaoAutoRef = useRef(false);

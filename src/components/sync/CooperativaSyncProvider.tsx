@@ -914,7 +914,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       } else if (cooperadoLogado || opts?.force) {
         await refreshHb();
       } else {
-        window.setTimeout(() => void refreshHb(), staffUser ? 8_000 : 2_500);
+        window.setTimeout(() => void refreshHb(), staffUser ? 14_000 : 2_500);
       }
     } catch (e) {
       if (!completed) {

@@ -29,7 +29,10 @@ import {
   resetCooperadoFinancialPin,
 } from "@/services/creditApiService";
 import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
-import { buildCreditosBaseMapCached, calcLimiteFromPercentual } from "@/modules/hb-credit/engine/creditBaseFromFicha";
+import {
+  buildCreditosBaseMapCachedAsync,
+  calcLimiteFromPercentual,
+} from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import { resolveLimiteHbCooperadoEfetivo } from "@/modules/hb-credit/engine/creditBaseHbGuard";
 import type { AuthoritativeCreditBaseErrorPayload } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro, ContaCoopCooperadoPinResetRequest, ContaCoopPixChangeRequest } from "@/modules/hb-credit/types";
@@ -380,14 +383,31 @@ function ContaCoopContent() {
       }
 
       const contextKey = `${user.cooperativaId}:${cooperadoIdsKey}`;
-      const t0 = contaCoopPerfStart("buildCreditosBaseMapCached");
-      const map = buildCreditosBaseMapCached(getData(), cooperadoIdsAtivos, user.cooperativaId);
-      contaCoopPerfEnd("buildCreditosBaseMapCached", t0);
-      creditosBaseContextRef.current = contextKey;
-      creditosBaseRef.current = map;
-      startTransition(() => {
-        setCreditosBaseColetivo(map);
-      });
+      const gen = ++creditosBaseComputeGenRef.current;
+      const t0 = contaCoopPerfStart("buildCreditosBaseMapCachedAsync");
+      void buildCreditosBaseMapCachedAsync(getData(), cooperadoIdsAtivos, user.cooperativaId, {
+        onBatch: (mapSoFar) => {
+          if (creditosBaseComputeGenRef.current !== gen) return;
+          creditosBaseContextRef.current = contextKey;
+          creditosBaseRef.current = mapSoFar;
+          startTransition(() => {
+            setCreditosBaseColetivo(mapSoFar);
+          });
+        },
+        shouldContinue: () => creditosBaseComputeGenRef.current === gen,
+      })
+        .then((map) => {
+          if (creditosBaseComputeGenRef.current !== gen) return;
+          contaCoopPerfEnd("buildCreditosBaseMapCachedAsync", t0);
+          creditosBaseContextRef.current = contextKey;
+          creditosBaseRef.current = map;
+          startTransition(() => {
+            setCreditosBaseColetivo(map);
+          });
+        })
+        .catch(() => {
+          contaCoopPerfEnd("buildCreditosBaseMapCachedAsync", t0);
+        });
     },
     [user?.cooperativaId, cooperadoIdsAtivos, cooperadoIdsKey]
   );

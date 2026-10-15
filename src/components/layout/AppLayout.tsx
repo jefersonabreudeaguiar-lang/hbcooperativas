@@ -30,9 +30,6 @@ import { CobrancaSaasPainel } from "@/components/payments/CobrancaSaasPainelWrap
 import { PainelResponsavelMobileBar } from "@/components/permissions/PainelResponsavelMobileBar";
 import { ContratoServicoAppGate } from "@/components/cobranca/ContratoServicoAppGate";
 import { cn } from "@/utils/format";
-import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
-import { useSyncContaCoopValorReceberCooperativa } from "@/hooks/useSyncContaCoopValorReceberCooperativa";
-import { isStaffHbCoopBackgroundSyncRoute } from "@/lib/hb-credit/staffHbSyncRoute";
 import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
 import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { scheduleCooperadoNavPrefetchEarly } from "@/lib/performance/cooperadoNavPrefetch";
@@ -269,7 +266,11 @@ export function MobileNav() {
   );
 
   useLayoutEffect(() => {
-    if (!navUser || !isCooperadoAppUser(navUser)) return;
+    if (!navUser) return;
+    const mobileShell =
+      typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches;
+    if (!mobileShell && isCooperadoAppUser(navUser)) return;
+    if (!mobileShell && !isCooperadoAppUser(navUser)) return;
     markRqlShellVisual();
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -486,17 +487,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   const mercadoQrImmersive = pathname === "/mercado-parceiro/cobrar";
   const shell = useAppShellNavigationContext();
   const navUser = shell?.navUser ?? null;
-  const coopId = shell?.coopId;
   const staffPainelUi = shell?.staffPainelUi ?? false;
-  const credit = useHbCreditEnabled(navUser);
-  const staffHbSync =
-    staffPainelUi &&
-    navUser &&
-    coopId &&
-    (navUser.role === "responsavel" || navUser.role === "tesoureiro" || navUser.role === "admin");
-  /** Ficha-descontos em lote — só relatórios; `/conta-coop` usa APIs próprias da página HB. */
-  const staffCoopBackgroundSync = isStaffHbCoopBackgroundSyncRoute(pathname);
-
   const cooperadoKeepAliveShell =
     Boolean(navUser) &&
     isCooperadoAppUser(navUser) &&
@@ -562,17 +553,17 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     }
   }, [navUser, cooperadoKeepAliveShell, staffKeepAliveShell]);
 
-  useSyncContaCoopValorReceberCooperativa(
-    staffHbSync && credit.enabled && staffCoopBackgroundSync
-      ? { cooperativaId: coopId, user: navUser, enabled: true }
-      : undefined
-  );
-
   useHbCreditDescontosWarmup(navUser);
 
   const router = useRouter();
   useEffect(() => {
     if (!navUser || isCooperadoAppUser(navUser)) return;
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 1023px)").matches
+    ) {
+      return;
+    }
     return scheduleStaffNavPrefetchEarly(router);
   }, [navUser?.id, navUser?.role, router]);
 

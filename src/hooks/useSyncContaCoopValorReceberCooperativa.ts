@@ -5,9 +5,10 @@ import { getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedule";
+import { scheduleStaffPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
 
-const SYNC_INTERVAL_MS = 120_000;
-const SYNC_INITIAL_DELAY_MS = 90_000;
+const SYNC_INTERVAL_MS = 240_000;
+const SYNC_INITIAL_DELAY_MS = 120_000;
 
 type HookOpts = {
   cooperativaId?: string;
@@ -75,11 +76,11 @@ export function useSyncContaCoopValorReceberCooperativa(opts?: HookOpts) {
     };
 
     const onVisible = () => {
-      if (document.visibilityState === "visible") run();
+      if (document.visibilityState === "visible") scheduleStaffPostInteractiveTask(run);
     };
     document.addEventListener("visibilitychange", onVisible);
-    const interval = window.setInterval(run, SYNC_INTERVAL_MS);
-    const initial = window.setTimeout(run, SYNC_INITIAL_DELAY_MS);
+    const interval = window.setInterval(() => scheduleStaffPostInteractiveTask(run), SYNC_INTERVAL_MS);
+    const initial = window.setTimeout(() => scheduleStaffPostInteractiveTask(run), SYNC_INITIAL_DELAY_MS);
 
     return () => {
       cancelled = true;
