@@ -8,10 +8,7 @@ import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
-import {
-  bicCentralGetConsolidadoFinanceiroCooperado,
-  bicCentralMesPrincipalQuantoVouReceber,
-} from "@/services/bicLeituraCentralCooperado";
+import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
 import type { LeituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
@@ -24,7 +21,7 @@ export type CooperadoPwaFichaResumoSnapshot = {
   savedAt: string;
   fichaAberto: ResumoMesEntregasCooperado[];
   mesPrincipal: ReturnType<typeof bicCentralMesPrincipalQuantoVouReceber>;
-  consolidado: ReturnType<typeof bicCentralGetConsolidadoFinanceiroCooperado>;
+  consolidado: LeituraFinanceiraParidadeCooperado["consolidado"];
   /** Paridade Financeiro (v2+) — leitura somente nas abas. */
   paridade?: LeituraFinanceiraParidadeCooperado;
 };
@@ -67,11 +64,15 @@ export function buildCooperadoPwaFichaResumoSnapshot(
 ): CooperadoPwaFichaResumoSnapshot {
   const canon = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
   const fichaAberto = listarResumosFichaEmAbertoCooperado(data, canon, cooperativaId);
-  const mesPrincipal = bicCentralMesPrincipalQuantoVouReceber(data, canon, cooperativaId, {
-    apresentacaoConsolidada,
-  });
-  const consolidado = bicCentralGetConsolidadoFinanceiroCooperado(data, canon, cooperativaId);
   const paridade = leituraFinanceiraParidadeCooperado(data, canon, cooperativaId);
+  const mesesPar = paridade.mesesResumo;
+  const mesPrincipal =
+    mesesPar[mesesPar.length - 1] ??
+    mesesPar[0] ??
+    bicCentralMesPrincipalQuantoVouReceber(data, canon, cooperativaId, {
+      apresentacaoConsolidada,
+    });
+  const consolidado = paridade.consolidado;
   return {
     v: COOPERADO_PWA_FICHA_RESUMO_SNAPSHOT_VERSION,
     appBuild: APP_BUILD_VERSION,

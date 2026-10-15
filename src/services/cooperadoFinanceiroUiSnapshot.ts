@@ -316,20 +316,31 @@ export function buildCooperadoFinanceiroUiSnapshot(
   const valorParidade = paridade.valorLiquido > 0.005 ? paridade.valorLiquido : 0;
   const valorInicioBic =
     inicioBic.exibir || inicioBic.valor > 0.005 ? Math.max(0, inicioBic.valor) : 0;
-  let valorAReceber = Math.max(valorParidade, valorInicioBic, m6.valor > 0.005 ? m6.valor : 0);
+  let valorAReceber =
+    valorParidade > 0
+      ? valorParidade
+      : Math.max(valorInicioBic, m6.valor > 0.005 ? m6.valor : 0);
   if (aguardandoAssinaturaRecibo && motorFicha.valor <= 0 && valorInicioBic <= 0 && valorParidade <= 0) {
     valorAReceber = 0;
   }
-  const mesLabel = motorFicha.mesLabel?.trim() || m6.mesLabel || null;
-  const mesPrincipal = motorFicha.mes || m6.mes || null;
+  const mesLabel =
+    paridade.mesLabel?.trim() || motorFicha.mesLabel?.trim() || m6.mesLabel || null;
+  const mesPrincipal =
+    paridade.mesesResumo[0] ??
+    paridade.consolidado.mesReferenciaPrincipal ??
+    motorFicha.mes ??
+    m6.mes ??
+    null;
   const mesesReferencia =
-    motorFicha.meses.length > 0
-      ? [...motorFicha.meses]
-      : m6.meses.length
-        ? [...m6.meses]
-        : mesPrincipal
-          ? [mesPrincipal]
-          : [];
+    paridade.mesesResumo.length > 0
+      ? [...paridade.mesesResumo]
+      : motorFicha.meses.length > 0
+        ? [...motorFicha.meses]
+        : m6.meses.length
+          ? [...m6.meses]
+          : mesPrincipal
+            ? [mesPrincipal]
+            : [];
   const painel = bicCentralResolvePainelParaExibicao(data, coopadoId, coopId, bicOpts);
   const revision = cooperadoMotorRevisionOperacional(data, coopadoId, coopId);
   const carregando = Boolean(opts?.carregandoNuvem || opts?.financeiroSincronizando);

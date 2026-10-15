@@ -6,7 +6,7 @@
 import type { AppData } from "@/types";
 import type { FichaCorridaDesconto } from "@/types";
 import {
-  getConsolidadoFinanceiroCooperado,
+  getConsolidadoFinanceiroCooperadoMotorLegado,
   listarMesesReferenciaResumoFinanceiroParidade,
   type ConsolidadoFinanceiroCooperado,
 } from "@/services/cooperadoEntregasService";
@@ -40,7 +40,8 @@ export function leituraFinanceiraParidadeCooperado(
     cooperadoId,
     cooperativaId
   );
-  const consolidado = getConsolidadoFinanceiroCooperado(data, cooperadoId, cooperativaId);
+  /** Mesma base do responsável (motor legado) — BIC M6 não reduz paridade de exibição. */
+  const consolidado = getConsolidadoFinanceiroCooperadoMotorLegado(data, cooperadoId, cooperativaId);
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const mesesConsolidadoKey = [...consolidado.meses].sort().join("|");
   const mesesResumoKey = [...mesesResumo].sort().join("|");

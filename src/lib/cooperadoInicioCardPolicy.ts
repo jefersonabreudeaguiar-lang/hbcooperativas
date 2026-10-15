@@ -146,6 +146,7 @@ function valorLiquidoCardInicioCooperado(
     : null;
   const valorBicInicio =
     inicioBic && (inicioBic.exibir || inicioBic.valor > 0) ? Math.max(0, inicioBic.valor) : 0;
+  if (valorParidade > 0) return valorParidade;
   const valorBase = isBicCentralReadAuthorityEnabled()
     ? Math.max(valorBicInicio, valorParidade)
     : valorParidade;

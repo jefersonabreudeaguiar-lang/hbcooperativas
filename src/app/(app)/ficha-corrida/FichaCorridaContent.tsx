@@ -444,13 +444,15 @@ function FichaCorridaPageInner() {
   ]);
 
   const mesEmAberto = useMemo(() => {
+    if (!tabActive || !cooperadoId) return getCurrentMesReferencia();
+    if (isCooperado && paridadeCooperadoMobile?.mesesResumo.length) {
+      const meses = paridadeCooperadoMobile.mesesResumo;
+      return meses[meses.length - 1] ?? meses[0]!;
+    }
     if ((messenger || pilotFinanceiroLeve) && fichaResumoSnap?.mesPrincipal) {
       return fichaResumoSnap.mesPrincipal;
     }
-    if (!tabActive || !data || !cooperadoId) return getCurrentMesReferencia();
-    if (isCooperado && paridadeCooperadoMobile?.mesesResumo[0]) {
-      return paridadeCooperadoMobile.mesesResumo[0];
-    }
+    if (!data) return getCurrentMesReferencia();
     return bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, coopId, {
       apresentacaoConsolidada: apresentacaoFinanceiroUi,
     });
@@ -1198,6 +1200,25 @@ function FichaCorridaPageInner() {
 
   const resumoQuantoVouReceber = useMemo(() => {
     if (!isCooperado) return null;
+    if (paridadeCooperadoMobile && paridadeCooperadoMobile.valorLiquido > 0.005) {
+      const mesLabel =
+        paridadeCooperadoMobile.mesLabel?.trim() ||
+        (paridadeCooperadoMobile.mesesResumo[0]
+          ? formatMesReferencia(paridadeCooperadoMobile.mesesResumo[0]!)
+          : "—");
+      return {
+        estado: "a_receber" as const,
+        mesLabel,
+        valorDestaque: paridadeCooperadoMobile.valorLiquido,
+        valorRecibo: 0,
+        aguardandoAssinatura: false,
+        valorAberto: paridadeCooperadoMobile.valorLiquido,
+        tituloValor: "Total a receber",
+        subtitulo:
+          "Valor líquido das entregas conferidas (mesma base do responsável após sincronizar).",
+        acaoRotulo: null,
+      };
+    }
     if (financeiroUiSnapshot?.painelParaExibicao) {
       const p = financeiroUiSnapshot.painelParaExibicao;
       const mesLabel =
@@ -1813,7 +1834,8 @@ function FichaCorridaPageInner() {
             <span className="text-sm font-bold text-green-800 bg-green-100 px-3 py-1.5 rounded-full">
               {visualizandoHistorico
                 ? formatMesReferencia(mesAtivo)
-                : valorReceberConsolidado?.mesLabel ?? "Mês em aberto"}
+                : valorReceberConsolidado?.mesLabel?.trim() ||
+                  (mesEmAberto ? formatMesReferencia(mesEmAberto) : "Mês em aberto")}
             </span>
           </div>
         ) : (
