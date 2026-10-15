@@ -1728,12 +1728,12 @@ export default function NotasPedidoCooperadoMain() {
     notaRejeitada?: NotaPedido,
     options?: { abrirCamera?: boolean }
   ) => {
+    iniciarModalAnexar(notaRejeitada, options);
     if (entregasPwaLeve && user && coopId) {
-      void (async () => {
-        const pull = await ensureCooperadoNotasFreshForEnvio(user, coopId, {
-          reason: "anexar",
-          notaRejeitada,
-        });
+      void ensureCooperadoNotasFreshForEnvio(user, coopId, {
+        reason: "anexar",
+        notaRejeitada,
+      }).then((pull) => {
         if (!pull.ok) {
           setErroEnvio(pull.error ?? "Não foi possível carregar o contrato. Toque em Atualizar.");
           return;
@@ -1741,11 +1741,8 @@ export default function NotasPedidoCooperadoMain() {
         refreshPwaEntregasResumosSnap();
         const fresh = getData();
         if (fresh) aplicarContratoLocal(fresh, notaRejeitada);
-        iniciarModalAnexar(notaRejeitada, options);
-      })();
-      return;
+      });
     }
-    iniciarModalAnexar(notaRejeitada, options);
   };
 
   const openAnexar = (notaRejeitada?: NotaPedido, options?: { abrirCamera?: boolean }) => {
@@ -2259,10 +2256,16 @@ export default function NotasPedidoCooperadoMain() {
   }, [searchParams, isCooperado, ready, tabActive]);
 
   useEffect(() => {
-    if (!isCooperado || !user || !coopId || !data) return;
-    void sincronizarContratosEmBackground();
+    if (!isCooperado || !user || !coopId || !data || !tabActive) return;
+    const run = () => void sincronizarContratosEmBackground();
+    if (typeof requestIdleCallback === "function") {
+      const id = requestIdleCallback(run, { timeout: 12_000 });
+      return () => cancelIdleCallback(id);
+    }
+    const timer = window.setTimeout(run, 1_500);
+    return () => window.clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCooperado, user?.id, coopId]);
+  }, [isCooperado, user?.id, coopId, tabActive]);
 
   const contratosPullEntregasRef = useRef(false);
   const lastContratosPullEntregasAtRef = useRef(0);

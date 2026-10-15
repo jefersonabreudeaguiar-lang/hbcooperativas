@@ -23,6 +23,7 @@ import {
 } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
 import { persistirCooperadoPwaMessengerCaches } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { runCooperadoMessengerOperacionalLightPull } from "@/lib/cooperado/cooperadoMessengerOperacionalLightPull";
+import { runCooperadoNotasContratosLightPull } from "@/lib/cooperado/cooperadoNotasContratosLightPull";
 import {
   requestCooperadoFinanceiroRecoverySync,
   requestCooperadoStaffRevisionSync,
@@ -115,7 +116,9 @@ export async function runCooperadoForegroundOperacionalCheck(
   const { reason, remote } = evaluation;
 
   if (reason === "financeiro_desatualizado") {
-    requestCooperadoFinanceiroRecoverySync();
+    if (!session || !isCooperadoMobileGaPromoted(session)) {
+      requestCooperadoFinanceiroRecoverySync();
+    }
     return true;
   }
 
@@ -168,12 +171,21 @@ export async function runCooperadoForegroundOperacionalCheck(
     remote != null &&
     !cooperadoCloudRevisionNotasInSyncWithApplied(digits, remote);
 
+  if (session?.role === "cooperado" && isCooperadoMobileGaPromoted(session)) {
+    if (notasAlteradasNaNuvem && remote) {
+      void runCooperadoNotasContratosLightPull({
+        cnpj: digits,
+        user: session,
+        remote,
+      });
+    }
+    return true;
+  }
+
   if (
     notasAlteradasNaNuvem ||
     reason === "never_applied_revision" ||
-    reason === "stale_local_sync" ||
-    !session ||
-    !isCooperadoMobileGaPromoted(session)
+    reason === "stale_local_sync"
   ) {
     requestCooperadoStaffRevisionSync();
   }

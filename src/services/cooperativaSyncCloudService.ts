@@ -2174,15 +2174,31 @@ export async function pushCooperativaProfileToCloud(cooperativa: Cooperativa): P
   }
 }
 
+const contratosFromCloudInflight = new Map<string, Promise<boolean>>();
+
 export async function syncContratosFromCloud(cnpj: string): Promise<boolean> {
-  const bundle = await fetchSyncBundle(cnpj);
-  if (!bundle?.contratos) return false;
-  const current = getData();
-  const coopId = resolveCoopId(current, cnpj);
-  if (!coopId) return false;
-  const merged = mergeContratosIntoData(current, bundle.contratos, coopId);
-  saveDataSafe(merged);
-  return true;
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return false;
+  const existing = contratosFromCloudInflight.get(digits);
+  if (existing) return existing;
+
+  const job = (async () => {
+    const bundle = await fetchSyncBundle(digits);
+    if (!bundle?.contratos) return false;
+    const current = getData();
+    const coopId = resolveCoopId(current, digits);
+    if (!coopId) return false;
+    const merged = mergeContratosIntoData(current, bundle.contratos, coopId);
+    saveDataSafe(merged);
+    return true;
+  })().finally(() => {
+    if (contratosFromCloudInflight.get(digits) === job) {
+      contratosFromCloudInflight.delete(digits);
+    }
+  });
+
+  contratosFromCloudInflight.set(digits, job);
+  return job;
 }
 
 /** Responsável republica todo o catálogo (contratos + preços) na nuvem. */
