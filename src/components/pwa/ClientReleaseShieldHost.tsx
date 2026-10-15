@@ -11,8 +11,11 @@ import {
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import {
   bindClientReleaseShieldEvents,
+  isForegroundShieldTrigger,
   runClientReleaseShield,
 } from "@/lib/pwa/clientReleaseShield";
+import { PWA_RELEASE_INTEGRITY_POLICY } from "@/lib/pwa/pwaReleaseIntegrityStrategy";
+import { runClientReleaseIntegrityProbe } from "@/lib/pwa/pwaReleaseIntegrityProbe";
 import { materializeCooperadoPwaSnapshotsForCurrentBuild } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
 import {
   isPwaColdStartWindow,
@@ -43,6 +46,9 @@ export function ClientReleaseShieldHost() {
     const kick = (trigger: string) => {
       if (isPwaColdStartWindow() && trigger !== "manual") return;
       if (cooperadoExperience) materializeCooperadoPwaSnapshotsForCurrentBuild();
+      if (cooperadoExperience && isForegroundShieldTrigger(trigger)) {
+        void runClientReleaseIntegrityProbe(`foreground:${trigger}`);
+      }
       void runClientReleaseShield(trigger);
     };
 
@@ -53,8 +59,14 @@ export function ClientReleaseShieldHost() {
     };
 
     if (shouldAutoAlignClientRelease()) {
-      const deferBoot = () => window.setTimeout(startBoot, 90_000);
+      const deferMs = cooperadoExperience
+        ? PWA_RELEASE_INTEGRITY_POLICY.cooperadoDeferredShieldBootMs
+        : PWA_RELEASE_INTEGRITY_POLICY.staffDeferredShieldBootMs;
+      const deferBoot = () => window.setTimeout(startBoot, deferMs);
       if (cooperadoExperience) {
+        scheduleCooperadoPostInteractiveTask(() => {
+          void runClientReleaseIntegrityProbe("post_interactive", { bypassCache: true });
+        });
         scheduleCooperadoPostInteractiveTask(deferBoot);
       } else {
         scheduleStaffPostInteractiveTask(deferBoot);

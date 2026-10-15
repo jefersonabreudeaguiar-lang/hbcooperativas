@@ -16,7 +16,7 @@ let lastForegroundShieldAt = 0;
 /** Evita rajada de fetch/reload ao alternar app ↔ PWA (foco/visibilidade/rede). */
 const FOREGROUND_SHIELD_MIN_GAP_MS = 45_000;
 
-function isForegroundShieldTrigger(trigger: string): boolean {
+export function isForegroundShieldTrigger(trigger: string): boolean {
   return (
     trigger === "visibility" ||
     trigger === "focus" ||

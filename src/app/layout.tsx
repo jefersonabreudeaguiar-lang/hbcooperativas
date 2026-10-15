@@ -17,6 +17,7 @@ import {
 } from "@/lib/pwa/clientRelease";
 import { buildInlineRuntimeCrashRecorderScript } from "@/lib/pwa/runtimeCrashForensics";
 import { buildInlineStaleProfileGuardScript } from "@/lib/pwa/staleProfileGuard";
+import { buildInlineChunkDplAlignGuardScript } from "@/lib/pwa/chunkDplAlignGuard";
 import { buildInlineHtmlDeploymentAlignScript } from "@/lib/pwa/htmlDeploymentAlign";
 import { buildInlineRescuePendingVerifyScript } from "@/lib/pwa/pwaReleaseConsistency";
 import { buildInlineRqlPerfStubScript } from "@/lib/performance/rqlPerfReport";
@@ -100,6 +101,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: buildInlineServiceWorkerMigrationScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlinePageReleaseBootstrap(pageRelease) }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineHtmlDeploymentAlignScript() }} />
+        <script dangerouslySetInnerHTML={{ __html: buildInlineChunkDplAlignGuardScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineDeploymentBootScript(pageRelease) }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineRescuePendingVerifyScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineRqlPerfStubScript() }} />

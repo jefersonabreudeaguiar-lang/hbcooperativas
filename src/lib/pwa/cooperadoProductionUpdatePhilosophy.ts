@@ -23,6 +23,13 @@
  *
  * 8. **Cooperado GA** — Sync operacional_full continua manual / event-driven leve;
  *    deploy não dispara sync completo na abertura.
+ *
+ * 9. **Integridade de chunks (L0–L4)** — Ver `pwaReleaseIntegrityStrategy.ts`:
+ *    guards inline (DPL/build), release shield, vigia cooperado 12s→120s.
+ *    Tab keep-alive não pode executar JS antigo sem probe vs `/api/client-release`.
+ *
+ * 10. **Build ≠ comportamento** — Badge `vNNN` vem do bundle; HTML `data-app-build` pode
+ *     divergir até align. Diagnóstico: `/pwa-diag.html` + comparar com nuvem.
  */
 
 import {

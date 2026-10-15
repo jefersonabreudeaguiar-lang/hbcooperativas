@@ -14,6 +14,10 @@ import {
   cancelCooperadoGaFinanceiroExibicaoRefresh,
   scheduleCooperadoGaFinanceiroExibicaoRefresh,
 } from "@/lib/cooperado/cooperadoGaFinanceiroExibicaoRefreshSchedule";
+import {
+  cancelCooperadoReleaseIntegrityWatch,
+  scheduleCooperadoReleaseIntegrityWatch,
+} from "@/lib/cooperado/cooperadoReleaseIntegrityWatch";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { persistirCooperadoPwaEntregasResumosSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
 import { persistirInicioCardCooperadoNotificarPwaLeve } from "@/lib/cooperado/cooperadoPwaLeveUi";
@@ -37,6 +41,7 @@ export function CooperadoPwaResumeLifecycle() {
     }
     if (isCooperadoMobileGaPromoted(user)) {
       scheduleCooperadoGaFinanceiroExibicaoRefresh(user);
+      scheduleCooperadoReleaseIntegrityWatch(user);
     }
 
     const flush = () => {
@@ -62,6 +67,7 @@ export function CooperadoPwaResumeLifecycle() {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
       cancelCooperadoGaFinanceiroExibicaoRefresh();
+      cancelCooperadoReleaseIntegrityWatch();
     };
   }, [user?.id, user?.role, user?.cooperadoId, user?.cooperativaId]);
 
