@@ -331,20 +331,38 @@ export async function validateCreditQr(
   qrPayload: string,
   opts?: { fast?: boolean }
 ) {
-  const res = await secureApiFetch("/api/credit/payment-intents", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "validate", cnpj, cooperadoId, qrPayload, fast: opts?.fast !== false }),
-  });
-  const data = await parseJson<{
-    ok?: boolean;
-    error?: string;
-    intent?: ContaCoopIntent;
-    parceiroNome?: string;
-    limite?: ContaCoopLimiteCooperado;
-  }>(res);
-  if (!res.ok || !data.ok) throw new Error(data.error ?? "Cobrança inválida.");
-  return data;
+  const tryOnce = async (fast: boolean) => {
+    const res = await secureApiFetch("/api/credit/payment-intents", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "validate", cnpj, cooperadoId, qrPayload, fast }),
+    });
+    const data = await parseJson<{
+      ok?: boolean;
+      error?: string;
+      code?: string;
+      intent?: ContaCoopIntent;
+      parceiroNome?: string;
+      limite?: ContaCoopLimiteCooperado;
+    }>(res);
+    if (!res.ok || !data.ok) {
+      const err = new Error(data.error ?? "Cobrança inválida.") as Error & { code?: string };
+      err.code = data.code;
+      throw err;
+    }
+    return data;
+  };
+
+  const wantFast = opts?.fast !== false;
+  try {
+    return await tryOnce(wantFast);
+  } catch (e) {
+    const code = (e as { code?: string }).code;
+    if (wantFast && code === "HB_CREDIT_INSUFFICIENT") {
+      return await tryOnce(false);
+    }
+    throw e;
+  }
 }
 
 export type AuthorizeCreditPaymentResult = {

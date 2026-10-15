@@ -43,3 +43,36 @@ export function canAffordHbPaymentScanPreview(limite: ContaCoopLimiteCooperado, 
     canAffordHbPaymentWithLimite(limite, grossCents, true)
   );
 }
+
+/** Alinha disponível ao motor de cap × usado (como Minha Conta HB). */
+export function normalizeHbPaymentLimiteDisponivel(
+  limite: ContaCoopLimiteCooperado
+): ContaCoopLimiteCooperado {
+  const liberado = Math.max(0, limite.limiteLiberadoCents ?? 0);
+  const usado = Math.max(0, limite.valorUsadoCents ?? 0);
+  const informado = Math.max(0, limite.valorDisponivelCents ?? 0);
+  const efetivo = hbCreditEffectiveDisponivelCents(liberado, liberado, usado);
+  const disponivel = Math.max(informado, efetivo, liberado - usado);
+  return { ...limite, valorDisponivelCents: disponivel };
+}
+
+/** Mescla limite do QR com snapshot da conta (cache/nuvem) — evita “saldo insuficiente” falso no PIN. */
+export function mergeHbPaymentLimiteForScan(
+  qrLimite: ContaCoopLimiteCooperado,
+  account?: ContaCoopLimiteCooperado | null
+): ContaCoopLimiteCooperado {
+  const fromQr = normalizeHbPaymentLimiteDisponivel(qrLimite);
+  if (!account) return fromQr;
+  const fromAcc = normalizeHbPaymentLimiteDisponivel(account);
+  const pick =
+    fromAcc.valorDisponivelCents >= fromQr.valorDisponivelCents ? fromAcc : fromQr;
+  return {
+    ...pick,
+    cashbackDisponivelCents: Math.max(
+      fromQr.cashbackDisponivelCents ?? 0,
+      fromAcc.cashbackDisponivelCents ?? 0
+    ),
+    valorDisponivelCents: Math.max(fromQr.valorDisponivelCents, fromAcc.valorDisponivelCents),
+    limiteLiberadoCents: Math.max(fromQr.limiteLiberadoCents, fromAcc.limiteLiberadoCents),
+  };
+}

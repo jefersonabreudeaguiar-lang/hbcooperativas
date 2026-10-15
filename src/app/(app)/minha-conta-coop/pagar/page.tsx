@@ -10,11 +10,13 @@ import { HbCreditPinDotsInput } from "@/components/hb-credit/HbCreditPinDotsInpu
 import { Button } from "@/components/ui/Button";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAppData } from "@/hooks/useAppData";
-import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
+import { getUserCooperativaId } from "@/utils/cooperativa";
 import {
   authorizeCreditPayment,
   fetchCreditAccount,
+  validateCreditQr,
 } from "@/services/creditApiService";
+import { resolveCooperadoHbCreditCnpjDigits } from "@/lib/hb-credit/resolveCooperadoHbCreditCnpj";
 import { kickHbCreditQrValidation } from "@/lib/hb-credit/openHbCreditPaymentFromQr";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
@@ -38,6 +40,7 @@ import {
   canAffordHbPaymentScanPreview,
   canAffordHbPaymentWithLimite,
   hbCreditDebitFromGrossCents,
+  mergeHbPaymentLimiteForScan,
 } from "@/modules/hb-credit/engine/paymentAffordability";
 import { cn } from "@/utils/format";
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
@@ -72,21 +75,18 @@ function HbCreditPagarContent() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<{ receiptCode: string } | null>(null);
+  const [contaLimite, setContaLimite] = useState<ContaCoopLimiteCooperado | null>(null);
+  const [limiteContaRefreshing, setLimiteContaRefreshing] = useState(false);
   const autoPayPinRef = useRef("");
   const payInFlightRef = useRef(false);
+  const qrRevalidateRef = useRef(false);
 
   const hbApiCooperadoId = useMemo(
     () => resolveHbCreditApiCooperadoId(user, cooperadoId),
     [user, cooperadoId]
   );
 
-  const cnpj = useMemo(() => {
-    if (!user || !data) return "";
-    if (user.cooperativaCnpj) return normalizeCnpj(user.cooperativaCnpj);
-    const coopId = getUserCooperativaId(user, data);
-    const coop = data.cooperativas.find((c) => c.id === coopId);
-    return coop?.cnpj ? normalizeCnpj(coop.cnpj) : "";
-  }, [user, data]);
+  const cnpj = useMemo(() => resolveCooperadoHbCreditCnpjDigits(user, data), [user, data]);
 
   const cooperadoNome = useMemo(() => {
     if (!data || !cooperadoId) return user?.name ?? "";
@@ -175,16 +175,52 @@ function HbCreditPagarContent() {
   useEffect(() => {
     if (!cnpj || !hbApiCooperadoId) return;
     const cached = lerHbCreditAccountPersistido(cnpj, hbApiCooperadoId);
+    if (cached?.account) setContaLimite(cached.account);
     if (cached?.hasPin) setHasPin(true);
+    setLimiteContaRefreshing(true);
     void fetchCreditAccount(cnpj, hbApiCooperadoId)
-      .then((acc) => setHasPin(Boolean(acc.hasPin)))
+      .then((acc) => {
+        setHasPin(Boolean(acc.hasPin));
+        if (acc.account) setContaLimite(acc.account as ContaCoopLimiteCooperado);
+      })
       .catch(() => {
         /* Rede lenta: não assumir “sem PIN” — authorize valida o PIN na nuvem. */
-      });
+      })
+      .finally(() => setLimiteContaRefreshing(false));
   }, [cnpj, hbApiCooperadoId]);
 
-  const limite = draft?.limite;
   const intent = draft?.intent;
+
+  const limite = useMemo(() => {
+    if (!draft?.limite) return undefined;
+    return mergeHbPaymentLimiteForScan(draft.limite, contaLimite);
+  }, [draft?.limite, contaLimite]);
+
+  useEffect(() => {
+    if (!draft || !cnpj || !hbApiCooperadoId || qrRevalidateRef.current) return;
+    if (!limite || !intent) return;
+    if (canAffordHbPaymentScanPreview(limite, intent.amountCents)) return;
+    qrRevalidateRef.current = true;
+    setLimiteContaRefreshing(true);
+    void validateCreditQr(cnpj, hbApiCooperadoId, draft.qrPayload, { fast: false })
+      .then((res) => {
+        if (!res.intent || !res.limite || !res.parceiroNome) return;
+        const next: HbCreditPaymentDraft = {
+          v: 1,
+          qrPayload: draft.qrPayload,
+          intent: res.intent,
+          parceiroNome: res.parceiroNome,
+          limite: res.limite,
+          savedAt: new Date().toISOString(),
+        };
+        setDraft(next);
+      })
+      .catch(() => {
+        /* Mantém draft + conta local; authorize é autoridade final. */
+      })
+      .finally(() => setLimiteContaRefreshing(false));
+  }, [cnpj, draft, hbApiCooperadoId, intent, limite]);
+
   const pagamentoCooperado = intent ? isCooperadoTransferIntentId(intent.id) : false;
   const saldoDisponivel = limite?.valorDisponivelCents ?? 0;
   const cashbackAvail = limite?.cashbackDisponivelCents ?? 0;
@@ -397,7 +433,7 @@ function HbCreditPagarContent() {
   const podePagar =
     !busy &&
     payPin.length >= FINANCIAL_PIN_MIN_LENGTH &&
-    affordOk &&
+    (affordOk || limiteContaRefreshing) &&
     hasPin !== false;
 
   return (
@@ -457,7 +493,13 @@ function HbCreditPagarContent() {
           <Row label="Saldo após pagamento" value={formatCentsBRL(saldoApos)} highlight />
         </div>
 
-        {!affordOk && (
+        {limiteContaRefreshing && (
+          <p className="mt-4 text-sm text-gray-600" role="status">
+            Atualizando seu saldo HB… você já pode digitar o PIN.
+          </p>
+        )}
+
+        {!affordOk && !limiteContaRefreshing && (
           <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900 border border-amber-200" role="alert">
             Saldo insuficiente para este valor. Aguarde a cooperativa liberar crédito ou pague um valor menor no
             mercado.
@@ -483,7 +525,13 @@ function HbCreditPagarContent() {
           disabled={!podePagar}
           onClick={() => void confirmar()}
         >
-          {busy ? "Confirmando…" : affordOk ? `Pagar ${formatCentsBRL(intent.amountCents)}` : "Saldo insuficiente"}
+          {busy
+            ? "Confirmando…"
+            : limiteContaRefreshing
+              ? "Atualizando saldo…"
+              : affordOk
+                ? `Pagar ${formatCentsBRL(intent.amountCents)}`
+                : "Saldo insuficiente"}
         </Button>
       </footer>
     </div>

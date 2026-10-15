@@ -18,6 +18,7 @@ import {
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { reaisToCents } from "@/modules/hb-credit/engine/money";
 import { INTENT_MAX_CENTS } from "@/modules/hb-credit/config";
+import { HB_CREDIT_INSUFFICIENT_CODE } from "@/modules/hb-credit/engine/paymentAffordability";
 import { isCooperadoTransferIntentId } from "@/config/cooperadoTransferenciaCredito";
 import {
   resolveCooperadoNomeForTransfer,
@@ -98,13 +99,20 @@ export async function POST(request: Request) {
     );
 
     const actorId = gate.ctx.session?.sub ?? payCooperadoId;
-    const fastValidate = body?.fast !== false;
-    const prepareLimitePromise = prepareHbCreditPaymentAuthorize(
+    const clientWantsFast = body?.fast !== false;
+
+    const prepare = await prepareHbCreditPaymentAuthorize(
       gate.ctx.supabase,
       cnpj,
       payCooperadoId,
       actorId
     );
+    if (!prepare.ok) {
+      return NextResponse.json(
+        { ok: false, error: prepare.error, code: prepare.code ?? "HB_LIMIT_PREPARE_FAILED" },
+        { status: 503 }
+      );
+    }
 
     if (isCooperadoTransferIntentId(parsed.intentId)) {
       const { data: intentRow } = await gate.ctx.supabase
@@ -117,26 +125,17 @@ export async function POST(request: Request) {
         ? await resolveCooperadoNomeForTransfer(gate.ctx.supabase, cnpj, receiverId)
         : "Cooperado";
 
-      const [transferResult, prepareTransfer] = await Promise.all([
-        validateCooperadoTransferForPayer(gate.ctx.supabase, {
-          intentId: parsed.intentId,
-          nonce: parsed.nonce,
-          payerCooperadoId: payCooperadoId,
-          cooperativeCnpj: cnpj,
-          receiverNome: nome,
-        }),
-        prepareLimitePromise,
-      ]);
+      const transferResult = await validateCooperadoTransferForPayer(gate.ctx.supabase, {
+        intentId: parsed.intentId,
+        nonce: parsed.nonce,
+        payerCooperadoId: payCooperadoId,
+        cooperativeCnpj: cnpj,
+        receiverNome: nome,
+      });
       if (!transferResult.ok) {
         return NextResponse.json(
           { ok: false, error: transferResult.error, code: transferResult.code },
           { status: 400 }
-        );
-      }
-      if (!prepareTransfer.ok) {
-        return NextResponse.json(
-          { ok: false, error: prepareTransfer.error, code: prepareTransfer.code ?? "HB_LIMIT_PREPARE_FAILED" },
-          { status: 503 }
         );
       }
       return NextResponse.json({
@@ -149,25 +148,26 @@ export async function POST(request: Request) {
       });
     }
 
-    const [result, prepare] = await Promise.all([
-      validateIntentForCooperado(
+    let result = await validateIntentForCooperado(
+      gate.ctx.supabase,
+      parsed.intentId,
+      parsed.nonce,
+      payCooperadoId,
+      cnpj,
+      { fast: clientWantsFast }
+    );
+    if (!result.ok && clientWantsFast && result.code === HB_CREDIT_INSUFFICIENT_CODE) {
+      result = await validateIntentForCooperado(
         gate.ctx.supabase,
         parsed.intentId,
         parsed.nonce,
         payCooperadoId,
         cnpj,
-        { fast: fastValidate }
-      ),
-      prepareLimitePromise,
-    ]);
+        { fast: false }
+      );
+    }
     if (!result.ok) {
       return NextResponse.json({ ok: false, error: result.error, code: result.code }, { status: 400 });
-    }
-    if (!prepare.ok) {
-      return NextResponse.json(
-        { ok: false, error: prepare.error, code: prepare.code ?? "HB_LIMIT_PREPARE_FAILED" },
-        { status: 503 }
-      );
     }
     return NextResponse.json({
       ok: true,

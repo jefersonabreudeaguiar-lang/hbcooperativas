@@ -1,5 +1,5 @@
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
-import { validateCreditQr } from "@/services/creditApiService";
+import { fetchCreditAccount, validateCreditQr } from "@/services/creditApiService";
 import { parseHbCreditQrPayload } from "@/lib/hb-credit/hbCreditQrPayload";
 import {
   clearHbCreditPendingQrScan,
@@ -73,6 +73,7 @@ export function prepareAndOpenHbCreditPaymentFromQrScan(
     savedAt: new Date().toISOString(),
   });
   void kickHbCreditQrValidation({ ...opts, qrPayload: payload });
+  void fetchCreditAccount(opts.cnpj, opts.cooperadoId).catch(() => {});
   router.replace("/minha-conta-coop/pagar");
 }
 
