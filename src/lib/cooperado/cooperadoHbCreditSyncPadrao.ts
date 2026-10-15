@@ -1,16 +1,20 @@
 import type { User } from "@/types";
 import { isCloudSessionActive } from "@/lib/security/clientSession";
+import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { hbCreditMesPrincipal } from "@/lib/hb-credit/hbCreditLeituraBic";
 import { resolveHbCreditLimiteSyncTargets } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
+import { refreshContaCoopValorReceberPilot } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
 import { refreshContaCoopLimiteFromFicha } from "@/lib/hb-credit/syncContaCoopLimiteFromFicha";
 import { notifyHbCreditAccountCacheUpdated } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import { persistirHbCreditAccountCooperado } from "@/services/hbCreditAccountPersistenciaService";
+import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm, preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 
 /**
- * Pipeline HB Créditos cooperado (produção) — mesmo fluxo do aparelho Jeferson:
- * sync-limite na nuvem a partir da ficha → GET /api/credit/account → cache local (mobile).
+ * Pipeline HB Créditos cooperado (produção) — paridade com Conta Coop do responsável:
+ * descontos HB na ficha → sync-limite na nuvem (base paridade) → GET /api/credit/account → cache local.
  */
 export async function executarCooperadoHbCreditSyncPadrao(
   user: Omit<User, "password"> | null | undefined
@@ -31,6 +35,20 @@ export async function executarCooperadoHbCreditSyncPadrao(
 
   const cnpj = await resolveCooperativaCnpj(data, cooperativaId, user);
   if (!cnpj) return false;
+
+  const canonico = resolverCooperadoIdCanonico(data, user.cooperadoId, cooperativaId);
+  const paridade = leituraFinanceiraParidadeCooperado(data, canonico, cooperativaId);
+  const mesReferencia =
+    paridade.mesesResumo[paridade.mesesResumo.length - 1] ??
+    paridade.mesesResumo[0] ??
+    hbCreditMesPrincipal(data, canonico, cooperativaId);
+
+  await refreshContaCoopValorReceberPilot({
+    cnpj,
+    cooperadoId: canonico,
+    mesReferencia,
+    cooperativaId,
+  }).catch(() => {});
 
   const limite = resolveHbCreditLimiteSyncTargets(user, data, cooperativaId);
   if (limite) {

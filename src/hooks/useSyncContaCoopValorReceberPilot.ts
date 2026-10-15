@@ -55,8 +55,6 @@ export function useSyncContaCoopValorReceberPilot(opts?: HookOpts) {
       : undefined;
 
   useEffect(() => {
-    if (isCooperadoPwaMessengerMode()) return;
-
     const syncOpts = optsRef.current;
     if (!syncOpts || !isContaCoopValorReceberPilot(syncOpts.cooperadoId, syncOpts.cooperadoNome)) return;
 
@@ -88,14 +86,19 @@ export function useSyncContaCoopValorReceberPilot(opts?: HookOpts) {
       idleCleanups.push(cancelIdle);
     };
 
-    const startInterval = () => {
+    const messenger = isCooperadoPwaMessengerMode();
+    const delay = Math.max(
+      0,
+      messenger
+        ? Math.max(opts?.initialDelayMs ?? DEFAULT_INITIAL_DELAY_MS, 12_000)
+        : (opts?.initialDelayMs ?? DEFAULT_INITIAL_DELAY_MS)
+    );
+    const start = () => {
       if (cancelled) return;
       run();
-      intervalId = window.setInterval(run, SYNC_INTERVAL_MS);
+      if (!messenger) intervalId = window.setInterval(run, SYNC_INTERVAL_MS);
     };
-
-    const delay = Math.max(0, opts?.initialDelayMs ?? DEFAULT_INITIAL_DELAY_MS);
-    delayId = window.setTimeout(startInterval, delay);
+    delayId = window.setTimeout(start, delay);
 
     const onVisible = () => {
       if (document.visibilityState === "visible") run();

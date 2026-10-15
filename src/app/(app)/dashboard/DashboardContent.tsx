@@ -157,6 +157,7 @@ function contaCoopValorReceberPilotOptsFromData(
   const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
   const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
   const mesHb =
+    paridade.mesesResumo[paridade.mesesResumo.length - 1] ??
     paridade.mesesResumo[0] ??
     bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, coopId, { apresentacaoConsolidada });
   const exibicaoOpts = bicCentralBuildValorExibicaoCooperadoOpts(data, cooperadoId, mesHb, coopId);

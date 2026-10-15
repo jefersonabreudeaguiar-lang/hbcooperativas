@@ -22,6 +22,7 @@ import {
   resolverCooperadoIdCanonico,
 } from "@/services/cooperadoCloudService";
 import { listarMesesPendentesPagamentoResponsavel } from "@/services/cooperadoEntregasService";
+import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import {
   getMesesReferenciaPagamento,
   getPagamentoConfirmadoCooperadoMes,
@@ -129,6 +130,9 @@ export function hbCreditMesPrincipal(
   cooperadoId: string,
   cooperativaId: string | undefined
 ): string {
+  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+  const meses = paridade.mesesResumo;
+  if (meses.length) return meses[meses.length - 1]!;
   return bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, cooperativaId, HB_CREDIT_APRESENTACAO);
 }
 
@@ -231,16 +235,16 @@ function hbCreditCreditoBaseParidadeQuantoVouReceberReais(
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   if (!coopId) return 0;
 
+  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
+  if (paridade.valorLiquido > 0.005) return round2(paridade.valorLiquido);
+
   const m6 = hbCreditValorAReceberAgregado(data, cooperadoId, cooperativaId);
   if (m6.aguardandoAssinatura && m6.valorRecibo > 0) return round2(m6.valorRecibo);
 
   const inicio = hbCreditInicioParaBase(data, cooperadoId, cooperativaId);
   if (inicio.aguardandoAssinatura && inicio.valorRecibo > 0) return round2(inicio.valorRecibo);
 
-  const { getValorQuantoVouReceberMotorLegado } =
-    require("@/services/cooperadoEntregasService") as typeof import("@/services/cooperadoEntregasService");
-  const legado = getValorQuantoVouReceberMotorLegado(data, cooperadoId, coopId);
-  if (legado.valor > 0) return round2(legado.valor);
+  if (m6.valor > 0) return round2(m6.valor);
   if (inicio.exibir && inicio.valor > 0) return round2(inicio.valor);
 
   return 0;
