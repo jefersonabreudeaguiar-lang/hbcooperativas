@@ -1,6 +1,10 @@
 import type { AppData, LivroCaixaLancamento, PagamentoCooperadoRegistro } from "@/types";
 import { round2 } from "@/utils/calculations";
-import { pagamentoIdFromOrigemId } from "@/services/livroCaixaService";
+import {
+  pagamentoIdFromOrigemId,
+  resolverDataIsoLancamentoLivroCaixa,
+} from "@/services/livroCaixaService";
+import { ordenarLancamentosPlanilha } from "@/services/livroCaixaPlanilha";
 import { getMesesReferenciaPagamento } from "@/services/notaPedidoService";
 
 export interface ResumoOperacionalLivroCaixa {
@@ -24,6 +28,14 @@ export interface PagamentoDetalheLivroCooperado {
   creditoOutros: number;
 }
 
+export interface EntradaLivroCooperadoLinha {
+  dataIso: string;
+  tipo: "credito" | "debito";
+  origem: string;
+  historico: string;
+  valor: number;
+}
+
 export interface ResumoCooperadoLivroCaixaLinha {
   cooperadoId: string;
   nome: string;
@@ -31,7 +43,16 @@ export interface ResumoCooperadoLivroCaixaLinha {
   creditoMensalidade: number;
   debitoPagamento: number;
   pagamentos: PagamentoDetalheLivroCooperado[];
+  entradas: EntradaLivroCooperadoLinha[];
 }
+
+const ORIGEM_ENTRADA_LABEL: Record<string, string> = {
+  taxa_cooperativa: "Taxa cooperativa",
+  mensalidade_ficha: "Mensalidade na ficha",
+  mensalidade: "Mensalidade (PIX)",
+  desconto_ficha: "Desconto retido",
+  pagamento_cooperado: "Pagamento PIX",
+};
 
 function cooperadoIdDoLancamento(data: AppData, l: LivroCaixaLancamento): string | null {
   const pgId = pagamentoIdFromOrigemId(l.origemId);
@@ -86,6 +107,7 @@ export function calcularResumoPorCooperadoLivroCaixa(
         creditoMensalidade: 0,
         debitoPagamento: 0,
         pagamentos: [],
+        entradas: [],
       };
 
     if (l.tipo === "credito" && l.origem === "taxa_cooperativa") {
@@ -166,6 +188,25 @@ export function listarPagamentosDetalheCooperadoNoPeriodo(
   );
 }
 
+export function listarEntradasLivroCooperadoNoPeriodo(
+  data: AppData,
+  cooperadoId: string,
+  lancamentos: LivroCaixaLancamento[]
+): EntradaLivroCooperadoLinha[] {
+  const entradas: EntradaLivroCooperadoLinha[] = [];
+  for (const l of ordenarLancamentosPlanilha(lancamentos)) {
+    if (cooperadoIdDoLancamento(data, l) !== cooperadoId) continue;
+    entradas.push({
+      dataIso: resolverDataIsoLancamentoLivroCaixa(l, data),
+      tipo: l.tipo,
+      origem: ORIGEM_ENTRADA_LABEL[l.origem] ?? l.origem,
+      historico: (l.historico?.trim() || ORIGEM_ENTRADA_LABEL[l.origem]) ?? l.origem,
+      valor: round2(l.valor),
+    });
+  }
+  return entradas;
+}
+
 export function enriquecerResumoCooperadoComPagamentos(
   data: AppData,
   linhas: ResumoCooperadoLivroCaixaLinha[],
@@ -174,6 +215,7 @@ export function enriquecerResumoCooperadoComPagamentos(
   return linhas.map((row) => ({
     ...row,
     pagamentos: listarPagamentosDetalheCooperadoNoPeriodo(data, row.cooperadoId, lancamentos),
+    entradas: listarEntradasLivroCooperadoNoPeriodo(data, row.cooperadoId, lancamentos),
   }));
 }
 
@@ -198,6 +240,7 @@ export function calcularResumoPorCooperadoLivroCaixaCompleto(
       creditoMensalidade: creditoMensalidadePagamento(p),
       debitoPagamento: round2(p.valorLiquido),
       pagamentos: [],
+      entradas: [],
     });
   }
   return enriquecerResumoCooperadoComPagamentos(data, [...byId.values()], lancamentos);

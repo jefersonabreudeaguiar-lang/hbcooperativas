@@ -60,6 +60,44 @@ export function dataLancamentoPagamento(pagamento: PagamentoCooperadoRegistro): 
   return dia && /^\d{4}-\d{2}-\d{2}$/.test(dia) ? dia : new Date().toISOString().split("T")[0];
 }
 
+const ISO_DATA_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Data ISO (YYYY-MM-DD) para exibição e ordenação — nunca deixa entrada sem data. */
+export function resolverDataIsoLancamentoLivroCaixa(
+  l: LivroCaixaLancamento,
+  data?: AppData
+): string {
+  const bruta = l.data?.trim().split("T")[0] ?? "";
+  if (ISO_DATA_RE.test(bruta)) return bruta;
+
+  const pgId = pagamentoIdFromOrigemId(l.origemId);
+  if (pgId && data) {
+    const p = data.pagamentosCooperado.find((x) => x.id === pgId);
+    if (p) return dataLancamentoPagamento(p);
+  }
+  if (l.origemId?.startsWith("mens_caixa_") && data) {
+    const mensId = l.origemId.slice("mens_caixa_".length);
+    const m = data.mensalidades.find((x) => x.id === mensId);
+    const dia = m?.dataPagamento?.trim().split("T")[0] ?? "";
+    if (ISO_DATA_RE.test(dia)) return dia;
+  }
+  const mes = l.mesReferencia?.trim();
+  if (mes && /^\d{4}-\d{2}$/.test(mes)) return `${mes}-01`;
+  return new Date().toISOString().split("T")[0];
+}
+
+function preencherDatasAusentesLivroCaixaCooperativa(data: AppData, cooperativaId: string): AppData {
+  let changed = false;
+  const livroCaixa = (data.livroCaixa ?? []).map((l) => {
+    if (l.cooperativaId !== cooperativaId) return l;
+    const iso = resolverDataIsoLancamentoLivroCaixa(l, data);
+    if (l.data === iso) return l;
+    changed = true;
+    return { ...l, data: iso };
+  });
+  return changed ? { ...data, livroCaixa } : data;
+}
+
 function mesesReferenciaPagamento(p: PagamentoCooperadoRegistro): string[] {
   if (p.mesesReferencia?.length) return [...new Set(p.mesesReferencia)].sort();
   return [p.mesReferencia];
@@ -625,6 +663,7 @@ export function reconciliarLivroCaixaContabilCooperativa(data: AppData, cooperat
   next = removerLancamentosCaixaPagamentoAguardando(next, cooperativaId);
   next = completarLancamentosContabeisPagamentos(next, cooperativaId);
   next = completarMensalidadesPagasNoCaixa(next, cooperativaId);
+  next = preencherDatasAusentesLivroCaixaCooperativa(next, cooperativaId);
   return next;
 }
 

@@ -20,7 +20,7 @@ export function LivroCaixaResumoCooperadosTable({
       {linhas.map((r) => {
         const credito = round2(r.creditoTaxa + r.creditoMensalidade);
         const saldo = round2(credito - r.debitoPagamento);
-        const pagamentos = r.pagamentos ?? [];
+        const entradas = r.entradas ?? [];
         return (
           <div key={r.cooperadoId} className="border-b border-slate-100 last:border-b-0">
             <div className="grid grid-cols-1 sm:grid-cols-[1fr_repeat(4,minmax(5rem,auto))] gap-2 sm:gap-3 px-3 py-3 bg-slate-50/60 items-center">
@@ -54,60 +54,40 @@ export function LivroCaixaResumoCooperadosTable({
                 </p>
               </div>
             </div>
-            {pagamentos.length > 0 && (
-              <ul className="px-3 pb-3 space-y-2">
-                {pagamentos.map((pg) => (
-                  <li
-                    key={pg.pagamentoId}
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                  >
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <span className="font-medium text-slate-800">
-                        Pagamento · ref. {pg.mesesLabel}
-                      </span>
-                      <span className="text-xs text-slate-500">
-                        {pg.pagoEm ? formatDate(pg.pagoEm.split("T")[0]) : "—"}
-                      </span>
-                    </div>
-                    <div className="mt-1.5 grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-xs">
-                      <div>
-                        <span className="text-slate-500">Bruto entregas </span>
-                        <span className="tabular-nums font-medium">{formatCurrency(pg.valorBruto)}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500">Líquido PIX </span>
-                        <span className="tabular-nums font-semibold text-red-700">
-                          {formatCurrency(pg.valorLiquido)}
-                        </span>
-                      </div>
-                      {pg.creditoTaxa > 0 && (
-                        <div>
-                          <span className="text-slate-500">Crédito taxa </span>
-                          <span className="tabular-nums text-emerald-700">
-                            +{formatCurrency(pg.creditoTaxa)}
-                          </span>
-                        </div>
-                      )}
-                      {pg.creditoMensalidade > 0 && (
-                        <div>
-                          <span className="text-slate-500">Crédito mensalidade </span>
-                          <span className="tabular-nums text-emerald-700">
-                            +{formatCurrency(pg.creditoMensalidade)}
-                          </span>
-                        </div>
-                      )}
-                      {pg.creditoOutros > 0 && (
-                        <div>
-                          <span className="text-slate-500">Outros créditos </span>
-                          <span className="tabular-nums text-emerald-700">
-                            +{formatCurrency(pg.creditoOutros)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+            {entradas.length > 0 && (
+              <div className="px-3 pb-3">
+                <table className="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-600 text-left">
+                      <th className="px-2 py-1.5 font-semibold w-[88px]">Data</th>
+                      <th className="px-2 py-1.5 font-semibold">Lançamento</th>
+                      <th className="px-2 py-1.5 font-semibold text-right w-[90px]">Crédito</th>
+                      <th className="px-2 py-1.5 font-semibold text-right w-[90px]">Débito</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {entradas.map((e, idx) => (
+                      <tr key={`${e.dataIso}-${e.origem}-${idx}`} className="border-t border-slate-100">
+                        <td className="px-2 py-1.5 tabular-nums whitespace-nowrap text-slate-800">
+                          {formatDate(e.dataIso)}
+                        </td>
+                        <td className="px-2 py-1.5 text-slate-700">
+                          <span className="font-medium">{e.origem}</span>
+                          {e.historico && e.historico !== e.origem ? (
+                            <span className="text-slate-500"> · {e.historico}</span>
+                          ) : null}
+                        </td>
+                        <td className="px-2 py-1.5 text-right tabular-nums text-emerald-700">
+                          {e.tipo === "credito" ? formatCurrency(e.valor) : ""}
+                        </td>
+                        <td className="px-2 py-1.5 text-right tabular-nums text-red-700">
+                          {e.tipo === "debito" ? formatCurrency(e.valor) : ""}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         );

@@ -14,6 +14,7 @@ import {
   lancamentosLivroCaixa,
   lancamentosLivroCaixaPorData,
   resumoLivroCaixa,
+  resolverDataIsoLancamentoLivroCaixa,
 } from "@/services/livroCaixaService";
 import { getRelatorioSobrasPerdas } from "@/services/sobrasPerdasService";
 import { listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
@@ -54,12 +55,13 @@ function linhaPlanilhaHtml(
   credito: number | null,
   debito: number | null,
   saldoCorrido: number,
-  l: LivroCaixaLancamento
+  l: LivroCaixaLancamento,
+  data: AppData
 ): string {
   const ret = isOrigemRetencaoContabil(l.origem) ? " · retenção" : "";
   return `<tr>
     <td>${formatNumeroSequenciaExibicao(l.numeroSequencia)}</td>
-    <td>${formatDate(l.data)}</td>
+    <td>${formatDate(resolverDataIsoLancamentoLivroCaixa(l, data))}</td>
     <td>${escapeHtml(l.historico)}<br/><small style="color:#6b7280">${ORIGEM_LABELS[l.origem]}${ret}</small></td>
     <td class="num credito">${credito != null ? formatCurrency(credito) : ""}</td>
     <td class="num debito">${debito != null ? formatCurrency(debito) : ""}</td>
@@ -67,7 +69,7 @@ function linhaPlanilhaHtml(
   </tr>`;
 }
 
-function tabelaPlanilhaHtml(lancamentos: LivroCaixaLancamento[], saldoInicial: number): string {
+function tabelaPlanilhaHtml(data: AppData, lancamentos: LivroCaixaLancamento[], saldoInicial: number): string {
   const linhas = buildPlanilhaLinhas(lancamentos, saldoInicial);
   const saldoAnt =
     Math.abs(saldoInicial) > 0.0001
@@ -81,7 +83,7 @@ function tabelaPlanilhaHtml(lancamentos: LivroCaixaLancamento[], saldoInicial: n
       <th>Nº</th><th>Data</th><th>Histórico</th>
       <th class="num">Crédito</th><th class="num">Débito</th><th class="num">Saldo</th>
     </tr></thead>
-    <tbody>${saldoAnt}${linhas.map((row) => linhaPlanilhaHtml(row.credito, row.debito, row.saldoCorrido, row.lancamento)).join("")}</tbody>
+    <tbody>${saldoAnt}${linhas.map((row) => linhaPlanilhaHtml(row.credito, row.debito, row.saldoCorrido, row.lancamento, data)).join("")}</tbody>
   </table>`;
 }
 
@@ -210,7 +212,7 @@ export function gerarRelatorioLivroCaixaPlanilhaHtml(
   }
 
   const resumo = resumoLivroCaixa(data, cooperativaId);
-  const planilha = tabelaPlanilhaHtml(lancamentos, saldoInicial);
+  const planilha = tabelaPlanilhaHtml(data, lancamentos, saldoInicial);
   const ficha =
     opts.modo === "dia" && opts.incluirExtratoFicha && opts.dataIso
       ? `<h2>Extrato ficha corrida (pagamentos do dia)</h2>${extratoFichaDoDia(data, cooperativaId, opts.dataIso)}`

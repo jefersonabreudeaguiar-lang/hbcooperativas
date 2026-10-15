@@ -10,6 +10,7 @@ import {
   formatNumeroSequenciaExibicao,
   isLancamentoManualEditavel,
   isOrigemRetencaoContabil,
+  resolverDataIsoLancamentoLivroCaixa,
 } from "@/services/livroCaixaService";
 import type { LivroCaixaPlanilhaLinha } from "@/services/livroCaixaPlanilha";
 
@@ -95,7 +96,8 @@ export function LivroCaixaPlanilhaTable({
           <tbody>
             {mostrarSaldoAnteriorPagina && (
               <tr className="bg-slate-50/90 text-slate-600 italic">
-                <td className="px-3 py-2 border-b border-slate-100" colSpan={3}>Saldo anterior</td>
+                <td className="px-3 py-2 border-b border-slate-100" colSpan={2}>Saldo anterior</td>
+                <td className="px-3 py-2 border-b border-slate-100 text-slate-400">—</td>
                 <td className="px-3 py-2 border-b border-slate-100" />
                 <td className="px-3 py-2 border-b border-slate-100" />
                 <td className="px-3 py-2 border-b border-slate-100 text-right font-semibold tabular-nums">
@@ -119,7 +121,7 @@ export function LivroCaixaPlanilhaTable({
                     {formatNumeroSequenciaExibicao(l.numeroSequencia)}
                   </td>
                   <td className="px-3 py-2 border-b border-slate-100 whitespace-nowrap tabular-nums text-slate-800">
-                    {formatDate(l.data)}
+                    {formatDate(resolverDataIsoLancamentoLivroCaixa(l))}
                   </td>
                   <td className="px-3 py-2 border-b border-slate-100">
                     <p className="font-medium text-slate-900 leading-snug">{l.historico}</p>
