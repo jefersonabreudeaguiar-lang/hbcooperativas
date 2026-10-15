@@ -46,6 +46,25 @@ export function lerHbCreditAccountPersistido(
   }
 }
 
+/** CNPJ (14 dígitos) do último cache HB deste cooperado — útil antes do AppData aquecer. */
+export function lerCnpjHbCreditPersistidoParaCooperado(cooperadoId: string): string {
+  if (typeof localStorage === "undefined" || !cooperadoId.trim()) return "";
+  const prefix = `hb.coop.hbCreditAccount.v${HB_CREDIT_ACCOUNT_STORAGE_VERSION}:`;
+  const suffix = `:${cooperadoId.trim()}`;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith(prefix) || !key.endsWith(suffix)) continue;
+      const middle = key.slice(prefix.length, key.length - suffix.length);
+      const digits = middle.replace(/\D/g, "");
+      if (digits.length === 14) return digits;
+    }
+  } catch {
+    return "";
+  }
+  return "";
+}
+
 export function lerHbCreditAccountPersistidoFlex(
   cooperadoId: string,
   cnpj?: string

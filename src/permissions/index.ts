@@ -408,14 +408,13 @@ function filterMenuForUser(
 /** Cooperado: HB Créditos no Início/atalhos — padrão app (card + Minha Conta), fail-open com UI pública. */
 export function isHbCreditCooperadoNavEligible(
   user: Pick<User, "role" | "cooperadoId">,
-  creditStatus: "loading" | "enabled" | "disabled" | "error",
-  serverConfirmed: boolean
+  _creditStatus: "loading" | "enabled" | "disabled" | "error",
+  _serverConfirmed: boolean
 ): boolean {
   if (!isContaCoopUiPublic()) return false;
   if (!isCooperadoAppUser(user)) return false;
-  if (isHbCreditEnabledClient()) return true;
-  if (creditStatus === "disabled") return false;
-  return serverConfirmed || creditStatus === "loading" || creditStatus === "error" || creditStatus === "enabled";
+  if (!user.cooperadoId?.trim()) return false;
+  return true;
 }
 
 /** Mercado parceiro — login dedicado ao painel HB Créditos do mercado. */

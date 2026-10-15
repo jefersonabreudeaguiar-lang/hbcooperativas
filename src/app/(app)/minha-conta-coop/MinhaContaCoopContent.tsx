@@ -28,7 +28,7 @@ import {
 } from "@/lib/hb-credit/hbCreditCooperadoReceberDraft";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { round2 } from "@/utils/calculations";
-import { getData, updateData } from "@/services/dataStore";
+import { getData, preloadAppData, updateData, waitForAppDataWarm } from "@/services/dataStore";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import {
@@ -143,7 +143,7 @@ function MinhaContaCoopContent() {
     [user, cooperadoId]
   );
 
-  const cnpj = useMemo(() => resolveCooperadoHbCreditCnpjDigits(user), [user, data]);
+  const cnpj = useMemo(() => resolveCooperadoHbCreditCnpjDigits(user, data), [user, data]);
   const cooperadoNome = useMemo(() => {
     if (!data || !cooperadoId) return user?.name ?? "";
     return data.cooperados.find((c) => c.id === cooperadoId)?.nomeCompleto ?? user?.name ?? "";
@@ -310,19 +310,42 @@ function MinhaContaCoopContent() {
   }, [cnpj, hbApiCooperadoId, pilotHbUi, user]);
 
   useEffect(() => {
-    if (!user) return;
-    if (hbApiCooperadoId && cnpj.length === 14) return;
-    const timer = window.setTimeout(() => {
-      const cid = resolveHbCreditApiCooperadoId(user, cooperadoId);
-      const cnpjNow = resolveCooperadoHbCreditCnpjDigits(user);
-      if (!cid || cnpjNow.length !== 14) {
+    if (!user || cnpj.length === 14) return;
+    preloadAppData();
+    let cancelled = false;
+    void waitForAppDataWarm(12_000).then(() => {
+      if (cancelled) return;
+      const cnpjNow = resolveCooperadoHbCreditCnpjDigits(user, getData());
+      if (cnpjNow.length === 14) return;
+      if (!hbApiCooperadoId) {
         setLoading(false);
         setError(
-          "Não foi possível abrir a HB Créditos: falta vínculo do seu login com o cooperado ou a cooperativa. Saia, entre de novo e, na tela inicial, toque em Atualizar."
+          "Não foi possível abrir a HB Créditos: falta vínculo do seu login com o cooperado. Saia, entre de novo e use Atualizar na tela inicial."
         );
       }
-    }, 4_000);
-    return () => window.clearTimeout(timer);
+    });
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      const cid = resolveHbCreditApiCooperadoId(user, cooperadoId);
+      const cnpjNow = resolveCooperadoHbCreditCnpjDigits(user, getData());
+      if (!cid) {
+        setLoading(false);
+        setError(
+          "Não foi possível abrir a HB Créditos: falta vínculo do seu login com o cooperado. Saia, entre de novo e use Atualizar na tela inicial."
+        );
+        return;
+      }
+      if (cnpjNow.length !== 14) {
+        setLoading(false);
+        setError(
+          "Ainda não temos o CNPJ da cooperativa neste aparelho. Volte ao Início, toque em Atualizar e abra a HB Créditos de novo."
+        );
+      }
+    }, 8_000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [user, cooperadoId, hbApiCooperadoId, cnpj]);
 
   useEffect(() => {

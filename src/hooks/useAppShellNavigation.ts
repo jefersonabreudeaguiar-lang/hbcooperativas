@@ -22,7 +22,6 @@ import { getUserCooperativaId } from "@/utils/cooperativa";
 import { resolveStaffNavigationUser, shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
 import { isContaCoopUiVisibleForUser } from "@/utils/contaCoopUiVisibility";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
-import { isHbCreditEnabledClient } from "@/modules/hb-credit/config";
 import { cooperadoPilotMobileBottomNavItems } from "@/lib/cooperado/cooperadoMobilePilotBottomNav";
 
 export type AppShellMenuItem = { href: string; label: string; resource: Resource };
@@ -109,7 +108,7 @@ export function useAppShellNavigation(): AppShellNavigation | null {
     if (beforeDataWarm) {
       const menus = getCooperadoShellMenusBeforeDataWarm(navUser);
       const hbWarmShell =
-        isCooperadoAppUser(navUser) && isContaCoopUiVisibleForUser(navUser) && isHbCreditEnabledClient();
+        isCooperadoAppUser(navUser) && isContaCoopUiVisibleForUser(navUser) && Boolean(navUser.cooperadoId?.trim());
       return {
         navUser,
         cooperadoNome,

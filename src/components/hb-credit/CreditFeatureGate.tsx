@@ -5,7 +5,6 @@ import { useEffect } from "react";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { isCooperadoAppUser, canAccessTesoureiroArea, isParceiroAppUser } from "@/permissions";
-import { isHbCreditEnabledClient } from "@/modules/hb-credit/config";
 import { isContaCoopUiPublic } from "@/utils/contaCoopUiVisibility";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { AlertBanner } from "@/components/ui/AlertBanner";
@@ -28,21 +27,22 @@ export function CreditFeatureGate({ children }: { children: React.ReactNode }) {
   const staffHbExperience = Boolean(user && canAccessTesoureiroArea(user));
   const canEnterHbArea =
     Boolean(user) && (cooperadoExperience || parceiroExperience || staffHbExperience);
-  const cooperadoHbFailOpen =
-    cooperadoExperience && isContaCoopUiPublic() && (isHbCreditEnabledClient() || cooperadoNavEligible);
+  const cooperadoHbHubOpen =
+    cooperadoExperience && isContaCoopUiPublic() && Boolean(user?.cooperadoId?.trim());
   const pageAllowed =
-    canEnterHbArea &&
-    (navEnabled ||
-      cooperadoHbFailOpen ||
-      (parceiroExperience && (hbStatusLoading || status === "loading" || parceiroNavEligible)));
+    cooperadoHbHubOpen ||
+    (canEnterHbArea &&
+      (navEnabled ||
+        cooperadoNavEligible ||
+        (parceiroExperience && (hbStatusLoading || status === "loading" || parceiroNavEligible))));
 
   useEffect(() => {
     if (authLoading || !user) return;
-    if (parceiroExperience || cooperadoHbFailOpen) return;
+    if (parceiroExperience || cooperadoHbHubOpen) return;
     if (status === "disabled" && !pageAllowed) {
       router.replace("/dashboard");
     }
-  }, [authLoading, user, status, router, pageAllowed, parceiroExperience, cooperadoHbFailOpen]);
+  }, [authLoading, user, status, router, pageAllowed, parceiroExperience, cooperadoHbHubOpen]);
 
   if ((authLoading || hbStatusLoading) && !pageAllowed) return <PageSkeleton />;
 

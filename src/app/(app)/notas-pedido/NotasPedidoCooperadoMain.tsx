@@ -4417,7 +4417,7 @@ export default function NotasPedidoCooperadoMain() {
         </AlertBanner>
       )}
 
-      {isCooperado && contratosEntrega.length === 0 && (
+      {isCooperado && abaCooperado === "entregas" && contratosEntrega.length === 0 && (
         <AlertBanner variant="warning" className="mb-6" title="Aguardando contrato da cooperativa">
           O responsável ainda não publicou um contrato com itens e preços. Veja o status no topo
           (“Atualizando…” / “Atualizado”) ou fale com a cooperativa.
@@ -4630,16 +4630,15 @@ export default function NotasPedidoCooperadoMain() {
         <p className="text-sm text-gray-600 mb-4">
           {abaCooperado === "entregas" ? (
             <>
-              Envie fotos e acompanhe entregas em aberto. Meses já pagos (notas, entregas e HB liquidados) estão em{" "}
+              Cada mês lista Entrega 1, 2, 3… Toque na entrega para abrir a foto. Valores consolidados ficam em{" "}
               <button type="button" onClick={() => trocarAbaCooperado("ficha")} className="text-green-700 font-semibold underline">
-                Histórico liquidado
+                Minha ficha
               </button>
-              . Valor a receber e PIX em{" "}
-              <Link href="/ficha-corrida" className="text-green-700 font-semibold">Financeiro</Link>.
+              .
             </>
           ) : (
             <>
-              Arquivo dos meses quitados: entregas, notas e compras HB já liquidadas. Valores em aberto só em{" "}
+              Resumo financeiro por mês. Valores em aberto também em{" "}
               <Link href="/ficha-corrida" className="text-green-700 font-semibold">Financeiro</Link>.
             </>
           )}
@@ -4670,7 +4669,7 @@ export default function NotasPedidoCooperadoMain() {
                 : "border-transparent text-gray-500 hover:text-gray-700"
             )}
           >
-            <BookOpen size={16} /> Histórico liquidado
+            <BookOpen size={16} /> Minha ficha
           </button>
         </div>
       )}
@@ -4718,7 +4717,8 @@ export default function NotasPedidoCooperadoMain() {
         {isCooperado && abaCooperado === "entregas" && (
           <FormField label="Filtrar entregas">
             <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="min-w-[200px]">
-              <option value="pendentes">Pendentes (em aberto)</option>
+              <option value="pendentes">Pendentes</option>
+              <option value="">Histórico completo</option>
               <option value="aguardando_conferencia">Em análise</option>
               <option value="rejeitada">Precisa corrigir</option>
               <option value="conferida">Aprovadas</option>
@@ -4801,8 +4801,8 @@ export default function NotasPedidoCooperadoMain() {
                   </p>
                   <p className="text-sm mt-1">
                     {statusFilter === "pendentes"
-                      ? "Entregas pagas ficam em Histórico liquidado."
-                      : "Ajuste o filtro ou veja meses quitados em Histórico liquidado."}
+                      ? "Entregas aprovadas ou pagas ficam no histórico completo."
+                      : "Toque em Histórico completo para ver todas as entregas."}
                   </p>
                 </div>
               ) : (

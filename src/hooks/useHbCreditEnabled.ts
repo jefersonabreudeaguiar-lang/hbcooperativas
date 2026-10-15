@@ -37,10 +37,8 @@ function readCachedHbCreditStatus(): boolean | null {
     const parsed = JSON.parse(raw) as { enabled?: boolean; at?: number };
     if (!parsed.at || Date.now() - parsed.at > STATUS_CACHE_TTL_MS) return null;
     if (parsed.enabled === true) return true;
-    if (parsed.enabled === false) {
-      if (isHbCreditEnabledClient()) return null;
-      return false;
-    }
+    // Nunca confiar em cache "disabled" — evita redirect/menu oculto antes do fetch atual.
+    if (parsed.enabled === false) return null;
     return null;
   } catch {
     return null;
