@@ -29,7 +29,7 @@ import { CooperadoBootShellDismiss } from "@/components/performance/CooperadoBoo
 import { PwaStandaloneRepairAck } from "@/components/pwa/PwaStandaloneRepairAck";
 import { buildInlineCooperadoPwaStealthReloadScript } from "@/lib/pwa/cooperadoPwaStealthReload";
 import { CooperadoPwaStealthReloadHost } from "@/components/cooperado/CooperadoPwaStealthReloadHost";
-import { buildInlineCooperadoFleetCachePurgeScript } from "@/lib/pwa/cooperadoFleetCachePurgeOnce";
+import { CooperadoFleetMaintenanceHost } from "@/components/pwa/CooperadoFleetMaintenanceHost";
 
 const geist = Geist({
   variable: "--font-geist-sans",
@@ -95,7 +95,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: buildInlineRuntimeCrashRecorderScript() }} />
-        <script dangerouslySetInnerHTML={{ __html: buildInlineCooperadoFleetCachePurgeScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineStaleProfileGuardScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlinePwaStandaloneLaunchGuardScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineServiceWorkerMigrationScript() }} />
@@ -127,6 +126,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <CooperadoPwaStealthReloadHost />
           <RqlPerfDebugBootstrap />
           <ClientReleaseShieldHost />
+          <CooperadoFleetMaintenanceHost />
           <PwaSilentServiceWorker />
           {children}
           <PwaProvider />
