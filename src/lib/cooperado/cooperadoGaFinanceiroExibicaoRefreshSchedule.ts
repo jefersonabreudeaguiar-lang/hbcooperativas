@@ -8,6 +8,8 @@ import {
   cooperadoGaExibicaoFinanceiraAindaZerada,
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { cooperadoPilotForcarRematerializacaoFinanceira } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
+import { cooperadoGaDispatchPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
+import { cooperadoPilotAppDataTemFinanceiroLocal } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
 import { requestCooperadoGaFinanceiroExibicaoRecoverySync } from "@/services/syncRequest";
 
 /** Delays absolutos desde o início da sessão visível no app. */
@@ -31,7 +33,14 @@ function onRefreshTick(
 
   cooperadoPilotForcarRematerializacaoFinanceira(user);
 
-  if (isLastTick && cooperadoGaExibicaoFinanceiraAindaZerada(user)) {
+  if (!cooperadoGaExibicaoFinanceiraAindaZerada(user)) return;
+
+  if (!cooperadoPilotAppDataTemFinanceiroLocal(user)) {
+    cooperadoGaDispatchPrimeiraCargaSilenciosa(user, { allowRepeat: tickIndex > 0 });
+    return;
+  }
+
+  if (isLastTick || tickIndex > 0) {
     requestCooperadoGaFinanceiroExibicaoRecoverySync();
   }
 }

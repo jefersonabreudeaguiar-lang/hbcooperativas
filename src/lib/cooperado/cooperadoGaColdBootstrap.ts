@@ -1,6 +1,12 @@
 import type { User } from "@/types";
-import { cooperadoFinanceiroExibicaoCachePronto } from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
-import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
+import {
+  cooperadoFinanceiroCardCacheTemValor,
+  cooperadoFinanceiroExibicaoCachePronto,
+} from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
+import {
+  cooperadoGaExibicaoFinanceiraAindaZerada,
+  cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem,
+} from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { cooperadoMobileDeferOperacionalSyncNaAbertura } from "@/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoPilotAppDataTemFinanceiroLocal } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
 import { cooperadoAppReleaseNeedsOperacionalSync } from "@/lib/performance/cooperadoEventDrivenSync";
@@ -50,9 +56,12 @@ export function cooperadoGaAparelhoPrecisaBootstrapNuvem(
   }
   if (cooperadoAppReleaseNeedsOperacionalSync()) return true;
   if (cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) return true;
-  if (cooperadoFinanceiroExibicaoCachePronto(user)) return false;
+  if (cooperadoFinanceiroCardCacheTemValor(user)) return false;
   if (cooperadoPilotAppDataTemFinanceiroLocal(user)) return false;
-  if (cooperadoLocalResumeReady(user)) return false;
+  if (cooperadoFinanceiroExibicaoCachePronto(user)) return false;
+  if (cooperadoLocalResumeReady(user) && cooperadoFinanceiroCardCacheTemValor(user)) {
+    return false;
+  }
   return true;
 }
 
@@ -71,6 +80,26 @@ function dispatchGaPrimeiraCargaSilenciosa(): void {
  * Uma carga silenciosa pós-interação — aparelho frio (Orlando e demais).
  * Aparelho quente (Jeferson) não agenda: já tem fatia/cache local.
  */
+/** Puxa operacional_full silenciosa quando a UI financeira segue zerada (ex.: após purge de snapshot). */
+export function cooperadoGaDispatchPrimeiraCargaSilenciosa(
+  user: Omit<User, "password"> | null | undefined,
+  opts?: { allowRepeat?: boolean }
+): void {
+  if (!user?.id || user.role !== "cooperado") return;
+  if (typeof navigator !== "undefined" && !navigator.onLine) return;
+  if (
+    !cooperadoGaAparelhoPrecisaBootstrapNuvem(user) &&
+    !(opts?.allowRepeat && cooperadoGaExibicaoFinanceiraAindaZerada(user))
+  ) {
+    return;
+  }
+  if (!opts?.allowRepeat && bootstrapAlreadyScheduled(user.id)) return;
+  if (!bootstrapAlreadyScheduled(user.id)) {
+    markBootstrapScheduled(user.id);
+  }
+  dispatchGaPrimeiraCargaSilenciosa();
+}
+
 export function scheduleCooperadoGaPrimeiraCargaSilenciosa(
   user: Omit<User, "password"> | null | undefined
 ): void {

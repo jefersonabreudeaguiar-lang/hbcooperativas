@@ -32,9 +32,8 @@ export function cooperadoPwaFinanceiroSnapshotsMaterializados(
     filtrarInicioCardPersistidoLeituraBic(
       lerInicioCardPersistidoFlex(cooperadoId, cooperativaId)
     );
-  if (card?.display) {
-    if (cooperadoMotorTemObrigacaoReceber(card.display)) return true;
-    if (cooperadoPwaSnapshotBuildReadable(card.appBuild)) return true;
+  if (card?.display && cooperadoMotorTemObrigacaoReceber(card.display)) {
+    return true;
   }
   if (!cooperativaId) return false;
   const ficha = lerCooperadoPwaFichaResumoSnapshot(cooperadoId, cooperativaId);
@@ -51,15 +50,7 @@ export function cooperadoPwaFinanceiroSnapshotsAusentes(
   cooperadoId: string,
   cooperativaId: string | undefined
 ): boolean {
-  if (cooperadoPwaFinanceiroSnapshotsMaterializados(cooperadoId, cooperativaId)) return false;
-  if (!cooperativaId) return true;
-  const card = filtrarInicioCardPersistidoLeituraBic(
-    lerInicioCardPersistidoFlex(cooperadoId, cooperativaId)
-  );
-  if (card?.display && cooperadoMotorTemObrigacaoReceber(card.display)) return false;
-  const ficha = lerCooperadoPwaFichaResumoSnapshot(cooperadoId, cooperativaId);
-  if (ficha?.paridade && (ficha.paridade.valorLiquido ?? 0) > 0.005) return false;
-  return !card && !ficha;
+  return !cooperadoPwaFinanceiroSnapshotsMaterializados(cooperadoId, cooperativaId);
 }
 
 export function cooperadoPwaFichaSnapshotPrecisaRematerializar(

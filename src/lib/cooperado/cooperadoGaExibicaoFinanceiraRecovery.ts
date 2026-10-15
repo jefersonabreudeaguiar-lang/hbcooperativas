@@ -80,6 +80,13 @@ export function cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(
   ) {
     return true;
   }
+  if (
+    cardSemValor &&
+    !cooperadoFinanceiroCardCacheTemValor(user) &&
+    !cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId)
+  ) {
+    return true;
+  }
   return false;
 }
 

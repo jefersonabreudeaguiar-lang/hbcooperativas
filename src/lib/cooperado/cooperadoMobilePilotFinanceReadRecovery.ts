@@ -118,7 +118,6 @@ export function scheduleCooperadoPilotFinanceReadRecovery(
 ): void {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return;
   if (financeRecoveryAlreadyRanThisSession(user.id)) return;
-  markFinanceRecoverySession(user.id);
   const leaseKey = user.id;
   recoveryLeaseByUser.get(leaseKey)?.();
 
@@ -134,18 +133,20 @@ export function scheduleCooperadoPilotFinanceReadRecovery(
       ctx.cooperadoId,
       ctx.cooperativaId
     );
-    if (materialized) {
-      dispatchCooperadoPwaLeveUiSnapshotRefresh();
-      return true;
-    }
-    if (cooperadoPilotAppDataTemFinanceiroLocal(user)) {
+    if (materialized && cooperadoFinanceiroCardCacheTemValor(user)) {
       dispatchCooperadoPwaLeveUiSnapshotRefresh();
       return true;
     }
     return false;
   };
 
-  if (attempt()) return;
+  const finishIfResolved = (): boolean => {
+    if (!attempt()) return false;
+    markFinanceRecoverySession(user.id);
+    return true;
+  };
+
+  if (finishIfResolved()) return;
 
   const release = () => {
     recoveryLeaseByUser.delete(leaseKey);
@@ -153,16 +154,20 @@ export function scheduleCooperadoPilotFinanceReadRecovery(
   recoveryLeaseByUser.set(leaseKey, release);
 
   const scheduleRetry = () => {
-    if (attempt()) {
+    if (finishIfResolved()) {
       release();
     }
   };
 
   const maybeCloudRecovery = () => {
-    if (cooperadoFinanceiroCardCacheTemValor(user)) return;
+    if (cooperadoFinanceiroCardCacheTemValor(user)) {
+      markFinanceRecoverySession(user.id);
+      return;
+    }
     if (!cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) return;
     requestCooperadoGaFinanceiroExibicaoRecoverySync();
     scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
+    markFinanceRecoverySession(user.id);
   };
 
   if (typeof requestIdleCallback === "function") {
