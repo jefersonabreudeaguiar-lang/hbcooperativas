@@ -524,8 +524,14 @@ export function getMenuItems(
   }
 
   if (effectiveRole === "cooperado") {
-    /** HB Créditos: atalho só no Início (CooperadoHbCreditResumoCard), não no menu lateral. */
-    return filterMenuForUser(COOPERADO_MENU, navUser);
+    const base = filterMenuForUser(COOPERADO_MENU, navUser);
+    return appendHbCreditMenuItem(
+      base,
+      navUser,
+      creditEnabled,
+      contaCoopUiVisible,
+      cooperadoNavEligible
+    );
   }
 
   if (isCooperativePlatformAdminRole(user.role)) {
@@ -553,7 +559,14 @@ export function getCooperadoDrawerMenuItems(
     return getMenuItems(user, creditEnabled, contaCoopUiVisible, data, cooperadoNavEligible);
   }
   const navUser = { ...user, role: "cooperado" as UserRole };
-  return filterMenuForUser(COOPERADO_DRAWER_MENU, navUser);
+  const base = filterMenuForUser(COOPERADO_DRAWER_MENU, navUser);
+  return appendHbCreditMenuItem(
+    base,
+    navUser,
+    creditEnabled,
+    contaCoopUiVisible,
+    cooperadoNavEligible
+  );
 }
 
 export function getCooperadoExtraItems(): { href: string; label: string }[] {

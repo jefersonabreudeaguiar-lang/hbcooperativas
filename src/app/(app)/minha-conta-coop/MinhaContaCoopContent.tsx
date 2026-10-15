@@ -76,6 +76,7 @@ import {
   cooperadoPilotHbCreditHubIntroDone,
   isCooperadoMobilePilotHbCreditUi,
 } from "@/lib/cooperado/cooperadoMobilePilotHbCredit";
+import { resolveCooperadoHbCreditCnpjDigits } from "@/lib/hb-credit/resolveCooperadoHbCreditCnpj";
 
 type Tab = "inicio" | "pagar" | "receber" | "extrato";
 
@@ -142,13 +143,7 @@ function MinhaContaCoopContent() {
     [user, cooperadoId]
   );
 
-  const cnpj = useMemo(() => {
-    if (!user || !data) return "";
-    if (user.cooperativaCnpj) return normalizeCnpj(user.cooperativaCnpj);
-    const coopId = getUserCooperativaId(user, data);
-    const coop = data.cooperativas.find((c) => c.id === coopId);
-    return coop?.cnpj ? normalizeCnpj(coop.cnpj) : "";
-  }, [user, data]);
+  const cnpj = useMemo(() => resolveCooperadoHbCreditCnpjDigits(user), [user, data]);
   const cooperadoNome = useMemo(() => {
     if (!data || !cooperadoId) return user?.name ?? "";
     return data.cooperados.find((c) => c.id === cooperadoId)?.nomeCompleto ?? user?.name ?? "";
@@ -313,6 +308,22 @@ function MinhaContaCoopContent() {
       }
     }
   }, [cnpj, hbApiCooperadoId, pilotHbUi, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (hbApiCooperadoId && cnpj.length === 14) return;
+    const timer = window.setTimeout(() => {
+      const cid = resolveHbCreditApiCooperadoId(user, cooperadoId);
+      const cnpjNow = resolveCooperadoHbCreditCnpjDigits(user);
+      if (!cid || cnpjNow.length !== 14) {
+        setLoading(false);
+        setError(
+          "Não foi possível abrir a HB Créditos: falta vínculo do seu login com o cooperado ou a cooperativa. Saia, entre de novo e, na tela inicial, toque em Atualizar."
+        );
+      }
+    }, 4_000);
+    return () => window.clearTimeout(timer);
+  }, [user, cooperadoId, hbApiCooperadoId, cnpj]);
 
   useEffect(() => {
     if (!cnpj || !hbApiCooperadoId) return;
@@ -499,7 +510,7 @@ function MinhaContaCoopContent() {
     }
   };
 
-  if (loading && !account) {
+  if (loading && !account && !error) {
     if (pilotHbUi) {
       return (
         <CooperadoHbCreditHubPilotChrome enabled>
@@ -511,6 +522,17 @@ function MinhaContaCoopContent() {
       <div className="mx-auto max-w-lg space-y-3 pb-8">
         <PageSkeleton />
         <p className="text-center text-xs text-gray-500">Carregando HB Créditos…</p>
+      </div>
+    );
+  }
+
+  if (!hbApiCooperadoId || cnpj.length !== 14) {
+    return (
+      <div className="mx-auto max-w-lg space-y-4 px-4 pb-8 pt-2">
+        <AlertBanner variant="error" title="HB Créditos indisponível">
+          {error ||
+            "Seu login não está ligado ao cadastro do cooperado na nuvem. Desconecte, entre de novo e use Atualizar na tela inicial."}
+        </AlertBanner>
       </div>
     );
   }

@@ -22,6 +22,7 @@ import { getUserCooperativaId } from "@/utils/cooperativa";
 import { resolveStaffNavigationUser, shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
 import { isContaCoopUiVisibleForUser } from "@/utils/contaCoopUiVisibility";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
+import { isHbCreditEnabledClient } from "@/modules/hb-credit/config";
 import { cooperadoPilotMobileBottomNavItems } from "@/lib/cooperado/cooperadoMobilePilotBottomNav";
 
 export type AppShellMenuItem = { href: string; label: string; resource: Resource };
@@ -107,15 +108,17 @@ export function useAppShellNavigation(): AppShellNavigation | null {
     const { navUser, cooperadoNome, staffPainelUi, coopId, beforeDataWarm } = shellCore;
     if (beforeDataWarm) {
       const menus = getCooperadoShellMenusBeforeDataWarm(navUser);
+      const hbWarmShell =
+        isCooperadoAppUser(navUser) && isContaCoopUiVisibleForUser(navUser) && isHbCreditEnabledClient();
       return {
         navUser,
         cooperadoNome,
         staffPainelUi,
         coopId,
-        contaCoopUiVisible: false,
-        moduleNavEligible: false,
+        contaCoopUiVisible: hbWarmShell,
+        moduleNavEligible: hbWarmShell,
         desktopMenu: menus.desktopMenu,
-        mobileMenu: cooperadoPilotMobileBottomNavItems(menus.mobileMenu, navUser, false),
+        mobileMenu: cooperadoPilotMobileBottomNavItems(menus.mobileMenu, navUser, hbWarmShell),
         drawerMenu: menus.drawerMenu,
       };
     }

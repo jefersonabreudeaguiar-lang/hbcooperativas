@@ -9,12 +9,12 @@ import { HbCreditQrScanner } from "@/components/hb-credit/HbCreditQrScanner";
 import { HbCreditScannerErrorBoundary } from "@/components/hb-credit/HbCreditScannerErrorBoundary";
 import { Button } from "@/components/ui/Button";
 import { usePermissions } from "@/hooks/usePermissions";
-import { useAppDataSelector } from "@/hooks/useAppData";
-import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { prepareAndOpenHbCreditPaymentFromQrScan } from "@/lib/hb-credit/openHbCreditPaymentFromQr";
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
+import { resolveCooperadoHbCreditCnpjDigits } from "@/lib/hb-credit/resolveCooperadoHbCreditCnpj";
 import { hbCooperadoFlowPage } from "@/lib/hb-credit/hbCreditCooperadoUi";
 import { cn } from "@/utils/format";
+import { AlertBanner } from "@/components/ui/AlertBanner";
 
 export default function EscanearQrContaCoopPage() {
   return (
@@ -37,16 +37,7 @@ function EscanearQrContent() {
     [user, cooperadoId]
   );
 
-  const cnpj = useAppDataSelector(
-    (data) => {
-      if (!user) return "";
-      if (user.cooperativaCnpj) return normalizeCnpj(user.cooperativaCnpj);
-      const coopId = getUserCooperativaId(user, data);
-      const coop = data.cooperativas.find((c) => c.id === coopId);
-      return coop?.cnpj ? normalizeCnpj(coop.cnpj) : "";
-    },
-    [user?.id, user?.cooperativaCnpj, user?.cooperativaId]
-  );
+  const cnpj = useMemo(() => resolveCooperadoHbCreditCnpjDigits(user), [user]);
 
   const handleScan = useCallback(
     (payload: string) => {
@@ -66,6 +57,20 @@ function EscanearQrContent() {
     },
     [cnpj, hbApiCooperadoId, router, validating]
   );
+
+  if (!hbApiCooperadoId || cnpj.length !== 14) {
+    return (
+      <div className={cn(hbCooperadoFlowPage, "mx-auto max-w-lg gap-4 px-4 pb-8")}>
+        <AlertBanner variant="error" title="Não foi possível abrir o pagamento">
+          Seu login precisa estar ligado ao cooperado na nuvem. Saia, entre de novo e abra HB Créditos pela tela
+          inicial antes de usar o atalho Pagar.
+        </AlertBanner>
+        <Button type="button" variant="secondary" onClick={() => router.back()}>
+          Voltar
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className={cn(hbCooperadoFlowPage, "mx-auto max-w-lg gap-4 px-4 pb-8")}>
