@@ -1734,13 +1734,7 @@ export default function NotasPedidoCooperadoMain() {
         reason: "anexar",
         notaRejeitada,
       }).then((pull) => {
-        if (!pull.ok) {
-          setErroEnvio(pull.error ?? "Não foi possível carregar o contrato. Toque em Atualizar.");
-          return;
-        }
-        refreshPwaEntregasResumosSnap();
-        const fresh = getData();
-        if (fresh) aplicarContratoLocal(fresh, notaRejeitada);
+        if (pull.ok) refreshPwaEntregasResumosSnap();
       });
     }
   };
@@ -2256,40 +2250,10 @@ export default function NotasPedidoCooperadoMain() {
   }, [searchParams, isCooperado, ready, tabActive]);
 
   useEffect(() => {
-    if (!isCooperado || !user || !coopId || !data || !tabActive) return;
-    const run = () => void sincronizarContratosEmBackground();
-    if (typeof requestIdleCallback === "function") {
-      const id = requestIdleCallback(run, { timeout: 12_000 });
-      return () => cancelIdleCallback(id);
-    }
-    const timer = window.setTimeout(run, 1_500);
-    return () => window.clearTimeout(timer);
+    if (!isCooperado || !user || !coopId || !data) return;
+    void sincronizarContratosEmBackground();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCooperado, user?.id, coopId, tabActive]);
-
-  const contratosPullEntregasRef = useRef(false);
-  const lastContratosPullEntregasAtRef = useRef(0);
-  const CONTRATOS_PULL_ENTREGAS_COOLDOWN_MS = 90_000;
-  useEffect(() => {
-    if (!isCooperado || !user || !coopId || !tabActive || abaCooperado !== "entregas") return;
-    if (contratosEntrega.length > 0) return;
-    const now = Date.now();
-    if (now - lastContratosPullEntregasAtRef.current < CONTRATOS_PULL_ENTREGAS_COOLDOWN_MS) return;
-    if (contratosPullEntregasRef.current) return;
-    contratosPullEntregasRef.current = true;
-    lastContratosPullEntregasAtRef.current = now;
-    void sincronizarContratosEmBackground().finally(() => {
-      contratosPullEntregasRef.current = false;
-    });
-  }, [
-    isCooperado,
-    user?.id,
-    coopId,
-    tabActive,
-    abaCooperado,
-    contratosEntrega.length,
-    sincronizarContratosEmBackground,
-  ]);
+  }, [isCooperado, user?.id, coopId]);
 
   useEffect(() => {
     if (!anexarModal || !data || !coopId) return;
@@ -2911,10 +2875,7 @@ export default function NotasPedidoCooperadoMain() {
     if (entregasPwaLeve) setPwaPreparandoEnvio(true);
 
     const uploadsPendentes = fotosNaNuvemCount < fotosSessaoCount;
-    const semContratoCatalogo =
-      getContratosEntrega(getData() ?? workingData, coopId).length === 0;
-    const skipPull =
-      entregasPwaLeve && !notaRejeitadaSubmit?.id && !semContratoCatalogo;
+    const skipPull = entregasPwaLeve && !notaRejeitadaSubmit?.id;
 
     if (uploadsPendentes) await aguardarFilaUpload();
     void syncOfflineDeliveryImages();
@@ -2926,16 +2887,6 @@ export default function NotasPedidoCooperadoMain() {
       });
       if (!pull.ok) {
         setErroEnvio(pull.error ?? "Atualize a internet e tente enviar de novo.");
-        return;
-      }
-      workingData = getData() ?? workingData;
-      const contratoAposSync = resolverContratoEntrega(workingData, coopId, preferId, {
-        criarPadraoSeVazio: false,
-      }).instituicaoId;
-      if (!contratoAposSync) {
-        setErroEnvio(
-          "Contrato da entrega não encontrado. Toque em Atualizar no topo ou fale com a cooperativa."
-        );
         return;
       }
     }
@@ -4468,9 +4419,8 @@ export default function NotasPedidoCooperadoMain() {
 
       {isCooperado && abaCooperado === "entregas" && contratosEntrega.length === 0 && (
         <AlertBanner variant="warning" className="mb-6" title="Aguardando contrato da cooperativa">
-          {syncingForUi
-            ? "Buscando contrato e preços na cooperativa…"
-            : "Se o aviso continuar após tocar em Atualizar, o responsável ainda não publicou um contrato com itens e preços."}
+          O responsável ainda não publicou um contrato com itens e preços. Veja o status no topo
+          (“Atualizando…” / “Atualizado”) ou fale com a cooperativa.
         </AlertBanner>
       )}
 

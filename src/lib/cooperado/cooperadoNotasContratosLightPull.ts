@@ -1,6 +1,6 @@
 /**
- * Cooperado GA/PWA — pull leve de notas + contratos quando a revisão na nuvem mudou,
- * sem operacional_full (evita travar o celular na abertura).
+ * Cooperado GA/PWA — pull leve só de notas quando a revisão na nuvem mudou,
+ * sem operacional_full nem catálogo de contratos (Entregas).
  */
 import type { User } from "@/types";
 import type { CooperativaCloudRevision } from "@/lib/performance/cooperadoEventDrivenSync";
@@ -10,7 +10,6 @@ import {
 } from "@/lib/performance/cooperadoEventDrivenSync";
 import { cooperadoPwaMaterializarSnapshotsFinanceirosPosSync } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
-import { syncContratosFromCloud } from "@/services/cooperativaSyncCloudService";
 import { syncNotasPedidoFromCloud } from "@/services/notaPedidoCloudService";
 import { normalizeCnpj } from "@/utils/cooperativa";
 
@@ -31,7 +30,6 @@ export function runCooperadoNotasContratosLightPull(opts: {
   inflight = (async () => {
     try {
       await syncNotasPedidoFromCloud(digits, { retryFull: false });
-      await syncContratosFromCloud(digits);
       cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(opts.user, { light: true });
       persistAppliedCooperativaCloudRevision(
         digits,
