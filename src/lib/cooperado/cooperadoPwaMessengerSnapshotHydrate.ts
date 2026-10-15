@@ -3,7 +3,12 @@
  */
 import type { User } from "@/types";
 import { cooperadoPwaSnapshotBuildReadable } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
-import { lerCooperadoPwaFichaResumoSnapshot } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
+import {
+  lerCooperadoPwaFichaResumoSnapshot,
+  resolveParidadeFromFichaResumoSnapshot,
+} from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
+import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import type { AppData } from "@/types";
 import {
   isCooperadoPwaMessengerMode,
   persistirCooperadoPwaMessengerCaches,
@@ -22,6 +27,26 @@ import { lerInicioCardFinanceiroExibicao } from "@/lib/cooperado/cooperadoFinanc
 import { lerInicioCardPersistidoFlex } from "@/lib/cooperadoInicioCardPersistencia";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 
+const PARIDADE_SNAP_DRIFT_EPS = 0.02;
+
+/** Snapshot de ficha com paridade zerada enquanto AppData local tem valor — trava Financeiro/Início. */
+export function cooperadoPwaFichaParidadeSnapshotDivergeDeAppData(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string
+): boolean {
+  const snap = lerCooperadoPwaFichaResumoSnapshot(cooperadoId, cooperativaId);
+  if (!snap || !cooperadoPwaSnapshotBuildReadable(snap.appBuild)) return false;
+  const fromSnap = resolveParidadeFromFichaResumoSnapshot(snap);
+  if (!fromSnap) return false;
+  const live = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+  const snapVal = fromSnap.valorLiquido ?? 0;
+  const liveVal = live.valorLiquido ?? 0;
+  if (liveVal > 0.005 && snapVal <= 0.005) return true;
+  if (liveVal > 0.005 && Math.abs(snapVal - liveVal) > PARIDADE_SNAP_DRIFT_EPS) return true;
+  return false;
+}
+
 /** Snapshots v2 gravados após sync — inclusive saldo zerado (não exige “a receber” > 0). */
 export function cooperadoPwaFinanceiroSnapshotsMaterializados(
   cooperadoId: string,
@@ -37,12 +62,20 @@ export function cooperadoPwaFinanceiroSnapshotsMaterializados(
   }
   if (!cooperativaId) return false;
   const ficha = lerCooperadoPwaFichaResumoSnapshot(cooperadoId, cooperativaId);
-  return Boolean(
+  const fichaOk = Boolean(
     ficha &&
       ficha.v >= 2 &&
       ficha.paridade &&
       cooperadoPwaSnapshotBuildReadable(ficha.appBuild)
   );
+  if (!fichaOk) return false;
+  if (isAppDataWarm()) {
+    const data = getData();
+    if (cooperadoPwaFichaParidadeSnapshotDivergeDeAppData(data, cooperadoId, cooperativaId)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** Após limpar cache do PWA — sem card/ficha local o Início zera (HB Créditos ainda vem da API). */
@@ -61,6 +94,12 @@ export function cooperadoPwaFichaSnapshotPrecisaRematerializar(
   if (!snap) return true;
   if (!cooperadoPwaSnapshotBuildReadable(snap.appBuild)) return true;
   if (snap.v < 2 || !snap.paridade) return true;
+  if (isAppDataWarm()) {
+    const data = getData();
+    if (cooperadoPwaFichaParidadeSnapshotDivergeDeAppData(data, cooperadoId, cooperativaId)) {
+      return true;
+    }
+  }
   return false;
 }
 

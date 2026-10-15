@@ -416,12 +416,16 @@ function FichaCorridaPageInner() {
   /** Uma leitura paridade por revisão — evita BIC/consolidado repetido no cooperado. */
   const paridadeCooperadoMobile = useMemo(() => {
     if (!tabActive || !isCooperado || !cooperadoId) return null;
+    const live =
+      data && coopId ? leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId) : null;
     if (financeiroDormant && fichaResumoSnap) {
       const fromSnap = resolveParidadeFromFichaResumoSnapshot(fichaResumoSnap);
+      if (fromSnap && fromSnap.valorLiquido > 0.005) return fromSnap;
+      if (live && live.valorLiquido > 0.005) return live;
       if (fromSnap) return fromSnap;
     }
     if (!data) return null;
-    return leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
+    return live ?? leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
   }, [
     tabActive,
     isCooperado,
