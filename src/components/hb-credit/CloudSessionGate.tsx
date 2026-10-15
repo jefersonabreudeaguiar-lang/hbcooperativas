@@ -109,7 +109,25 @@ export function CloudSessionGate({
     );
   }
 
+  const cooperadoFailOpen =
+    optimistic && user?.role === "cooperado" && Boolean(user.cooperadoId?.trim());
+
   if (!ready) {
+    if (cooperadoFailOpen) {
+      return (
+        <>
+          <AlertBanner variant="warning" title="Conexão com a nuvem" className="mb-4">
+            {error || "Sincronizando HB Créditos… Se o saldo não aparecer, toque em Tentar novamente."}
+          </AlertBanner>
+          <div className="flex flex-wrap gap-2 mb-4">
+            <Button size="sm" onClick={retry} disabled={retrying}>
+              {retrying ? "Conectando..." : "Tentar novamente"}
+            </Button>
+          </div>
+          {children}
+        </>
+      );
+    }
     return (
       <div className="max-w-lg space-y-4">
         <AlertBanner variant="error" title="Conexão com a nuvem">

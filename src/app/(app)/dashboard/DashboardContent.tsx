@@ -137,8 +137,8 @@ function CooperadoHbCreditInicioSection({
   hbCredit: HbCreditFlagState;
   cnpjDigits: string;
 }) {
-  if (!hbCredit.navEnabled || cnpjDigits.length !== 14) return null;
-  return <CooperadoHbCreditResumoCard cnpj={cnpjDigits} />;
+  if (!hbCredit.navEnabled) return null;
+  return <CooperadoHbCreditResumoCard cnpj={cnpjDigits.length === 14 ? cnpjDigits : ""} />;
 }
 
 function contaCoopValorReceberPilotOptsFromData(
