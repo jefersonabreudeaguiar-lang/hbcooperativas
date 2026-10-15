@@ -4856,15 +4856,16 @@ export default function NotasPedidoStaffMain() {
         <p className="text-sm text-gray-600 mb-4">
           {abaCooperado === "entregas" ? (
             <>
-              Cada mês lista Entrega 1, 2, 3… Toque na entrega para abrir a foto. Valores consolidados ficam em{" "}
+              Envie fotos e acompanhe entregas em aberto. Meses já pagos ficam em{" "}
               <button type="button" onClick={() => trocarAbaCooperado("ficha")} className="text-green-700 font-semibold underline">
-                Minha ficha
+                Histórico liquidado
               </button>
-              .
+              . Valor a receber em{" "}
+              <Link href="/ficha-corrida" className="text-green-700 font-semibold">Financeiro</Link>.
             </>
           ) : (
             <>
-              Resumo financeiro por mês. Valores em aberto também em{" "}
+              Arquivo dos meses quitados (entregas, notas e HB liquidados). Valores em aberto em{" "}
               <Link href="/ficha-corrida" className="text-green-700 font-semibold">Financeiro</Link>.
             </>
           )}
@@ -4895,7 +4896,7 @@ export default function NotasPedidoStaffMain() {
                 : "border-transparent text-gray-500 hover:text-gray-700"
             )}
           >
-            <BookOpen size={16} /> Minha ficha
+            <BookOpen size={16} /> Histórico liquidado
           </button>
         </div>
       )}
@@ -4943,8 +4944,7 @@ export default function NotasPedidoStaffMain() {
         {isCooperado && abaCooperado === "entregas" && (
           <FormField label="Filtrar entregas">
             <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="min-w-[200px]">
-              <option value="pendentes">Pendentes</option>
-              <option value="">Histórico completo</option>
+              <option value="pendentes">Pendentes (em aberto)</option>
               <option value="aguardando_conferencia">Em análise</option>
               <option value="rejeitada">Precisa corrigir</option>
               <option value="conferida">Aprovadas</option>

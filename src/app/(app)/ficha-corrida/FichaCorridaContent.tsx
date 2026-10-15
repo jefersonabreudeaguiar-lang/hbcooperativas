@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useMemo, useState, useEffect, useCallback, useLayoutEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard, History, Users, ChevronDown, Pencil, RefreshCw, Eye } from "lucide-react";
@@ -90,7 +91,16 @@ import {
   getPagamentoConfirmadoMes,
   getPagamentoRegistradoMes,
   listarMesesComPagamentoRegistradoCooperado,
+  listarResumosFotosCooperado,
 } from "@/services/cooperadoEntregasService";
+
+const CooperadoFichaFotosPanel = dynamic(
+  () =>
+    import("@/components/cooperado/CooperadoFichaFotosPanel").then((m) => ({
+      default: m.CooperadoFichaFotosPanel,
+    })),
+  { loading: () => <p className="text-sm text-gray-500 py-4">Carregando fotos…</p> }
+);
 import { PageHeader, FilterBar, Modal } from "@/components/ui/Table";
 import { Select, FormField, Input, Textarea } from "@/components/ui/Form";
 import { Card } from "@/components/ui/Card";
@@ -1279,6 +1289,21 @@ function FichaCorridaPageInner() {
     return lista.filter((d) => !descontoManualDuplicaContaCoop(d));
   }, [data, cooperadoSelecionadoId, mesAtivo, resumoExibicao?.descontosExtras]);
 
+  const getEscolaLabelCooperadoFinanceiro = useCallback(
+    (n: NotaPedido) => {
+      const inst = data?.instituicoes.find((i) => i.id === n.instituicaoId);
+      return inst?.nome ?? "Escola";
+    },
+    [data?.instituicoes]
+  );
+
+  const resumosFotosMesAbertoCooperado = useMemo(() => {
+    if (!data || !isCooperado || !cooperadoSelecionadoId || visualizandoHistorico) return [];
+    const todos = listarResumosFotosCooperado(data, cooperadoSelecionadoId, coopId);
+    const abertos = new Set(mesesFinanceiroCooperado);
+    return todos.filter((r) => abertos.has(r.mesReferencia));
+  }, [data, isCooperado, cooperadoSelecionadoId, coopId, visualizandoHistorico, mesesFinanceiroCooperado]);
+
   const resumoReciboPagamento = useMemo(() => {
     const pg = isCooperado ? pagamentoAguardandoExibicao : pagamentoAguardando;
     if (!pg) return null;
@@ -2299,6 +2324,7 @@ function FichaCorridaPageInner() {
             )}
           </Card>
 
+          {(!isCooperado || visualizandoHistorico) && (
           <Card
             title={`Resumo das entregas · ${
               isCooperado && !visualizandoHistorico && mesesFinanceiroCooperado.length > 1
@@ -2327,6 +2353,20 @@ function FichaCorridaPageInner() {
               </div>
             )}
           </Card>
+          )}
+          {isCooperado && !visualizandoHistorico && (
+            <p className="text-sm text-gray-600 mb-6 -mt-2">
+              Lista de entregas e fotos por nota ficam em{" "}
+              <Link href="/notas-pedido" className="text-green-700 font-semibold hover:underline">
+                Entregas
+              </Link>
+              . Meses já pagos em{" "}
+              <Link href="/notas-pedido?aba=ficha" className="text-green-700 font-semibold hover:underline">
+                Histórico liquidado
+              </Link>
+              .
+            </p>
+          )}
         </>
       )}
 
@@ -2389,6 +2429,18 @@ function FichaCorridaPageInner() {
                     />
                   </div>
                 )}
+              {resumosFotosMesAbertoCooperado.length > 0 && (
+                <Card title="Fotos das notas recebidas" className="mb-6">
+                  <p className="text-sm text-gray-600 mb-4">
+                    Comprovantes das entregas dos meses em aberto. Para enviar novas fotos, use a aba Entregas.
+                  </p>
+                  <CooperadoFichaFotosPanel
+                    resumos={resumosFotosMesAbertoCooperado}
+                    getEscolaLabel={getEscolaLabelCooperadoFinanceiro}
+                    cooperativaId={coopId}
+                  />
+                </Card>
+              )}
             </>
           ) : (
             <div className="bg-gradient-to-br from-green-700 to-green-800 text-white rounded-2xl p-6 mb-6 shadow-sm">

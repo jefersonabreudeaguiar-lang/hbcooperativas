@@ -83,9 +83,9 @@ export default function NotasPedidoStaffCooperadoEmbedded(props: NotasPedidoStaf
           {statusFilter === "pendentes" ? "Nenhuma entrega pendente" : "Nenhuma entrega com este filtro"}
         </p>
         <p className="text-sm mt-1">
-          {statusFilter === "pendentes"
-            ? "Entregas aprovadas ou pagas ficam no histórico completo."
-            : "Toque em Histórico completo para ver todas as entregas."}
+                    {statusFilter === "pendentes"
+                      ? "Entregas pagas ficam em Histórico liquidado."
+                      : "Ajuste o filtro ou veja meses quitados em Histórico liquidado."}
         </p>
       </div>
     );

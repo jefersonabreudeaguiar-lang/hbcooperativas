@@ -514,8 +514,7 @@ export const CooperadoEntregasPorMes = memo(function CooperadoEntregasPorMes({
             {mesExpandido && !resumo.pagamentoConfirmado && resumo.valorAReceber > 0 && (
               <div className="mt-4 rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <p className="text-sm text-gray-600">
-                  Totais aprovados deste mês estão em <strong>Minha ficha</strong> e em{" "}
-                  <strong>Financeiro</strong>.
+                  Valor a receber e pagamento deste mês estão em <strong>Financeiro</strong>.
                 </p>
                 <Link href="/ficha-corrida">
                   <Button size="sm" variant="secondary">

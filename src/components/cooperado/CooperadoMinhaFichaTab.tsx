@@ -517,7 +517,10 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
 }: CooperadoMinhaFichaTabProps) {
   const [mesExpandido, setMesExpandido] = useState<string | null>(resumos[0]?.mesReferencia ?? null);
   const [mesHistoricoAtivo, setMesHistoricoAtivo] = useState<string | null>(null);
-  const [subAba, setSubAba] = useState<"extrato" | "pagamentos" | "fotos">("extrato");
+  const focoHistoricoLiquidado = modo === "cooperado";
+  const [subAba, setSubAba] = useState<"extrato" | "pagamentos" | "fotos">(
+    focoHistoricoLiquidado ? "pagamentos" : "extrato"
+  );
   const [fotosMesFocus, setFotosMesFocus] = useState<string | null>(null);
 
   const abaPagamentosAtiva = subAba === "pagamentos";
@@ -534,9 +537,9 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
   };
 
   const resumosHistoricoLive = useMemo(() => {
-    if (!data || !abaPagamentosAtiva) return [];
+    if (!data || (!abaPagamentosAtiva && !focoHistoricoLiquidado)) return [];
     return listarResumosExtratoHistoricoCooperado(data, cooperadoId, cooperativaId);
-  }, [data, cooperadoId, cooperativaId, abaPagamentosAtiva]);
+  }, [data, cooperadoId, cooperativaId, abaPagamentosAtiva, focoHistoricoLiquidado]);
 
   const temHistoricoPixRegistrado = useMemo(() => {
     if ((pagamentosRealizadosCache?.length ?? 0) > 0) return true;
@@ -559,7 +562,7 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
   }, [pagamentosRealizadosCache, resumosHistoricoLive]);
 
   const totalRecebido = useAppDataSelectorWhenActive(
-    abaPagamentosAtiva,
+    abaPagamentosAtiva || focoHistoricoLiquidado,
     (d) => somarTotalRecebidoConfirmadoCooperado(d, cooperadoId, cooperativaId),
     [cooperadoId, cooperativaId]
   ) ?? 0;
@@ -618,7 +621,9 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
   );
 
   const resumoHistoricoAtivoEnriquecido = useMemo(() => {
-    if (!abaPagamentosAtiva || !resumoHistoricoAtivo || !data) return resumoHistoricoAtivo;
+    if ((!abaPagamentosAtiva && !focoHistoricoLiquidado) || !resumoHistoricoAtivo || !data) {
+      return resumoHistoricoAtivo;
+    }
     if (resumoHistoricoAtivo.pagamentoConfirmado || resumoHistoricoAtivo.pagamentoAguardando) {
       return resumoHistoricoAtivo;
     }
@@ -636,9 +641,9 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
       pagamentoAguardando: confirmado ? resumoHistoricoAtivo.pagamentoAguardando : pagamento,
       valorRecebido: pagamento.valorLiquido ?? resumoHistoricoAtivo.valorRecebido,
     };
-  }, [abaPagamentosAtiva, resumoHistoricoAtivo, data, cooperadoId, cooperativaId]);
+  }, [abaPagamentosAtiva, focoHistoricoLiquidado, resumoHistoricoAtivo, data, cooperadoId, cooperativaId]);
 
-  if (resumos.length === 0 && resumosHistorico.length === 0) {
+  if (!focoHistoricoLiquidado && resumos.length === 0 && resumosHistorico.length === 0) {
     return (
       <div className="space-y-6">
         <div className="flex gap-2 border-b border-gray-200">
@@ -695,55 +700,85 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
     );
   }
 
+  if (focoHistoricoLiquidado && resumosHistorico.length === 0) {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-gray-600">
+          Entregas e compras HB já liquidadas por mês. Valores em aberto ficam em{" "}
+          <Link href="/ficha-corrida" className="text-green-700 font-semibold hover:underline">
+            Financeiro
+          </Link>
+          ; envio de fotos em <strong>Entregas</strong>.
+        </p>
+        <div className="text-center py-12 text-gray-500 bg-white rounded-2xl border border-dashed">
+          <CheckCircle2 size={40} className="mx-auto mb-3 text-gray-300" />
+          <p className="font-medium text-gray-800">Nenhum mês liquidado ainda</p>
+          <p className="text-sm mt-2">Após o PIX confirmado, o detalhe das entregas e notas aparece aqui.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex gap-2 border-b border-gray-200">
-        <button
-          type="button"
-          onClick={() => trocarSubAba("extrato")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2",
-            subAba === "extrato"
-              ? "border-green-600 text-green-700"
-              : "border-transparent text-gray-500 hover:text-gray-700"
-          )}
-        >
-          <BookOpen size={16} /> Extrato
-        </button>
-        <button
-          type="button"
-          onClick={() => trocarSubAba("pagamentos")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2",
-            subAba === "pagamentos"
-              ? "border-green-600 text-green-700"
-              : "border-transparent text-gray-500 hover:text-gray-700"
-          )}
-        >
-          <CheckCircle2 size={16} /> Pagamentos realizados
-        </button>
-        <button
-          type="button"
-          onClick={() => trocarSubAba("fotos")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2",
-            subAba === "fotos"
-              ? "border-green-600 text-green-700"
-              : "border-transparent text-gray-500 hover:text-gray-700"
-          )}
-        >
-          <Camera size={16} /> Fotos por mês
-        </button>
-      </div>
+      {focoHistoricoLiquidado ? (
+        <p className="text-sm text-gray-600">
+          Meses já pagos: entregas, notas e compras HB liquidadas. Para <strong>valor a receber</strong>, histórico de
+          pagamento e fotos das notas em aberto, use{" "}
+          <Link href="/ficha-corrida" className="text-green-700 font-semibold hover:underline">
+            Financeiro
+          </Link>
+          .
+        </p>
+      ) : (
+        <div className="flex gap-2 border-b border-gray-200">
+          <button
+            type="button"
+            onClick={() => trocarSubAba("extrato")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2",
+              subAba === "extrato"
+                ? "border-green-600 text-green-700"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            )}
+          >
+            <BookOpen size={16} /> Extrato
+          </button>
+          <button
+            type="button"
+            onClick={() => trocarSubAba("pagamentos")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2",
+              subAba === "pagamentos"
+                ? "border-green-600 text-green-700"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            )}
+          >
+            <CheckCircle2 size={16} /> Pagamentos realizados
+          </button>
+          <button
+            type="button"
+            onClick={() => trocarSubAba("fotos")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2",
+              subAba === "fotos"
+                ? "border-green-600 text-green-700"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            )}
+          >
+            <Camera size={16} /> Fotos por mês
+          </button>
+        </div>
+      )}
 
-      {subAba === "fotos" ? (
+      {!focoHistoricoLiquidado && subAba === "fotos" ? (
         <CooperadoFichaFotosPanel
           resumos={resumosFotos}
           getEscolaLabel={getEscolaLabel}
           cooperativaId={cooperativaId}
           mesReferenciaInicial={fotosMesFocus}
         />
-      ) : subAba === "pagamentos" ? (
+      ) : focoHistoricoLiquidado || subAba === "pagamentos" ? (
         <>
           <div className="rounded-2xl bg-gradient-to-br from-emerald-700 to-emerald-800 text-white p-5">
             <p className="text-emerald-100 text-sm">Total já recebido</p>
