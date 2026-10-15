@@ -172,6 +172,7 @@ function buildLegadoSnapshot(
   const carregando = Boolean(opts?.carregandoNuvem || opts?.financeiroSincronizando);
   const conferindo = Boolean(opts?.conferindoPagamentoNuvem);
 
+  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
   const motor = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
   const inicioRaw = cooperadoExibirValorReceberInicio(data, cooperadoId, cooperativaId);
   const inicio =
@@ -197,10 +198,19 @@ function buildLegadoSnapshot(
     status: "LEGADO",
     autoridade: "LEGADO",
     bicAuthoritative: false,
-    valorAReceber: motor.valor,
-    mesPrincipal: motor.mes || null,
-    mesLabel: motor.mesLabel || null,
-    mesesReferencia: motor.meses.length ? [...motor.meses] : motor.mes ? [motor.mes] : [],
+    valorAReceber:
+      paridade.valorLiquido > 0.005 ? paridade.valorLiquido : motor.valor,
+    mesPrincipal:
+      paridade.mesesResumo[paridade.mesesResumo.length - 1] ?? motor.mes ?? null,
+    mesLabel: paridade.mesLabel?.trim() || motor.mesLabel || null,
+    mesesReferencia:
+      paridade.mesesResumo.length > 0
+        ? [...paridade.mesesResumo]
+        : motor.meses.length
+          ? [...motor.meses]
+          : motor.mes
+            ? [motor.mes]
+            : [],
     exibirValorNoCard: Boolean(inicio.exibir && inicio.valor > 0),
     cardAtualizando: carregando,
     podeAssinarRecibo: reciboAtivo,

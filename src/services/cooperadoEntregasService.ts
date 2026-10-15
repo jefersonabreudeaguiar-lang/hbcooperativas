@@ -213,9 +213,25 @@ export function cooperadoExibirValorReceberInicio(
       : mesLabel;
 
   if (isBicCentralReadAuthorityEnabled()) {
+    const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
     const bicVal = getValorQuantoVouReceber(data, cooperadoId, cooperativaId);
+    const mesesPar =
+      paridade.mesesResumo.length > 0 ? paridade.mesesResumo : paridade.consolidado.meses;
     const mesesBic =
       bicVal.meses.length > 0 ? bicVal.meses : bicVal.valor > 0 && bicVal.mes ? [bicVal.mes] : [];
+    const mesLabelPar = paridade.mesLabel?.trim() || bicVal.mesLabel;
+    if (paridade.valorLiquido > 0.005) {
+      const mesPar = mesesPar[mesesPar.length - 1] ?? bicVal.mes;
+      return {
+        exibir: true,
+        mes: mesPar,
+        meses: mesesPar.length ? [...mesesPar] : mesPar ? [mesPar] : mesesBic,
+        mesLabel: mesLabelPar,
+        valor: paridade.valorLiquido,
+        valorRecibo: 0,
+        aguardandoAssinatura: false,
+      };
+    }
     const mesLabelBic =
       mesesBic.length > 0
         ? mesesBic.length === bicVal.meses.length
@@ -223,21 +239,6 @@ export function cooperadoExibirValorReceberInicio(
           : formatMesReferencia(bicVal.mes)
         : bicVal.mesLabel;
     if (bicVal.valor <= 0 || mesesBic.length === 0) {
-      const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
-      if (paridade.valorLiquido > 0.005) {
-        const mesesPar =
-          paridade.mesesResumo.length > 0 ? paridade.mesesResumo : paridade.consolidado.meses;
-        const mesPar = mesesPar[mesesPar.length - 1] ?? bicVal.mes;
-        return {
-          exibir: true,
-          mes: mesPar,
-          meses: mesesPar.length ? [...mesesPar] : mesPar ? [mesPar] : mesesBic,
-          mesLabel: paridade.mesLabel?.trim() || mesLabelBic,
-          valor: paridade.valorLiquido,
-          valorRecibo: 0,
-          aguardandoAssinatura: false,
-        };
-      }
       return {
         exibir: false,
         mes: bicVal.mes,

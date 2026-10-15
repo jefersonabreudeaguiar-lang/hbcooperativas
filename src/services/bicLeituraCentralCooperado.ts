@@ -103,44 +103,9 @@ export function bicCentralInicioParaExibicao(
       apresentacaoConsolidada: consolidated,
     });
   }
-  const raw = bicCentralNormalizarValorM6(
-    bicCentralSincronizarRotuloMeses(getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId))
-  );
-  const modoRecibo =
-    cooperadoUsarFluxoReciboAssinaturaNaUi() &&
-    raw.aguardandoAssinatura &&
-    raw.valorRecibo > 0 &&
-    raw.valor <= 0;
-  if (raw.valor > 0 || modoRecibo) {
-    return {
-      value: cooperadoInicioParaCardsDefinitivos(
-        {
-          exibir: true,
-          mes: raw.mes,
-          meses: raw.meses,
-          mesLabel: raw.mesLabel,
-          valor: raw.valor,
-          valorRecibo: modoRecibo ? raw.valorRecibo : 0,
-          aguardandoAssinatura: modoRecibo,
-        },
-        consolidated
-      ),
-      observability: { source: "bic", fallback: false, bicProjectionAuthorized: true },
-    };
-  }
+  const value = bicCentralResolveInicioParaExibicao(data, cooperadoId, cooperativaId, opts);
   return {
-    value: cooperadoInicioParaCardsDefinitivos(
-      {
-        exibir: false,
-        mes: raw.mes,
-        meses: raw.meses,
-        mesLabel: raw.mesLabel,
-        valor: 0,
-        valorRecibo: 0,
-        aguardandoAssinatura: false,
-      },
-      consolidated
-    ),
+    value,
     observability: { source: "bic", fallback: false, bicProjectionAuthorized: true },
   };
 }
@@ -269,6 +234,46 @@ export function bicCentralPainelQuantoVouReceberParaExibicao(
   return getPainelQuantoVouReceberCooperadoParaExibicao(data, cooperadoId, cooperativaId, optsEff);
 }
 
+/** Valor agregado M6 — padrão universal: mesma paridade do responsável (motor legado + meses ficha). */
+function bicCentralValorAReceberFromParidadeUniversal(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string | undefined
+): ReturnType<typeof getValorQuantoVouReceber> {
+  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+  const reciboMotor = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
+  const meses =
+    paridade.mesesResumo.length > 0
+      ? [...paridade.mesesResumo]
+      : paridade.consolidado.meses.length > 0
+        ? [...paridade.consolidado.meses]
+        : reciboMotor.meses;
+  const mes =
+    meses[meses.length - 1] ??
+    paridade.consolidado.mesReferenciaPrincipal ??
+    reciboMotor.mes;
+  const aguardandoRecibo =
+    cooperadoUsarFluxoReciboAssinaturaNaUi() &&
+    reciboMotor.aguardandoAssinatura &&
+    reciboMotor.valorRecibo > 0;
+  const valorExibir =
+    aguardandoRecibo && paridade.valorLiquido <= 0
+      ? 0
+      : paridade.valorLiquido > 0
+        ? paridade.valorLiquido
+        : 0;
+  return bicCentralSincronizarRotuloMeses(
+    bicCentralNormalizarValorM6({
+      mes,
+      meses,
+      mesLabel: paridade.mesLabel,
+      valor: valorExibir,
+      valorRecibo: reciboMotor.valorRecibo,
+      aguardandoAssinatura: reciboMotor.aguardandoAssinatura,
+    })
+  );
+}
+
 /** Valor agregado M6 — único número “a receber” no LAB B4. */
 export function bicCentralValorAReceberAgregado(
   data: AppData,
@@ -277,36 +282,7 @@ export function bicCentralValorAReceberAgregado(
   opts?: Pick<BicCentralProjecaoOpts, "apresentacaoConsolidada">
 ): ReturnType<typeof getValorQuantoVouReceber> {
   if (isBicCentralReadAuthorityEnabled()) {
-    const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-    const mesesCanon = listarMesesReferenciaResumoFinanceiroParidade(data, cooperadoId, cooperativaId);
-    const consolidadoLegado = getConsolidadoFinanceiroCooperadoMotorLegado(data, cooperadoId, cooperativaId);
-    let valor = consolidadoLegado.valorLiquido;
-    if (mesesCanon.length === 1) {
-      const resumo =
-        resumoComplementaresPosPagamento(data, cooperadoId, mesesCanon[0]!, coopId) ??
-        getResumoPagamentoExibicao(data, cooperadoId, mesesCanon[0]!, coopId);
-      valor = valorLiquidoFromResumoPartes(resumo.valorEntregas, resumo.descontosExtras);
-    } else if (mesesCanon.length > 1) {
-      const resumo = getResumoPagamentoConsolidadoCooperado(data, cooperadoId, mesesCanon, coopId);
-      valor = valorLiquidoFromResumoPartes(resumo.valorEntregas, resumo.descontosExtras);
-    }
-    const mesLabel =
-      mesesCanon.length > 0
-        ? formatMesesReferenciaRotulo(mesesCanon)
-        : consolidadoLegado.mesLabel;
-    const mes =
-      mesesCanon[mesesCanon.length - 1] ?? consolidadoLegado.mesReferenciaPrincipal ?? "";
-    const reciboMotor = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
-    return bicCentralSincronizarRotuloMeses(
-      bicCentralNormalizarValorM6({
-        mes,
-        meses: mesesCanon,
-        mesLabel,
-        valor,
-        valorRecibo: reciboMotor.valorRecibo,
-        aguardandoAssinatura: reciboMotor.aguardandoAssinatura,
-      })
-    );
+    return bicCentralValorAReceberFromParidadeUniversal(data, cooperadoId, cooperativaId);
   }
   const envelope = bicCentralQuantoVouReceberParaExibicao(data, cooperadoId, cooperativaId, opts);
   return bicCentralSincronizarRotuloMeses(bicCentralNormalizarValorM6(envelope.value));
@@ -371,7 +347,11 @@ export function bicCentralResolveInicioParaExibicao(
   const m6 = bicCentralValorAReceberAgregado(data, cooperadoId, cooperativaId, optsEff);
 
   if (isBicCentralReadAuthorityEnabled()) {
-    const valor = m6.valor > 0 ? m6.valor : 0;
+    const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+    const mesesPar =
+      paridade.mesesResumo.length > 0 ? paridade.mesesResumo : paridade.consolidado.meses;
+    const mesPar = mesesPar[mesesPar.length - 1] ?? m6.mes;
+    const valor = paridade.valorLiquido > 0.005 ? paridade.valorLiquido : m6.valor > 0 ? m6.valor : 0;
     const modoRecibo =
       cooperadoUsarFluxoReciboAssinaturaNaUi() &&
       m6.aguardandoAssinatura &&
@@ -381,9 +361,9 @@ export function bicCentralResolveInicioParaExibicao(
       return cooperadoInicioParaCardsDefinitivos(
         {
           exibir: true,
-          mes: m6.mes,
-          meses: m6.meses,
-          mesLabel: m6.mesLabel,
+          mes: mesPar,
+          meses: mesesPar.length ? [...mesesPar] : m6.meses,
+          mesLabel: paridade.mesLabel?.trim() || m6.mesLabel,
           valor,
           valorRecibo: modoRecibo ? m6.valorRecibo : 0,
           aguardandoAssinatura: modoRecibo,
@@ -391,30 +371,12 @@ export function bicCentralResolveInicioParaExibicao(
         consolidated
       );
     }
-    const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
-    if (paridade.valorLiquido > 0.005) {
-      const mesesPar =
-        paridade.mesesResumo.length > 0 ? paridade.mesesResumo : paridade.consolidado.meses;
-      const mesPar = mesesPar[mesesPar.length - 1] ?? m6.mes;
-      return cooperadoInicioParaCardsDefinitivos(
-        {
-          exibir: true,
-          mes: mesPar,
-          meses: mesesPar.length ? [...mesesPar] : mesPar ? [mesPar] : m6.meses,
-          mesLabel: paridade.mesLabel?.trim() || m6.mesLabel,
-          valor: paridade.valorLiquido,
-          valorRecibo: 0,
-          aguardandoAssinatura: false,
-        },
-        consolidated
-      );
-    }
     return cooperadoInicioParaCardsDefinitivos(
       {
         exibir: false,
-        mes: m6.mes,
-        meses: m6.meses,
-        mesLabel: m6.mesLabel,
+        mes: mesPar || m6.mes,
+        meses: mesesPar.length ? [...mesesPar] : m6.meses,
+        mesLabel: paridade.mesLabel?.trim() || m6.mesLabel,
         valor: 0,
         valorRecibo: 0,
         aguardandoAssinatura: false,
@@ -449,7 +411,24 @@ export function bicCentralResolvePainelParaExibicao(
     ? bicCentralPainelQuantoVouReceberParaExibicao(data, cooperadoId, cooperativaId, opts).value
     : getPainelQuantoVouReceberCooperadoParaExibicao(data, cooperadoId, cooperativaId, opts).value;
   const m6 = bicCentralValorAReceberAgregado(data, cooperadoId, cooperativaId, opts);
-  return { ...painel, mesLabel: m6.mesLabel };
+  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+  const mesLabel = paridade.mesLabel?.trim() || m6.mesLabel;
+  const valorAberto =
+    paridade.valorLiquido > 0.005 ? paridade.valorLiquido : m6.valor > 0 ? m6.valor : 0;
+  if (valorAberto > 0 && painel.estado !== "carregando") {
+    return {
+      ...painel,
+      estado: "a_receber",
+      mesLabel,
+      valorDestaque: valorAberto,
+      valorAberto,
+      tituloValor: painel.tituloValor || "Total a receber",
+      subtitulo:
+        painel.subtitulo ||
+        "Valor líquido das entregas conferidas (antes do pagamento da cooperativa).",
+    };
+  }
+  return { ...painel, mesLabel, valorAberto: valorAberto > 0 ? valorAberto : painel.valorAberto };
 }
 
 /** Pendência financeira visível na UI cooperado (BIC: só valor líquido aberto na ficha). */
@@ -470,6 +449,10 @@ export function bicCentralGetConsolidadoFinanceiroCooperado(
 ): ConsolidadoFinanceiroCooperado {
   if (!isBicCentralReadAuthorityEnabled()) {
     return getConsolidadoFinanceiroCooperadoMotorLegado(data, cooperadoId, cooperativaId, ajustesPorMes);
+  }
+
+  if (!ajustesPorMes || Object.keys(ajustesPorMes).length === 0) {
+    return leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId).consolidado;
   }
 
   const m6 = bicCentralValorAReceberAgregado(data, cooperadoId, cooperativaId);

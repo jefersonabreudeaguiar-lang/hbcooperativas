@@ -211,16 +211,7 @@ export function resolverInicioCardMotorOperacionalFromAppData(
   cooperadoId: string,
   cooperativaId: string | undefined
 ): InicioCardMotorSnapshot {
-  const raw = bicCentralSincronizarRotuloMeses(
-    getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId)
-  );
-  const mesFallback = raw.mes || getCurrentMesReferencia();
-  return sanitizeInicioCardSnapshotFluxoBic({
-    mesLabel: raw.mesLabel?.trim() || formatMesReferencia(mesFallback),
-    valor: raw.valor > 0 ? raw.valor : 0,
-    valorRecibo: raw.valorRecibo > 0 ? raw.valorRecibo : 0,
-    aguardandoAssinatura: raw.aguardandoAssinatura,
-  });
+  return resolverInicioCardMotorFromAppData(data, cooperadoId, cooperativaId);
 }
 
 function motorInicioCardComReciboBic(
