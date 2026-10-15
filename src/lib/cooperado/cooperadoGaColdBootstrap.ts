@@ -26,6 +26,10 @@ import {
   requestSyncTier,
 } from "@/services/syncRequest";
 import { scheduleEmpacotarModeloAparelhoJeferson } from "@/lib/cooperado/cooperadoAparelhoJefersonPacote";
+import { cooperadoPwaFichaParidadeSnapshotDivergeDeAppData } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
+import { getData, isAppDataWarm } from "@/services/dataStore";
+import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import { getUserCooperativaId } from "@/utils/cooperativa";
 
 const BOOTSTRAP_SESSION_KEY = "hb.coop.gaColdBootstrap.v1";
 
@@ -57,7 +61,20 @@ export function cooperadoGaAparelhoPrecisaBootstrapNuvem(
   if (cooperadoAppReleaseNeedsOperacionalSync()) return true;
   if (cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) return true;
   if (cooperadoFinanceiroCardCacheTemValor(user)) return false;
-  if (cooperadoPilotAppDataTemFinanceiroLocal(user)) return false;
+  if (cooperadoPilotAppDataTemFinanceiroLocal(user)) {
+    if (cooperadoGaExibicaoFinanceiraAindaZerada(user)) return true;
+    if (isAppDataWarm() && user.cooperadoId) {
+      const data = getData();
+      const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
+      if (coopId) {
+        const canon = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+        if (cooperadoPwaFichaParidadeSnapshotDivergeDeAppData(data, canon, coopId)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
   if (cooperadoFinanceiroExibicaoCachePronto(user)) return false;
   if (cooperadoLocalResumeReady(user) && cooperadoFinanceiroCardCacheTemValor(user)) {
     return false;

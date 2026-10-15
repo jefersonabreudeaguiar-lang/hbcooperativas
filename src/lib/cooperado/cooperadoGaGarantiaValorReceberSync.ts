@@ -5,7 +5,7 @@
 import type { User } from "@/types";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import {
-  cooperadoGaValorReceberExibicaoIndeterminada,
+  cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem,
   cooperadoGaValorReceberExibicaoResolvida,
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { cooperadoGaDispatchPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
@@ -17,7 +17,10 @@ import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { requestCooperadoGaFinanceiroExibicaoRecoverySync } from "@/services/syncRequest";
 import { getUserCooperativaId } from "@/utils/cooperativa";
-import { cooperadoPilotAppDataTemFinanceiroLocal } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
+import { cooperadoPwaFichaParidadeSnapshotDivergeDeAppData } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
+import { scheduleCooperadoHbCreditLimiteAndAccountWarmup } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
+import { markCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
+import { requestSyncTier } from "@/services/syncRequest";
 
 const GARANTIA_DELAYS_MS = [5_000, 15_000, 30_000, 60_000, 120_000, 180_000] as const;
 
@@ -30,10 +33,31 @@ function clearGarantiaTimers(): void {
 }
 
 function pullNuvemFinanceiro(user: Omit<User, "password">, attempt: number): void {
-  if (!cooperadoPilotAppDataTemFinanceiroLocal(user)) {
-    cooperadoGaDispatchPrimeiraCargaSilenciosa(user, { allowRepeat: attempt > 0 });
+  let precisaOperacionalFull = !cooperadoGaValorReceberExibicaoResolvida(user);
+  if (isAppDataWarm() && user.cooperadoId) {
+    const data = getData();
+    const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
+    if (coopId) {
+      const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+      if (cooperadoPwaFichaParidadeSnapshotDivergeDeAppData(data, cooperadoId, coopId)) {
+        precisaOperacionalFull = true;
+      }
+    }
   }
-  requestCooperadoGaFinanceiroExibicaoRecoverySync({ garantia: true });
+  if (precisaOperacionalFull || cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
+    cooperadoGaDispatchPrimeiraCargaSilenciosa(user, { allowRepeat: true });
+  }
+  if (attempt >= 3) {
+    markCooperadoUserSyncVisible();
+    requestSyncTier("operacional_full", {
+      force: true,
+      immediate: true,
+      userInitiated: true,
+    });
+  } else {
+    requestCooperadoGaFinanceiroExibicaoRecoverySync({ garantia: true });
+  }
+  scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
   if (!isAppDataWarm() || !user.cooperadoId) return;
   const data = getData();
   const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;

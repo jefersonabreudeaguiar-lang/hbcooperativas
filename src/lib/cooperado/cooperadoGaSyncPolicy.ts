@@ -1,5 +1,6 @@
 import type { User } from "@/types";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { cooperadoGaExibicaoFinanceiraAindaZerada } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { cooperadoPostDeployQueueActive } from "@/lib/cooperado/cooperadoPostDeploySession";
 import { isPwaColdStartWindow } from "@/lib/pwa/clientRelease";
 import { getSession } from "@/services/dataStore";
@@ -79,6 +80,7 @@ export function cooperadoGaBloqueiaOperacionalFullAutomatico(opts?: {
   }
   if (cooperadoGaTemPrimeiraCargaSyncPending()) return false;
   if (opts?.eventDriven && cooperadoGaTemFinanceExibicaoSyncPending()) return false;
+  if (opts?.eventDriven && cooperadoGaExibicaoFinanceiraAindaZerada(session)) return false;
   return true;
 }
 

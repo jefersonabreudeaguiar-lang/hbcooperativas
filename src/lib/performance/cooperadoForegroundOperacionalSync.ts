@@ -13,6 +13,7 @@ import {
 import { isCooperadoManualOperacionalSync } from "@/lib/performance/cooperadoColdStart";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import {
+  cooperadoPwaFichaParidadeSnapshotDivergeDeAppData,
   cooperadoPwaFinanceiroSnapshotsAusentes,
   rematerializarCooperadoPwaSnapshotsSeNecessario,
 } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
@@ -24,7 +25,11 @@ import {
 import { persistirCooperadoPwaMessengerCaches } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { runCooperadoMessengerOperacionalLightPull } from "@/lib/cooperado/cooperadoMessengerOperacionalLightPull";
 import { runCooperadoNotasContratosLightPull } from "@/lib/cooperado/cooperadoNotasContratosLightPull";
-import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
+import {
+  cooperadoGaExibicaoFinanceiraAindaZerada,
+  cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem,
+} from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
+import { cooperadoGaDispatchPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
 import {
   requestCooperadoFinanceiroRecoverySync,
   requestCooperadoGaFinanceiroExibicaoRecoverySync,
@@ -34,7 +39,7 @@ import type { CooperativaCloudRevision } from "@/lib/performance/cooperadoEventD
 import { resolveCooperadoForegroundStaleMs } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { cooperadoGaDeferForegroundRevisionChecks } from "@/lib/cooperado/cooperadoGaSyncPolicy";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
-import { getSession, isAppDataWarm } from "@/services/dataStore";
+import { getData, getSession, isAppDataWarm } from "@/services/dataStore";
 
 export type CooperadoForegroundPullReason =
   | "revision_changed"
@@ -65,13 +70,30 @@ export async function evaluateCooperadoForegroundOperacionalPull(
     return { reason: "financeiro_desatualizado", remote: null };
   }
 
-  if (
-    isCooperadoPwaMessengerMode() &&
-    opts?.cooperadoId &&
-    opts?.cooperativaId &&
-    cooperadoPwaFinanceiroSnapshotsAusentes(opts.cooperadoId, opts.cooperativaId)
-  ) {
-    return { reason: "snapshots_ausentes", remote: null };
+  if (isCooperadoPwaMessengerMode() && opts?.cooperadoId && opts?.cooperativaId) {
+    if (cooperadoPwaFinanceiroSnapshotsAusentes(opts.cooperadoId, opts.cooperativaId)) {
+      return { reason: "snapshots_ausentes", remote: null };
+    }
+    const gaUser = getSession();
+    if (
+      gaUser &&
+      isCooperadoMobileGaPromoted(gaUser) &&
+      cooperadoGaExibicaoFinanceiraAindaZerada(gaUser)
+    ) {
+      return { reason: "snapshots_ausentes", remote: null };
+    }
+    if (isAppDataWarm()) {
+      const data = getData();
+      if (
+        cooperadoPwaFichaParidadeSnapshotDivergeDeAppData(
+          data,
+          opts.cooperadoId,
+          opts.cooperativaId
+        )
+      ) {
+        return { reason: "financeiro_desatualizado", remote: null };
+      }
+    }
   }
 
   const remote = await fetchCooperativaCloudRevision(digits);
@@ -119,9 +141,8 @@ export async function runCooperadoForegroundOperacionalCheck(
 
   if (reason === "financeiro_desatualizado") {
     if (session && isCooperadoMobileGaPromoted(session)) {
-      if (cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(session)) {
-        requestCooperadoGaFinanceiroExibicaoRecoverySync();
-      }
+      requestCooperadoGaFinanceiroExibicaoRecoverySync({ garantia: true });
+      cooperadoGaDispatchPrimeiraCargaSilenciosa(session, { allowRepeat: true });
     } else {
       requestCooperadoFinanceiroRecoverySync();
     }
@@ -148,6 +169,11 @@ export async function runCooperadoForegroundOperacionalCheck(
         !cooperadoPwaFinanceiroSnapshotsAusentes(cooperadoId, coopId)
       ) {
         clearCooperadoPwaDadosDesatualizados();
+        return true;
+      }
+      if (session && isCooperadoMobileGaPromoted(session) && cooperadoGaExibicaoFinanceiraAindaZerada(session)) {
+        requestCooperadoGaFinanceiroExibicaoRecoverySync({ garantia: true });
+        cooperadoGaDispatchPrimeiraCargaSilenciosa(session, { allowRepeat: true });
         return true;
       }
     }

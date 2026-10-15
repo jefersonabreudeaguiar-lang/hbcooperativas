@@ -103,6 +103,7 @@ export function cooperadoGaValorReceberExibicaoResolvida(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return true;
+  if (cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) return false;
   if (cooperadoFinanceiroCardCacheTemValor(user)) return true;
   if (cooperadoGaExibicaoFinanceiraConfiavel(user)) return true;
   if (!isAppDataWarm() || !user.cooperadoId) return false;
