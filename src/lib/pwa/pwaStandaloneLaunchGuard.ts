@@ -7,7 +7,6 @@ import { buildCooperadoLoginPath } from "@/lib/cooperado/cooperadoCanonicalEntry
 
 export type PwaStandaloneLaunchDecision =
   | { action: "allow" }
-  | { action: "rescue"; nextLogin: string }
   | { action: "launch"; nextPath: string };
 
 export function evaluatePwaStandaloneLaunchGuard(input: {
@@ -25,7 +24,7 @@ export function evaluatePwaStandaloneLaunchGuard(input: {
 
   if (repairOk && buildOk) return { action: "allow" };
   if (!buildOk || veryStale) {
-    return { action: "rescue", nextLogin: loginNext };
+    return { action: "launch", nextPath: loginNext };
   }
 
   const path =

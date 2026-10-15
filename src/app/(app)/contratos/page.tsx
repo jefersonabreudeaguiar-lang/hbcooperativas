@@ -12,7 +12,12 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select, FormField } from "@/components/ui/Form";
 import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { pushContratosToCloud, publicarCatalogoContratos } from "@/services/cooperativaSyncCloudService";
+import {
+  pushContratosToCloud,
+  publicarCatalogoContratos,
+  syncContratosFromCloud,
+} from "@/services/cooperativaSyncCloudService";
+import { isStaffGestaoRole } from "@/lib/staff/staffResponsavelSyncPolicy";
 import { contarItensCatalogo, getInstituicoesCatalogo } from "@/services/catalogoContratosService";
 import { excluirInstituicaoContrato } from "@/services/instituicaoContratoService";
 import { formatCurrency } from "@/utils/format";
@@ -88,13 +93,21 @@ export default function ContratosPage() {
     void (async () => {
       const cnpj = await resolveCooperativaCnpj(data, coopId, user);
       if (!cnpj) return;
-      const d = getData();
+      let d = getData();
+      if (isStaffGestaoRole(user.role) && getInstituicoesCatalogo(d, coopId).length === 0) {
+        try {
+          await syncContratosFromCloud(cnpj);
+        } catch {
+          /* offline — mantém estado local */
+        }
+        d = getData();
+      }
       if (contarItensCatalogo(d, coopId) > 0) {
         await publicarCatalogoContratos(cnpj, d, coopId);
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coopId, user?.id]);
+  }, [coopId, user?.id, user?.role]);
 
   const pushContratos = async (dataOverride?: AppData) => {
     if (!user || !coopId) return;

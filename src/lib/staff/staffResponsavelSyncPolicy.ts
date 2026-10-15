@@ -14,12 +14,20 @@ export function isStaffGestaoRole(role: UserRole | string | undefined | null): b
   return STAFF_GESTAO_ROLES.includes(role as UserRole);
 }
 
-/** Abertura pós-login — 283 usava notas_delta; aqui financeiro_delta puxa pagamentos sem bidirectional_full (fila Pagar). */
+/** Abertura pós-login — baseline 283: notas_delta (fila Conferir rápida; sem operacional_full). */
 export function staffResponsavelOpeningSyncRequest(): SyncRunOptions {
-  return { silent: true, tier: "financeiro_delta" };
+  return { silent: true, tier: "notas_delta" };
 }
 
-/** Voltar à aba / idle / online — igual ao 283: runSync padrão (operacional_full na gestão). */
+/**
+ * Voltar à aba / idle / online — deltas leves (não operacional_full).
+ * Em notas-pedido: notas_delta; demais rotas: financeiro_delta (pagamentos/ficha).
+ */
 export function staffResponsavelLifecycleSyncRequest(): SyncRunOptions | undefined {
-  return undefined;
+  const path =
+    typeof window !== "undefined" ? window.location.pathname : "";
+  if (path === "/notas-pedido" || path.startsWith("/notas-pedido/")) {
+    return { silent: true, tier: "notas_delta" };
+  }
+  return { silent: true, tier: "financeiro_delta" };
 }

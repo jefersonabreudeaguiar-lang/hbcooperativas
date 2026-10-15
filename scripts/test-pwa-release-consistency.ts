@@ -48,7 +48,7 @@ assert.deepEqual(
     repairLocalOk: false,
     nextPath: "/dashboard",
   }),
-  { action: "rescue", nextLogin: "/login?hb-pwa=349" }
+  { action: "launch", nextPath: "/login?hb-pwa=349&next=%2Fdashboard" }
 );
 
 const boot = readFileSync(new URL("../src/lib/pwa/clientRelease.ts", import.meta.url), "utf8");

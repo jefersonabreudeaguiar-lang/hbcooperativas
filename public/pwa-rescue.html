@@ -83,10 +83,33 @@
           ? parseInt(metaFb.getAttribute("content") || "0", 10) || 349
           : 349;
         var REPAIR_VER = String(BUILD_FALLBACK);
+        var COOP_SESSION_KEY = "coopeagriplla_session";
+        function isCooperadoSession() {
+          try {
+            var raw = localStorage.getItem(COOP_SESSION_KEY);
+            if (!raw) return false;
+            var s = JSON.parse(raw);
+            return !!(s && (s.role === "cooperado" || s.cooperadoId));
+          } catch (e) {
+            return false;
+          }
+        }
+
         var params = new URLSearchParams(location.search);
         var next = params.get("next");
         var auto = params.get("auto") === "1";
         var target = "/login";
+
+        if (auto && isCooperadoSession()) {
+          var coopNext =
+            next && next.charAt(0) === "/"
+              ? next
+              : "/login?hb-pwa=" + BUILD_FALLBACK + "&next=%2Fdashboard";
+          location.replace(
+            "/pwa-launch.html?next=" + encodeURIComponent(coopNext)
+          );
+          return;
+        }
 
         var status = document.getElementById("status");
         var errEl = document.getElementById("err");

@@ -23,6 +23,9 @@ import {
   markContaCoopDescontosMesFetchOk,
 } from "@/lib/hb-credit/contaCoopDescontosSyncHealth";
 import { isStaffHbCoopBackgroundSyncRoute } from "@/lib/hb-credit/staffHbSyncRoute";
+import { persistirHbCreditAccountCooperado } from "@/services/hbCreditAccountPersistenciaService";
+import { notifyHbCreditAccountCacheUpdated } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 import type { User } from "@/types";
 import {
   refreshContaCoopLimiteCooperativaAtivos,
@@ -329,7 +332,7 @@ export async function refreshContaCoopValorReceberAfterHbTransaction(
 export async function refreshContaCoopDescontosAfterOperacionalSync(opts: {
   cnpj: string;
   cooperativaId: string;
-  user: Pick<User, "role" | "cooperadoId" | "id">;
+  user: Omit<User, "password">;
 }): Promise<void> {
   if (!shouldSyncHbFichaBaseDescontos()) return;
 
@@ -339,6 +342,9 @@ export async function refreshContaCoopDescontosAfterOperacionalSync(opts: {
     const data = getData();
     if (opts.user.role === "cooperado" && opts.user.cooperadoId) {
       const canonico = resolverCooperadoIdCanonico(data, opts.user.cooperadoId, opts.cooperativaId);
+      const apiCooperadoId = resolveHbCreditApiCooperadoId(opts.user, opts.user.cooperadoId);
+      const limiteIds =
+        canonico && canonico !== apiCooperadoId ? [apiCooperadoId, canonico] : [apiCooperadoId];
       const mesesParidade = listarMesesReferenciaResumoFinanceiroParidade(data, canonico, opts.cooperativaId);
       const mesReferencia =
         mesesParidade[0] ?? hbCreditMesPrincipal(data, canonico, opts.cooperativaId);
@@ -350,9 +356,14 @@ export async function refreshContaCoopDescontosAfterOperacionalSync(opts: {
       }).catch(() => {});
       await refreshContaCoopLimiteFromFicha({
         cnpj: opts.cnpj,
-        cooperadoId: canonico,
+        cooperadoId: apiCooperadoId,
         cooperativaId: opts.cooperativaId,
+        cooperadoIds: limiteIds,
       }).catch(() => {});
+      const persisted = await persistirHbCreditAccountCooperado(opts.user, {
+        syncLimiteFromFicha: false,
+      }).catch(() => false);
+      if (persisted) notifyHbCreditAccountCacheUpdated();
       return;
     }
 

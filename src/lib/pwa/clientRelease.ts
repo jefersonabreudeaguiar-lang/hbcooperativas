@@ -5,6 +5,7 @@ import {
 } from "@/lib/pwa/pwaReleaseConsistency";
 import { parseDplFromAssetUrl } from "@/lib/pwa/vercelDeploymentId";
 import { isCooperadoEntregaFlowActive } from "@/lib/cooperado/cooperadoEntregaFlowGuard";
+import { buildInlineCooperadoPwaSilentRepairBlock } from "@/lib/pwa/cooperadoPwaSilentRepairInline";
 
 /** Persistido após confirmar que o bundle carregado bate com o release oficial. */
 export const DEPLOYMENT_SEEN_KEY = "hb-coop-app-deployment-seen";
@@ -626,8 +627,7 @@ export const PWA_STANDALONE_GUARD_BURST_MAX = 3;
 export const PWA_STANDALONE_GUARD_BURST_WINDOW_MS = 120_000;
 
 /**
- * Ícone instalado (WebAPK): antes do React, manda para pwa-rescue se cache/build desalinhado.
- * O guard antigo só marcava “reparado” sem limpar — causava “This page couldn’t load”.
+ * Ícone instalado (WebAPK): build antigo → launch ou reparo silencioso (cooperado).
  */
 export function buildInlinePwaStandaloneLaunchGuardScript(): string {
   const repairKey = PWA_REPAIR_SESSION_KEY;
@@ -636,8 +636,8 @@ export function buildInlinePwaStandaloneLaunchGuardScript(): string {
   const appBuild = APP_BUILD_VERSION;
   const repairLocalKey = "hb-coop-pwa-repair-done-build";
   const directKey = PWA_DIRECT_ENTRY_SESSION_KEY;
-  /** Alinhado a 0fc3a12a / aa928574: redirect único, sem purge de SW no cold start (purge ficou no rescue/launch). */
-  return `(function(){try{var standalone=window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;if(!standalone)return;try{if(sessionStorage.getItem("${directKey}")==="1")return;}catch(e){}var path=location.pathname||"";if(path.indexOf("pwa-rescue")>=0||path.indexOf("pwa-launch")>=0||path.indexOf("pwa-diag")>=0)return;var repairKey="${repairKey}";var repairVer="${repairVer}";var repairLocalKey="${repairLocalKey}";var buildSeenKey="${buildSeenKey}";var pageBuild=parseInt(document.documentElement.getAttribute("data-app-build")||"0",10)||${appBuild};function repairMarkOk(v){if(!v)return false;var s=String(v);if(s===repairVer||s===String(pageBuild))return true;var n=parseInt(s,10);return n>0&&n>=pageBuild-1;}var seen=0;try{seen=parseInt(localStorage.getItem(buildSeenKey)||"0",10);}catch(e){}var repairLocal=false;var repairSession=false;try{repairLocal=repairMarkOk(localStorage.getItem(repairLocalKey));}catch(e){}try{repairSession=repairMarkOk(sessionStorage.getItem(repairKey));}catch(e){}var repairOk=repairLocal||repairSession;var buildOk=!seen||seen>=pageBuild-1;var veryStale=seen>0&&seen<pageBuild-1;var loginNext="/login?hb-pwa="+pageBuild;var nextPath=path+location.search;if(!nextPath||nextPath==="/")nextPath=loginNext;if(repairOk&&buildOk)return;if((path.indexOf("/login")>=0||path.indexOf("/dashboard")>=0)&&repairOk)return;if(!buildOk||veryStale){location.replace("/pwa-rescue.html?auto=1&next="+encodeURIComponent(loginNext));return;}location.replace("/pwa-launch.html?next="+encodeURIComponent(nextPath));}catch(e){}})();`;
+  const silent = buildInlineCooperadoPwaSilentRepairBlock();
+  return `(function(){try{${silent}var standalone=window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;if(!standalone)return;try{if(sessionStorage.getItem("${directKey}")==="1")return;}catch(e){}var path=location.pathname||"";if(path.indexOf("pwa-rescue")>=0||path.indexOf("pwa-launch")>=0||path.indexOf("pwa-diag")>=0)return;var repairKey="${repairKey}";var repairVer="${repairVer}";var repairLocalKey="${repairLocalKey}";var buildSeenKey="${buildSeenKey}";var pageBuild=parseInt(document.documentElement.getAttribute("data-app-build")||"0",10)||${appBuild};function repairMarkOk(v){if(!v)return false;var s=String(v);if(s===repairVer||s===String(pageBuild))return true;var n=parseInt(s,10);return n>0&&n>=pageBuild-1;}var seen=0;try{seen=parseInt(localStorage.getItem(buildSeenKey)||"0",10);}catch(e){}var repairLocal=false;var repairSession=false;try{repairLocal=repairMarkOk(localStorage.getItem(repairLocalKey));}catch(e){}try{repairSession=repairMarkOk(sessionStorage.getItem(repairKey));}catch(e){}var repairOk=repairLocal||repairSession;var buildOk=!seen||seen>=pageBuild-1;var veryStale=seen>0&&seen<pageBuild-1;var loginNext="/login?hb-pwa="+pageBuild;var nextPath=path+location.search;if(!nextPath||nextPath==="/")nextPath=loginNext;if(repairOk&&buildOk)return;if((path.indexOf("/login")>=0||path.indexOf("/dashboard")>=0)&&repairOk)return;if(!buildOk||veryStale){hbCoopPwaStaleRepairOrLaunch(pageBuild,loginNext);return;}location.replace("/pwa-launch.html?next="+encodeURIComponent(nextPath));}catch(e){}})();`;
 }
 
 /** 1º paint: no atalho remove todo SW legado; registra /sw.js passthrough. */

@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Wallet } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
-import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
+import {
+  resolveHbCreditApiCooperadoId,
+  resolveHbCreditLimiteSyncTargets,
+} from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { hbCreditEffectiveDisponivelCents } from "@/modules/hb-credit/engine/paymentAffordability";
 import {
@@ -75,11 +78,15 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
           const data = getData();
           const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
           if (coopId) {
-            await refreshContaCoopLimiteFromFicha({
-              cnpj,
-              cooperadoId: hbApiCooperadoId,
-              cooperativaId: coopId,
-            }).catch(() => {});
+            const limite = resolveHbCreditLimiteSyncTargets(user, data, coopId);
+            if (limite) {
+              await refreshContaCoopLimiteFromFicha({
+                cnpj,
+                cooperadoId: limite.apiCooperadoId,
+                cooperativaId: coopId,
+                cooperadoIds: limite.cooperadoIds,
+              }).catch(() => {});
+            }
           }
         }
         await persistirHbCreditAccountCooperado(user);

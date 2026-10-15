@@ -3493,7 +3493,7 @@ export default function NotasPedidoStaffMain() {
         lancamentoSequenciaTimerRef.current = null;
       }
 
-      const slideMs = total === 1 ? 550 : 650;
+      const slideMs = slideMsConferenciaLancamentoSequencia(total);
 
       return new Promise((resolve) => {
         let idx = 0;
@@ -4001,8 +4001,8 @@ export default function NotasPedidoStaffMain() {
       travarLancamentoConferencia();
       void (async () => {
         try {
-          await executarSlideshowLeveConferenciaMultiFoto(selectedNota, qtdFotosAprovadas);
           concluirGravacaoAprovacao();
+          void executarSlideshowLeveConferenciaMultiFoto(selectedNota, qtdFotosAprovadas);
         } catch (err) {
           liberarLancamentoConferencia();
           setConferirErrors({

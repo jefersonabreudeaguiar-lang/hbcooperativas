@@ -78,6 +78,23 @@ export function HbCreditAccountPersistBootstrap() {
   }, [hbNavOn, user?.id, user?.role]);
 
   useEffect(() => {
+    if (!hbNavOn || user?.role !== "cooperado" || dataRevision < 0) return;
+    if (persistRevisionTimerRef.current) {
+      window.clearTimeout(persistRevisionTimerRef.current);
+    }
+    persistRevisionTimerRef.current = window.setTimeout(() => {
+      persistRevisionTimerRef.current = null;
+      scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
+    }, 900);
+    return () => {
+      if (persistRevisionTimerRef.current) {
+        window.clearTimeout(persistRevisionTimerRef.current);
+        persistRevisionTimerRef.current = null;
+      }
+    };
+  }, [hbNavOn, user, dataRevision]);
+
+  useEffect(() => {
     if (!hbNavOn || !user || user.role !== "cooperado" || syncing) return;
     if (!cooperadoPagamentosHydrated || lastSyncedAt == null) return;
     if (lastSyncedRef.current === lastSyncedAt) return;
