@@ -26,6 +26,7 @@ export function empacotarModeloAparelhoJeferson(
 
   if (!isAppDataWarm()) {
     preloadAppData();
+    scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
     return;
   }
 

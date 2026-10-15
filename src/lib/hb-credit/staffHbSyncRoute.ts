@@ -14,6 +14,7 @@ export function isStaffHbCoopWideSyncRoute(pathname?: string): boolean {
 }
 
 const STAFF_HB_COOP_BACKGROUND_SYNC_PREFIXES = [
+  "/conta-coop",
   "/relatorios",
   "/ficha-corrida",
   "/notas-pedido",
@@ -23,7 +24,7 @@ const STAFF_HB_COOP_BACKGROUND_SYNC_PREFIXES = [
 /**
  * Sync cooperativa-wide em background (ficha-descontos / sync-limite em lote).
  * Inclui ficha, entregas e cooperados — resumo de pagamento e “A receber” alinhados ao HB.
- * Exclui `/conta-coop` — a tela já usa GET limites/dashboard e troca de abas não deve competir com N× ficha-descontos.
+ * Inclui `/conta-coop` para sync-limite em lote (todos os cooperados, mesmo pipeline do mobile).
  */
 export function isStaffHbCoopBackgroundSyncRoute(pathname?: string): boolean {
   const p = pathname ?? (typeof window !== "undefined" ? window.location.pathname : "");

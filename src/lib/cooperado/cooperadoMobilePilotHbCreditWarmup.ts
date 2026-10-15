@@ -1,20 +1,12 @@
 import type { User } from "@/types";
-import { isCooperadoMobilePilotHbCreditUi } from "@/lib/cooperado/cooperadoMobilePilotHbCredit";
-import { refreshContaCoopLimiteFromFicha } from "@/lib/hb-credit/syncContaCoopLimiteFromFicha";
-import { resolveHbCreditLimiteSyncTargets } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
-import { isCloudSessionActive } from "@/lib/security/clientSession";
-import { persistirHbCreditAccountCooperado } from "@/services/hbCreditAccountPersistenciaService";
-import { notifyHbCreditAccountCacheUpdated } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
-import { getData, isAppDataWarm } from "@/services/dataStore";
-import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { getUserCooperativaId } from "@/utils/cooperativa";
+import { scheduleCooperadoHbCreditSyncPadrao } from "@/lib/cooperado/cooperadoHbCreditSyncPadrao";
 
 /** Prefetch de rotas HB — chamado no Início cooperado (piloto). */
 export function scheduleCooperadoPilotHbCreditRouteWarmup(
   user: Omit<User, "password"> | null | undefined,
   prefetch: (href: string) => void
 ): void {
-  if (!isCooperadoMobilePilotHbCreditUi(user)) return;
+  if (!user || user.role !== "cooperado") return;
   const routes = ["/minha-conta-coop", "/minha-conta-coop/escanear"];
   const run = () => {
     for (const href of routes) {
@@ -32,43 +24,12 @@ export function scheduleCooperadoPilotHbCreditRouteWarmup(
   }
 }
 
-/** Recalcula limite na nuvem (ficha/entregas) e grava cache da conta HB — cooperado mobile. */
-export function scheduleCooperadoHbCreditLimiteAndAccountWarmup(
-  user: Omit<User, "password"> | null | undefined
-): void {
-  if (!user || user.role !== "cooperado" || !user.cooperadoId) return;
-  const run = () => {
-    void (async () => {
-      if (typeof navigator !== "undefined" && !navigator.onLine) return;
-      if (!isAppDataWarm() || !isCloudSessionActive()) return;
-      const data = getData();
-      const cooperativaId = getUserCooperativaId(user, data);
-      if (!cooperativaId) return;
-      const cnpj = await resolveCooperativaCnpj(data, cooperativaId, user);
-      if (!cnpj) return;
-      const limite = resolveHbCreditLimiteSyncTargets(user, data, cooperativaId);
-      if (!limite) return;
-      await refreshContaCoopLimiteFromFicha({
-        cnpj,
-        cooperadoId: limite.apiCooperadoId,
-        cooperativaId,
-        cooperadoIds: limite.cooperadoIds,
-      }).catch(() => {});
-      const ok = await persistirHbCreditAccountCooperado(user);
-      if (ok) notifyHbCreditAccountCacheUpdated();
-    })();
-  };
-  if (typeof requestIdleCallback === "function") {
-    requestIdleCallback(run, { timeout: 2_500 });
-  } else {
-    window.setTimeout(run, 400);
-  }
-}
+/** @deprecated Use scheduleCooperadoHbCreditSyncPadrao — mantido para imports existentes. */
+export const scheduleCooperadoHbCreditLimiteAndAccountWarmup = scheduleCooperadoHbCreditSyncPadrao;
 
-/** Grava cache da conta HB em idle logo após login — abre Minha Conta na hora. */
+/** Grava cache da conta HB em idle logo após login — todos os cooperados. */
 export function scheduleCooperadoPilotHbCreditAccountPersist(
   user: Omit<User, "password"> | null | undefined
 ): void {
-  if (!isCooperadoMobilePilotHbCreditUi(user)) return;
-  scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
+  scheduleCooperadoHbCreditSyncPadrao(user);
 }

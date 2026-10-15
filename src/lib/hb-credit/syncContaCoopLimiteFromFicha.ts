@@ -1,7 +1,6 @@
 import { buildCreditosBaseMapCached } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import { syncCreditLimiteFromFicha } from "@/services/creditApiService";
 import { getData } from "@/services/dataStore";
-import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import type { AppData } from "@/types";
 import {
   coalesceContaCoopAuxSync,
@@ -19,10 +18,6 @@ export type SyncContaCoopLimiteOpts = {
 
 /** Envia cooperados para sincronizar limite na nuvem (base calculada no servidor). */
 export async function refreshContaCoopLimiteFromFicha(opts: SyncContaCoopLimiteOpts): Promise<void> {
-  if (!opts.cooperadoIds?.length && !isContaCoopValorReceberPilot(opts.cooperadoId, opts.cooperadoNome)) {
-    return;
-  }
-
   const primaryId = opts.cooperadoId ?? opts.cooperadoIds?.[0] ?? "";
   if (!primaryId || !opts.cnpj) return;
 
