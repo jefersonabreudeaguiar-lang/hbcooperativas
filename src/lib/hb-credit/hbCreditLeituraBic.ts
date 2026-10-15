@@ -261,7 +261,29 @@ export function hbCreditCreditoBaseReais(
 
   if (!coopId) return 0;
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
-  if (!hbCreditMesesFinanceirosAbertos(data, canonico, coopId).length) return 0;
+  if (!hbCreditMesesFinanceirosAbertos(data, canonico, coopId).length) {
+    const m6 = hbCreditValorAReceberAgregado(data, cooperadoId, cooperativaId);
+    if (m6.aguardandoAssinatura) {
+      const titularIds = new Set(listCooperadoIdsMesmoTitular(data, canonico, coopId));
+      const pixAguardando = (data.pagamentosCooperado ?? []).some((p) => {
+        if (p.status !== "aguardando_confirmacao") return false;
+        const pgCanonico = resolverCooperadoIdCanonico(data, p.cooperadoId, coopId);
+        return titularIds.has(pgCanonico) || p.cooperadoId === canonico;
+      });
+      if (pixAguardando) {
+        if (m6.valorRecibo > 0) return round2(m6.valorRecibo);
+        const inicio = hbCreditInicioParaBase(data, cooperadoId, cooperativaId);
+        if (inicio.valorRecibo > 0) return round2(inicio.valorRecibo);
+      }
+      if (m6.valor > 0) return round2(m6.valor);
+      return 0;
+    }
+    if (m6.valor > 0) {
+      const pendentesQvr = hbCreditMesesPendentesQuantoVouReceber(data, canonico, coopId);
+      if (pendentesQvr.length) return round2(m6.valor);
+    }
+    return 0;
+  }
 
   const pendente = hbCreditCreditoBaseBrutoFichasPendentesReais(data, cooperadoId, coopId);
   if (pendente > 0) return pendente;

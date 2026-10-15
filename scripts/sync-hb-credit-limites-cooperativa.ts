@@ -16,6 +16,7 @@ import { resolveAuthoritativeCreditosBaseCents } from "../src/modules/hb-credit/
 import { syncLimitesCooperadosFromCreditoBase } from "../src/lib/supabase/contaCoopStorage.ts";
 import { fetchCooperadosFromStorage } from "../src/lib/supabase/cooperadosStorage.ts";
 import { calcLimiteFromPercentual } from "../src/modules/hb-credit/engine/creditBaseFromFicha.ts";
+import { markHbCreditLimitSynced } from "../src/modules/hb-credit/engine/hbCreditLimitSyncState.ts";
 
 function loadEnvLocal() {
   const path = resolve(process.cwd(), ".env.local");
@@ -115,6 +116,23 @@ async function main() {
   if (result.errors?.length) {
     console.log("   avisos:", result.errors.join("; "));
   }
+
+  const failed = new Set(
+    (result.errors ?? []).map((line) => line.split(":")[0]?.trim()).filter(Boolean)
+  );
+  console.log("\n4) Marcar financial_limit_sync_state = SYNCED…");
+  let marked = 0;
+  let markFailed = 0;
+  for (const id of ids) {
+    if (failed.has(id)) continue;
+    const mark = await markHbCreditLimitSynced(sb, { cnpj: CNPJ, cooperadoId: id, actorUserId: ACTOR });
+    if (mark.ok) marked++;
+    else {
+      markFailed++;
+      console.log(`   ${id.slice(-8)}: ${mark.error}`);
+    }
+  }
+  console.log(`   SYNCED: ${marked} | falha: ${markFailed}`);
 }
 
 main().catch((e) => {
