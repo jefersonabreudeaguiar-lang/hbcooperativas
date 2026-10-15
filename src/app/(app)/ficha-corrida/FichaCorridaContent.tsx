@@ -153,6 +153,7 @@ import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExib
 import { materializarCooperadoPwaAposAssinaturaReciboLocal } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { useCooperadoApresentacaoFinanceiraConsolidada } from "@/hooks/useCooperadoApresentacaoFinanceiraConsolidada";
 import { cooperadoFluxoPainelProjecaoOpts } from "@/lib/cooperadoFluxoFinanceiroGlobal";
+import { isMobileCooperativaApp } from "@/lib/mobileExperience";
 import { formatCurrency, formatDate, formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia, cn } from "@/utils/format";
 import type { PagamentoCooperadoRegistro, FichaCorrida, NotaPedido } from "@/types";
 
@@ -223,6 +224,8 @@ function FichaCorridaPageInner() {
   const ready = useEnsureAppDataWarm();
   const tabActive = useCooperadoTabPanelActive("/ficha-corrida");
   const { user, isCooperado, cooperadoId, check } = usePermissions();
+  /** Celular/PWA: Financeiro com resumo de entregas e mês pago como antes da separação desktop. */
+  const cooperadoFichaMobileLegado = isCooperado && isMobileCooperativaApp();
   const messenger = isCooperadoPwaMessengerMode();
   const pilotFinanceiroLeve = cooperadoMobilePilotSnapshotFirstInicio(user);
   const readModelsRevision = useCooperadoMessengerReadModelRevision();
@@ -2324,7 +2327,7 @@ function FichaCorridaPageInner() {
             )}
           </Card>
 
-          {(!isCooperado || visualizandoHistorico) && (
+          {(!isCooperado || visualizandoHistorico || cooperadoFichaMobileLegado) && (
           <Card
             title={`Resumo das entregas · ${
               isCooperado && !visualizandoHistorico && mesesFinanceiroCooperado.length > 1
@@ -2354,7 +2357,7 @@ function FichaCorridaPageInner() {
             )}
           </Card>
           )}
-          {isCooperado && !visualizandoHistorico && (
+          {isCooperado && !visualizandoHistorico && !cooperadoFichaMobileLegado && (
             <p className="text-sm text-gray-600 mb-6 -mt-2">
               Lista de entregas e fotos por nota ficam em{" "}
               <Link href="/notas-pedido" className="text-green-700 font-semibold hover:underline">
@@ -2429,7 +2432,7 @@ function FichaCorridaPageInner() {
                     />
                   </div>
                 )}
-              {resumosFotosMesAbertoCooperado.length > 0 && (
+              {!cooperadoFichaMobileLegado && resumosFotosMesAbertoCooperado.length > 0 && (
                 <Card title="Fotos das notas recebidas" className="mb-6">
                   <p className="text-sm text-gray-600 mb-4">
                     Comprovantes das entregas dos meses em aberto. Para enviar novas fotos, use a aba Entregas.
