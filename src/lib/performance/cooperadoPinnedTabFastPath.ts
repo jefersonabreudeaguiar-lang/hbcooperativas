@@ -21,6 +21,19 @@ const OFF = new Set(["false", "0", "no", "off"]);
 let pinnedPairCachesReady = false;
 let pilotBottomTabsCachesReady = false;
 
+let tabPanelCacheProbe: ((href: string) => boolean) | null = null;
+
+/** Keep-alive informa se o painel da aba já foi visitado (evita replaceState sem conteúdo). */
+export function registerCooperadoTabPanelCacheProbe(
+  probe: ((href: string) => boolean) | null
+): void {
+  tabPanelCacheProbe = probe;
+}
+
+export function cooperadoTabPanelCached(href: string): boolean {
+  return tabPanelCacheProbe?.(href) ?? false;
+}
+
 /** Sinal do keep-alive: Início e Financeiro já foram visitados e estão no cache. */
 export function setCooperadoPinnedPairCachesReady(ready: boolean): void {
   pinnedPairCachesReady = ready;
@@ -51,6 +64,7 @@ export function tryCooperadoPilotInstantBottomTabSwitch(
     return false;
   }
   if (currentEffectiveHref === targetHref) return false;
+  if (!cooperadoTabPanelCached(targetHref)) return false;
 
   setCooperadoOptimisticTab(targetHref);
   if (typeof window === "undefined") return true;
@@ -78,6 +92,7 @@ export function tryCooperadoPinnedInstantTabSwitch(
     return false;
   }
   if (currentEffectiveHref === targetHref) return false;
+  if (!cooperadoTabPanelCached(targetHref)) return false;
 
   setCooperadoOptimisticTab(targetHref);
   if (typeof window === "undefined") return true;

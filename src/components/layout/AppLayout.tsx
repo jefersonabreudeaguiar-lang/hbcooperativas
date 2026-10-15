@@ -45,7 +45,10 @@ import {
   cooperadoTabWarmOnPointerDown,
   cooperadoTabWarmOnTouchStart,
 } from "@/lib/performance/cooperadoTabPointerWarmup";
-import { setCooperadoOptimisticTab } from "@/lib/performance/cooperadoOptimisticTabNavigation";
+import {
+  clearCooperadoOptimisticTab,
+  setCooperadoOptimisticTab,
+} from "@/lib/performance/cooperadoOptimisticTabNavigation";
 import { useCooperadoEffectiveTabPath } from "@/hooks/useCooperadoEffectiveTabPath";
 import { staffTabWarmOnPointerDown } from "@/lib/performance/staffTabPointerWarmup";
 import { isCooperadoBottomTabPath } from "@/lib/performance/cooperadoBottomTabRoutes";
@@ -334,7 +337,7 @@ export function MobileNav() {
         {mobileItems.map((item) => {
           const tabPath = isCooperadoAppUser(navUser!) ? effectiveTabPath : pathname;
           const active = pilotHbBottomNav
-            ? cooperadoPilotBottomNavItemActive(pathname, item.href)
+            ? cooperadoPilotBottomNavItemActive(tabPath, item.href)
             : tabPath === item.href || (item.href !== "/dashboard" && tabPath.startsWith(item.href));
           const isCooperadoNav = isCooperadoAppUser(navUser);
           const mobileTabUx = isCooperadoNav || isStaffBottomTabPath(item.href);
@@ -386,6 +389,9 @@ export function MobileNav() {
                 }
               }}
               onClick={(e) => {
+                if (isCooperadoNav && pilotPayTab) {
+                  clearCooperadoOptimisticTab();
+                }
                 if (!active && isCooperadoNav && isCooperadoBottomTabPath(item.href)) {
                   e.preventDefault();
                   if (tryCooperadoPinnedInstantTabSwitch(tabPath, item.href)) {

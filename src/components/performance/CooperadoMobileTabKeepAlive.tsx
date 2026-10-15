@@ -32,6 +32,7 @@ import {
 import {
   COOPERADO_PINNED_TAB_HREFS,
   isCooperadoPinnedDualMountEnabled,
+  registerCooperadoTabPanelCacheProbe,
   setCooperadoPinnedPairCachesReady,
   setCooperadoPilotBottomTabsCachesReady,
 } from "@/lib/performance/cooperadoPinnedTabFastPath";
@@ -156,6 +157,8 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   }, [enabled, mobile, onTab, pathname, deferredChildren]);
 
   useLayoutEffect(() => {
+    registerCooperadoTabPanelCacheProbe((href) => Boolean(cacheRef.current[href]));
+
     const ready =
       isCooperadoPinnedDualMountEnabled() &&
       Boolean(cacheRef.current[COOPERADO_TAB_PIN_HREF]) &&
@@ -168,6 +171,8 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
     } else {
       setCooperadoPilotBottomTabsCachesReady(false);
     }
+
+    return () => registerCooperadoTabPanelCacheProbe(null);
   }, [enabled, mobile, onTab, pathname, deferredChildren, cacheVersion, effectivePath]);
 
   const pinnedDualReady =
