@@ -2265,14 +2265,16 @@ export default function NotasPedidoCooperadoMain() {
   }, [isCooperado, user?.id, coopId]);
 
   const contratosPullEntregasRef = useRef(false);
+  const lastContratosPullEntregasAtRef = useRef(0);
+  const CONTRATOS_PULL_ENTREGAS_COOLDOWN_MS = 90_000;
   useEffect(() => {
-    if (!isCooperado || !user || !coopId || !data || !tabActive || abaCooperado !== "entregas") return;
-    if (contratosEntrega.length > 0) {
-      contratosPullEntregasRef.current = false;
-      return;
-    }
+    if (!isCooperado || !user || !coopId || !tabActive || abaCooperado !== "entregas") return;
+    if (contratosEntrega.length > 0) return;
+    const now = Date.now();
+    if (now - lastContratosPullEntregasAtRef.current < CONTRATOS_PULL_ENTREGAS_COOLDOWN_MS) return;
     if (contratosPullEntregasRef.current) return;
     contratosPullEntregasRef.current = true;
+    lastContratosPullEntregasAtRef.current = now;
     void sincronizarContratosEmBackground().finally(() => {
       contratosPullEntregasRef.current = false;
     });
@@ -2280,7 +2282,6 @@ export default function NotasPedidoCooperadoMain() {
     isCooperado,
     user?.id,
     coopId,
-    data,
     tabActive,
     abaCooperado,
     contratosEntrega.length,
