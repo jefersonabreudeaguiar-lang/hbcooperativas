@@ -115,9 +115,7 @@ export async function runCooperadoForegroundOperacionalCheck(
   const { reason, remote } = evaluation;
 
   if (reason === "financeiro_desatualizado") {
-    if (!session || !isCooperadoMobileGaPromoted(session)) {
-      requestCooperadoFinanceiroRecoverySync();
-    }
+    requestCooperadoFinanceiroRecoverySync();
     return true;
   }
 
@@ -165,7 +163,18 @@ export async function runCooperadoForegroundOperacionalCheck(
     }
   }
 
-  if (!session || !isCooperadoMobileGaPromoted(session)) {
+  const notasAlteradasNaNuvem =
+    reason === "revision_changed" &&
+    remote != null &&
+    !cooperadoCloudRevisionNotasInSyncWithApplied(digits, remote);
+
+  if (
+    notasAlteradasNaNuvem ||
+    reason === "never_applied_revision" ||
+    reason === "stale_local_sync" ||
+    !session ||
+    !isCooperadoMobileGaPromoted(session)
+  ) {
     requestCooperadoStaffRevisionSync();
   }
   return true;
