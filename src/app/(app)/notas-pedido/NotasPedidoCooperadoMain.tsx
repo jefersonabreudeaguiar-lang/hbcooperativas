@@ -1728,15 +1728,24 @@ export default function NotasPedidoCooperadoMain() {
     notaRejeitada?: NotaPedido,
     options?: { abrirCamera?: boolean }
   ) => {
-    iniciarModalAnexar(notaRejeitada, options);
     if (entregasPwaLeve && user && coopId) {
-      void ensureCooperadoNotasFreshForEnvio(user, coopId, {
-        reason: "anexar",
-        notaRejeitada,
-      }).then((pull) => {
-        if (pull.ok) refreshPwaEntregasResumosSnap();
-      });
+      void (async () => {
+        const pull = await ensureCooperadoNotasFreshForEnvio(user, coopId, {
+          reason: "anexar",
+          notaRejeitada,
+        });
+        if (!pull.ok) {
+          setErroEnvio(pull.error ?? "Não foi possível carregar o contrato. Toque em Atualizar.");
+          return;
+        }
+        refreshPwaEntregasResumosSnap();
+        const fresh = getData();
+        if (fresh) aplicarContratoLocal(fresh, notaRejeitada);
+        iniciarModalAnexar(notaRejeitada, options);
+      })();
+      return;
     }
+    iniciarModalAnexar(notaRejeitada, options);
   };
 
   const openAnexar = (notaRejeitada?: NotaPedido, options?: { abrirCamera?: boolean }) => {
@@ -2254,6 +2263,29 @@ export default function NotasPedidoCooperadoMain() {
     void sincronizarContratosEmBackground();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCooperado, user?.id, coopId]);
+
+  const contratosPullEntregasRef = useRef(false);
+  useEffect(() => {
+    if (!isCooperado || !user || !coopId || !data || !tabActive || abaCooperado !== "entregas") return;
+    if (contratosEntrega.length > 0) {
+      contratosPullEntregasRef.current = false;
+      return;
+    }
+    if (contratosPullEntregasRef.current) return;
+    contratosPullEntregasRef.current = true;
+    void sincronizarContratosEmBackground().finally(() => {
+      contratosPullEntregasRef.current = false;
+    });
+  }, [
+    isCooperado,
+    user?.id,
+    coopId,
+    data,
+    tabActive,
+    abaCooperado,
+    contratosEntrega.length,
+    sincronizarContratosEmBackground,
+  ]);
 
   useEffect(() => {
     if (!anexarModal || !data || !coopId) return;
@@ -2875,7 +2907,10 @@ export default function NotasPedidoCooperadoMain() {
     if (entregasPwaLeve) setPwaPreparandoEnvio(true);
 
     const uploadsPendentes = fotosNaNuvemCount < fotosSessaoCount;
-    const skipPull = entregasPwaLeve && !notaRejeitadaSubmit?.id;
+    const semContratoCatalogo =
+      getContratosEntrega(getData() ?? workingData, coopId).length === 0;
+    const skipPull =
+      entregasPwaLeve && !notaRejeitadaSubmit?.id && !semContratoCatalogo;
 
     if (uploadsPendentes) await aguardarFilaUpload();
     void syncOfflineDeliveryImages();
@@ -2887,6 +2922,16 @@ export default function NotasPedidoCooperadoMain() {
       });
       if (!pull.ok) {
         setErroEnvio(pull.error ?? "Atualize a internet e tente enviar de novo.");
+        return;
+      }
+      workingData = getData() ?? workingData;
+      const contratoAposSync = resolverContratoEntrega(workingData, coopId, preferId, {
+        criarPadraoSeVazio: false,
+      }).instituicaoId;
+      if (!contratoAposSync) {
+        setErroEnvio(
+          "Contrato da entrega não encontrado. Toque em Atualizar no topo ou fale com a cooperativa."
+        );
         return;
       }
     }
@@ -4419,8 +4464,9 @@ export default function NotasPedidoCooperadoMain() {
 
       {isCooperado && abaCooperado === "entregas" && contratosEntrega.length === 0 && (
         <AlertBanner variant="warning" className="mb-6" title="Aguardando contrato da cooperativa">
-          O responsável ainda não publicou um contrato com itens e preços. Veja o status no topo
-          (“Atualizando…” / “Atualizado”) ou fale com a cooperativa.
+          {syncingForUi
+            ? "Buscando contrato e preços na cooperativa…"
+            : "Se o aviso continuar após tocar em Atualizar, o responsável ainda não publicou um contrato com itens e preços."}
         </AlertBanner>
       )}
 

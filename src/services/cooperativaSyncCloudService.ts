@@ -2526,7 +2526,7 @@ export async function syncCooperativaBackground(
 }
 
 /**
- * Cooperado tocou «Atualizar»: ficha/notas/perfil sem contratos (mais rápido que background completo).
+ * Cooperado tocou «Atualizar» ou sync event-driven: notas + operacional + contratos (catálogo de entregas).
  * Notas: sempre full no toque manual — poda conferidas apagadas na nuvem (delta em background inalterado).
  */
 export async function syncCooperadoAtualizarFromCloud(
@@ -2559,6 +2559,7 @@ export async function syncCooperadoAtualizarFromCloud(
           await syncNotasPedidoFromCloud(digits, notasOpts);
           await syncOperacionalFromCloud(digits, { sessionLease: session });
         }
+        await syncContratosFromCloud(digits);
         const operacionalCloud =
           bundleHint?.operacional ?? (await fetchSyncBundle(digits))?.operacional ?? null;
         if (!isOperacionalCloudAuthoritative(digits)) {

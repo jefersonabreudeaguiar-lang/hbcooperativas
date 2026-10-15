@@ -7,6 +7,7 @@ import { isCooperadoPwaMobileEntregasSyncDeferUntilEnvio } from "@/lib/cooperado
 import { grantCooperadoEventDrivenSync } from "@/lib/performance/cooperadoEventDrivenSync";
 import { scheduleCooperadoPilotPostEnvioSync } from "@/lib/cooperado/cooperadoMobilePilotPerfSync";
 import { getData, isAppDataWarm } from "@/services/dataStore";
+import { getContratosEntrega } from "@/utils/contratosEntrega";
 import { resolveCooperativaCnpj, syncNotasPedidoFromCloud } from "@/services/notaPedidoCloudService";
 import { syncContratosFromCloud } from "@/services/cooperativaSyncCloudService";
 
@@ -62,20 +63,22 @@ export async function ensureCooperadoNotasFreshForEnvio(
   }
 
   if (opts?.reason === "anexar") {
-    void (async () => {
-      try {
-        await syncNotasPedidoFromCloud(cnpj, { retryFull: false });
-        try {
-          await syncContratosFromCloud(cnpj);
-        } catch {
-          /* contratos locais */
-        }
-        markCooperadoEnvioSyncFresh();
-      } catch {
-        /* não bloqueia abertura da câmera — submit valida de novo */
+    try {
+      await syncContratosFromCloud(cnpj);
+      await syncNotasPedidoFromCloud(cnpj, { retryFull: false });
+      markCooperadoEnvioSyncFresh();
+      return { ok: true };
+    } catch {
+      const local = getContratosEntrega(data, coopId);
+      if (local.length > 0) {
+        return { ok: true };
       }
-    })();
-    return { ok: true };
+      return {
+        ok: false,
+        error:
+          "Não foi possível carregar o contrato da cooperativa. Verifique a internet e toque em Atualizar.",
+      };
+    }
   }
 
   if (opts?.reason === "submit" && shouldSkipCooperadoEnvioSyncOnSubmit(opts.notaRejeitada)) {
