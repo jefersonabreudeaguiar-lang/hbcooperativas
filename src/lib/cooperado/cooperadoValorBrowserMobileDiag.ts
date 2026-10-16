@@ -81,9 +81,8 @@ function roughFichaPendente(data: ReturnType<typeof getData> | null, cid: string
   let n = 0;
   for (const f of data.fichaCorrida || []) {
     if (f.cooperadoId !== cid) continue;
-    const st = String(f.status || "");
-    if (st !== "pendente" && st !== "parcial") continue;
-    sum += Number(f.valorLiquido ?? f.valor ?? 0);
+    if (f.status !== "pendente") continue;
+    sum += Number(f.valorLiquido ?? 0);
     n++;
   }
   return { linhas: n, soma: sum };
