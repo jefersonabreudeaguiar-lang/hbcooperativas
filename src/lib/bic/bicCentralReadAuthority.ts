@@ -7,6 +7,7 @@
  */
 import { evaluateBicLabBoundary } from "@/lib/lab/bicLabBoundary";
 import { isBicLabB4AuthorityEnabled } from "@/lib/lab/bicLabB4Authority";
+import { isCooperadoFinanceiroAppDataLiveRead } from "@/lib/cooperado/cooperadoFinanceiroAppDataLiveRead";
 
 const ALLOWED_ON = new Set(["true", "1", "yes"]);
 
@@ -17,6 +18,7 @@ function parseFlag(raw: string | undefined): boolean {
 
 /** Leitura financeira cooperado via bicLeituraCentral* (substitui ramos legados na UI). */
 export function isBicCentralReadAuthorityEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (isCooperadoFinanceiroAppDataLiveRead(env)) return false;
   if (parseFlag(env.NEXT_PUBLIC_BIC_CENTRAL_READ_OFFICIAL)) return true;
   if (parseFlag(env.NEXT_PUBLIC_BIC_CENTRAL_READ_FULL_OFFICIAL)) return true;
   if (isBicLabB4AuthorityEnabled(env)) return true;

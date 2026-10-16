@@ -91,6 +91,7 @@ import {
 import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
+import { isCooperadoFinanceiroAppDataLiveRead } from "@/lib/cooperado/cooperadoFinanceiroAppDataLiveRead";
 import {
   cooperadoMesQuitado,
   cooperadoPendentePagamentoResponsavel,
@@ -434,6 +435,10 @@ function FichaCorridaPageInner() {
         apresentacaoConsolidada: apresentacaoFinanceiroUi,
       });
     const live = data && coopId ? readParidade(data) : null;
+    if (isCooperadoFinanceiroAppDataLiveRead()) {
+      if (!data) return null;
+      return live ?? readParidade(data);
+    }
     if (financeiroDormant && fichaResumoSnap) {
       if (isBicCentralReadAuthorityEnabled() && live && isAppDataWarm()) {
         return live;
