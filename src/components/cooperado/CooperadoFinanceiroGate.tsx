@@ -74,6 +74,8 @@ import {
 } from "@/lib/cooperado/cooperadoGaGarantiaValorReceberSync";
 import { cancelCooperadoBicMobileSessionSync } from "@/lib/cooperado/cooperadoBicMobileSessionSync";
 import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoBicMobileAuthority";
+import { CooperadoBicRevisionPulseHost } from "@/components/cooperado/CooperadoBicRevisionPulseHost";
+import { markCooperadoBicFinanceiroFresh } from "@/lib/bic/cooperadoBicSonataSyncUi";
 import { scheduleCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
 import {
   cooperadoPilotAppDataTemFinanceiroLocal,
@@ -121,6 +123,9 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     scheduleCooperadoPilotFinanceReadRecovery(user);
     scheduleCooperadoGaFinanceiroExibicaoRefresh(user);
     scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
+    if (isCooperadoMobileBicLeituraAuthority(user)) {
+      markCooperadoBicFinanceiroFresh();
+    }
     if (!isCooperadoMobileBicLeituraAuthority(user)) {
       scheduleCooperadoGarantiaValorReceberUntilResolvido(user);
       scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user, { force: true });
@@ -312,6 +317,9 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
   };
 
   return (
-    <CooperadoFinanceiroShellProvider value={shellState}>{children}</CooperadoFinanceiroShellProvider>
+    <CooperadoFinanceiroShellProvider value={shellState}>
+      <CooperadoBicRevisionPulseHost />
+      {children}
+    </CooperadoFinanceiroShellProvider>
   );
 }

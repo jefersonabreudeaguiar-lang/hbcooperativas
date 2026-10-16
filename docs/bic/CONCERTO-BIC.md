@@ -2,6 +2,18 @@
 
 Plano de maturidade BIC (meta rubrica **99/100**) em quatro movimentos. Este documento acompanha o **Movimento I — Allegro**.
 
+## Movimento IV — Finale (quase ao vivo + observabilidade)
+
+| Entrega | Função |
+|---------|--------|
+| `bicRevisionPulse` | Pulso ~55s + ao voltar ao app; light pull ou só rematerializar |
+| `bicParidadeTelemetry` | Contadores em sessionStorage |
+| `GET /api/health/bic-paridade` | Staff — flags + telemetria opcional (`X-HB-BIC-TELEMETRY`) |
+| `cooperadoBicSonataSyncUi` | Spinner na ficha só se dados &gt;60s stale |
+| Flags | `NEXT_PUBLIC_BIC_REVISION_PULSE`, `NEXT_PUBLIC_BIC_SONATA_SYNC_UI` |
+
+Teste: `npm run test:bic-movimento-iv`. Rollback: `scripts/backups/COOPERADO-BIC-MOVIMENTO-IV.md`.
+
 ## Movimento III — Presto (staff + admin + revisão)
 
 | Entrega | Função |

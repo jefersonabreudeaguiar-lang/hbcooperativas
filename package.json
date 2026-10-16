@@ -37,6 +37,7 @@
     "bic:cobertura-leitura": "npx tsx scripts/generate-bic-cobertura-leitura.ts",
     "test:cooperado-bic-session-skip": "npx tsx scripts/test-cooperado-bic-session-reinforcement-skip.ts",
     "test:bic-movimento-iii": "npx tsx scripts/test-bic-movimento-iii.ts",
+    "test:bic-movimento-iv": "npx tsx scripts/test-bic-movimento-iv.ts",
     "test:bic-lab-full-wiring": "npx tsx scripts/test-bic-lab-full-wiring.ts",
     "test:cooperado-inicio-card-policy": "npx tsx scripts/test-cooperado-inicio-card-policy.ts",
     "test:cooperado-inicio-card-resolver-boot": "npx tsx scripts/test-cooperado-inicio-card-resolver-boot.ts",

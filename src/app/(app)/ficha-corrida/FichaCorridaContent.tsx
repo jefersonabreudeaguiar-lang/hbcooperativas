@@ -90,6 +90,7 @@ import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLei
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
 import { isCooperadoFinanceiroAppDataLiveRead } from "@/lib/cooperado/cooperadoFinanceiroAppDataLiveRead";
 import { isCooperadoBicExibicaoPadraoAtiva } from "@/lib/cooperado/cooperadoBicMobileAuthority";
+import { cooperadoBicFinanceiroSyncHintForUi } from "@/lib/bic/cooperadoBicSonataSyncUi";
 import {
   cooperadoMesQuitado,
   cooperadoPendentePagamentoResponsavel,
@@ -960,6 +961,10 @@ function FichaCorridaPageInner() {
   const { exibirAguardandoAssinatura, conferindoPagamentoNuvem } =
     useCooperadoExibirAguardandoAssinatura(isCooperado && !!pagamentoAguardando);
   const { syncingForUi: syncCooperadoFinanceiro, cooperadoPagamentosHydrated } = useSyncStatus();
+  const syncCooperadoFinanceiroUi = cooperadoBicFinanceiroSyncHintForUi(syncCooperadoFinanceiro, {
+    onFinanceiroScreen: tabActive && isCooperado,
+    cooperadoBicAuthority: isCooperadoBicExibicaoPadraoAtiva(),
+  });
 
   const financeiroUiSnapshot = useCooperadoFinanceiroUiSnapshot({
     active: tabActive && isCooperado,
@@ -969,8 +974,8 @@ function FichaCorridaPageInner() {
     frozenFinanceiroEpoch: financeiroDormant ? readModelsRevision : undefined,
     opts: {
       apresentacaoConsolidada: apresentacaoFinanceiroUi,
-      carregandoNuvem: !apresentacaoFinanceiroUi && syncCooperadoFinanceiro,
-      financeiroSincronizando: !apresentacaoFinanceiroUi && syncCooperadoFinanceiro,
+      carregandoNuvem: !apresentacaoFinanceiroUi && syncCooperadoFinanceiroUi,
+      financeiroSincronizando: !apresentacaoFinanceiroUi && syncCooperadoFinanceiroUi,
       dataReady: apresentacaoFinanceiroUi || cooperadoPagamentosHydrated,
       conferindoPagamentoNuvem,
     },
