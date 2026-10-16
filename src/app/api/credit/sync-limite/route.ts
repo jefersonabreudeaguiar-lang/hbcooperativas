@@ -14,6 +14,9 @@ import {
 import { resolveAuthoritativeCreditBase } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import { markHbCreditLimitSynced } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
 
+/** Reconstrói crédito-base no servidor — pode passar do default 10s na Vercel. */
+export const maxDuration = 120;
+
 /**
  * Sincroniza limite HB = % de liberação persistido × crédito-base (não sobrescreve o % de compra ao alterar só o teto).
  * Fase 1: crédito-base é sempre reconstruído no servidor (operacional + notas); cliente não decide o valor.

@@ -19,11 +19,16 @@ export function CooperadoJefersonValorDiagPanel() {
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState<CooperadoValorBrowserMobileDiag | null>(null);
   const [copied, setCopied] = useState(false);
+  const [clientReady, setClientReady] = useState(false);
 
   useEffect(() => {
-    if (!enabled) return;
+    setClientReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!enabled || !clientReady) return;
     return installCooperadoValorBrowserMobileDiag(user);
-  }, [enabled, user?.id, user?.cooperadoId, user]);
+  }, [enabled, clientReady, user?.id, user?.cooperadoId, user]);
 
   const rodar = useCallback(async () => {
     if (!enabled || typeof window === "undefined") return;
@@ -47,7 +52,7 @@ export function CooperadoJefersonValorDiagPanel() {
     setCopied(true);
   }, []);
 
-  if (!enabled) return null;
+  if (!clientReady || !enabled) return null;
 
   return (
     <>

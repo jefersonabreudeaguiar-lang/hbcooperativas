@@ -1,17 +1,13 @@
 import type { User } from "@/types";
-import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
-import { getSession } from "@/services/dataStore";
 
-/** Hidrata auth no 1º frame do cliente — cooperado mobile GA (sem flash de loading). */
+/**
+ * Estado inicial do AuthProvider — sempre igual SSR e 1º paint do cliente (evita React #418).
+ * Sessão cooperado GA entra no `useLayoutEffect` → `refresh()` (mesmo frame, antes do paint).
+ */
 export function cooperadoMobilePilotInitialAccountUser(): Omit<User, "password"> | null {
-  if (typeof window === "undefined") return null;
-  const session = getSession();
-  if (!session || !isCooperadoMobileGaPromoted(session)) return null;
-  return session;
+  return null;
 }
 
 export function cooperadoMobilePilotInitialAuthLoading(): boolean {
-  if (typeof window === "undefined") return true;
-  const session = getSession();
-  return !(session && isCooperadoMobileGaPromoted(session));
+  return true;
 }
