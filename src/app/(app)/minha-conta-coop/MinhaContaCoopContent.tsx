@@ -150,8 +150,19 @@ function MinhaContaCoopContent() {
     return data.cooperados.find((c) => c.id === cooperadoId)?.nomeCompleto ?? user?.name ?? "";
   }, [data, cooperadoId, user?.name]);
 
+  const valorAReceberFicha = useMemo(() => {
+    if (!data || !cooperadoId || !user) return { valor: 0, mesLabel: "" };
+    const coopId = getUserCooperativaId(user, data);
+    if (!coopId) return { valor: 0, mesLabel: "" };
+    const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, coopId);
+    return {
+      valor: paridade.valorLiquido > 0.005 ? paridade.valorLiquido : 0,
+      mesLabel: paridade.mesLabel?.trim() ?? "",
+    };
+  }, [data, cooperadoId, user]);
+
   const contaCoopValorSync = useMemo(() => {
-    if (!auxSyncEnabled || !data || !cooperadoId || !user || !cnpj) return undefined;
+    if (!data || !cooperadoId || !user || !cnpj) return undefined;
     const coopId = getUserCooperativaId(user, data);
     if (!coopId || !isContaCoopValorReceberPilot(cooperadoId, cooperadoNome)) return undefined;
     const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, coopId);
@@ -167,7 +178,7 @@ function MinhaContaCoopContent() {
       user,
       enabled: true as const,
     };
-  }, [auxSyncEnabled, cnpj, cooperadoId, cooperadoNome, data, user]);
+  }, [cnpj, cooperadoId, cooperadoNome, data, user]);
 
   const mesReferenciaReceber = useMemo(() => {
     if (!data || !cooperadoId || !user) return "";
@@ -319,6 +330,25 @@ function MinhaContaCoopContent() {
       }
     }
   }, [cnpj, hbApiCooperadoId, pilotHbUi, user]);
+
+  useEffect(() => {
+    if (!cnpj || cnpj.length !== 14 || !user || !data || !cooperadoId) return;
+    if (valorAReceberFicha.valor <= 0.005) return;
+    const coopId = getUserCooperativaId(user, data);
+    if (!coopId) return;
+    const limite = resolveHbCreditLimiteSyncTargets(user, data, coopId);
+    if (!limite) return;
+    void refreshContaCoopLimiteFromFicha({
+      cnpj,
+      cooperadoId: limite.apiCooperadoId,
+      cooperativaId: coopId,
+      cooperadoIds: limite.cooperadoIds,
+    }).then(() => void reload({ background: true }));
+  }, [cnpj, cooperadoId, data, user, valorAReceberFicha.valor, reload]);
+
+  useEffect(() => {
+    preloadAppData();
+  }, []);
 
   useEffect(() => {
     if (!user || cnpj.length === 14) return;
@@ -665,6 +695,19 @@ function MinhaContaCoopContent() {
         <p className="relative mt-1 text-4xl font-bold tracking-tight tabular-nums sm:text-5xl">
           {formatCentsBRL(saldoHb)}
         </p>
+        {valorAReceberFicha.valor > 0 && (
+          <div className="relative mt-4 rounded-2xl border border-white/20 bg-white/10 px-3 py-2.5">
+            <p className="text-xs font-medium text-green-100">Valor a receber (ficha)</p>
+            <p className="text-lg font-bold tabular-nums">
+              {formatCentsBRL(Math.round(valorAReceberFicha.valor * 100))}
+              {valorAReceberFicha.mesLabel ? (
+                <span className="ml-2 text-sm font-medium text-green-100/90">
+                  · {valorAReceberFicha.mesLabel}
+                </span>
+              ) : null}
+            </p>
+          </div>
+        )}
 
         {cashback > 0 && (
           <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-3 py-2.5">
