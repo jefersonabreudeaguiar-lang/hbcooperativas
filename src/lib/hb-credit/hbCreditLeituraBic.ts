@@ -9,11 +9,6 @@ import {
   listarMesesPendentesQuantoVouReceber,
   listarMesesReferenciaResumoFinanceiroParidade,
 } from "@/services/cooperadoEntregasService";
-import {
-  bicCentralMesPrincipalQuantoVouReceber,
-  bicCentralResolveInicioParaExibicao,
-  bicCentralValorAReceberAgregado,
-} from "@/services/bicLeituraCentralCooperado";
 import { listarFichasPendentesPagamento } from "@/services/notaPedidoService";
 import { round2 } from "@/utils/calculations";
 import {
@@ -32,15 +27,43 @@ import {
 
 const HB_CREDIT_APRESENTACAO: { apresentacaoConsolidada: true } = { apresentacaoConsolidada: true };
 
+type BicLeituraCentralModule = typeof import("@/services/bicLeituraCentralCooperado");
+
+/** Evita spread de export ainda indefinido (ciclo creditBaseFromFicha ↔ BIC no client). */
+function loadBicLeituraCentralCooperado(): BicLeituraCentralModule {
+  return require("@/services/bicLeituraCentralCooperado") as BicLeituraCentralModule;
+}
+
+function bicCentralValorAReceberAgregadoLazy(
+  ...args: Parameters<BicLeituraCentralModule["bicCentralValorAReceberAgregado"]>
+): ReturnType<BicLeituraCentralModule["bicCentralValorAReceberAgregado"]> {
+  const fn = loadBicLeituraCentralCooperado().bicCentralValorAReceberAgregado;
+  if (typeof fn !== "function") {
+    throw new Error("bicCentralValorAReceberAgregado indisponível (módulo BIC ainda carregando)");
+  }
+  return fn(...args);
+}
+
+function bicCentralResolveInicioParaExibicaoLazy(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string | undefined,
+  opts?: { apresentacaoConsolidada?: boolean }
+) {
+  const fn = loadBicLeituraCentralCooperado().bicCentralResolveInicioParaExibicao;
+  if (typeof fn !== "function") {
+    throw new Error("bicCentralResolveInicioParaExibicao indisponível (módulo BIC ainda carregando)");
+  }
+  return fn(data, cooperadoId, cooperativaId, opts);
+}
+
 /** Evita spread de export ainda indefinido (ciclo creditBaseFromFicha ↔ BIC no client). */
 function hbCreditMesesPendentesQuantoVouReceber(
   data: AppData,
   cooperadoId: string,
   cooperativaId: string | undefined
 ): string[] {
-  const bicListar = (
-    require("@/services/bicLeituraCentralCooperado") as typeof import("@/services/bicLeituraCentralCooperado")
-  ).bicCentralListarMesesPendentesQuantoVouReceber;
+  const bicListar = loadBicLeituraCentralCooperado().bicCentralListarMesesPendentesQuantoVouReceber;
   if (typeof bicListar === "function") {
     const meses = bicListar(data, cooperadoId, cooperativaId, HB_CREDIT_APRESENTACAO);
     if (Array.isArray(meses)) return meses;
@@ -53,9 +76,7 @@ function hbCreditMesPrincipalFallback(
   cooperadoId: string,
   cooperativaId: string | undefined
 ): string {
-  const bicMes = (
-    require("@/services/bicLeituraCentralCooperado") as typeof import("@/services/bicLeituraCentralCooperado")
-  ).bicCentralMesPrincipalQuantoVouReceber;
+  const bicMes = loadBicLeituraCentralCooperado().bicCentralMesPrincipalQuantoVouReceber;
   if (typeof bicMes === "function") {
     const mes = bicMes(data, cooperadoId, cooperativaId, HB_CREDIT_APRESENTACAO);
     if (mes?.trim()) return mes;
@@ -69,7 +90,7 @@ export function hbCreditInicioParaBase(
   cooperadoId: string,
   cooperativaId: string | undefined
 ) {
-  return bicCentralResolveInicioParaExibicao(data, cooperadoId, cooperativaId, HB_CREDIT_APRESENTACAO);
+  return bicCentralResolveInicioParaExibicaoLazy(data, cooperadoId, cooperativaId, HB_CREDIT_APRESENTACAO);
 }
 
 /** M6 agregado BIC — referência cruzada responsável × cooperado. */
@@ -78,7 +99,7 @@ export function hbCreditValorAReceberAgregado(
   cooperadoId: string,
   cooperativaId: string | undefined
 ) {
-  return bicCentralValorAReceberAgregado(data, cooperadoId, cooperativaId, HB_CREDIT_APRESENTACAO);
+  return bicCentralValorAReceberAgregadoLazy(data, cooperadoId, cooperativaId, HB_CREDIT_APRESENTACAO);
 }
 
 function hbCreditMesesFinanceirosAbertos(
@@ -133,7 +154,12 @@ export function hbCreditMesPrincipal(
   const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
   const meses = paridade.mesesResumo;
   if (meses.length) return meses[meses.length - 1]!;
-  return bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, cooperativaId, HB_CREDIT_APRESENTACAO);
+  const bicMes = loadBicLeituraCentralCooperado().bicCentralMesPrincipalQuantoVouReceber;
+  if (typeof bicMes === "function") {
+    const mes = bicMes(data, cooperadoId, cooperativaId, HB_CREDIT_APRESENTACAO);
+    if (mes?.trim()) return mes;
+  }
+  return hbCreditMesPrincipalFallback(data, cooperadoId, cooperativaId);
 }
 
 /** Valor líquido do mês (abatimento HB / fingerprint) — mesma regra do relatório responsável. */
