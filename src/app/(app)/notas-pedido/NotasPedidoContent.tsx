@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { RouteChunkLoadingShell } from "@/lib/performance/appRouteLazy";
 import { usePermissions } from "@/hooks/usePermissions";
 
-const NotasPedidoStaffMain = dynamic(() => import("./staff/NotasPedidoStaffResponsavelEntry"), {
+const NotasPedidoStaffMain = dynamic(() => import("./staff/NotasPedidoStaffResponsavelApp"), {
   loading: () => <RouteChunkLoadingShell />,
 });
 

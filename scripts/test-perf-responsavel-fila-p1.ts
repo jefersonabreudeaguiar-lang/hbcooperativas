@@ -7,7 +7,10 @@ import { join } from "node:path";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const hook = readFileSync(join(ROOT, "src/hooks/useResponsavelFilaConferencia.ts"), "utf8");
-const notas = readFileSync(join(ROOT, "src/app/(app)/notas-pedido/NotasPedidoStaffMain.tsx"), "utf8");
+const notas = readFileSync(
+  join(ROOT, "src/app/(app)/notas-pedido/staff/NotasPedidoStaffResponsavelApp.tsx"),
+  "utf8"
+);
 
 function assert(cond: boolean, msg: string) {
   if (!cond) {
@@ -26,6 +29,18 @@ assert(
   "badge usa contagem leve (lista fila sem sticky pesado)"
 );
 assert(notas.includes("{conferirModal && ("), "modal conferir monta só quando aberto");
-assert(notas.includes('vistaResponsavel !== "fila"'), "zombie scan só na fila");
+assert(
+  notas.includes("filaZombieScanActive") || notas.includes('vistaResponsavel !== "fila"'),
+  "zombie scan só na fila"
+);
+assert(
+  notas.includes("scheduleStaffResponsavelNotasPollLoop"),
+  "poll da fila com atraso de boot (evita rajada)"
+);
+assert(
+  notas.includes("useAppDataSelectorForDomainsWhenActive") &&
+    notas.includes('["shell", "operacional"]'),
+  "contratos/cooperados por domínio (menos repaint)"
+);
 
 console.log("test-perf-responsavel-fila-p1.ts done.");

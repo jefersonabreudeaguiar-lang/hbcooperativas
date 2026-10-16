@@ -25,7 +25,7 @@ function assert(cond: boolean, msg: string) {
 const marks = read("src/lib/performance/rqlMarks.ts");
 const report = read("src/lib/performance/rqlPerfReport.ts");
 const staffTier = read("src/lib/performance/staffConferenciaSyncTier.ts");
-const staffNotas = read("src/app/(app)/notas-pedido/NotasPedidoStaffMain.tsx");
+const staffNotas = read("src/app/(app)/notas-pedido/staff/NotasPedidoStaffResponsavelApp.tsx");
 const layout = read("src/app/(app)/layout.tsx");
 const doc = read("docs/performance-rql-fase-1-prova-rotas.md");
 

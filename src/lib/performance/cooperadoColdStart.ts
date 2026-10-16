@@ -102,12 +102,39 @@ export function shouldSkipCooperadoSecondaryMountSync(): boolean {
   return isCooperadoInstantResumeEnabled() && coldStartSyncScheduled;
 }
 
+function isStaffDeferAppDataEagerWarmEnabled(): boolean {
+  if (typeof process === "undefined") return true;
+  const v = (process.env.NEXT_PUBLIC_STAFF_DEFER_APPDATA_EAGER ?? "true").trim().toLowerCase();
+  return v !== "0" && v !== "false" && v !== "no";
+}
+
+function shouldDeferAppDataEagerWarmForSession(session: ReturnType<typeof getSession>): boolean {
+  if (!session) return false;
+  if (isCooperadoPwaMessengerMode() || cooperadoMobilePilotDeferAppDataEagerWarm(session)) {
+    return true;
+  }
+  if (isStaffDeferAppDataEagerWarmEnabled() && isStaffGestaoRole(session.role)) {
+    return true;
+  }
+  return false;
+}
+
+function scheduleDeferredAppDataEagerWarm(): void {
+  if (typeof window === "undefined") return;
+  const run = () => preloadAppData({ eager: true });
+  if (typeof requestIdleCallback !== "undefined") {
+    requestIdleCallback(run, { timeout: 1_400 });
+  } else {
+    window.setTimeout(run, 16);
+  }
+}
+
 export function ensureCooperadoAppDataEagerWarm(): void {
   if (!isCooperadoInstantResumeEnabled()) return;
   const session = getSession();
-  /** PWA mensageiro / piloto Jeferson: pintar shell antes do parse gigante (tela branca). */
-  if (isCooperadoPwaMessengerMode() || cooperadoMobilePilotDeferAppDataEagerWarm(session)) {
+  if (shouldDeferAppDataEagerWarmForSession(session)) {
     preloadAppData();
+    scheduleDeferredAppDataEagerWarm();
     return;
   }
   preloadAppData({ eager: true });

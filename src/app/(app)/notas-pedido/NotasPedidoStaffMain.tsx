@@ -1,2 +1,2 @@
-/** Compat — prefetch e imports legados apontam aqui; entry leve em `staff/`. */
-export { default } from "./staff/NotasPedidoStaffResponsavelEntry";
+/** Compat — prefetch e imports legados; implementação em `staff/NotasPedidoStaffResponsavelApp`. */
+export { default } from "./staff/NotasPedidoStaffResponsavelApp";

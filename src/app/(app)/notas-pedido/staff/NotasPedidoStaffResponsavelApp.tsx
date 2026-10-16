@@ -9,6 +9,7 @@ import {
 import {
   useAppDataSelector,
   useAppDataSelectorForDomainsWhenActive,
+  useAppDataDomainsRevisionWhenActive,
   useAppDataSnapshotForDomainsWhenActive,
 } from "@/hooks/useAppData";
 import {
@@ -23,6 +24,7 @@ import {
 } from "@/lib/conferencia/conferenciaSequenciaLancamentoFotos";
 import { listarPendentesConferenciaResponsavel } from "@/lib/conferencia/responsavelConferenciaFilaNav";
 import { resolveStaffNotasPedidoNotifyDomains } from "@/lib/performance/staffNotasPedidoNotifyDomains";
+import { scheduleStaffResponsavelNotasPollLoop } from "@/lib/performance/staffResponsavelNotasPullBoot";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { useResponsavelFilaConferencia } from "@/hooks/useResponsavelFilaConferencia";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -1518,7 +1520,7 @@ export default function NotasPedidoStaffMain() {
     void loadConferenciaFoto(fresh, conferenciaFotoIdx);
   }, [conferirModal, selectedNota?.id, conferenciaFotoIdx, loadConferenciaFoto]);
 
-  const conferenciaDataRevision = useAppDataSelector(() => getDataRevision(), []);
+  const conferenciaDataRevision = useAppDataDomainsRevisionWhenActive(conferirModal, ["notas"]);
 
   useEffect(() => {
     if (!conferirModal || !selectedNota) return;
@@ -1738,12 +1740,14 @@ export default function NotasPedidoStaffMain() {
   };
 
   const cooperadosCoop =
-    useAppDataSelector(
+    useAppDataSelectorForDomainsWhenActive(
+      tabActive && !isCooperado,
+      ["shell", "operacional"],
       (d) => {
-        if (!coopId || isCooperado) return [];
+        if (!coopId) return [];
         return listCooperadosDaCooperativa(d, coopId);
       },
-      [coopId, isCooperado]
+      [coopId]
     ) ?? [];
 
   useEffect(() => {
@@ -1784,7 +1788,9 @@ export default function NotasPedidoStaffMain() {
   const deferredStatusFilter = useDeferredValue(statusFilter);
 
   const resumosMensaisCooperado =
-    useAppDataSelector(
+    useAppDataSelectorForDomainsWhenActive(
+      isCooperado && tabActive,
+      ["notas", "financeiro"],
       (d) => {
         if (!cooperadoId || !coopId || abaCooperado !== "entregas") return [];
         const base = filtrarResumosMesesNaoQuitados(
@@ -1805,7 +1811,9 @@ export default function NotasPedidoStaffMain() {
     ) ?? [];
 
   const resumosFichaCooperado =
-    useAppDataSelector(
+    useAppDataSelectorForDomainsWhenActive(
+      isCooperado && tabActive,
+      ["notas", "financeiro"],
       (d) => {
         if (!cooperadoId || !coopId || abaCooperado !== "ficha") return [];
         return listarResumosFichaEmAbertoCooperado(d, cooperadoId, coopId);
@@ -2043,7 +2051,9 @@ export default function NotasPedidoStaffMain() {
     mostrarFilaResponsavelConteudo && (data === null || !isAppDataWarm());
 
   const contratosEntrega =
-    useAppDataSelector(
+    useAppDataSelectorForDomainsWhenActive(
+      tabActive && !isCooperado,
+      ["shell", "operacional"],
       (d) => (coopId ? getContratosEntrega(d, coopId) : []),
       [coopId]
     ) ?? [];
@@ -2193,18 +2203,6 @@ export default function NotasPedidoStaffMain() {
     });
   }, [isCooperado, data, coopId, puxarNotasResponsavelDaNuvem]);
 
-  useEffect(() => {
-    if (isCooperado || !coopId) return;
-    if (responsavelPrimeiroPullAgendadoRef.current) return;
-    if (vistaResponsavel !== "fila" && vistaResponsavel !== "cooperado") return;
-    const t = window.setTimeout(() => {
-      const d = getData();
-      const filaVazia = !d || countNotasFilaConferenciaResponsavel(d, coopId) === 0;
-      puxarNotasResponsavelDaNuvem({ forceFull: filaVazia });
-    }, 400);
-    return () => window.clearTimeout(t);
-  }, [vistaResponsavel, isCooperado, coopId, puxarNotasResponsavelDaNuvem]);
-
   const filaRecuperacaoAutoRef = useRef(false);
   useEffect(() => {
     if (isCooperado || !coopId || !mostrarFilaResponsavelConteudo) return;
@@ -2238,19 +2236,12 @@ export default function NotasPedidoStaffMain() {
   useEffect(() => {
     if (isCooperado || !coopId || !tabActive || !mostrarFilaResponsavelConteudo) return;
     const filaLive = isStaffFilaNotasLivePollEnabled();
-    const onVisible = () => {
-      if (document.hidden) return;
-      puxarNotasResponsavelDaNuvem({ bypassMinGap: true });
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    const interval = window.setInterval(() => {
-      if (document.hidden) return;
-      puxarNotasResponsavelDaNuvem();
-    }, resolveStaffNotasPollIntervalMs(filaLive));
-    return () => {
-      document.removeEventListener("visibilitychange", onVisible);
-      window.clearInterval(interval);
-    };
+    const pollMs = resolveStaffNotasPollIntervalMs(filaLive);
+    return scheduleStaffResponsavelNotasPollLoop({
+      pollIntervalMs: pollMs,
+      onPoll: () => puxarNotasResponsavelDaNuvem(),
+      onVisible: () => puxarNotasResponsavelDaNuvem({ bypassMinGap: true }),
+    });
   }, [
     isCooperado,
     coopId,
