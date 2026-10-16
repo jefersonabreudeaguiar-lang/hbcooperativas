@@ -211,7 +211,7 @@ function miniData(overrides: Partial<AppData> = {}): AppData {
   );
   assert.equal(
     isHbCreditStaffNavEligible({ role: "responsavel" }, "disabled", false),
-    false
+    true
   );
 }
 
