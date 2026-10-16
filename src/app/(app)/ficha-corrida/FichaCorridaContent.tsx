@@ -84,7 +84,11 @@ import {
   bicCentralResolvePainelParaExibicao,
 } from "@/services/bicLeituraCentralCooperado";
 import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
-import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import {
+  leituraFinanceiraParidadeCooperado,
+  leituraFinanceiraParidadeCooperadoMesReferencia,
+} from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
 import {
@@ -95,6 +99,7 @@ import {
   getPagamentoRegistradoMes,
   listarMesesComPagamentoRegistradoCooperado,
   listarResumosFotosCooperado,
+  getResumoMesEntregasCooperado,
 } from "@/services/cooperadoEntregasService";
 
 const CooperadoFichaFotosPanel = dynamic(
@@ -639,6 +644,28 @@ function FichaCorridaPageInner() {
     if (paridadeCooperadoMobile?.mesesResumo.length) return paridadeCooperadoMobile.mesesResumo;
     return mesesPendentesQuantoVouReceber;
   }, [isCooperado, paridadeCooperadoMobile, mesesPendentesQuantoVouReceber]);
+
+  const resumosMesEmAbertoCooperado = useMemo(() => {
+    if (!tabActive || !isCooperado || !data || !cooperadoSelecionadoId) return [];
+    const list = listarResumosFichaEmAbertoCooperado(data, cooperadoSelecionadoId, coopId);
+    if (list.length > 0) {
+      return [...list].sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia));
+    }
+    if (mesesFinanceiroCooperado.length === 0) return [];
+    return mesesFinanceiroCooperado
+      .filter((mes) => !cooperadoMesQuitado(data, cooperadoSelecionadoId, mes))
+      .map((mes) => getResumoMesEntregasCooperado(data, cooperadoSelecionadoId, mes, coopId))
+      .filter((r) => r.valorAReceber > 0.005 || r.conferidas > 0)
+      .sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia));
+  }, [
+    tabActive,
+    isCooperado,
+    data,
+    cooperadoSelecionadoId,
+    coopId,
+    mesesFinanceiroCooperado,
+    financeiroUiEpoch,
+  ]);
 
   const mesReferenciaHbCooperado = useMemo(() => {
     if (!isCooperado) return mesAtivo;
@@ -2249,21 +2276,68 @@ function FichaCorridaPageInner() {
                 valorEntregas={resumoExibicao.valorEntregas}
                 descontosExtras={descontosExtrasResumo}
                 totalLiquido={
-                  visualizandoHistorico
-                    ? exibicaoOpts
-                      ? bicCentralGetValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
-                      : resumoExibicao.valorEntregas
-                    : mesesFinanceiroCooperado.length > 1
-                      ? resumoExibicao.valorLiquido
-                      : (paridadeCooperadoMobile?.valorLiquido ?? valorReceberConsolidado?.valor ?? 0)
+                  exibicaoOpts
+                    ? bicCentralGetValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
+                    : resumoExibicao.valorEntregas
                 }
-                rotuloTotal={
-                  visualizandoHistorico
-                    ? "Total recebido"
-                    : "A receber"
-                }
+                rotuloTotal="Total recebido"
               />
             )}
+            {isCooperado &&
+              resumoExibicao &&
+              !visualizandoHistorico &&
+              cooperadoSelecionadoId && (
+                <div className="space-y-6 mb-4">
+                  {resumosMesEmAbertoCooperado.length > 0
+                    ? resumosMesEmAbertoCooperado.map((r) => {
+                        const part = leituraFinanceiraParidadeCooperadoMesReferencia(
+                          data,
+                          cooperadoSelecionadoId,
+                          coopId,
+                          r.mesReferencia
+                        );
+                        const resumoMes = part.resumo;
+                        const liquido = part.valorLiquido > 0.005 ? part.valorLiquido : r.valorAReceber;
+                        if (liquido <= 0.005 && resumoMes.valorEntregas <= 0.005) return null;
+                        return (
+                          <div key={r.mesReferencia} className="rounded-xl border border-green-100 bg-green-50/30 p-4">
+                            <p className="text-sm font-bold text-green-900 mb-3">
+                              {formatMesReferencia(r.mesReferencia)}
+                              {liquido > 0.005 && (
+                                <span className="ml-2 font-semibold text-green-700">
+                                  · {formatCurrency(liquido)}
+                                </span>
+                              )}
+                            </p>
+                            <ResumoDescontosMes
+                              valorBruto={resumoMes.valorBruto}
+                              descontoCooperativa={resumoMes.descontoCooperativa}
+                              descontoPadraoPct={data.config.descontoPadraoCooperativa}
+                              valorEntregas={resumoMes.valorEntregas}
+                              descontosExtras={part.descontosExtras}
+                              totalLiquido={liquido}
+                              rotuloTotal="A receber"
+                            />
+                          </div>
+                        );
+                      })
+                    : (
+                      <ResumoDescontosMes
+                        valorBruto={resumoExibicao.valorBruto}
+                        descontoCooperativa={resumoExibicao.descontoCooperativa}
+                        descontoPadraoPct={data.config.descontoPadraoCooperativa}
+                        valorEntregas={resumoExibicao.valorEntregas}
+                        descontosExtras={descontosExtrasResumo}
+                        totalLiquido={
+                          paridadeCooperadoMobile?.valorLiquido ??
+                          valorReceberConsolidado?.valor ??
+                          resumoExibicao.valorLiquido
+                        }
+                        rotuloTotal="A receber"
+                      />
+                    )}
+                </div>
+              )}
             {visualizandoHistorico &&
               resumoExibicao &&
               cooperadoSelecionadoId &&
