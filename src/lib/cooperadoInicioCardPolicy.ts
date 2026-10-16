@@ -353,6 +353,30 @@ function aplicarPoliticaCardInicioEndurecidaComMotor(
     };
   }
 
+  const anchor =
+    prevLatch?.hadPendencia && cooperadoMotorTemObrigacaoReceber(prevLatch.display)
+      ? prevLatch.display
+      : persistidoLeitura && cooperadoMotorTemObrigacaoReceber(persistidoLeitura.display)
+        ? persistidoLeitura.display
+        : null;
+  if (
+    financeiroCarregando &&
+    anchor &&
+    cooperadoMotorTemObrigacaoReceber(applied.display) &&
+    applied.display.valor + 0.02 < anchor.valor
+  ) {
+    applied = {
+      ...applied,
+      display: anchor,
+      latch: {
+        motorRevision: revision,
+        display: anchor,
+        hadPendencia: true,
+      },
+      atualizando: true,
+    };
+  }
+
   return finalizarResultadoCardBic({
     ...applied,
     gravarPersistencia: Boolean(cooperativaId),

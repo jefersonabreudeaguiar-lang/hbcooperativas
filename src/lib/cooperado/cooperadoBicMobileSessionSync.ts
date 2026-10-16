@@ -27,6 +27,7 @@ import {
   cooperadoBrowserDesktopBicPerfActive,
   cooperadoBrowserDesktopFinanceiroEstavel,
 } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
+import { cooperadoFinanceiroCardCacheTemValor } from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
 
 const SESSION_COUNT_PREFIX = "hb.coop.bicMobileSessionSyncCount";
 /** 1ª imediata pós-interativo + 2 reforços — sensação “quase ao vivo”. */
@@ -104,7 +105,13 @@ async function runBicSessionSyncTick(user: Omit<User, "password">, tickIndex: nu
   incrementSessionSyncCount(user.id);
 
   if (tickIndex === 0) {
-    await runCooperadoGaSyncBaseInformacoesFinanceiras(user, { force: true, bicSession: true });
+    const desktop = cooperadoBrowserDesktopBicPerfActive(user);
+    const cacheValor = desktop && cooperadoFinanceiroCardCacheTemValor(user);
+    await runCooperadoGaSyncBaseInformacoesFinanceiras(user, {
+      force: !cacheValor,
+      bicSession: true,
+      light: Boolean(cacheValor),
+    });
   } else if (hybridLight) {
     await runCooperadoGaSyncBaseInformacoesFinanceiras(user, { bicSession: true, light: true });
     if (cooperadoGaExibicaoFinanceiraAindaZerada(user)) {
@@ -132,7 +139,6 @@ export function scheduleCooperadoBicMobileSessionSync(
   activeUserId = user!.id;
 
   if (cooperadoBrowserDesktopBicPerfActive(user) && cooperadoBrowserDesktopFinanceiroEstavel(user)) {
-    scheduleCooperadoBicHybridIdleTask(() => rematerializarBicSnapshots(user!), 1_200);
     return;
   }
 

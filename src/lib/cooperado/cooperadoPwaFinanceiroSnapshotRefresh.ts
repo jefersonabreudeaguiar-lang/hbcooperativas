@@ -22,6 +22,7 @@ import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoP
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import { isCooperadoMobilePilotPerfActive } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoBicMobileAuthority";
+import { cooperadoBrowserDesktopBicPerfActive } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 
 /** Após troca de build ou purge — recria snapshots do AppData local (paridade com o browser). */
@@ -73,6 +74,8 @@ export function cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(
     return;
   }
   if (isCooperadoMobileBicLeituraAuthority(user)) {
+    // Browser desktop: card lê AppData/BIC ao vivo — snapshots PWA regravam valor transitório (ex.: 124) no meio do sync.
+    if (cooperadoBrowserDesktopBicPerfActive(user)) return;
     persistirInicioCardCooperadoNotificarPwaLeve(user);
     persistirCooperadoPwaFichaResumoSnapshotFromUser(user, true);
     persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, true);

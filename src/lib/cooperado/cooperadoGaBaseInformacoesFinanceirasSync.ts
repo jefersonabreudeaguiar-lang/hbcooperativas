@@ -31,7 +31,10 @@ import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import { cooperadoMotorTemObrigacaoReceber } from "@/lib/cooperadoInicioCardPolicy";
 import { resolverMotorCardInicioParidadeFinanceiro } from "@/lib/cooperado/cooperadoInicioCardParidadeMotor";
-import { cooperadoBrowserDesktopBicPerfActive } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
+import {
+  cooperadoBrowserDesktopBicPerfActive,
+  cooperadoBrowserDesktopFinanceiroEstavel,
+} from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
 
 const SESSION_KEY = "hb.coop.gaBaseInformacoesPull.v1";
 const MIN_INTERVAL_MS = 45_000;
@@ -136,8 +139,11 @@ export async function runCooperadoGaSyncBaseInformacoesFinanceiras(
       persistAppliedCooperativaCloudRevision(digits, fingerprintCooperativaCloudRevision(remote));
     }
 
-    cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user);
-    cooperadoPilotForcarRematerializacaoFinanceira(user);
+    const desktopEstavel = cooperadoBrowserDesktopFinanceiroEstavel(user);
+    if (!desktopEstavel || nuvemMudou) {
+      cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user);
+      cooperadoPilotForcarRematerializacaoFinanceira(user);
+    }
     if (!cooperadoBrowserDesktopBicPerfActive(user) || nuvemMudou) {
       dispatchCooperadoPwaLeveUiSnapshotRefresh();
     }
