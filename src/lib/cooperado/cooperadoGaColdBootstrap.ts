@@ -135,12 +135,13 @@ export function scheduleCooperadoGaPrimeiraCargaSilenciosa(
     scheduleEmpacotarModeloAparelhoJeferson(user);
   };
 
+  const releasePrecisaOperacional = cooperadoAppReleaseNeedsOperacionalSync();
   if (isCooperadoInstantResumeEnabled()) {
     scheduleCooperadoPostInteractiveTask(fire);
   } else if (typeof requestIdleCallback === "function") {
-    requestIdleCallback(fire, { timeout: 12_000 });
+    requestIdleCallback(fire, { timeout: releasePrecisaOperacional ? 2_500 : 12_000 });
   } else {
-    window.setTimeout(fire, 6_000);
+    window.setTimeout(fire, releasePrecisaOperacional ? 1_500 : 6_000);
   }
 }
 

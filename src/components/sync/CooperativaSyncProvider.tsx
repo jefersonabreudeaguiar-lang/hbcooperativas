@@ -155,6 +155,7 @@ import {
   isCooperadoMobileGaPromoted,
 } from "@/lib/cooperado/cooperadoMobilePilot";
 import { tryAckCooperadoAppReleaseWhenLocalReady } from "@/lib/cooperado/cooperadoMobileReleaseLocalAck";
+import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 /** Intervalo mínimo entre pulls de operacional só para votação (bem menor que sync completa). */
@@ -1147,6 +1148,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         scheduleCooperadoPostShellSync(() => {
           prepararFinanceiroLocalCooperado(user);
           if (isCooperadoPwaMessengerMode() || deferReleaseOnOpen) {
+            if (deferReleaseOnOpen && cooperadoAppReleaseNeedsOperacionalSync()) {
+              scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
+            }
             scheduleCooperadoMessengerStaffRevisionPull(user, coopId);
             return;
           }

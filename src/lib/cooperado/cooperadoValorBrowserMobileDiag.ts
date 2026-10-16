@@ -183,9 +183,21 @@ export async function buildCooperadoValorBrowserMobileDiag(
   if (cloudBuild && buildSeen && buildSeen < cloudBuild) {
     causas.push(`PERFIL_PWA_ANTIGO: buildSeen ${buildSeen} < produção ${cloudBuild}`);
   }
-  if (cloudBuild && operSync && operSync < cloudBuild) {
+  if (cloudBuild && (!operSync || operSync < cloudBuild)) {
     causas.push(
-      `OPERACIONAL_NAO_SYNC_NO_BUILD: ${operSync} < ${cloudBuild} (AppData pode estar velho no celular)`
+      operSync
+        ? `OPERACIONAL_NAO_SYNC_NO_BUILD: ${operSync} < ${cloudBuild} (AppData pode estar velho no celular)`
+        : `OPERACIONAL_NUNCA_SYNC_NO_APARELHO: operacionalSyncedBuild=0 no build ${cloudBuild} — PWA precisa operacional_full em background (sem travar UI)`
+    );
+  }
+  if (
+    (pwaInicio[0]?.valorInicioDash === 0 || pwaInicio[0]?.valorInicioDash == null) &&
+    motorApp &&
+    motorApp.paridade.valorLiquido <= 0.005 &&
+    (!operSync || operSync < (cloudBuild || pageBuild))
+  ) {
+    causas.push(
+      "SNAPSHOT_ZERO_ANTES_OPERACIONAL: cache PWA gravou R$ 0 antes do sync — valor real pode estar só na nuvem (PC)"
     );
   }
   if ((standalone || mobile) && appDataKb > 20 && !parsedEarly && !isAppDataWarm()) {

@@ -5,6 +5,7 @@ import type { AppData, User } from "@/types";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { cooperadoPwaSnapshotBuildReadable } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
 import { getData, isAppDataWarm } from "@/services/dataStore";
+import { cooperadoAppReleaseNeedsOperacionalSync } from "@/lib/performance/cooperadoEventDrivenSync";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import type { LeituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
@@ -139,6 +140,12 @@ export function persistirCooperadoPwaFichaResumoSnapshotFromUser(
   if (!coopId) return null;
   const canon = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
   const built = buildCooperadoPwaFichaResumoSnapshot(data, canon, coopId, apresentacaoConsolidada);
+  if (
+    cooperadoAppReleaseNeedsOperacionalSync() &&
+    (built.paridade?.valorLiquido ?? 0) <= 0.005
+  ) {
+    return null;
+  }
   gravarCooperadoPwaFichaResumoSnapshot(canon, coopId, built);
   return built;
 }

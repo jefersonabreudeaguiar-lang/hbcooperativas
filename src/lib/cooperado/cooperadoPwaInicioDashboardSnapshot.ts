@@ -30,6 +30,7 @@ import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedi
 import { prestacaoPrincipalCooperado, prestacaoExigeAtencaoCooperado } from "@/services/prestacaoContasService";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { getUserCooperativaId, getUserCooperativaNome, normalizeCnpj } from "@/utils/cooperativa";
+import { cooperadoAppReleaseNeedsOperacionalSync } from "@/lib/performance/cooperadoEventDrivenSync";
 import { getCurrentMesReferencia } from "@/utils/format";
 
 export const COOPERADO_PWA_INICIO_DASHBOARD_SNAPSHOT_VERSION = 1;
@@ -223,6 +224,11 @@ export function persistirCooperadoPwaInicioDashboardSnapshot(
   if (!d) return null;
   const view = buildCooperadoPwaInicioDashboardView(d, user, apresentacaoConsolidada);
   if (!view) return null;
+  const valorInicio =
+    view.valorReceber?.valorExibicao ?? view.valorReceber?.valor ?? 0;
+  if (cooperadoAppReleaseNeedsOperacionalSync() && Number(valorInicio) <= 0.005) {
+    return null;
+  }
   const payload: CooperadoPwaInicioDashboardSnapshot = {
     v: COOPERADO_PWA_INICIO_DASHBOARD_SNAPSHOT_VERSION,
     appBuild: APP_BUILD_VERSION,
