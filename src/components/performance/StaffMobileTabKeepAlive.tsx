@@ -1,9 +1,9 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, useSyncExternalStore, useMemo, type ReactNode } from "react";
-import { cn } from "@/utils/format";
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
 import { CooperadoTabPanelProvider } from "@/lib/performance/cooperadoTabPanelContext";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import {
   getStaffMobileTabCacheLimit,
   isStaffBottomTabPath,
@@ -89,34 +89,25 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
     }
   }, [enabled, mobile, onTab, tabKey, pathname, children, cacheLimit, lowMemory]);
 
-  const panelForKey = (href: string, activeKey: string | null): ReactNode | undefined => {
-    if (onTab && href === tabKey) return children;
-    if (activeKey === href && onTab) return children;
-    return cacheRef.current[href];
-  };
-
   if (!enabled || !mobile) {
     return <>{children}</>;
   }
 
-  const hrefsToRender = useMemo(() => {
-    if (onTab) {
-      return [...new Set([tabKey, ...orderRef.current])];
-    }
-    return [...new Set([...orderRef.current, ...Object.keys(cacheRef.current)])];
-  }, [cacheVersion, onTab, tabKey]);
+  const inactiveTabHrefs = useMemo(() => {
+    void cacheVersion;
+    return orderRef.current.filter((h) => h !== tabKey);
+  }, [cacheVersion, tabKey]);
 
-  const renderPanels = (activeKey: string | null) =>
-    hrefsToRender.map((href) => {
-      const active = activeKey === href;
-      const panel = panelForKey(href, activeKey);
+  const renderInactivePanels = () =>
+    inactiveTabHrefs.map((href) => {
+      const panel = cacheRef.current[href];
       if (!panel) return null;
       return (
         <div
           key={href}
-          className={cn(!active && "hidden [content-visibility:hidden]")}
-          aria-hidden={!active}
-          inert={!active}
+          className="hidden [content-visibility:hidden]"
+          aria-hidden
+          inert
           data-staff-tab-panel={href}
         >
           {panel}
@@ -124,9 +115,17 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
       );
     });
 
-  const panels = onTab ? renderPanels(tabKey) : renderPanels(null);
-
   if (!onTab) {
+    const hrefsToRender = [...new Set([...orderRef.current, ...Object.keys(cacheRef.current)])];
+    const panels = hrefsToRender.map((href) => {
+      const panel = cacheRef.current[href];
+      if (!panel) return null;
+      return (
+        <div key={href} className="hidden [content-visibility:hidden]" aria-hidden data-staff-tab-panel={href}>
+          {panel}
+        </div>
+      );
+    });
     return (
       <CooperadoTabPanelProvider activeHref={pathname}>
         <>
@@ -141,7 +140,14 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
 
   return (
     <CooperadoTabPanelProvider activeHref={tabKey}>
-      <>{panels}</>
+      <div
+        className="relative z-[1] w-full min-h-0"
+        data-staff-tab-panel={tabKey}
+        data-staff-tab-panel-active="1"
+      >
+        {children ?? <PageSkeleton compact />}
+      </div>
+      {renderInactivePanels()}
     </CooperadoTabPanelProvider>
   );
 }

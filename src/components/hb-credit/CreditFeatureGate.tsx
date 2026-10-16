@@ -4,13 +4,19 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { isCooperadoAppUser, canAccessTesoureiroArea, isParceiroAppUser } from "@/permissions";
+import {
+  isCooperadoAppUser,
+  canAccessTesoureiroArea,
+  isParceiroAppUser,
+  isResponsavelRole,
+  isTesoureiroRole,
+} from "@/permissions";
 import { isContaCoopUiPublic } from "@/utils/contaCoopUiVisibility";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 
 export function CreditFeatureGate({ children }: { children: React.ReactNode }) {
-  const { user, loading: authLoading } = useAuth();
+  const { user, accountUser, loading: authLoading } = useAuth();
   const {
     navEnabled,
     loading: hbStatusLoading,
@@ -25,13 +31,16 @@ export function CreditFeatureGate({ children }: { children: React.ReactNode }) {
     user && (user.role === "cooperado" || isCooperadoAppUser(user))
   );
   const parceiroExperience = Boolean(user && isParceiroAppUser(user));
-  const staffHbExperience = Boolean(user && canAccessTesoureiroArea(user));
+  const staffAccount = accountUser ?? user;
+  const staffGestaoRole = Boolean(
+    staffAccount && (isResponsavelRole(staffAccount.role) || isTesoureiroRole(staffAccount.role))
+  );
+  const staffHbExperience = Boolean(staffAccount && staffGestaoRole && canAccessTesoureiroArea(staffAccount));
   const canEnterHbArea =
     Boolean(user) && (cooperadoExperience || parceiroExperience || staffHbExperience);
   const cooperadoHbHubOpen =
     cooperadoExperience && isContaCoopUiPublic() && Boolean(user?.cooperadoId?.trim());
-  const staffHbHubOpen =
-    staffHbExperience && isContaCoopUiPublic() && !cooperadoExperience && !parceiroExperience;
+  const staffHbHubOpen = staffHbExperience && isContaCoopUiPublic() && !parceiroExperience;
   const pageAllowed =
     cooperadoHbHubOpen ||
     staffHbHubOpen ||
