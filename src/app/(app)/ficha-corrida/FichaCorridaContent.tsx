@@ -161,7 +161,6 @@ import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExib
 import { materializarCooperadoPwaAposAssinaturaReciboLocal } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { useCooperadoApresentacaoFinanceiraConsolidada } from "@/hooks/useCooperadoApresentacaoFinanceiraConsolidada";
 import { cooperadoFluxoPainelProjecaoOpts } from "@/lib/cooperadoFluxoFinanceiroGlobal";
-import { isMobileCooperativaApp } from "@/lib/mobileExperience";
 import { formatCurrency, formatDate, formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia, cn } from "@/utils/format";
 import type { PagamentoCooperadoRegistro, FichaCorrida, NotaPedido } from "@/types";
 
@@ -233,7 +232,6 @@ function FichaCorridaPageInner() {
   const tabActive = useCooperadoTabPanelActive("/ficha-corrida");
   const { user, isCooperado, cooperadoId, check } = usePermissions();
   /** Celular/PWA: Financeiro com resumo de entregas e mês pago como antes da separação desktop. */
-  const cooperadoFichaMobileLegado = isCooperado && isMobileCooperativaApp();
   const messenger = isCooperadoPwaMessengerMode();
   const pilotFinanceiroLeve = cooperadoMobilePilotSnapshotFirstInicio(user);
   const readModelsRevision = useCooperadoMessengerReadModelRevision();
@@ -1392,8 +1390,17 @@ function FichaCorridaPageInner() {
     if (!data || !isCooperado || !cooperadoSelecionadoId || visualizandoHistorico) return [];
     const todos = listarResumosFotosCooperado(data, cooperadoSelecionadoId, coopId);
     const abertos = new Set(mesesFinanceiroCooperado);
+    for (const r of resumosMesEmAbertoCooperado) abertos.add(r.mesReferencia);
     return todos.filter((r) => abertos.has(r.mesReferencia));
-  }, [data, isCooperado, cooperadoSelecionadoId, coopId, visualizandoHistorico, mesesFinanceiroCooperado]);
+  }, [
+    data,
+    isCooperado,
+    cooperadoSelecionadoId,
+    coopId,
+    visualizandoHistorico,
+    mesesFinanceiroCooperado,
+    resumosMesEmAbertoCooperado,
+  ]);
 
   const resumoReciboPagamento = useMemo(() => {
     const pg = isCooperado ? pagamentoAguardandoExibicao : pagamentoAguardando;
@@ -2334,23 +2341,47 @@ function FichaCorridaPageInner() {
                               totalLiquido={liquido}
                               rotuloTotal="A receber"
                             />
+                            {coopCnpjResumo &&
+                              part.descontosExtras.some((d) => d.tipo === "conta_coop") && (
+                                <HistoricoHbCreditosResumo
+                                  cnpj={coopCnpjResumo}
+                                  cooperadoId={cooperadoSelecionadoId}
+                                  mesReferencia={r.mesReferencia}
+                                  valorEntregas={resumoMes.valorEntregas}
+                                  descontosExtras={part.descontosExtras}
+                                  variant="cooperado"
+                                />
+                              )}
                           </div>
                         );
                       })
                     : (
-                      <ResumoDescontosMes
-                        valorBruto={resumoExibicao.valorBruto}
-                        descontoCooperativa={resumoExibicao.descontoCooperativa}
-                        descontoPadraoPct={data.config.descontoPadraoCooperativa}
-                        valorEntregas={resumoExibicao.valorEntregas}
-                        descontosExtras={descontosExtrasResumo}
-                        totalLiquido={
-                          paridadeCooperadoMobile?.valorLiquido ??
-                          valorReceberConsolidado?.valor ??
-                          resumoExibicao.valorLiquido
-                        }
-                        rotuloTotal="A receber"
-                      />
+                      <>
+                        <ResumoDescontosMes
+                          valorBruto={resumoExibicao.valorBruto}
+                          descontoCooperativa={resumoExibicao.descontoCooperativa}
+                          descontoPadraoPct={data.config.descontoPadraoCooperativa}
+                          valorEntregas={resumoExibicao.valorEntregas}
+                          descontosExtras={descontosExtrasResumo}
+                          totalLiquido={
+                            paridadeCooperadoMobile?.valorLiquido ??
+                            valorReceberConsolidado?.valor ??
+                            resumoExibicao.valorLiquido
+                          }
+                          rotuloTotal="A receber"
+                        />
+                        {coopCnpjResumo &&
+                          descontosExtrasResumo.some((d) => d.tipo === "conta_coop") && (
+                            <HistoricoHbCreditosResumo
+                              cnpj={coopCnpjResumo}
+                              cooperadoId={cooperadoSelecionadoId}
+                              mesReferencia={mesReferenciaHbCooperado}
+                              valorEntregas={resumoExibicao.valorEntregas}
+                              descontosExtras={descontosExtrasResumo}
+                              variant="cooperado"
+                            />
+                          )}
+                      </>
                     )}
                 </div>
               )}
@@ -2463,7 +2494,6 @@ function FichaCorridaPageInner() {
             )}
           </Card>
 
-          {(!isCooperado || visualizandoHistorico || cooperadoFichaMobileLegado) && (
           <Card
             title={`Resumo das entregas · ${
               isCooperado && !visualizandoHistorico && mesesFinanceiroCooperado.length > 1
@@ -2492,20 +2522,6 @@ function FichaCorridaPageInner() {
               </div>
             )}
           </Card>
-          )}
-          {isCooperado && !visualizandoHistorico && !cooperadoFichaMobileLegado && (
-            <p className="text-sm text-gray-600 mb-6 -mt-2">
-              Lista de entregas e fotos por nota ficam em{" "}
-              <Link href="/notas-pedido" className="text-green-700 font-semibold hover:underline">
-                Entregas
-              </Link>
-              . Meses já pagos em{" "}
-              <Link href="/notas-pedido?aba=ficha" className="text-green-700 font-semibold hover:underline">
-                Histórico liquidado
-              </Link>
-              .
-            </p>
-          )}
         </>
       )}
 
@@ -2568,7 +2584,7 @@ function FichaCorridaPageInner() {
                     />
                   </div>
                 )}
-              {!cooperadoFichaMobileLegado && resumosFotosMesAbertoCooperado.length > 0 && (
+              {resumosFotosMesAbertoCooperado.length > 0 && (
                 <Card title="Fotos das notas recebidas" className="mb-6">
                   <p className="text-sm text-gray-600 mb-4">
                     Comprovantes das entregas dos meses em aberto. Para enviar novas fotos, use a aba Entregas.
