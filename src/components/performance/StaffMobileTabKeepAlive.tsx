@@ -73,6 +73,7 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
     });
 
     if (!enabled || !mobile || !onTab) return;
+    if (children == null) return;
     cacheRef.current[tabKey] = children;
     const merged = [tabKey, ...orderRef.current.filter((h) => h !== tabKey)];
     const prevOrder = orderRef.current;

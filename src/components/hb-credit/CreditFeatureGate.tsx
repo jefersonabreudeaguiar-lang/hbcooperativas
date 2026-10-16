@@ -18,6 +18,7 @@ export function CreditFeatureGate({ children }: { children: React.ReactNode }) {
     errorMessage,
     parceiroNavEligible,
     cooperadoNavEligible,
+    staffNavEligible,
   } = useHbCreditEnabled(user);
   const router = useRouter();
   const cooperadoExperience = Boolean(
@@ -29,20 +30,24 @@ export function CreditFeatureGate({ children }: { children: React.ReactNode }) {
     Boolean(user) && (cooperadoExperience || parceiroExperience || staffHbExperience);
   const cooperadoHbHubOpen =
     cooperadoExperience && isContaCoopUiPublic() && Boolean(user?.cooperadoId?.trim());
+  const staffHbHubOpen =
+    staffHbExperience && isContaCoopUiPublic() && !cooperadoExperience && !parceiroExperience;
   const pageAllowed =
     cooperadoHbHubOpen ||
+    staffHbHubOpen ||
     (canEnterHbArea &&
       (navEnabled ||
         cooperadoNavEligible ||
+        staffNavEligible ||
         (parceiroExperience && (hbStatusLoading || status === "loading" || parceiroNavEligible))));
 
   useEffect(() => {
     if (authLoading || !user) return;
-    if (parceiroExperience || cooperadoHbHubOpen) return;
+    if (parceiroExperience || cooperadoHbHubOpen || staffHbHubOpen) return;
     if (status === "disabled" && !pageAllowed) {
       router.replace("/dashboard");
     }
-  }, [authLoading, user, status, router, pageAllowed, parceiroExperience, cooperadoHbHubOpen]);
+  }, [authLoading, user, status, router, pageAllowed, parceiroExperience, cooperadoHbHubOpen, staffHbHubOpen]);
 
   if ((authLoading || hbStatusLoading) && !pageAllowed) return <PageSkeleton />;
 

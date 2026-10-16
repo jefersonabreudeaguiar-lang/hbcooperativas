@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { canAccessTesoureiroArea } from "@/permissions";
 import { AlertBanner } from "@/components/ui/AlertBanner";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 /** Bloqueia perfil admin da área financeira/tesouraria da cooperativa. */
 export function TesoureiroAreaGuard({ children }: { children: React.ReactNode }) {
@@ -18,7 +19,7 @@ export function TesoureiroAreaGuard({ children }: { children: React.ReactNode })
     }
   }, [loading, user, router]);
 
-  if (loading || !user) return null;
+  if (loading || !user) return <PageSkeleton compact />;
 
   if (!canAccessTesoureiroArea(user)) {
     return (

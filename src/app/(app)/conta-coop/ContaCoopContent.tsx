@@ -434,50 +434,62 @@ function ContaCoopContent() {
   const creditosBaseRef = useRef(creditosBaseColetivo);
   creditosBaseRef.current = creditosBaseColetivo;
 
-  /** Crédito-base para POST (liberação) — aguarda cálculo; nunca retorna mapa vazio por race assíncrona. */
-  const ensureCreditosBaseCentsForPost = useCallback(async (): Promise<Record<string, number> | null> => {
-    const cached = creditosBaseRef.current;
-    if (Object.keys(cached).length > 0) return cached;
+  const creditosBaseMapTemValor = (map: Record<string, number>) =>
+    Object.values(map).some((v) => Number(v) > 0);
 
+  /** Crédito-base para POST (liberação). Servidor resolve base autoritativa; cliente envia prévia quando houver. */
+  const ensureCreditosBaseCentsForPost = useCallback(async (): Promise<Record<string, number> | null> => {
     const ids = cooperadoIdsAtivosRef.current;
     if (!user?.cooperativaId || !ids.length) {
       setError("Cooperativa ou cooperados não carregados. Aguarde e tente novamente.");
       return null;
     }
 
+    const cached = creditosBaseRef.current;
+    if (Object.keys(cached).length > 0 && creditosBaseMapTemValor(cached)) {
+      return cached;
+    }
+
     if (cnpj.length === 14) {
       try {
-        const fast = await fetchCreditLimites(cnpj, { fast: true, cooperadoIds: ids });
-        if (fast.creditosBaseAuthoritativeCents && Object.keys(fast.creditosBaseAuthoritativeCents).length) {
-          applyCreditosBaseFromServer(fast.creditosBaseAuthoritativeCents);
-          return creditosBaseRef.current;
+        const fromServer = await fetchCreditLimites(cnpj, {
+          resyncInflated: true,
+          cooperadoIds: ids,
+        });
+        if (fromServer.authoritativeError) {
+          setLimitesListaAviso(mensagemAvisoBaseAuthoritativeLimites(fromServer.authoritativeError));
+        }
+        if (
+          fromServer.creditosBaseAuthoritativeCents &&
+          Object.keys(fromServer.creditosBaseAuthoritativeCents).length
+        ) {
+          applyCreditosBaseFromServer(fromServer.creditosBaseAuthoritativeCents);
+          if (creditosBaseMapTemValor(creditosBaseRef.current)) {
+            return creditosBaseRef.current;
+          }
         }
       } catch {
-        /* calcula localmente */
+        /* tenta local ou POST só na nuvem */
       }
     }
 
-    if (ids.length > CREDITOS_BASE_SYNC_MAX_COOPERADOS) {
-      setError(
-        "Crédito na ficha ainda não carregou para todos os cooperados. Toque em «Atualizar na nuvem» e tente de novo."
-      );
-      return null;
-    }
-
-    const map = await buildCreditosBaseMapCachedAsync(getData(), ids, user.cooperativaId);
-    if (!Object.keys(map).length) {
+    if (ids.length <= CREDITOS_BASE_SYNC_MAX_COOPERADOS) {
+      const map = await buildCreditosBaseMapCachedAsync(getData(), ids, user.cooperativaId);
+      if (Object.keys(map).length && creditosBaseMapTemValor(map)) {
+        creditosBaseRef.current = map;
+        startTransition(() => setCreditosBaseColetivo(map));
+        return map;
+      }
       const syncMap = buildCreditosBaseMapCached(getData(), ids, user.cooperativaId);
-      if (!Object.keys(syncMap).length) {
-        setError("Não foi possível obter o crédito na ficha. Atualize a aba Limites e tente novamente.");
-        return null;
+      if (Object.keys(syncMap).length && creditosBaseMapTemValor(syncMap)) {
+        creditosBaseRef.current = syncMap;
+        startTransition(() => setCreditosBaseColetivo(syncMap));
+        return syncMap;
       }
-      creditosBaseRef.current = syncMap;
-      startTransition(() => setCreditosBaseColetivo(syncMap));
-      return syncMap;
     }
-    creditosBaseRef.current = map;
-    startTransition(() => setCreditosBaseColetivo(map));
-    return map;
+
+    /** Mapa vazio: POST /limites recalcula crédito-base na nuvem (operacional + notas). */
+    return {};
   }, [user?.cooperativaId, cnpj, applyCreditosBaseFromServer]);
 
   const limitesPorCooperado = useMemo(() => {
@@ -1377,7 +1389,15 @@ function ContaCoopContent() {
             </Card>
           </div>
         </div>
-          ) : null}
+          ) : (
+            <AlertBanner variant="warning" title="Painel HB Créditos">
+              {error ||
+                "Não foi possível carregar o painel. Verifique a conexão ou se o módulo está ativo na nuvem."}
+              <Button className="mt-3" size="sm" variant="secondary" onClick={() => void reload()}>
+                Tentar novamente
+              </Button>
+            </AlertBanner>
+          )}
         </>
       )}
 
