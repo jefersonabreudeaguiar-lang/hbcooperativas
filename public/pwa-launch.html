@@ -73,7 +73,11 @@
 
         function go(pageBuild, target) {
           try {
-            sessionStorage.setItem(DIRECT_ENTRY_KEY, "1");
+            if (target.indexOf("/login") < 0) {
+              sessionStorage.setItem(DIRECT_ENTRY_KEY, "1");
+            } else {
+              sessionStorage.removeItem(DIRECT_ENTRY_KEY);
+            }
             sessionStorage.setItem(REPAIR_KEY, String(pageBuild));
             localStorage.setItem(BUILD_SEEN_KEY, String(pageBuild));
             localStorage.setItem("hb-coop-pwa-repair-done-build", String(pageBuild));

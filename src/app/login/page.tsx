@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense, useEffect } from "react";
+import { useState, Suspense, useEffect, useLayoutEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
@@ -18,6 +18,7 @@ import { ensureCooperadoLoginSearchParams } from "@/lib/cooperado/cooperadoCanon
 import { prepareBrowserProfileForPwaInstall } from "@/lib/pwa/cooperadoPwaInstallPrepare";
 import { shouldShowBaixarAppInstallPromo } from "@/lib/pwa/baixarAppInstallPromo";
 import { PwaRepararAtalhoPanel } from "@/components/pwa/PwaRepararAtalhoPanel";
+import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
 
 const SEGMENTOS_ATENDIDOS = [
   "Agrícola e agroindustrial",
@@ -92,6 +93,10 @@ function LoginForm() {
     nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/dashboard";
   const bicLabLogin = isBicLabEnabledClient();
   const sessaoExpirada = searchParams.get("sessao") === "expirada";
+
+  useLayoutEffect(() => {
+    dismissCooperadoBootShell();
+  }, []);
 
   useEffect(() => {
     const { params, changed } = ensureCooperadoLoginSearchParams(
