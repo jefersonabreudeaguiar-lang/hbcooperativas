@@ -224,8 +224,7 @@ export function persistirCooperadoPwaInicioDashboardSnapshot(
   if (!d) return null;
   const view = buildCooperadoPwaInicioDashboardView(d, user, apresentacaoConsolidada);
   if (!view) return null;
-  const valorInicio =
-    view.valorReceber?.valorExibicao ?? view.valorReceber?.valor ?? 0;
+  const valorInicio = view.valorReceber?.valor ?? 0;
   if (cooperadoAppReleaseNeedsOperacionalSync() && Number(valorInicio) <= 0.005) {
     return null;
   }
