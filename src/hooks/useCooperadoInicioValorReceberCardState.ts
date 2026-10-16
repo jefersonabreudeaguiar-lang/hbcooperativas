@@ -33,7 +33,8 @@ import {
 } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
 import { lerInicioCardPersistidoResume } from "@/lib/cooperado/cooperadoPwaInstantResume";
 import { inicioCardMotorFromParidadeFinanceiro } from "@/lib/cooperado/cooperadoFinanceiroParidadeInicioBridge";
-import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
+import { cooperadoPwaFichaParidadeSnapshotDivergeDeAppData } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import {
   cooperadoGaValorReceberExibicaoIndeterminada,
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
@@ -368,22 +369,31 @@ export function useCooperadoInicioValorReceberCardState(input: {
       const dataParidade =
         dataLatch ?? (paridadeSnap && isAppDataWarm() ? getData() : null);
       if (paridadeSnap && dataParidade && input.cooperadoId && fichaSnap) {
-        const display = inicioCardMotorFromParidadeFinanceiro(
-          dataParidade,
-          input.cooperadoId,
-          cooperativaIdLatch,
-          paridadeSnap
-        );
-        return {
-          display,
-          latch: {
-            motorRevision: `fichaSnap:${fichaSnap.savedAt}`,
+        const snapDiverge =
+          cooperativaIdLatch &&
+          cooperadoPwaFichaParidadeSnapshotDivergeDeAppData(
+            dataParidade,
+            input.cooperadoId,
+            cooperativaIdLatch
+          );
+        if (!snapDiverge) {
+          const display = inicioCardMotorFromParidadeFinanceiro(
+            dataParidade,
+            input.cooperadoId,
+            cooperativaIdLatch,
+            paridadeSnap
+          );
+          return {
             display,
-            hadPendencia: cooperadoMotorTemObrigacaoReceber(display),
-          },
-          atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
-          gravarPersistencia: true,
-        };
+            latch: {
+              motorRevision: `fichaSnap:${fichaSnap.savedAt}`,
+              display,
+              hadPendencia: cooperadoMotorTemObrigacaoReceber(display),
+            },
+            atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+            gravarPersistencia: true,
+          };
+        }
       }
 
       if (dataLatch && input.cooperadoId && cooperativaIdLatch) {
@@ -417,7 +427,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
       }
 
       if (dataLatch && input.cooperadoId && cooperativaIdLatch) {
-        const paridadeLive = leituraFinanceiraParidadeCooperado(
+        const paridadeLive = cooperadoLeituraFinanceiraExibicao(
           dataLatch,
           input.cooperadoId,
           cooperativaIdLatch

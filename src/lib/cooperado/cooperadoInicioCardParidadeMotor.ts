@@ -4,10 +4,8 @@
 import type { AppData } from "@/types";
 import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
 import { cooperadoInicioParaCardsDefinitivos } from "@/lib/cooperadoApresentacaoFinanceira";
-import {
-  leituraFinanceiraParidadeCooperado,
-  type LeituraFinanceiraParidadeCooperado,
-} from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import type { LeituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import type { InicioCardMotorSnapshot } from "@/lib/cooperado/cooperadoInicioCardMotorTypes";
 import { cooperadoMotorRevisionOperacional } from "@/lib/cooperado/cooperadoMotorRevisionOperacional";
 import { getValorQuantoVouReceberMotorLegado } from "@/services/cooperadoEntregasService";
@@ -38,7 +36,7 @@ export function inicioCardMotorFromParidadeFinanceiro(
   cooperativaId: string | undefined,
   paridade?: LeituraFinanceiraParidadeCooperado
 ): InicioCardMotorSnapshot {
-  const p = paridade ?? leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+  const p = paridade ?? cooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId);
   const fluxoPix = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
   const modoRecibo =
     cooperadoUsarFluxoReciboAssinaturaNaUi() &&
@@ -59,7 +57,7 @@ export function resolverMotorCardInicioParidadeFinanceiro(
   cooperadoId: string,
   cooperativaId: string | undefined
 ): { motor: InicioCardMotorSnapshot; revision: string } {
-  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+  const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId);
   const motor = inicioCardMotorFromParidadeFinanceiro(data, cooperadoId, cooperativaId, paridade);
   const revision = cooperadoMotorRevisionOperacional(data, cooperadoId, cooperativaId);
   return { motor, revision };
@@ -71,7 +69,7 @@ export function inicioValorReceberViewFromParidadeFinanceiro(
   cooperativaId: string | undefined,
   apresentacaoConsolidada: boolean
 ): ReturnType<typeof bicCentralResolveInicioParaExibicao> {
-  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+  const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId);
   const fluxoPix = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
   const meses = paridade.mesesResumo.length > 0 ? paridade.mesesResumo : paridade.consolidado.meses;
   const mes = meses[0] ?? getCurrentMesReferencia();

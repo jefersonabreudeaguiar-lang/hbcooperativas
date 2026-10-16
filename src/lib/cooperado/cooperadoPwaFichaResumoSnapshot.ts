@@ -6,12 +6,12 @@ import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { cooperadoPwaSnapshotBuildReadable } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
+import type { LeituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
 import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
-import type { LeituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 
 export const COOPERADO_PWA_FICHA_RESUMO_SNAPSHOT_VERSION = 2;
 
@@ -64,7 +64,9 @@ export function buildCooperadoPwaFichaResumoSnapshot(
 ): CooperadoPwaFichaResumoSnapshot {
   const canon = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
   const fichaAberto = listarResumosFichaEmAbertoCooperado(data, canon, cooperativaId);
-  const paridade = leituraFinanceiraParidadeCooperado(data, canon, cooperativaId);
+  const paridade = cooperadoLeituraFinanceiraExibicao(data, canon, cooperativaId, {
+    apresentacaoConsolidada,
+  });
   const mesesPar = paridade.mesesResumo;
   const mesPrincipal =
     mesesPar[mesesPar.length - 1] ??

@@ -85,6 +85,8 @@ import {
 } from "@/services/bicLeituraCentralCooperado";
 import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
 import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
+import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
 import {
   cooperadoMesQuitado,
   cooperadoPendentePagamentoResponsavel,
@@ -419,19 +421,30 @@ function FichaCorridaPageInner() {
     };
   }, [data, coopId, user?.id, tabActive]);
 
-  /** Uma leitura paridade por revisão — evita BIC/consolidado repetido no cooperado. */
+  /** Uma leitura BIC/paridade por revisão — cooperado mobile. */
   const paridadeCooperadoMobile = useMemo(() => {
     if (!tabActive || !isCooperado || !cooperadoId) return null;
-    const live =
-      data && coopId ? leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId) : null;
+    const readParidade = (d: NonNullable<typeof data>) =>
+      cooperadoLeituraFinanceiraExibicao(d, cooperadoId, coopId, {
+        apresentacaoConsolidada: apresentacaoFinanceiroUi,
+      });
+    const live = data && coopId ? readParidade(data) : null;
     if (financeiroDormant && fichaResumoSnap) {
+      if (isBicCentralReadAuthorityEnabled() && live && isAppDataWarm()) {
+        return live;
+      }
       const fromSnap = resolveParidadeFromFichaResumoSnapshot(fichaResumoSnap);
+      if (fromSnap && live) {
+        const drift =
+          Math.abs((fromSnap.valorLiquido ?? 0) - (live.valorLiquido ?? 0)) > 0.02;
+        if (drift) return live;
+      }
       if (fromSnap && fromSnap.valorLiquido > 0.005) return fromSnap;
       if (live && live.valorLiquido > 0.005) return live;
       if (fromSnap) return fromSnap;
     }
     if (!data) return null;
-    return live ?? leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
+    return live ?? readParidade(data);
   }, [
     tabActive,
     isCooperado,
@@ -441,6 +454,7 @@ function FichaCorridaPageInner() {
     financeiroUiEpoch,
     financeiroDormant,
     fichaResumoSnap,
+    apresentacaoFinanceiroUi,
   ]);
 
   const mesEmAberto = useMemo(() => {

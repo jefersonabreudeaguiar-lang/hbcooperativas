@@ -42,7 +42,10 @@ import {
   cooperadoQuantoVouReceberParaApresentacao,
 } from "@/lib/cooperadoApresentacaoFinanceira";
 import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
-import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import {
+  leituraFinanceiraParidadeCooperado,
+  type LeituraFinanceiraParidadeCooperado,
+} from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 
 export type BicCentralProjecaoOpts = BicProjecaoFinanceiraCooperadoOpts & {
   apresentacaoConsolidada?: boolean;
@@ -286,6 +289,55 @@ export function bicCentralValorAReceberAgregado(
   }
   const envelope = bicCentralQuantoVouReceberParaExibicao(data, cooperadoId, cooperativaId, opts);
   return bicCentralSincronizarRotuloMeses(bicCentralNormalizarValorM6(envelope.value));
+}
+
+/**
+ * Paridade ficha/início/conta coop — mesma autoridade que CooperadoFinanceiroUiSnapshot (BIC ON).
+ * UI cooperado deve preferir isto a `leituraFinanceiraParidadeCooperado` direto.
+ */
+export function bicCentralLeituraFinanceiraParidadeCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string,
+  opts?: Pick<BicCentralProjecaoOpts, "apresentacaoConsolidada">
+): LeituraFinanceiraParidadeCooperado {
+  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+  if (!isBicCentralReadAuthorityEnabled()) return paridade;
+
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const m6 = bicCentralValorAReceberAgregado(data, cooperadoId, coopId, opts);
+  const inicio = bicCentralResolveInicioParaExibicao(data, cooperadoId, coopId, opts);
+  const valorParidade = paridade.valorLiquido > 0.005 ? paridade.valorLiquido : 0;
+  const valorInicio =
+    inicio.exibir || inicio.valor > 0.005 ? Math.max(0, inicio.valor) : 0;
+  const valorLiquido =
+    valorParidade > 0
+      ? valorParidade
+      : Math.max(valorInicio, m6.valor > 0.005 ? m6.valor : 0);
+  const mesesResumo =
+    paridade.mesesResumo.length > 0
+      ? [...paridade.mesesResumo]
+      : m6.meses.length > 0
+        ? [...m6.meses]
+        : [...paridade.consolidado.meses];
+  const mesLabel =
+    paridade.mesLabel?.trim() || m6.mesLabel?.trim() || paridade.consolidado.mesLabel || "";
+  const consolidado = bicCentralGetConsolidadoFinanceiroCooperado(data, cooperadoId, coopId);
+  const resumo = { ...consolidado.resumo, valorLiquido };
+  return {
+    ...paridade,
+    valorLiquido,
+    mesesResumo,
+    mesLabel,
+    resumo,
+    consolidado: {
+      ...consolidado,
+      valorLiquido,
+      meses: mesesResumo,
+      mesLabel,
+      resumo,
+    },
+  };
 }
 
 export function bicCentralAguardandoAssinatura(

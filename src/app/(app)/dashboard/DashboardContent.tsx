@@ -64,7 +64,7 @@ const ContaCoopFilaCloudPanel = dynamic(
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 import {
   requestCooperadoFinanceiroRecoverySync,
@@ -155,7 +155,9 @@ function contaCoopValorReceberPilotOptsFromData(
   const coopId = getUserCooperativaId(user, data);
   if (!coopId) return null;
   const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
+  const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, coopId, {
+    apresentacaoConsolidada,
+  });
   const mesHb =
     paridade.mesesResumo[paridade.mesesResumo.length - 1] ??
     paridade.mesesResumo[0] ??

@@ -25,7 +25,7 @@ import { getData, isAppDataWarm, preloadAppData, waitForAppDataWarm } from "@/se
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { syncNotasPedidoFromCloud } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
-import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import { cooperadoMotorTemObrigacaoReceber } from "@/lib/cooperadoInicioCardPolicy";
 import { resolverMotorCardInicioParidadeFinanceiro } from "@/lib/cooperado/cooperadoInicioCardParidadeMotor";
 
@@ -112,7 +112,7 @@ export async function runCooperadoGaSyncBaseInformacoesFinanceiras(
     const cooperadoId = user.cooperadoId;
     if (!cooperadoId) return false;
     const canon = resolverCooperadoIdCanonico(dataAfter, cooperadoId, coopId);
-    const paridade = leituraFinanceiraParidadeCooperado(dataAfter, canon, coopId);
+    const paridade = cooperadoLeituraFinanceiraExibicao(dataAfter, canon, coopId);
     const { motor } = resolverMotorCardInicioParidadeFinanceiro(dataAfter, canon, coopId);
     return (
       paridade.valorLiquido > 0.005 || cooperadoMotorTemObrigacaoReceber(motor)

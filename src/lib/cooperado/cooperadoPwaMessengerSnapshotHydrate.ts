@@ -7,7 +7,7 @@ import {
   lerCooperadoPwaFichaResumoSnapshot,
   resolveParidadeFromFichaResumoSnapshot,
 } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
-import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import type { AppData } from "@/types";
 import {
   isCooperadoPwaMessengerMode,
@@ -39,11 +39,12 @@ export function cooperadoPwaFichaParidadeSnapshotDivergeDeAppData(
   if (!snap || !cooperadoPwaSnapshotBuildReadable(snap.appBuild)) return false;
   const fromSnap = resolveParidadeFromFichaResumoSnapshot(snap);
   if (!fromSnap) return false;
-  const live = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+  const live = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId);
   const snapVal = fromSnap.valorLiquido ?? 0;
   const liveVal = live.valorLiquido ?? 0;
   if (liveVal > 0.005 && snapVal <= 0.005) return true;
-  if (liveVal > 0.005 && Math.abs(snapVal - liveVal) > PARIDADE_SNAP_DRIFT_EPS) return true;
+  if (snapVal > 0.005 && liveVal <= 0.005) return true;
+  if (Math.abs(snapVal - liveVal) > PARIDADE_SNAP_DRIFT_EPS) return true;
   return false;
 }
 

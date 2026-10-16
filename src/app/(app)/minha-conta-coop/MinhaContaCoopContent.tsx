@@ -39,7 +39,7 @@ import {
 import type { ContaCoopLedgerEntry, ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 import { formatLedgerEntryLabel } from "@/lib/hb-credit/ledgerLabels";
-import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import { hbCreditMesPrincipal } from "@/lib/hb-credit/hbCreditLeituraBic";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import { notifyHbCreditAccountLoaded } from "@/lib/hb-credit/hbCreditEntryEvents";
@@ -154,7 +154,7 @@ function MinhaContaCoopContent() {
     if (!auxSyncEnabled || !data || !cooperadoId || !user || !cnpj) return undefined;
     const coopId = getUserCooperativaId(user, data);
     if (!coopId || !isContaCoopValorReceberPilot(cooperadoId, cooperadoNome)) return undefined;
-    const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
+    const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, coopId);
     const mesReferencia =
       paridade.mesesResumo[paridade.mesesResumo.length - 1] ??
       paridade.mesesResumo[0] ??
@@ -173,7 +173,7 @@ function MinhaContaCoopContent() {
     if (!data || !cooperadoId || !user) return "";
     const coopId = getUserCooperativaId(user, data);
     if (!coopId) return "";
-    const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
+    const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, coopId);
     return (
       paridade.mesesResumo[paridade.mesesResumo.length - 1] ??
       paridade.mesesResumo[0] ??
