@@ -6,7 +6,9 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppDataSelector } from "@/hooks/useAppData";
+import { useStaffConferenciaModalOpen } from "@/hooks/useStaffConferenciaModalOpen";
+import { isStaffConferenciaModalOpen } from "@/lib/performance/staffConferenciaSyncTier";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { updateData, getData } from "@/services/dataStore";
 import { patchCobrancaSaas, sincronizarCicloCobrancaSaas } from "@/services/cobrancaSaasService";
@@ -37,7 +39,7 @@ function formatCents(cents: number): string {
 
 export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, onPaid }: Props) {
   const { user } = useAuth();
-  const data = useAppData();
+  const conferenciaModalOpen = useStaffConferenciaModalOpen();
   const [breakdown, setBreakdown] = useState<HbUnifiedChargeBreakdown | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -47,9 +49,9 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
   const [chargeId, setChargeId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const coopId = useMemo(
-    () => (user && data ? getUserCooperativaId(user, data) : undefined),
-    [user, data]
+  const coopId = useAppDataSelector(
+    (d) => (user ? getUserCooperativaId(user, d) : undefined),
+    [user?.id, user?.role, user?.cooperativaId, user?.cooperativaCnpj]
   );
 
   const mesRef = mesReferenciaContaCoop ?? breakdown?.mesReferenciaContaCoop;
@@ -93,6 +95,7 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
 
   const syncLocalFromCloud = useCallback(async (activeChargeId?: string | null) => {
     if (!cnpj || !coopId) return;
+    if (isStaffConferenciaModalOpen()) return;
     const qs = new URLSearchParams({ cnpj });
     if (activeChargeId) qs.set("chargeId", activeChargeId);
     const res = await secureApiFetch(`/api/payments/hb-charge/cloud-state?${qs.toString()}`, {
@@ -148,7 +151,7 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
   const initialLoadKeyRef = useRef("");
 
   useEffect(() => {
-    if (!cnpj) return;
+    if (!cnpj || conferenciaModalOpen) return;
     const loadKey = `${cnpj}:${mesReferenciaContaCoop ?? ""}`;
     if (initialLoadKeyRef.current === loadKey) return;
     initialLoadKeyRef.current = loadKey;
@@ -157,9 +160,10 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
       await syncLocalFromCloud();
       await reloadPreview({ autoPix: true });
     })();
-  }, [cnpj, mesReferenciaContaCoop, syncLocalFromCloud, reloadPreview]);
+  }, [cnpj, mesReferenciaContaCoop, syncLocalFromCloud, reloadPreview, conferenciaModalOpen]);
 
   useEffect(() => {
+    if (conferenciaModalOpen) return;
     if (!chargeId && !pixPayload) return;
     const timer = setInterval(() => {
       void (async () => {
@@ -190,9 +194,10 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
       })();
     }, 5000);
     return () => clearInterval(timer);
-  }, [chargeId, cnpj, mesRef, pixPayload, reloadPreview, syncLocalFromCloud, onPaid]);
+  }, [chargeId, cnpj, mesRef, pixPayload, reloadPreview, syncLocalFromCloud, onPaid, conferenciaModalOpen]);
 
   useEffect(() => {
+    if (conferenciaModalOpen) return;
     if (!cnpj || !coopId) return;
     if (!breakdown || breakdown.totalCents <= 0) return;
     const timer = setInterval(() => {
@@ -202,7 +207,17 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
       })();
     }, 20000);
     return () => clearInterval(timer);
-  }, [breakdown?.totalCents, chargeId, cnpj, coopId, reloadPreview, syncLocalFromCloud]);
+  }, [breakdown?.totalCents, chargeId, cnpj, coopId, reloadPreview, syncLocalFromCloud, conferenciaModalOpen]);
+
+  useEffect(() => {
+    if (!conferenciaModalOpen || !cnpj) return;
+    return () => {
+      void (async () => {
+        await syncLocalFromCloud(chargeId);
+        await reloadPreview({ autoPix: false });
+      })();
+    };
+  }, [conferenciaModalOpen, cnpj, chargeId, syncLocalFromCloud, reloadPreview]);
 
   const gerarPixAsaas = async () => {
     setBusy(true);

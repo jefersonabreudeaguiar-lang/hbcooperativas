@@ -18,12 +18,27 @@ const CONFERENCIA_CAP_TIER: SyncTier = "notas_delta";
 let conferenciaModalOpen = false;
 let conferenciaLancamentoDepth = 0;
 
+const conferenciaModalListeners = new Set<() => void>();
+
+function notifyConferenciaModalListeners(): void {
+  for (const listener of conferenciaModalListeners) listener();
+}
+
+/** React: painel HB / sync leve pausam durante modal Conferir (evita re-render da árvore inteira). */
+export function subscribeStaffConferenciaModalOpen(onStoreChange: () => void): () => void {
+  conferenciaModalListeners.add(onStoreChange);
+  return () => {
+    conferenciaModalListeners.delete(onStoreChange);
+  };
+}
+
 export function setStaffConferenciaModalOpen(open: boolean): void {
   const wasOpen = conferenciaModalOpen;
   conferenciaModalOpen = open;
   if (!open) conferenciaLancamentoDepth = 0;
   if (open && !wasOpen) markRqlInteractionPhase("staff_conferir_modal_open");
   if (!open && wasOpen) markRqlInteractionPhase("staff_conferir_modal_close");
+  if (wasOpen !== open) notifyConferenciaModalListeners();
 }
 
 export function setStaffConferenciaLancamentoAtivo(active: boolean): void {

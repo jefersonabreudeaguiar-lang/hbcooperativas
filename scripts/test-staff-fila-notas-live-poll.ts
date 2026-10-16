@@ -16,6 +16,7 @@ const staff = readFileSync(
   "utf8"
 );
 const cloud = readFileSync(join(ROOT, "src/services/notaPedidoCloudService.ts"), "utf8");
+const hbPanel = readFileSync(join(ROOT, "src/components/payments/HbUnifiedPaymentPanel.tsx"), "utf8");
 
 function assert(cond: boolean, msg: string) {
   if (!cond) {
@@ -33,5 +34,7 @@ assert(staff.includes("staffFilaNotasLivePoll"), "Staff notas usa política live
 assert(staff.includes("mostrarFilaResponsavelConteudo"), "poll notas só na vista Conferir");
 assert(staff.includes("refreshStaffFilaNotasFromUploadProgress"), "Staff poll uploadProgress");
 assert(cloud.includes("refreshStaffFilaNotasFromUploadProgress"), "cloud service exporta refresh leve");
+assert(hbPanel.includes("useStaffConferenciaModalOpen"), "painel PIX pausa durante Conferir");
+assert(hbPanel.includes("isStaffConferenciaModalOpen"), "sync HB não grava AppData na Conferir");
 
 console.log("test-staff-fila-notas-live-poll.ts done.");

@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppDataSelector } from "@/hooks/useAppData";
 import { HbUnifiedPaymentPanel } from "@/components/payments/HbUnifiedPaymentPanel";
 import {
   getPainelCobrancaSaasResponsavel,
@@ -16,12 +16,18 @@ import { isDiretoriaRole } from "@/permissions";
  */
 export function CobrancaSaasPainel() {
   const { user } = useAuth();
-  const data = useAppData();
 
-  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
-  const coop = useMemo(
-    () => (coopId && data ? data.cooperativas.find((c) => c.id === coopId) : undefined),
-    [coopId, data]
+  const coopId = useAppDataSelector(
+    (d) => (user ? getUserCooperativaId(user, d) : undefined),
+    [user?.id, user?.role, user?.cooperativaCnpj]
+  );
+  const coop = useAppDataSelector(
+    (d) => (coopId ? d.cooperativas.find((c) => c.id === coopId) : undefined),
+    [coopId]
+  );
+  const painel = useAppDataSelector(
+    (d) => (coopId ? getPainelCobrancaSaasResponsavel(d, coopId) : undefined),
+    [coopId]
   );
 
   const cnpj = useMemo(() => {
@@ -30,15 +36,14 @@ export function CobrancaSaasPainel() {
     return "";
   }, [user?.cooperativaCnpj, coop?.cnpj]);
 
-  if (!user || !data || !isDiretoriaRole(user.role) || !coopId || !cnpj) {
+  if (!user || !coopId || !cnpj || !isDiretoriaRole(user.role)) {
     return null;
   }
 
-  if (precisaAssinarContratoServico(coop)) {
+  if (precisaAssinarContratoServico(coop ?? undefined)) {
     return null;
   }
 
-  const painel = getPainelCobrancaSaasResponsavel(data, coopId);
   if (painel?.statusMes === "em_dia" && !painel.aguardandoConfirmacao) {
     /* repasse may still be due — unified panel checks both */
   }
