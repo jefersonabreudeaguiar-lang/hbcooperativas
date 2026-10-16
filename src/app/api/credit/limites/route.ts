@@ -95,17 +95,27 @@ export async function POST(request: Request) {
     }
     const clientCreditosBaseCents = creditosValidation.sanitized;
 
+    const authoritativeBasesCache = new Map<
+      string,
+      Awaited<ReturnType<typeof resolveCreditosBaseForLiberacaoColetiva>>
+    >();
+
     const resolveBasesForPost = async (cooperadoIds: string[]) => {
       const ids = cooperadoIds.filter(Boolean);
       if (!ids.length) {
         return { ok: true as const, creditosBaseCents: clientCreditosBaseCents };
       }
-      return resolveCreditosBaseForLiberacaoColetiva(
+      const cacheKey = ids.slice().sort().join("|");
+      const cached = authoritativeBasesCache.get(cacheKey);
+      if (cached) return cached;
+      const resolved = await resolveCreditosBaseForLiberacaoColetiva(
         gate.ctx.supabase,
         cnpj,
         ids,
         clientCreditosBaseCents
       );
+      authoritativeBasesCache.set(cacheKey, resolved);
+      return resolved;
     };
 
     const basesOrErrorResponse = async (cooperadoIds: string[]) => {
@@ -120,6 +130,40 @@ export async function POST(request: Request) {
       }
       return { creditosBaseCents: resolved.creditosBaseCents };
     };
+
+    if (action === "salvar_liberacao_percentual") {
+      const cooperadoIds = (body?.cooperadoIds ?? []) as string[];
+      const percentual = Number(body?.percentual);
+      const tetoPercent = Number(body?.tetoPercentual ?? body?.tetoPercent ?? percentual);
+      if (!Number.isFinite(percentual) || percentual < 0 || percentual > 100) {
+        return NextResponse.json({ error: "Percentual inválido." }, { status: 400 });
+      }
+      const basesLiberacao = await basesOrErrorResponse(cooperadoIds);
+      if ("errorResponse" in basesLiberacao) return basesLiberacao.errorResponse;
+      const creditosBaseCents = basesLiberacao.creditosBaseCents;
+      const tetoResult = await setTetoGlobalPercent(
+        gate.ctx.supabase,
+        cnpj,
+        tetoPercent,
+        creditosBaseCents,
+        actorId
+      );
+      if (!tetoResult.ok) return NextResponse.json({ error: tetoResult.error }, { status: 400 });
+      const result = await setLimiteColetivoPercentual(
+        gate.ctx.supabase,
+        cnpj,
+        cooperadoIds,
+        percentual,
+        creditosBaseCents,
+        actorId
+      );
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+      return NextResponse.json({
+        ok: true,
+        updated: result.updated,
+        creditosBaseAuthoritativeCents: creditosBaseCents,
+      });
+    }
 
     if (action === "set_teto") {
     const tetoPercent = Number(body?.tetoPercentual ?? body?.tetoPercent ?? 0);
@@ -192,7 +236,11 @@ export async function POST(request: Request) {
         actorId
       );
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-      return NextResponse.json({ ok: true, updated: result.updated });
+      return NextResponse.json({
+        ok: true,
+        updated: result.updated,
+        creditosBaseAuthoritativeCents: creditosBaseCents,
+      });
     }
     const valorCents = Number(body?.valorCentavos ?? reaisToCents(Number(body?.valorReais ?? 0)));
     const result = await setLimiteColetivo(

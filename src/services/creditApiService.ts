@@ -169,7 +169,12 @@ export async function postCreditLimites(body: Record<string, unknown>) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const data = await parseJson<{ ok?: boolean; error?: string }>(res);
+  const data = await parseJson<{
+    ok?: boolean;
+    error?: string;
+    updated?: number;
+    creditosBaseAuthoritativeCents?: Record<string, number>;
+  }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Operação recusada.");
   return data;
 }

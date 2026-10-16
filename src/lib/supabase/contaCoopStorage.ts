@@ -571,6 +571,18 @@ export async function listLimitesCooperadosAlinhadosComBase(
 }> {
   const digits = normalizeCnpj(cnpj);
   const limitesRaw = await listLimitesCooperados(supabase, cnpj);
+
+  if (opts?.fast) {
+    return { limites: limitesRaw, creditosBaseCents: {} };
+  }
+
+  const persistFichaSync = opts?.persistFichaSync === true;
+  const heavyListSync = persistFichaSync || opts?.resyncIfInflated === true;
+  /** GET leve = só hb_credit_accounts; heal/M6 apenas em persist ou resync=1. */
+  if (!heavyListSync) {
+    return { limites: limitesRaw, creditosBaseCents: {} };
+  }
+
   const actorHeal = opts?.actorUserId ?? "system:hb_limites_list_heal";
   const limitesPosHeal = await aplicarHealNovoCicloContasComSaldo(
     supabase,
@@ -578,17 +590,6 @@ export async function listLimitesCooperadosAlinhadosComBase(
     limitesRaw,
     actorHeal
   );
-
-  if (opts?.fast) {
-    return { limites: limitesPosHeal, creditosBaseCents: {} };
-  }
-
-  const persistFichaSync = opts?.persistFichaSync === true;
-  const heavyListSync = persistFichaSync || opts?.resyncIfInflated === true;
-  /** GET padrão = hb_credit_accounts + heal novo ciclo; BIC/autoritativo só em persist/resync explícitos. */
-  if (!heavyListSync) {
-    return { limites: limitesPosHeal, creditosBaseCents: {} };
-  }
 
   /** Reconcile em lote só no sync explícito — GET leve evita timeout/resposta vazia. */
   const reconcileUsed = persistFichaSync;
@@ -607,7 +608,7 @@ export async function listLimitesCooperadosAlinhadosComBase(
   let limitesPosSync =
     reconcileUsed && idsReconcile.length
       ? await listLimitesCooperados(supabase, cnpj)
-      : limitesRaw;
+      : limitesPosHeal;
 
   const idsParaBase = [
     ...new Set([
@@ -3275,26 +3276,31 @@ export async function previewLimiteColetivoPercentual(
   itens: LimiteColetivoPreviewItem[];
 }> {
   const digits = normalizeCnpj(cnpj);
-  const basesResolved = await resolveCreditosBaseForLiberacaoColetiva(
-    supabase,
-    cnpj,
-    cooperadoIds,
-    creditosBaseCents
-  );
-  if (!basesResolved.ok) {
-    return {
-      limiteAtualTotal: 0,
-      novoLimiteTotal: 0,
-      totalApos: 0,
-      tetoGlobal: 0,
-      tetoGlobalPercent: 0,
-      ok: false,
-      error: basesResolved.message,
-      percentual,
-      itens: [],
-    };
+  let basesEfetivas = creditosBaseCents;
+  const basesJaAutoritativas =
+    cooperadoIds.length > 0 && cooperadoIds.every((id) => Object.prototype.hasOwnProperty.call(creditosBaseCents, id));
+  if (!basesJaAutoritativas) {
+    const basesResolved = await resolveCreditosBaseForLiberacaoColetiva(
+      supabase,
+      cnpj,
+      cooperadoIds,
+      creditosBaseCents
+    );
+    if (!basesResolved.ok) {
+      return {
+        limiteAtualTotal: 0,
+        novoLimiteTotal: 0,
+        totalApos: 0,
+        tetoGlobal: 0,
+        tetoGlobalPercent: 0,
+        ok: false,
+        error: basesResolved.message,
+        percentual,
+        itens: [],
+      };
+    }
+    basesEfetivas = basesResolved.creditosBaseCents;
   }
-  const basesEfetivas = basesResolved.creditosBaseCents;
   const tetoReq = await requireConfiguredTeto(supabase, digits, basesEfetivas);
   if (!tetoReq.ok) {
     return {
@@ -3414,28 +3420,42 @@ export async function setLimiteColetivoPercentual(
   if (!preview.ok) return { ok: false, error: preview.error ?? "Prévia recusada." };
 
   const writeResults = await Promise.all(
-    preview.itens.map((item) =>
-      writeLimiteCooperadoCents(
-        supabase,
-        cnpj,
-        item.cooperadoId,
-        item.novoLimiteCents,
+    preview.itens.map(async (item) => {
+      const baseSnapshot = Math.max(0, Math.round(item.creditoBaseCents));
+      const ceilingSnapshot = calcLimiteFromPercentual(baseSnapshot, preview.tetoGlobalPercent);
+      const synced = await writeLimiteCooperadoAuthoritativeSync(supabase, cnpj, item.cooperadoId, {
+        limitReleasedCents: item.novoLimiteCents,
+        baseSnapshotCents: baseSnapshot,
+        ceilingSnapshotCents: ceilingSnapshot,
         actorUserId,
-        {
+        auditMetadata: {
           anterior: {
             limiteLiberadoCents: item.limiteAtualCents,
             valorUsadoCents: item.valorUsadoCents,
             valorDisponivelCents: computeDisponivel(item.limiteAtualCents, item.valorUsadoCents),
           },
-          novo: { limiteLiberadoCents: item.novoLimiteCents },
+          novo: {
+            limiteLiberadoCents: item.novoLimiteCents,
+            baseSnapshotCents: baseSnapshot,
+            ceilingSnapshotCents: ceilingSnapshot,
+          },
+          percentual,
+          source: "LIMIT_COLLECTIVE",
         },
-        "LIMIT_COLLECTIVE"
-      )
-    )
+      });
+      if (synced.ok) {
+        await markHbCreditLimitSynced(supabase, {
+          cnpj,
+          cooperadoId: item.cooperadoId,
+          actorUserId,
+        }).catch(() => {});
+      }
+      return synced;
+    })
   );
   const failed = writeResults.find((r) => !r.ok);
   if (failed && !failed.ok) return failed;
-  const updated = writeResults.length;
+  const updated = writeResults.filter((r) => r.ok).length;
   const persisted = await persistCooperativaLiberacaoPercent(supabase, cnpj, percentual, actorUserId);
   if (!persisted.ok) return persisted;
   return { ok: true, updated };

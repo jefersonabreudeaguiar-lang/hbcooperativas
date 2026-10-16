@@ -452,24 +452,17 @@ function ContaCoopContent() {
 
     if (cnpj.length === 14) {
       try {
-        const fromServer = await fetchCreditLimites(cnpj, {
-          resyncInflated: true,
-          cooperadoIds: ids,
-        });
-        if (fromServer.authoritativeError) {
-          setLimitesListaAviso(mensagemAvisoBaseAuthoritativeLimites(fromServer.authoritativeError));
-        }
+        const fromServer = await fetchCreditLimites(cnpj, { fast: true, cooperadoIds: ids });
         if (
           fromServer.creditosBaseAuthoritativeCents &&
-          Object.keys(fromServer.creditosBaseAuthoritativeCents).length
+          Object.keys(fromServer.creditosBaseAuthoritativeCents).length &&
+          creditosBaseMapTemValor(fromServer.creditosBaseAuthoritativeCents)
         ) {
           applyCreditosBaseFromServer(fromServer.creditosBaseAuthoritativeCents);
-          if (creditosBaseMapTemValor(creditosBaseRef.current)) {
-            return creditosBaseRef.current;
-          }
+          return creditosBaseRef.current;
         }
       } catch {
-        /* tenta local ou POST só na nuvem */
+        /* POST /limites recalcula crédito-base na nuvem */
       }
     }
 
@@ -768,7 +761,7 @@ function ContaCoopContent() {
   );
 
   const refreshLimitesAposLiberacao = useCallback(async () => {
-    await revalidateLimitesLista({ force: true, background: true, authoritative: true });
+    await revalidateLimitesLista({ force: true, background: true });
   }, [revalidateLimitesLista]);
 
   const refreshHbNuvemEmBackground = useCallback(() => {
@@ -903,23 +896,26 @@ function ContaCoopContent() {
       const tetoAtual = dashboard?.teto.tetoGlobalPercent ?? 100;
       const tetoGravar = Math.max(pct, tetoAtual);
 
-      await postCreditLimites({
-        action: "set_teto",
+      const liberacaoRes = await postCreditLimites({
+        action: "salvar_liberacao_percentual",
         cnpj,
         tetoPercentual: tetoGravar,
-        creditosBaseCents,
-      });
-      await postCreditLimites({
-        action: "set_coletivo",
-        cnpj,
         creditosBaseCents,
         cooperadoIds,
         percentual: pct,
       });
+      const basesEfetivas =
+        liberacaoRes.creditosBaseAuthoritativeCents &&
+        Object.keys(liberacaoRes.creditosBaseAuthoritativeCents).length
+          ? liberacaoRes.creditosBaseAuthoritativeCents
+          : creditosBaseCents;
+      if (Object.keys(basesEfetivas).length) {
+        applyCreditosBaseFromServer(basesEfetivas);
+      }
 
       setPercentualColetivo(String(pct));
       setPreviewColetivo(null);
-      aplicarLimitesColetivoLocal(pct, creditosBaseCents, cooperadoIds);
+      aplicarLimitesColetivoLocal(pct, basesEfetivas, cooperadoIds);
       setDashboard((d) =>
         d
           ? {
@@ -932,7 +928,7 @@ function ContaCoopContent() {
             }
           : d
       );
-      gravarHbCreditLimitesPersistidos(cnpj, limitesRef.current, creditosBaseRef.current, pct);
+      gravarHbCreditLimitesPersistidos(cnpj, limitesRef.current, basesEfetivas, pct);
       marcarPercentualLiberacaoConfirmado(pct);
       notifyHbCreditLimiteSynced({ immediate: true });
       setSuccess("Percentual salvo e limites liberados na tabela.");
