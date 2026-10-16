@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Plus, Banknote, History } from "lucide-react";
-import { useAppDataSnapshotForDomainsWhenActive } from "@/hooks/useAppData";
+import { useAppData } from "@/hooks/useAppData";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, FormField, Textarea } from "@/components/ui/Form";
@@ -54,7 +54,7 @@ export function ValoresAvulsosReceberPanel({
   onRemover,
   lancamentoForm,
 }: ValoresAvulsosReceberPanelProps) {
-  const data = useAppDataSnapshotForDomainsWhenActive(true, ["financeiro", "shell"]);
+  const data = useAppData();
   if (!data) return null;
 
   const pendentes = mesReferencia
@@ -302,7 +302,7 @@ export function ValoresAvulsosDashboardCard({
   cooperadoId: string;
   cooperativaId?: string;
 }) {
-  const data = useAppDataSnapshotForDomainsWhenActive(true, ["financeiro", "shell"]);
+  const data = useAppData();
   if (!data) return null;
 
   const pendentes = valoresAvulsosDoCooperado(data, cooperadoId, cooperativaId).filter(
