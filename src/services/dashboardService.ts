@@ -1,6 +1,7 @@
 import type { AppData, FechamentoMensal, FinanceiroMensal } from "@/types";
 import { bicCentralValorAReceberAgregado } from "@/services/bicLeituraCentralCooperado";
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
+import { isBicLeituraPortaAtiva } from "@/lib/bic/bicLeituraPortaGating";
 import { getData, getDataRevision } from "@/services/dataStore";
 import {
   getTotalAPagarCooperado,
@@ -120,6 +121,7 @@ export function getAdminStats(
   const d = data ?? getData();
   return computeAdminStatsPure(d, cooperativaId, opts, {
     bicCentralRead: isBicCentralReadAuthorityEnabled(),
+    bicLeituraPortaAdmin: isBicLeituraPortaAtiva("admin"),
   });
 }
 

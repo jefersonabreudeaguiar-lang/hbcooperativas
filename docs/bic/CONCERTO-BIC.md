@@ -2,6 +2,18 @@
 
 Plano de maturidade BIC (meta rubrica **99/100**) em quatro movimentos. Este documento acompanha o **Movimento I — Allegro**.
 
+## Movimento III — Presto (staff + admin + revisão)
+
+| Entrega | Função |
+|---------|--------|
+| `bicRevisionWatch.ts` | Coalesce `fetchCooperativaCloudRevision` por CNPJ |
+| `bicStaffLeituraCooperado.ts` | Staff porta + memo domínios |
+| `NotasPedidoStaffResponsavelApp` | `staffMesPrincipal` / `staffListarResumos` |
+| `adminStatsComputeCore` | `bicLeituraPortaAdmin` → soma via `leituraAdminSomaValorLiquidoCooperados` |
+| Flags | `NEXT_PUBLIC_BIC_LEITURA_PORTA_STAFF`, `_ADMIN` |
+
+Teste: `npm run test:bic-movimento-iii`. Rollback: `scripts/backups/BIC-LEITURA-PORTA.md`.
+
 ## Movimento II — Largo (cooperado 99 no recorte)
 
 | Entrega | Função |

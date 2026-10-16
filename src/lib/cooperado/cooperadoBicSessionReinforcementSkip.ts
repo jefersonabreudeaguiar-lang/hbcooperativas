@@ -5,7 +5,7 @@ import type { User } from "@/types";
 import { isCooperadoBicHybridLightEnabled } from "@/lib/cooperado/cooperadoBicHybridLight";
 import { cooperadoGaExibicaoFinanceiraAindaZerada } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { cloudRevisionChangedSinceApplied } from "@/lib/performance/cooperadoEventDrivenSync";
-import { fetchCooperativaCloudRevision } from "@/services/cooperativaSyncRevisionService";
+import { watchBicCooperativaCloudRevision } from "@/lib/bic/bicRevisionWatch";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
@@ -60,7 +60,7 @@ export async function shouldSkipCooperadoBicSessionReinforcementPull(
   const digits = normalizeCnpj(cnpj ?? "");
   if (digits.length !== 14) return false;
 
-  const remote = await fetchCooperativaCloudRevision(digits);
+  const remote = await watchBicCooperativaCloudRevision(digits);
   if (!remote) return false;
   if (cloudRevisionChangedSinceApplied(digits, remote)) return false;
 

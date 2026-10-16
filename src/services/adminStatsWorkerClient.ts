@@ -2,6 +2,7 @@ import type { AppData } from "@/types";
 import type { AdminDashboardStats } from "@/lib/performance/adminStatsComputeCore";
 import { computeAdminStatsPure } from "@/lib/performance/adminStatsComputeCore";
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
+import { isBicLeituraPortaAtiva } from "@/lib/bic/bicLeituraPortaGating";
 import { isRqlAdminStatsWorkerEnabled } from "@/lib/performance/rqlAdminStats85";
 import { seedAdminStatsCache } from "@/services/dashboardService";
 import type {
@@ -58,6 +59,7 @@ function computeSync(
 ): AdminDashboardStats {
   return computeAdminStatsPure(data, cooperativaId, opts, {
     bicCentralRead: isBicCentralReadAuthorityEnabled(),
+    bicLeituraPortaAdmin: isBicLeituraPortaAtiva("admin"),
   });
 }
 
@@ -83,6 +85,7 @@ export async function requestAdminStatsFromWorker(
     cooperativaId: cooperativaId || undefined,
     skipValoresAPagar: opts?.skipValoresAPagar,
     bicCentralRead,
+    bicLeituraPortaAdmin: isBicLeituraPortaAtiva("admin"),
   };
 
   const response = await new Promise<AdminStatsWorkerResponse>((resolve, reject) => {

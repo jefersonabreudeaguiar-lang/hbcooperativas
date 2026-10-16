@@ -2,6 +2,7 @@
  * RQL 8.5 — cálculo puro de stats do painel gestão (main thread ou Web Worker).
  */
 import type { AppData } from "@/types";
+import { leituraAdminSomaValorLiquidoCooperados } from "@/lib/bic/bicLeituraPorta";
 import { bicCentralValorAReceberAgregado } from "@/services/bicLeituraCentralCooperado";
 import { projetarAppDataFinanceiroParaCreditoBase } from "@/modules/hb-credit/engine/projetarAppDataFinanceiroParaCreditoBase";
 import { normalizeCnpj } from "@/utils/cooperativa";
@@ -32,6 +33,7 @@ export interface AdminDashboardStats {
 
 export type AdminStatsComputeEnv = {
   bicCentralRead: boolean;
+  bicLeituraPortaAdmin?: boolean;
 };
 
 function filterByMes<T>(items: T[], getter: (item: T) => string, mes: string): T[] {
@@ -105,6 +107,9 @@ export function computeAdminStatsPure(
     : env.bicCentralRead
       ? (() => {
           const base = projetarAppDataFinanceiroParaCreditoBase(d, cnpjDigitsForCooperativa(d, cooperativaId));
+          if (env.bicLeituraPortaAdmin) {
+            return round2(leituraAdminSomaValorLiquidoCooperados(base, cooperadosEscopo));
+          }
           return round2(
             cooperadosEscopo.reduce((s, c) => {
               return s + bicCentralValorAReceberAgregado(base, c.id, c.cooperativaId).valor;

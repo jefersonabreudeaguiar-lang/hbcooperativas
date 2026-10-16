@@ -7,6 +7,7 @@ export interface AdminStatsWorkerRequest {
   cooperativaId?: string;
   skipValoresAPagar?: boolean;
   bicCentralRead: boolean;
+  bicLeituraPortaAdmin?: boolean;
 }
 
 export interface AdminStatsWorkerSuccess {

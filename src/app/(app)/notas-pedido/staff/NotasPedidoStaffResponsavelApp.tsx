@@ -213,9 +213,9 @@ import {
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, filtrarResumosMesesNaoQuitados } from "@/services/cooperadoEntregasService";
 import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
 import {
-  bicCentralListarResumosMensaisEntregas,
-  bicCentralMesPrincipalQuantoVouReceber,
-} from "@/services/bicLeituraCentralCooperado";
+  staffListarResumosMensaisEntregas,
+  staffMesPrincipalQuantoVouReceber,
+} from "@/lib/bic/bicStaffLeituraCooperado";
 import dynamic from "next/dynamic";
 import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
 
@@ -735,7 +735,7 @@ export default function NotasPedidoStaffMain() {
       : undefined;
   const mesHbSync =
     data && cooperadoCanonico && coopId
-      ? bicCentralMesPrincipalQuantoVouReceber(data, cooperadoCanonico, coopId)
+      ? staffMesPrincipalQuantoVouReceber(data, cooperadoCanonico, coopId)
       : undefined;
   useSyncContaCoopValorReceberPilot(
     isCooperado && cooperadoCanonico && coopId && mesHbSync && user
@@ -1796,7 +1796,7 @@ export default function NotasPedidoStaffMain() {
         const base = filtrarResumosMesesNaoQuitados(
           d,
           cooperadoId,
-          bicCentralListarResumosMensaisEntregas(d, cooperadoId, coopId)
+          staffListarResumosMensaisEntregas(d, cooperadoId, coopId)
         );
         if (deferredStatusFilter === "pendentes") return filtrarResumosEntregasPendentes(base);
         if (!deferredStatusFilter) return base;

@@ -100,6 +100,34 @@ export type BicLeituraHbCreditoResumo = {
 /**
  * HB Créditos — lastro e limite leem o mesmo agregado BIC (lazy require evita ciclo no client).
  */
+/**
+ * Admin / relatórios — soma de valor líquido no escopo cooperativa (porta admin).
+ */
+export function leituraAdminSomaValorLiquidoCooperados(
+  data: AppData,
+  cooperados: ReadonlyArray<{ id: string; cooperativaId: string }>
+): number {
+  let total = 0;
+  for (const c of cooperados) {
+    total += resolveLeituraFinanceiraCooperadoCore(data, c.id, c.cooperativaId).valorLiquido;
+  }
+  return total;
+}
+
+/** Admin — leitura por cooperado (mesma autoridade BIC do cooperado). */
+export function leituraAdminCooperadoFinanceira(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string,
+  opts?: BicLeituraPortaCooperadoOpts
+): BicLeituraPortaEnvelope<LeituraFinanceiraParidadeCooperado> {
+  const viaPorta = isBicLeituraPortaAtiva("admin");
+  const value = viaPorta
+    ? resolveLeituraFinanceiraCooperadoCore(data, cooperadoId, cooperativaId, opts)
+    : leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+  return envelope("admin", value, viaPorta);
+}
+
 export function leituraHbCreditoFinanceira(
   data: AppData,
   cooperadoId: string,

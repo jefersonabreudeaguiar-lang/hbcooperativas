@@ -3,7 +3,7 @@
  * sem exigir toque em «Atualizar» (sync silencioso em segundo plano).
  */
 import { normalizeCnpj } from "@/utils/cooperativa";
-import { fetchCooperativaCloudRevision } from "@/services/cooperativaSyncRevisionService";
+import { watchBicCooperativaCloudRevision } from "@/lib/bic/bicRevisionWatch";
 import {
   cloudRevisionChangedSinceApplied,
   cooperadoOperacionalSyncStale,
@@ -96,7 +96,7 @@ export async function evaluateCooperadoForegroundOperacionalPull(
     }
   }
 
-  const remote = await fetchCooperativaCloudRevision(digits);
+  const remote = await watchBicCooperativaCloudRevision(digits);
   if (!remote) return null;
 
   if (cloudRevisionChangedSinceApplied(digits, remote)) {

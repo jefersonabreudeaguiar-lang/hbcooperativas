@@ -8,7 +8,7 @@ self.onmessage = (ev: MessageEvent<AdminStatsWorkerRequest>) => {
       req.data,
       req.cooperativaId || undefined,
       { skipValoresAPagar: req.skipValoresAPagar === true },
-      { bicCentralRead: req.bicCentralRead }
+      { bicCentralRead: req.bicCentralRead, bicLeituraPortaAdmin: req.bicLeituraPortaAdmin }
     );
     const res: AdminStatsWorkerResponse = { id: req.id, ok: true, stats };
     self.postMessage(res);

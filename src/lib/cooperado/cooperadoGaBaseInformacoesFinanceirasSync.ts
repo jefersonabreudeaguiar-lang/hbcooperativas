@@ -14,7 +14,7 @@ import { cooperadoPwaMaterializarSnapshotsFinanceirosPosSync } from "@/lib/coope
 import { dispatchCooperadoPwaLeveUiSnapshotRefresh } from "@/lib/cooperado/cooperadoPwaLeveUiEvents";
 import { scheduleCooperadoHbCreditLimiteAndAccountWarmup } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
 import { markCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
-import { fetchCooperativaCloudRevision } from "@/services/cooperativaSyncRevisionService";
+import { watchBicCooperativaCloudRevision } from "@/lib/bic/bicRevisionWatch";
 import {
   cloudRevisionChangedSinceApplied,
   fingerprintCooperativaCloudRevision,
@@ -112,7 +112,7 @@ export async function runCooperadoGaSyncBaseInformacoesFinanceiras(
     const digits = normalizeCnpj(cnpj ?? "");
     if (digits.length !== 14) return false;
 
-    const remote = await fetchCooperativaCloudRevision(digits);
+    const remote = await watchBicCooperativaCloudRevision(digits);
     const nuvemMudou = remote ? cloudRevisionChangedSinceApplied(digits, remote) : true;
 
     if (lightReconcile && remote && !nuvemMudou) {
