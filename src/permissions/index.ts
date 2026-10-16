@@ -437,18 +437,20 @@ export function isHbCreditParceiroNavEligible(
   return serverConfirmed || creditStatus === "loading" || creditStatus === "error" || creditStatus === "enabled";
 }
 
-/** Responsável/tesoureiro — módulo habilitado no build; falha transitória de status não esconde o menu. */
+/** Responsável/tesoureiro — menu com UI pública (paridade cooperado); APIs seguem fail-closed no servidor. */
 export function isHbCreditStaffNavEligible(
   user: Pick<User, "role">,
   creditStatus: "loading" | "enabled" | "disabled" | "error",
   serverConfirmed: boolean
 ): boolean {
+  const role = normalizeUserRole(user.role);
+  if (role !== "responsavel" && role !== "tesoureiro") return false;
+  if (isContaCoopUiPublic()) return true;
+
   const clientFlagRaw = (process.env.NEXT_PUBLIC_HB_CREDIT_ENABLED ?? "").trim().toLowerCase();
   const clientConfigured =
     typeof window !== "undefined" ? isHbCreditEnabledClient() : clientFlagRaw === "true" || clientFlagRaw === "1";
   if (!clientConfigured) return false;
-  const role = normalizeUserRole(user.role);
-  if (role !== "responsavel" && role !== "tesoureiro") return false;
   if (creditStatus === "disabled") return false;
   return serverConfirmed || creditStatus === "loading" || creditStatus === "error" || creditStatus === "enabled";
 }
