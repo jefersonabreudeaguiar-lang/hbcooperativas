@@ -1,7 +1,9 @@
 /**
  * HB Credit Engine — feature flag central (fail-closed).
- * Padrão obrigatório: OFF. Ausência ou valor inválido = OFF.
+ * Padrão obrigatório: OFF. Exceção: produção com NEXT_PUBLIC_CONTA_COOP_UI_PUBLIC (todos cooperados).
  */
+
+import { isContaCoopUiPublic } from "@/utils/contaCoopUiVisibility";
 
 const SERVER_FLAG = "HB_CREDIT_ENABLED";
 const CLIENT_FLAG = "NEXT_PUBLIC_HB_CREDIT_ENABLED";
@@ -28,10 +30,19 @@ function isProductionWithoutAuthSecret(): boolean {
   return process.env.NODE_ENV === "production" && !process.env.AUTH_SECRET?.trim();
 }
 
+/** Rollout oficial: UI HB pública na build de produção ⇒ APIs HB ativas para todos cooperados. */
+function isHbCreditEnabledViaContaCoopPublicProduction(): boolean {
+  return process.env.NODE_ENV === "production" && isContaCoopUiPublic();
+}
+
 /** Servidor: autoridade para operações financeiras. */
 export function isHbCreditEnabledServer(): boolean {
   if (isProductionWithoutAuthSecret()) return false;
-  return parseFlag(process.env[SERVER_FLAG]) || isDevLabServerEnabled();
+  return (
+    parseFlag(process.env[SERVER_FLAG]) ||
+    isDevLabServerEnabled() ||
+    isHbCreditEnabledViaContaCoopPublicProduction()
+  );
 }
 
 /** Kill switch operacional — bloqueia novas liberações/cobranças/autorizações. */
@@ -51,13 +62,15 @@ export function assertHbCreditOperationsEnabled(): void {
 
 /** Cliente: somente indica intenção de UI; nunca autoriza operação financeira. */
 export function isHbCreditEnabledClient(): boolean {
-  if (typeof window === "undefined") return false;
-  return parseFlag(process.env[CLIENT_FLAG]) || isDevLabClientEnabled();
+  return (
+    parseFlag(process.env[CLIENT_FLAG]) ||
+    isDevLabClientEnabled() ||
+    isHbCreditEnabledViaContaCoopPublicProduction()
+  );
 }
 
 /**
  * UI habilitada = flag pública TRUE AND confirmação segura do servidor.
- * Fase 0: servidor sempre false em produção → UI nunca operacional.
  */
 export function isHbCreditUiAllowed(serverConfirmed: boolean): boolean {
   return isHbCreditEnabledClient() && serverConfirmed === true;
