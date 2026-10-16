@@ -23,3 +23,7 @@ export function contaCoopAuxSyncKeyValorReceber(cnpj: string, cooperadoId: strin
 export function contaCoopAuxSyncKeyWarmupBundle(cnpj: string, userId: string): string {
   return `warmup:${cnpj}:${userId}`;
 }
+
+export function contaCoopAuxSyncKeyAccountPersist(cnpj: string, cooperadoId: string): string {
+  return `account-persist:${cnpj}:${cooperadoId}`;
+}

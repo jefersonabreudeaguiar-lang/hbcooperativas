@@ -12,7 +12,11 @@ import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { refreshContaCoopLimiteFromFicha } from "@/lib/hb-credit/syncContaCoopLimiteFromFicha";
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
-import { notifyHbCreditAccountCacheUpdated, notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import { notifyHbCreditAccountCacheUpdated } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import {
+  coalesceContaCoopAuxSync,
+  contaCoopAuxSyncKeyAccountPersist,
+} from "@/lib/hb-credit/contaCoopAuxSyncDedupe";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import type { User } from "@/types";
 
@@ -45,28 +49,31 @@ export async function persistirHbCreditAccountCooperado(
   const cooperadoIds =
     canonico && canonico !== apiCooperadoId ? [apiCooperadoId, canonico] : [apiCooperadoId];
   const syncLimite = options?.syncLimiteFromFicha !== false;
-  try {
-    if (syncLimite) {
-      await refreshContaCoopLimiteFromFicha({
-        cnpj,
-        cooperadoId: apiCooperadoId,
-        cooperativaId,
-        cooperadoIds,
-      }).catch(() => {});
+  const dedupeKey = contaCoopAuxSyncKeyAccountPersist(cnpj, apiCooperadoId);
+
+  return coalesceContaCoopAuxSync(dedupeKey, async () => {
+    try {
+      if (syncLimite) {
+        await refreshContaCoopLimiteFromFicha({
+          cnpj,
+          cooperadoId: apiCooperadoId,
+          cooperativaId,
+          cooperadoIds,
+        }).catch(() => {});
+      }
+      const acc = await fetchCreditAccount(cnpj, apiCooperadoId);
+      gravarHbCreditAccountPersistido(cnpj, apiCooperadoId, {
+        v: HB_CREDIT_ACCOUNT_STORAGE_VERSION,
+        account: (acc.account as import("@/modules/hb-credit/types").ContaCoopLimiteCooperado) ?? null,
+        updatedAt: acc.updatedAt ?? null,
+        hasPin: Boolean(acc.hasPin),
+        pinResetPending: Boolean(acc.pinResetPending),
+        savedAt: new Date().toISOString(),
+      });
+      notifyHbCreditAccountCacheUpdated();
+      return Boolean(acc.account);
+    } catch {
+      return false;
     }
-    const acc = await fetchCreditAccount(cnpj, apiCooperadoId);
-    gravarHbCreditAccountPersistido(cnpj, apiCooperadoId, {
-      v: HB_CREDIT_ACCOUNT_STORAGE_VERSION,
-      account: (acc.account as import("@/modules/hb-credit/types").ContaCoopLimiteCooperado) ?? null,
-      updatedAt: acc.updatedAt ?? null,
-      hasPin: Boolean(acc.hasPin),
-      pinResetPending: Boolean(acc.pinResetPending),
-      savedAt: new Date().toISOString(),
-    });
-    notifyHbCreditAccountCacheUpdated();
-    notifyHbCreditLimiteSynced();
-    return Boolean(acc.account);
-  } catch {
-    return false;
-  }
+  });
 }

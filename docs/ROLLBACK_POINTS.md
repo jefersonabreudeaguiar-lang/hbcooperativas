@@ -1,5 +1,19 @@
 # Pontos de retorno (produção)
 
+## `rollback/pre-hb-sync-storm-429`
+
+- **Commit:** `a071acff` (tag aponta para este commit)
+- **App build:** 428
+- **Descrição:** Antes da coalescência do pipeline HB Créditos e fim do loop `LIMITE_SYNCED` → `sync-limite` (build 429+, anti-travamento cooperado/PWA).
+
+### Voltar o código a este ponto (local)
+
+```powershell
+cd C:\Image-Cipher\coopeagriplla-gestao
+git fetch origin
+git checkout rollback/pre-hb-sync-storm-429
+```
+
 ## `rollback/pre-pwa-integrity-399`
 
 - **Commit:** `0be7ae1c`

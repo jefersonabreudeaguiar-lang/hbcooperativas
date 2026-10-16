@@ -5,10 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Wallet } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
-import {
-  resolveHbCreditApiCooperadoId,
-  resolveHbCreditLimiteSyncTargets,
-} from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
+import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { hbCreditEffectiveDisponivelCents } from "@/modules/hb-credit/engine/paymentAffordability";
 import {
@@ -20,12 +17,8 @@ import {
   HB_CREDIT_ACCOUNT_CACHE_EVENT,
   HB_CREDIT_LIMITE_SYNCED_EVENT,
 } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
-import { refreshContaCoopLimiteFromFicha } from "@/lib/hb-credit/syncContaCoopLimiteFromFicha";
 import { persistirHbCreditAccountCooperado } from "@/services/hbCreditAccountPersistenciaService";
-import { getData, isAppDataWarm } from "@/services/dataStore";
-import { getUserCooperativaId } from "@/utils/cooperativa";
 import { fetchCreditAccount } from "@/services/creditApiService";
-import { useHbCreditAccountRevisionPoll } from "@/hooks/useHbCreditAccountRevisionPoll";
 import {
   gravarHbCreditAccountPersistido,
   HB_CREDIT_ACCOUNT_STORAGE_VERSION,
@@ -72,30 +65,9 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
     const refreshFromCache = () => setSnap(readCache());
     refreshFromCache();
 
-    const syncFromCloud = async (opts?: { syncLimiteFromFicha?: boolean }) => {
+    const syncAccountFromCloud = async () => {
       if (user?.role === "cooperado") {
-        const syncLimite = opts?.syncLimiteFromFicha !== false;
-        if (
-          syncLimite &&
-          isAppDataWarm() &&
-          cnpj.length === 14 &&
-          hbApiCooperadoId
-        ) {
-          const data = getData();
-          const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
-          if (coopId) {
-            const limite = resolveHbCreditLimiteSyncTargets(user, data, coopId);
-            if (limite) {
-              await refreshContaCoopLimiteFromFicha({
-                cnpj,
-                cooperadoId: limite.apiCooperadoId,
-                cooperativaId: coopId,
-                cooperadoIds: limite.cooperadoIds,
-              }).catch(() => {});
-            }
-          }
-        }
-        await persistirHbCreditAccountCooperado(user, { syncLimiteFromFicha: syncLimite });
+        await persistirHbCreditAccountCooperado(user, { syncLimiteFromFicha: false });
         refreshFromCache();
         return;
       }
@@ -117,31 +89,20 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
       }
     };
 
-    void syncFromCloud({ syncLimiteFromFicha: false });
+    void syncAccountFromCloud();
 
     const onCache = () => refreshFromCache();
-    const onCloud = () => {
+    const onLimiteSynced = () => {
       refreshFromCache();
-      void syncFromCloud({ syncLimiteFromFicha: true });
+      void syncAccountFromCloud();
     };
     window.addEventListener(HB_CREDIT_ACCOUNT_CACHE_EVENT, onCache);
-    window.addEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onCloud);
+    window.addEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
     return () => {
       window.removeEventListener(HB_CREDIT_ACCOUNT_CACHE_EVENT, onCache);
-      window.removeEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onCloud);
+      window.removeEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
     };
   }, [hbApiCooperadoId, cooperadoId, cnpj, user]);
-
-  useHbCreditAccountRevisionPoll({
-    cnpj,
-    cooperadoId: hbApiCooperadoId ?? "",
-    enabled: Boolean(cnpj.length === 14 && hbApiCooperadoId && user?.role === "cooperado"),
-    onRevisionChange: () => {
-      if (user?.role === "cooperado") {
-        void persistirHbCreditAccountCooperado(user, { syncLimiteFromFicha: false });
-      }
-    },
-  });
 
   const totals = useMemo(() => {
     const acc = snap?.account;
