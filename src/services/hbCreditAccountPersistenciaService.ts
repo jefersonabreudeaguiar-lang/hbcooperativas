@@ -25,6 +25,7 @@ export async function persistirHbCreditAccountCooperado(
   options?: { syncLimiteFromFicha?: boolean }
 ): Promise<boolean> {
   if (!user || user.role !== "cooperado" || !user.cooperadoId) return false;
+  const cooperadoId = user.cooperadoId;
   if (typeof navigator === "undefined" || !navigator.onLine) return false;
   if (!isCloudSessionActive()) return false;
 
@@ -44,8 +45,8 @@ export async function persistirHbCreditAccountCooperado(
   const cnpj = await resolveCooperativaCnpj(data, cooperativaId, user);
   if (!cnpj) return false;
 
-  const apiCooperadoId = resolveHbCreditApiCooperadoId(user, user.cooperadoId);
-  const canonico = resolverCooperadoIdCanonico(data, user.cooperadoId, cooperativaId);
+  const apiCooperadoId = resolveHbCreditApiCooperadoId(user, cooperadoId);
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
   const cooperadoIds =
     canonico && canonico !== apiCooperadoId ? [apiCooperadoId, canonico] : [apiCooperadoId];
   const syncLimite = options?.syncLimiteFromFicha !== false;

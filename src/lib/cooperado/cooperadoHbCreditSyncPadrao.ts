@@ -38,6 +38,8 @@ export async function executarCooperadoHbCreditSyncPadrao(
     return false;
   }
 
+  const cooperadoId = user.cooperadoId;
+
   pipelineInflight = (async () => {
     pipelineLastAt = Date.now();
 
@@ -54,7 +56,7 @@ export async function executarCooperadoHbCreditSyncPadrao(
     const cnpj = await resolveCooperativaCnpj(data, cooperativaId, user);
     if (!cnpj) return false;
 
-    const canonico = resolverCooperadoIdCanonico(data, user.cooperadoId, cooperativaId);
+    const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
     const paridade = cooperadoLeituraFinanceiraExibicao(data, canonico, cooperativaId);
     const mesReferencia =
       paridade.mesesResumo[paridade.mesesResumo.length - 1] ??
