@@ -1,0 +1,8 @@
+.worktrees
+scripts/_diag_*
+scripts/_audit_*
+scripts/_once-*
+scripts/_peek-*
+scripts/_out-*
+scripts/backups
+*.wip-local

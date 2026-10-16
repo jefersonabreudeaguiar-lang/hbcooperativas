@@ -1,4 +1,6 @@
 {
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build",
   "env": {
     "APP_ENV": "production",
     "BIC_ENVIRONMENT": "PRODUCTION",

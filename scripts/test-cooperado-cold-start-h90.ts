@@ -115,8 +115,9 @@ assert(
 );
 const hbResumo = read("src/components/hb-credit/CooperadoHbCreditResumoCard.tsx");
 assert(
-  hbResumo.includes("isCooperadoManualOperacionalSync"),
-  "card HB inicio sem poll automatico (manual)"
+  hbResumo.includes("persistirHbCreditAccountCooperado") &&
+    hbResumo.includes('user?.role === "cooperado"'),
+  "card HB inicio atualiza conta sob demanda (cooperado, sem poll global)"
 );
 
 const silentSw = read("src/components/pwa/PwaSilentServiceWorker.tsx");
