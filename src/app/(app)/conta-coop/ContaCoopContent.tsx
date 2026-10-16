@@ -30,6 +30,7 @@ import {
 } from "@/services/creditApiService";
 import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import {
+  buildCreditosBaseMapCached,
   buildCreditosBaseMapCachedAsync,
   calcLimiteFromPercentual,
 } from "@/modules/hb-credit/engine/creditBaseFromFicha";
@@ -433,24 +434,51 @@ function ContaCoopContent() {
   const creditosBaseRef = useRef(creditosBaseColetivo);
   creditosBaseRef.current = creditosBaseColetivo;
 
-  /** Base vinda do GET /limites (ref) — evita buildCreditosBaseMapCached síncrono na liberação coletiva. */
-  const pickCreditosBaseForPost = useCallback((): Record<string, number> | null => {
-    const fromServer = creditosBaseRef.current;
-    if (Object.keys(fromServer).length > 0) return fromServer;
+  /** Crédito-base para POST (liberação) — aguarda cálculo; nunca retorna mapa vazio por race assíncrona. */
+  const ensureCreditosBaseCentsForPost = useCallback(async (): Promise<Record<string, number> | null> => {
+    const cached = creditosBaseRef.current;
+    if (Object.keys(cached).length > 0) return cached;
 
     const ids = cooperadoIdsAtivosRef.current;
+    if (!user?.cooperativaId || !ids.length) {
+      setError("Cooperativa ou cooperados não carregados. Aguarde e tente novamente.");
+      return null;
+    }
+
+    if (cnpj.length === 14) {
+      try {
+        const fast = await fetchCreditLimites(cnpj, { fast: true, cooperadoIds: ids });
+        if (fast.creditosBaseAuthoritativeCents && Object.keys(fast.creditosBaseAuthoritativeCents).length) {
+          applyCreditosBaseFromServer(fast.creditosBaseAuthoritativeCents);
+          return creditosBaseRef.current;
+        }
+      } catch {
+        /* calcula localmente */
+      }
+    }
+
     if (ids.length > CREDITOS_BASE_SYNC_MAX_COOPERADOS) {
       setError(
-        "Crédito na ficha ainda não carregou para todos os cooperados. Aguarde alguns segundos e tente de novo."
+        "Crédito na ficha ainda não carregou para todos os cooperados. Toque em «Atualizar na nuvem» e tente de novo."
       );
       return null;
     }
 
-    recomputeCreditosBaseLocal({ immediate: true });
-    if (Object.keys(creditosBaseRef.current).length > 0) return creditosBaseRef.current;
-    setError("Não foi possível obter o crédito na ficha. Atualize a aba Limites e tente novamente.");
-    return null;
-  }, [recomputeCreditosBaseLocal]);
+    const map = await buildCreditosBaseMapCachedAsync(getData(), ids, user.cooperativaId);
+    if (!Object.keys(map).length) {
+      const syncMap = buildCreditosBaseMapCached(getData(), ids, user.cooperativaId);
+      if (!Object.keys(syncMap).length) {
+        setError("Não foi possível obter o crédito na ficha. Atualize a aba Limites e tente novamente.");
+        return null;
+      }
+      creditosBaseRef.current = syncMap;
+      startTransition(() => setCreditosBaseColetivo(syncMap));
+      return syncMap;
+    }
+    creditosBaseRef.current = map;
+    startTransition(() => setCreditosBaseColetivo(map));
+    return map;
+  }, [user?.cooperativaId, cnpj, applyCreditosBaseFromServer]);
 
   const limitesPorCooperado = useMemo(() => {
     const map = new Map<string, ContaCoopLimiteCooperado>();
@@ -714,7 +742,9 @@ function ContaCoopContent() {
             valorDisponivelCents: computeDisponivel(liberado, usado),
           });
         }
-        const next = ids.map((id) => map.get(id)!).filter(Boolean);
+        const ordem =
+          cooperadoIdsAtivosRef.current.length > 0 ? cooperadoIdsAtivosRef.current : ids;
+        const next = ordem.map((id) => map.get(id) ?? limitePlaceholderCooperado(id, cnpj));
         limitesRef.current = next;
         return next;
       });
@@ -723,9 +753,8 @@ function ContaCoopContent() {
   );
 
   const refreshLimitesAposLiberacao = useCallback(async () => {
-    await reload({ background: true });
-    await revalidateLimitesLista({ force: true, background: false });
-  }, [reload, revalidateLimitesLista]);
+    await revalidateLimitesLista({ force: true, background: true });
+  }, [revalidateLimitesLista]);
 
   const refreshHbNuvemEmBackground = useCallback(() => {
     void revalidateLimitesLista({ force: true, background: true });
@@ -828,6 +857,11 @@ function ContaCoopContent() {
   }, [tab, cnpj, cooperadoIdsAtivos.length, revalidateLimitesLista]);
 
   useEffect(() => {
+    if (tab !== "limites" || !cooperadoIdsAtivos.length) return;
+    void ensureCreditosBaseCentsForPost();
+  }, [tab, cooperadoIdsKey, ensureCreditosBaseCentsForPost, cooperadoIdsAtivos.length]);
+
+  useEffect(() => {
     if (!cnpj) return;
     const snap = lerHbCreditLimitesPersistidos(cnpj);
     const pref = percentualHbPersistido(dashboard, snap);
@@ -839,8 +873,6 @@ function ContaCoopContent() {
 
   const salvarTeto = async () => {
     if (!cnpj) return;
-    const creditosBaseCents = pickCreditosBaseForPost();
-    if (!creditosBaseCents) return;
     const pct = Number(tetoPercentual.replace(",", "."));
     if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
       setError("Informe um percentual entre 0 e 100.");
@@ -850,26 +882,42 @@ function ContaCoopContent() {
     setError("");
     setSuccess("");
     try {
+      const creditosBaseCents = await ensureCreditosBaseCentsForPost();
+      if (!creditosBaseCents) return;
       const cooperadoIds = cooperadosAtivos.map((c) => c.id);
       const tetoAtual = dashboard?.teto.tetoGlobalPercent ?? 100;
-      const bodyBase = { cnpj, creditosBaseCents, cooperadoIds, percentual: pct };
 
-      if (pct > tetoAtual) {
-        await postCreditLimites({ action: "set_teto", cnpj, tetoPercentual: pct, creditosBaseCents });
-        await postCreditLimites({ action: "set_coletivo", ...bodyBase });
-      } else {
-        await postCreditLimites({ action: "set_coletivo", ...bodyBase });
+      await postCreditLimites({
+        action: "set_coletivo",
+        cnpj,
+        creditosBaseCents,
+        cooperadoIds,
+        percentual: pct,
+      });
+      if (Math.abs(pct - tetoAtual) > 0.001) {
         await postCreditLimites({ action: "set_teto", cnpj, tetoPercentual: pct, creditosBaseCents });
       }
 
       setPercentualColetivo(String(pct));
       setPreviewColetivo(null);
       aplicarLimitesColetivoLocal(pct, creditosBaseCents, cooperadoIds);
+      setDashboard((d) =>
+        d
+          ? {
+              ...d,
+              teto: {
+                ...d.teto,
+                liberacaoColetivaPercent: pct,
+                tetoGlobalPercent: Math.max(d.teto.tetoGlobalPercent, pct),
+              },
+            }
+          : d
+      );
       gravarHbCreditLimitesPersistidos(cnpj, limitesRef.current, creditosBaseRef.current, pct);
       marcarPercentualLiberacaoConfirmado(pct);
       notifyHbCreditLimiteSynced({ immediate: true });
-      setSuccess("Percentual salvo na nuvem.");
-      await refreshLimitesAposLiberacao();
+      setSuccess("Percentual salvo e limites liberados na tabela.");
+      void refreshLimitesAposLiberacao();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar percentual.");
     } finally {
@@ -879,11 +927,11 @@ function ContaCoopContent() {
 
   const salvarLimiteIndividual = async () => {
     if (!cnpj || !cooperadoId) return;
-    const creditosBaseCents = pickCreditosBaseForPost();
-    if (!creditosBaseCents) return;
     setBusy(true);
     setError("");
     try {
+      const creditosBaseCents = await ensureCreditosBaseCentsForPost();
+      if (!creditosBaseCents) return;
       await postCreditLimites({
         action: "set_individual",
         cnpj,
@@ -907,11 +955,11 @@ function ContaCoopContent() {
       setError("Informe um percentual entre 0 e 100.");
       return;
     }
-    const creditosBaseCents = pickCreditosBaseForPost();
-    if (!creditosBaseCents) return;
     setBusy(true);
     setError("");
     try {
+      const creditosBaseCents = await ensureCreditosBaseCentsForPost();
+      if (!creditosBaseCents) return;
       const res = await postCreditLimites({
         action: "preview_coletivo",
         cnpj,
@@ -935,12 +983,12 @@ function ContaCoopContent() {
       setError("Informe um percentual entre 0 e 100.");
       return;
     }
-    const creditosBaseCents = pickCreditosBaseForPost();
-    if (!creditosBaseCents) return;
     setBusy(true);
     setError("");
     setSuccess("");
     try {
+      const creditosBaseCents = await ensureCreditosBaseCentsForPost();
+      if (!creditosBaseCents) return;
       await postCreditLimites({
         action: "set_coletivo",
         cnpj,
@@ -954,8 +1002,8 @@ function ContaCoopContent() {
       gravarHbCreditLimitesPersistidos(cnpj, limitesRef.current, creditosBaseRef.current, percentual);
       marcarPercentualLiberacaoConfirmado(percentual);
       notifyHbCreditLimiteSynced({ immediate: true });
-      setSuccess("Limites liberados na nuvem.");
-      await refreshLimitesAposLiberacao();
+      setSuccess("Limites liberados na tabela.");
+      void refreshLimitesAposLiberacao();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao liberar limites.");
     } finally {
