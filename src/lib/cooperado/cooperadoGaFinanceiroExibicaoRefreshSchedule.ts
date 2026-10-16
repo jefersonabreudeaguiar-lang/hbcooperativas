@@ -1,9 +1,11 @@
 /**
  * GA cooperado — reidrata A receber / Financeiro no aparelho sem sync pesada a cada tick.
- * Escalonamento: 20s → 40s → 1 min (enquanto o app permanece aberto na sessão).
+ * Com BIC padrão no mobile: ver cooperadoBicMobileSessionSync (3× por sessão).
  */
 import type { User } from "@/types";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoBicMobileAuthority";
+import { scheduleCooperadoBicMobileSessionSync } from "@/lib/cooperado/cooperadoBicMobileSessionSync";
 import {
   cooperadoGaExibicaoFinanceiraAindaZerada,
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
@@ -53,6 +55,11 @@ export function scheduleCooperadoGaFinanceiroExibicaoRefresh(
 ): void {
   if (typeof window === "undefined") return;
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return;
+
+  if (isCooperadoMobileBicLeituraAuthority(user)) {
+    scheduleCooperadoBicMobileSessionSync(user);
+    return;
+  }
 
   if (activeUserId === user.id && timerIds.length > 0) return;
 

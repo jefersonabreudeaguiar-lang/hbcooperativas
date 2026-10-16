@@ -1,6 +1,15 @@
 # Cooperado — leitura financeira ao vivo (AppData)
 
-## Modo atual recomendado (produção)
+## Modo atual recomendado (produção) — BIC padrão
+
+| Variável | Valor |
+|----------|--------|
+| `NEXT_PUBLIC_BIC_CENTRAL_READ_OFFICIAL` | `true` |
+| `NEXT_PUBLIC_COOPERADO_FINANCEIRO_APPDATA_LIVE` | `false` |
+
+Mobile cooperado: snapshots materializados da BIC + até **3 syncs por sessão** (`cooperadoBicMobileSessionSync.ts`).
+
+## Modo legado AppData direto (rollback)
 
 | Variável | Valor |
 |----------|--------|

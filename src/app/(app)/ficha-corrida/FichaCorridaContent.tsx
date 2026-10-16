@@ -92,6 +92,7 @@ import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTi
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
 import { isCooperadoFinanceiroAppDataLiveRead } from "@/lib/cooperado/cooperadoFinanceiroAppDataLiveRead";
+import { isCooperadoBicExibicaoPadraoAtiva } from "@/lib/cooperado/cooperadoBicMobileAuthority";
 import {
   cooperadoMesQuitado,
   cooperadoPendentePagamentoResponsavel,
@@ -440,10 +441,18 @@ function FichaCorridaPageInner() {
       return live ?? readParidade(data);
     }
     if (financeiroDormant && fichaResumoSnap) {
+      const fromSnap = resolveParidadeFromFichaResumoSnapshot(fichaResumoSnap);
+      const bicPadrao = isCooperadoBicExibicaoPadraoAtiva();
+      if (bicPadrao && live && isAppDataWarm()) {
+        if (!fromSnap) return live;
+        const drift =
+          Math.abs((fromSnap.valorLiquido ?? 0) - (live.valorLiquido ?? 0)) > 0.02;
+        if (drift) return live;
+        return fromSnap;
+      }
       if (isBicCentralReadAuthorityEnabled() && live && isAppDataWarm()) {
         return live;
       }
-      const fromSnap = resolveParidadeFromFichaResumoSnapshot(fichaResumoSnap);
       if (fromSnap && live) {
         const drift =
           Math.abs((fromSnap.valorLiquido ?? 0) - (live.valorLiquido ?? 0)) > 0.02;

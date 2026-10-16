@@ -2,7 +2,7 @@
  * Modo híbrido cooperado — valor a receber / Financeiro / Início leem direto do AppData
  * (paridade + motores legados), sem projeção BIC na UI.
  *
- * Rollback para BIC na UI: NEXT_PUBLIC_COOPERADO_FINANCEIRO_APPDATA_LIVE=false
+ * Padrão produção: false (BIC é a fonte). Rollback AppData direto: =true
  * (manter NEXT_PUBLIC_BIC_CENTRAL_READ_OFFICIAL=true).
  *
  * Performance: só um parse de flag em build; sem I/O extra.

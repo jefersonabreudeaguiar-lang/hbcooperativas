@@ -21,6 +21,7 @@ import { getUserCooperativaId } from "@/utils/cooperativa";
 import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import { isCooperadoMobilePilotPerfActive } from "@/lib/cooperado/cooperadoMobilePilotPerf";
+import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoBicMobileAuthority";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 
 /** Após troca de build ou purge — recria snapshots do AppData local (paridade com o browser). */
@@ -69,6 +70,14 @@ export function cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(
   if (isCooperadoPwaMessengerMode()) {
     persistirCooperadoPwaMessengerCaches(user, { light: opts?.light });
     clearCooperadoPwaDadosDesatualizados();
+    return;
+  }
+  if (isCooperadoMobileBicLeituraAuthority(user)) {
+    persistirInicioCardCooperadoNotificarPwaLeve(user);
+    persistirCooperadoPwaFichaResumoSnapshotFromUser(user, true);
+    persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, true);
+    clearCooperadoPwaDadosDesatualizados();
+    dispatchCooperadoPwaLeveUiSnapshotRefresh();
     return;
   }
   if (!isCooperadoPwaMobileLeveUi() && !isCooperadoMobilePilotPerfActive(user)) return;

@@ -4,6 +4,7 @@
  */
 import type { User } from "@/types";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoBicMobileAuthority";
 import {
   cooperadoGaExibicaoFinanceiraAindaZerada,
   cooperadoGaValorReceberExibicaoResolvida,
@@ -65,13 +66,19 @@ export function cooperadoGaPrecisaSyncBaseInformacoesFinanceiras(
 /** Puxa operacional + notas da nuvem e atualiza snapshots locais (paridade = base). */
 export async function runCooperadoGaSyncBaseInformacoesFinanceiras(
   user: Omit<User, "password"> | null | undefined,
-  opts?: { force?: boolean }
+  opts?: { force?: boolean; bicSession?: boolean }
 ): Promise<boolean> {
   if (typeof window === "undefined") return false;
   if (!user || user.role !== "cooperado" || !user.cooperadoId) return false;
-  if (!isCooperadoMobileGaPromoted(user)) return false;
-  if (!opts?.force && !cooperadoGaPrecisaSyncBaseInformacoesFinanceiras(user)) return false;
-  if (!opts?.force && pullJaRecente(user.id)) return false;
+  if (!isCooperadoMobileGaPromoted(user) && !isCooperadoMobileBicLeituraAuthority(user)) return false;
+  if (
+    !opts?.force &&
+    !opts?.bicSession &&
+    !cooperadoGaPrecisaSyncBaseInformacoesFinanceiras(user)
+  ) {
+    return false;
+  }
+  if (!opts?.force && !opts?.bicSession && pullJaRecente(user.id)) return false;
   if (inflight) return inflight;
 
   inflight = (async () => {

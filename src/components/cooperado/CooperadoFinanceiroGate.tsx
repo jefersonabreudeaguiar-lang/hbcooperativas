@@ -72,6 +72,8 @@ import {
   cancelCooperadoGarantiaValorReceberSync,
   scheduleCooperadoGarantiaValorReceberUntilResolvido,
 } from "@/lib/cooperado/cooperadoGaGarantiaValorReceberSync";
+import { cancelCooperadoBicMobileSessionSync } from "@/lib/cooperado/cooperadoBicMobileSessionSync";
+import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoBicMobileAuthority";
 import { scheduleCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
 import {
   cooperadoPilotAppDataTemFinanceiroLocal,
@@ -119,9 +121,14 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     scheduleCooperadoPilotFinanceReadRecovery(user);
     scheduleCooperadoGaFinanceiroExibicaoRefresh(user);
     scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
-    scheduleCooperadoGarantiaValorReceberUntilResolvido(user);
-    scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user, { force: true });
-    return () => cancelCooperadoGarantiaValorReceberSync();
+    if (!isCooperadoMobileBicLeituraAuthority(user)) {
+      scheduleCooperadoGarantiaValorReceberUntilResolvido(user);
+      scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user, { force: true });
+    }
+    return () => {
+      cancelCooperadoGarantiaValorReceberSync();
+      cancelCooperadoBicMobileSessionSync();
+    };
   }, [user?.id, user?.role, user?.cooperadoId]);
 
   useEffect(() => {

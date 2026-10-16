@@ -1,6 +1,6 @@
 /**
  * Entrada única de leitura financeira cooperado (Início, Financeiro, PWA snapshots).
- * APPDATA_LIVE: paridade direta no AppData. Caso contrário, BIC quando autoridade ativa.
+ * Padrão: BIC (bicCentralLeituraFinanceiraParidadeCooperado). APPDATA_LIVE=true força paridade legado.
  */
 import type { AppData } from "@/types";
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
