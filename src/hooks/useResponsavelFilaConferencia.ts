@@ -33,8 +33,11 @@ export function useResponsavelFilaConferencia(
   const subscribeFila = panelActive && !isCooperado;
   const stickyRef = useRef({ ids: new Set<string>(), snapshot: new Map<string, NotaPedido>() });
 
+  const filaSubscribe = subscribeFila && filaDetalhada;
+  const badgeSubscribe = subscribeFila && !filaDetalhada;
+
   const pendingDeleteIds = useAppDataSelectorForDomainsWhenActive(
-    subscribeFila,
+    filaSubscribe,
     FILA_CONFERENCIA_DOMAINS,
     (d) => {
       if (!coopId) return new Set<string>();
@@ -46,7 +49,7 @@ export function useResponsavelFilaConferencia(
 
   const pendentesTodasBase =
     useAppDataSelectorForDomainsWhenActive(
-      subscribeFila,
+      filaSubscribe,
       FILA_CONFERENCIA_DOMAINS,
       (d) => {
         if (isCooperado || !coopId || !filaDetalhada) return [] as NotaPedido[];
@@ -60,19 +63,23 @@ export function useResponsavelFilaConferencia(
 
   const filaBadgeCount =
     useAppDataSelectorForDomainsWhenActive(
-      subscribeFila,
+      badgeSubscribe,
       FILA_CONFERENCIA_DOMAINS,
       (d) => {
         if (isCooperado || !coopId || filaDetalhada) return 0;
         const cnpj = getCooperativaCnpj(d, coopId);
         const pending = cnpj ? getPendingNotaDeleteIds(cnpj) : new Set<string>();
-        reconciliarNotasConferenciaDecididasLocalmente(d);
-        const fila = listNotasFilaConferenciaResponsavel(d, coopId).filter(
-          (n) => !isNotaConferenciaDecididaLocalmente(n.id)
-        );
-        if (pending.size === 0) return fila.length;
+        const fila = listNotasFilaConferenciaResponsavel(d, coopId);
+        if (pending.size === 0) {
+          let visiveis = 0;
+          for (const n of fila) {
+            if (!isNotaConferenciaDecididaLocalmente(n.id)) visiveis += 1;
+          }
+          return visiveis;
+        }
         let visiveis = 0;
         for (const n of fila) {
+          if (isNotaConferenciaDecididaLocalmente(n.id)) continue;
           if (!pending.has(n.id)) visiveis += 1;
         }
         return visiveis;

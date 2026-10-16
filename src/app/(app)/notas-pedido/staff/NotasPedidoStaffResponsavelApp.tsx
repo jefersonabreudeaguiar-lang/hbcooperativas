@@ -206,7 +206,6 @@ import { getProdutosContrato } from "@/services/catalogoContratosService";
 import {
   countCooperadosLancamentosEmAbertoResponsavel,
   countNotasFilaConferenciaResponsavel,
-  listNotasFilaConferenciaResponsavel,
 } from "@/services/responsavelPainelIndex";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, filtrarResumosMesesNaoQuitados } from "@/services/cooperadoEntregasService";
 import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
@@ -2036,18 +2035,6 @@ export default function NotasPedidoStaffMain() {
       [coopId, isCooperado, hbDescontosRevision]
     ) ?? 0;
 
-  const filaIndexCount =
-    useAppDataSelector(
-      (d) => {
-        if (!coopId || isCooperado) return 0;
-        reconciliarNotasConferenciaDecididasLocalmente(d);
-        return listNotasFilaConferenciaResponsavel(d, coopId).filter(
-          (n) => !isNotaConferenciaDecididaLocalmente(n.id)
-        ).length;
-      },
-      [coopId, isCooperado]
-    ) ?? 0;
-
   const dadosCarregandoFilaConferencia =
     mostrarFilaResponsavelConteudo && (data === null || !isAppDataWarm());
 
@@ -2205,6 +2192,7 @@ export default function NotasPedidoStaffMain() {
   useEffect(() => {
     if (isCooperado || !coopId) return;
     if (responsavelPrimeiroPullAgendadoRef.current) return;
+    if (vistaResponsavel !== "fila" && vistaResponsavel !== "cooperado") return;
     const t = window.setTimeout(() => {
       const d = getData();
       const filaVazia = !d || countNotasFilaConferenciaResponsavel(d, coopId) === 0;
@@ -2217,7 +2205,7 @@ export default function NotasPedidoStaffMain() {
   useEffect(() => {
     if (isCooperado || !coopId || !mostrarFilaResponsavelConteudo) return;
     if (data === null || !isAppDataWarm()) return;
-    if (pendentesEstaveis.length > 0 || filaIndexCount > 0) {
+    if (pendentesEstaveis.length > 0 || filaNavCount > 0) {
       filaRecuperacaoAutoRef.current = false;
       return;
     }
@@ -2237,15 +2225,15 @@ export default function NotasPedidoStaffMain() {
     mostrarFilaResponsavelConteudo,
     data,
     pendentesEstaveis.length,
-    filaIndexCount,
+    filaNavCount,
     dadosCarregandoFilaConferencia,
     conferirModal,
     recuperarFilaConferencia,
   ]);
 
   useEffect(() => {
-    if (isCooperado || !coopId || !tabActive) return;
-    const filaLive = mostrarFilaResponsavelConteudo && isStaffFilaNotasLivePollEnabled();
+    if (isCooperado || !coopId || !tabActive || !mostrarFilaResponsavelConteudo) return;
+    const filaLive = isStaffFilaNotasLivePollEnabled();
     const onVisible = () => {
       if (document.hidden) return;
       puxarNotasResponsavelDaNuvem({ bypassMinGap: true });
@@ -4821,10 +4809,10 @@ export default function NotasPedidoStaffMain() {
                   pelo botão Atualizar.
                 </p>
               </div>
-            ) : filaIndexCount > 0 ? (
+            ) : filaNavCount > 0 ? (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-6 text-center space-y-3">
                 <p className="text-base font-semibold text-amber-950">
-                  {filaIndexCount} {filaIndexCount === 1 ? "entrega" : "entregas"} na cooperativa
+                  {filaNavCount} {filaNavCount === 1 ? "entrega" : "entregas"} na cooperativa
                 </p>
                 <p className="text-sm text-amber-900/80 max-w-md mx-auto">
                   Os dados locais ainda não montaram a lista. Toque abaixo para buscar na nuvem de novo.

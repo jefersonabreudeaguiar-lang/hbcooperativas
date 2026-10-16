@@ -38,12 +38,12 @@ export function resolveStaffNotasPollIntervalMs(filaConferenciaAtiva: boolean): 
   if (!filaConferenciaAtiva || !isStaffFilaNotasLivePollEnabled()) {
     return readEnvMs("NEXT_PUBLIC_STAFF_NOTAS_POLL_INTERVAL_MS", 120_000);
   }
-  return readEnvMs("NEXT_PUBLIC_STAFF_FILA_NOTAS_POLL_INTERVAL_MS", 6_000);
+  return readEnvMs("NEXT_PUBLIC_STAFF_FILA_NOTAS_POLL_INTERVAL_MS", 10_000);
 }
 
 /** Poll leve uploadProgress (meta + partes na nuvem). */
 export function resolveStaffFilaUploadProgressPollMs(): number {
-  return readEnvMs("NEXT_PUBLIC_STAFF_FILA_UPLOAD_PROGRESS_MS", 3_500);
+  return readEnvMs("NEXT_PUBLIC_STAFF_FILA_UPLOAD_PROGRESS_MS", 5_000);
 }
 
 export const STAFF_FILA_UPLOAD_PROGRESS_MAX_NOTAS = 12;
