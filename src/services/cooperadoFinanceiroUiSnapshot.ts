@@ -8,7 +8,7 @@ import {
   type BicExibicaoFallbackReason,
 } from "@/types/bic";
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
-import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import { cooperadoMotorRevisionOperacional } from "@/lib/cooperado/cooperadoMotorRevisionOperacional";
 import { validateBicTenantContext } from "@/services/bicTenantGuard";
 import {
@@ -172,7 +172,7 @@ function buildLegadoSnapshot(
   const carregando = Boolean(opts?.carregandoNuvem || opts?.financeiroSincronizando);
   const conferindo = Boolean(opts?.conferindoPagamentoNuvem);
 
-  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+  const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId);
   const motor = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
   const inicioRaw = cooperadoExibirValorReceberInicio(data, cooperadoId, cooperativaId);
   const inicio =
@@ -312,7 +312,7 @@ export function buildCooperadoFinanceiroUiSnapshot(
 
   const m6 = bicCentralValorAReceberAgregado(data, coopadoId, coopId, { apresentacaoConsolidada });
   const motorFicha = getValorQuantoVouReceberMotorLegado(data, coopadoId, coopId);
-  const paridade = leituraFinanceiraParidadeCooperado(data, coopadoId, coopId);
+  const paridade = cooperadoLeituraFinanceiraExibicao(data, coopadoId, coopId);
   const reciboAssinadoLocal = cooperadoTemReciboAssinadoLocalSemPendenciaUi(data, coopadoId, coopId);
   const aguardandoAssinaturaRecibo =
     !reciboAssinadoLocal &&

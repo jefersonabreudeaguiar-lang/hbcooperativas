@@ -2,6 +2,17 @@
 
 Plano de maturidade BIC (meta rubrica **99/100**) em quatro movimentos. Este documento acompanha o **Movimento I — Allegro**.
 
+## Movimento II — Largo (cooperado 99 no recorte)
+
+| Entrega | Função |
+|---------|--------|
+| `cooperadoBicSessionReinforcementSkip.ts` | Reforços 8s/22s pulam pull se revisão nuvem já aplicada + remat &lt; 90s |
+| `cooperadoBicMobileSessionSync` | Coalesce com sync inflight |
+| Migração gaps | Policy, recovery, snapshots, HB sync, entregas, ficha → `cooperadoLeituraFinanceiraExibicao` |
+| `useCooperadoInicioValorReceberCardState` | Domínios `shell`+`financeiro` no híbrido leve |
+
+Testes: `npm run test:cooperado-bic-session-skip` + matriz/porta existentes.
+
 ## Movimento I (entregue neste repositório)
 
 | Artefato | Função |

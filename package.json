@@ -35,6 +35,7 @@
     "test:bic-leitura-porta": "npx tsx scripts/test-bic-leitura-porta.ts",
     "test:bic-paridade-matrix": "npx tsx scripts/test-bic-paridade-matrix.ts",
     "bic:cobertura-leitura": "npx tsx scripts/generate-bic-cobertura-leitura.ts",
+    "test:cooperado-bic-session-skip": "npx tsx scripts/test-cooperado-bic-session-reinforcement-skip.ts",
     "test:bic-lab-full-wiring": "npx tsx scripts/test-bic-lab-full-wiring.ts",
     "test:cooperado-inicio-card-policy": "npx tsx scripts/test-cooperado-inicio-card-policy.ts",
     "test:cooperado-inicio-card-resolver-boot": "npx tsx scripts/test-cooperado-inicio-card-resolver-boot.ts",

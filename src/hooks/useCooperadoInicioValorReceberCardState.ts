@@ -43,6 +43,15 @@ import {
   lerCooperadoPwaFichaResumoSnapshot,
   resolveParidadeFromFichaResumoSnapshot,
 } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
+import {
+  getAppDataDomainRevision,
+  subscribeAppDataDomain,
+  type AppDataNotifyDomain,
+} from "@/lib/performance/appDataDomainNotify";
+import {
+  COOPERADO_BIC_HYBRID_FINANCE_DOMAINS,
+  cooperadoBicHybridLightUiActive,
+} from "@/lib/cooperado/cooperadoBicHybridLight";
 import { getData, isAppDataWarm, preloadAppData, subscribe } from "@/services/dataStore";
 import { cooperadoPilotCardInicioLeituraRapida } from "@/lib/cooperado/cooperadoMobilePilotInicioValorLocal";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -109,9 +118,23 @@ export function useCooperadoInicioValorReceberCardState(input: {
       (isCooperadoPwaMobileLeveUi() || isCooperadoMobilePilotPerfActive())
   );
 
+  const bicHybridFinanceDomains = cooperadoBicHybridLightUiActive(sessionUser);
+
   const appDataWarmKey = useSyncExternalStore(
-    subscribe,
-    () => (isAppDataWarm() ? "1" : "0"),
+    (onStoreChange) => {
+      if (!bicHybridFinanceDomains) return subscribe(onStoreChange);
+      const unsubs = COOPERADO_BIC_HYBRID_FINANCE_DOMAINS.map((d: AppDataNotifyDomain) =>
+        subscribeAppDataDomain(d, onStoreChange)
+      );
+      return () => {
+        for (const u of unsubs) u();
+      };
+    },
+    () => {
+      if (!isAppDataWarm()) return "0";
+      if (!bicHybridFinanceDomains) return "1";
+      return COOPERADO_BIC_HYBRID_FINANCE_DOMAINS.map((d) => getAppDataDomainRevision(d)).join(",");
+    },
     () => "0"
   );
 

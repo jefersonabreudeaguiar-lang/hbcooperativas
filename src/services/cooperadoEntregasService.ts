@@ -24,7 +24,7 @@ import {
   valorLiquidoFromResumoPartes,
 } from "@/services/notaPedidoService";
 import { formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia } from "@/utils/format";
-import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import {
   mesesComValoresAvulsos,
   temValoresAvulsosPendentesMes,
@@ -213,7 +213,7 @@ export function cooperadoExibirValorReceberInicio(
       : mesLabel;
 
   if (isBicCentralReadAuthorityEnabled()) {
-    const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+    const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId);
     const bicVal = getValorQuantoVouReceber(data, cooperadoId, cooperativaId);
     const mesesPar =
       paridade.mesesResumo.length > 0 ? paridade.mesesResumo : paridade.consolidado.meses;

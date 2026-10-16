@@ -15,6 +15,14 @@ import {
   scheduleCooperadoBicHybridIdleTask,
 } from "@/lib/cooperado/cooperadoBicHybridLight";
 import { cooperadoGaExibicaoFinanceiraAindaZerada } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
+import {
+  awaitCooperadoGaSyncBaseInformacoesFinanceirasInflight,
+  isCooperadoGaSyncBaseInformacoesFinanceirasInflight,
+} from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
+import {
+  markCooperadoBicSessionRematerialized,
+  shouldSkipCooperadoBicSessionReinforcementPull,
+} from "@/lib/cooperado/cooperadoBicSessionReinforcementSkip";
 
 const SESSION_COUNT_PREFIX = "hb.coop.bicMobileSessionSyncCount";
 /** 1ª imediata pós-interativo + 2 reforços — sensação “quase ao vivo”. */
@@ -60,6 +68,7 @@ function rematerializarBicSnapshots(user: Omit<User, "password">): void {
     cooperadoPilotForcarRematerializacaoFinanceira(user);
     cooperadoRematerializarFinanceiroLocalSePossivel(user);
     dispatchCooperadoPwaLeveUiSnapshotRefresh();
+    markCooperadoBicSessionRematerialized(user.id);
   };
   if (isCooperadoBicHybridLightEnabled()) {
     scheduleCooperadoBicHybridIdleTask(run);
@@ -73,9 +82,22 @@ async function runBicSessionSyncTick(user: Omit<User, "password">, tickIndex: nu
   if (activeUserId !== user.id) return;
   if (readSessionSyncCount(user.id) >= MAX_SYNCS_PER_SESSION) return;
 
-  incrementSessionSyncCount(user.id);
-
   const hybridLight = isCooperadoBicHybridLightEnabled();
+
+  if (tickIndex > 0 && isCooperadoGaSyncBaseInformacoesFinanceirasInflight()) {
+    incrementSessionSyncCount(user.id);
+    await awaitCooperadoGaSyncBaseInformacoesFinanceirasInflight();
+    rematerializarBicSnapshots(user);
+    return;
+  }
+
+  if (tickIndex > 0 && hybridLight && (await shouldSkipCooperadoBicSessionReinforcementPull(user, tickIndex))) {
+    incrementSessionSyncCount(user.id);
+    rematerializarBicSnapshots(user);
+    return;
+  }
+
+  incrementSessionSyncCount(user.id);
 
   if (tickIndex === 0) {
     await runCooperadoGaSyncBaseInformacoesFinanceiras(user, { force: true, bicSession: true });

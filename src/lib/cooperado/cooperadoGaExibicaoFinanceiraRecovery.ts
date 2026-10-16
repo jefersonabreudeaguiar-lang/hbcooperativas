@@ -13,7 +13,7 @@ import { lerHbCreditAccountPersistidoFlex } from "@/lib/hb-credit/hbCreditAccoun
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoAppReleaseNeedsOperacionalSync } from "@/lib/performance/cooperadoEventDrivenSync";
-import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import { cooperadoPwaFinanceiroSnapshotsAusentes } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
@@ -50,7 +50,7 @@ export function cooperadoGaExibicaoFinanceiraConfiavel(
   const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
   if (!coopId) return false;
   const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
+  const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, coopId);
   if (paridade.valorLiquido > 0.01 && !cooperadoFinanceiroCardCacheTemValor(user)) {
     return false;
   }
@@ -75,7 +75,7 @@ export function cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(
   if (cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId)) return true;
   if (cooperadoPwaFinanceiroSnapshotsAusentes(cooperadoId, coopId)) {
     if (cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId)) return true;
-    const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
+    const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, coopId);
     if (paridade.valorLiquido > 0.01) return true;
   }
   const card = lerInicioCardFinanceiroExibicao(cooperadoId, coopId);
@@ -84,7 +84,7 @@ export function cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(
   if (
     cardSemValor &&
     (cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId) ||
-      leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId).valorLiquido > 0.01)
+      cooperadoLeituraFinanceiraExibicao(data, cooperadoId, coopId).valorLiquido > 0.01)
   ) {
     return true;
   }
@@ -116,7 +116,7 @@ export function cooperadoGaValorReceberExibicaoResolvida(
   const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
   if (!cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId)) return false;
   if (cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId)) return false;
-  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
+  const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, coopId);
   if (paridade.valorLiquido > 0.01) {
     return cooperadoPilotMotorCardInicioTemValor(data, cooperadoId, coopId);
   }

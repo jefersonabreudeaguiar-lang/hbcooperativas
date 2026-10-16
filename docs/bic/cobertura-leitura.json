@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-10-16T02:34:21.260Z",
-  "movement": "I",
+  "generatedAt": "2026-10-16T02:38:55.441Z",
+  "movement": "II",
   "buckets": [
     {
       "id": "porta_cooperado",
       "label": "cooperadoLeituraFinanceiraExibicao / bicLeituraPorta",
       "preferPorta": true,
-      "fileCount": 12,
+      "fileCount": 19,
       "files": [
         "src/app/(app)/dashboard/DashboardContent.tsx",
         "src/app/(app)/ficha-corrida/FichaCorridaContent.tsx",
@@ -16,10 +16,17 @@
         "src/lib/bic/bicLeituraPortaGating.ts",
         "src/lib/cooperado/cooperadoBicMobileAuthority.ts",
         "src/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync.ts",
+        "src/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery.ts",
+        "src/lib/cooperado/cooperadoHbCreditSyncPadrao.ts",
         "src/lib/cooperado/cooperadoInicioCardParidadeMotor.ts",
         "src/lib/cooperado/cooperadoLeituraFinanceiraExibicao.ts",
         "src/lib/cooperado/cooperadoPwaFichaResumoSnapshot.ts",
-        "src/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate.ts"
+        "src/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate.ts",
+        "src/lib/cooperadoInicioCardPolicy.ts",
+        "src/lib/hb-credit/hbCreditLeituraBic.ts",
+        "src/lib/hb-credit/syncContaCoopFichaDescontos.ts",
+        "src/services/cooperadoEntregasService.ts",
+        "src/services/cooperadoFinanceiroUiSnapshot.ts"
       ]
     },
     {
@@ -57,21 +64,14 @@
       "id": "paridade_legado_direto",
       "label": "leituraFinanceiraParidadeCooperado direto na UI",
       "preferPorta": false,
-      "fileCount": 13,
+      "fileCount": 6,
       "files": [
         "src/app/(app)/ficha-corrida/FichaCorridaContent.tsx",
         "src/components/cooperado/CooperadoMinhaFichaTab.tsx",
         "src/lib/bic/bicLeituraPorta.ts",
         "src/lib/cooperado/cooperadoFinanceiroParidadeProbe.ts",
         "src/lib/cooperado/cooperadoFinanceiroParidadeUniversal.ts",
-        "src/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery.ts",
-        "src/lib/cooperado/cooperadoHbCreditSyncPadrao.ts",
-        "src/lib/cooperadoInicioCardPolicy.ts",
-        "src/lib/hb-credit/hbCreditLeituraBic.ts",
-        "src/lib/hb-credit/syncContaCoopFichaDescontos.ts",
-        "src/services/bicLeituraCentralCooperado.ts",
-        "src/services/cooperadoEntregasService.ts",
-        "src/services/cooperadoFinanceiroUiSnapshot.ts"
+        "src/services/bicLeituraCentralCooperado.ts"
       ]
     },
     {
@@ -92,18 +92,9 @@
   ],
   "gaps": {
     "uiLegadoParidadeDireta": {
-      "fileCount": 10,
+      "fileCount": 1,
       "files": [
-        "src/app/(app)/ficha-corrida/FichaCorridaContent.tsx",
-        "src/components/cooperado/CooperadoMinhaFichaTab.tsx",
-        "src/lib/cooperado/cooperadoFinanceiroParidadeProbe.ts",
-        "src/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery.ts",
-        "src/lib/cooperado/cooperadoHbCreditSyncPadrao.ts",
-        "src/lib/cooperadoInicioCardPolicy.ts",
-        "src/lib/hb-credit/hbCreditLeituraBic.ts",
-        "src/lib/hb-credit/syncContaCoopFichaDescontos.ts",
-        "src/services/cooperadoEntregasService.ts",
-        "src/services/cooperadoFinanceiroUiSnapshot.ts"
+        "src/app/(app)/ficha-corrida/FichaCorridaContent.tsx"
       ]
     }
   },

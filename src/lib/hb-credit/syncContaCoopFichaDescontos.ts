@@ -10,7 +10,7 @@ import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { beginSaveBatch, endSaveBatch, getData, notifyAppDataSubscribers, updateData } from "@/services/dataStore";
 import { persistDescontosContaCoopNoArquivo, getDescontosContaCoopMesCached } from "@/services/notaPedidoService";
 import { hbCreditMesPrincipal, hbCreditValorLiquidoMes } from "@/lib/hb-credit/hbCreditLeituraBic";
-import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import {
   listMesesReferenciaHbFichaBaseSync,
   shouldSyncHbFichaBaseDescontos,
@@ -345,7 +345,7 @@ export async function refreshContaCoopDescontosAfterOperacionalSync(opts: {
       const apiCooperadoId = resolveHbCreditApiCooperadoId(opts.user, opts.user.cooperadoId);
       const limiteIds =
         canonico && canonico !== apiCooperadoId ? [apiCooperadoId, canonico] : [apiCooperadoId];
-      const paridade = leituraFinanceiraParidadeCooperado(data, canonico, opts.cooperativaId);
+      const paridade = cooperadoLeituraFinanceiraExibicao(data, canonico, opts.cooperativaId);
       const mesReferencia =
         paridade.mesesResumo[paridade.mesesResumo.length - 1] ??
         paridade.mesesResumo[0] ??

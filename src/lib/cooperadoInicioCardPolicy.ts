@@ -16,7 +16,10 @@ import {
 import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
 import { cooperadoMotorRevisionOperacional } from "@/lib/cooperado/cooperadoMotorRevisionOperacional";
 import { bicCentralResolveInicioParaExibicao, bicCentralSincronizarRotuloMeses, bicCentralValorAReceberAgregado } from "@/services/bicLeituraCentralCooperado";
-import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import {
+  type LeituraFinanceiraParidadeCooperado,
+} from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import { resolverMotorCardInicioParidadeFinanceiro } from "@/lib/cooperado/cooperadoInicioCardParidadeMotor";
 import {
   buildCooperadoFinanceiroUiSnapshot,
@@ -89,7 +92,7 @@ export function cooperadoBicAutorizaZerarCardInicio(
   cooperativaId: string | undefined,
   opts?: { tinhaValorExibido?: boolean }
 ): boolean {
-  const paridadeValor = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId).valorLiquido;
+  const paridadeValor = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId).valorLiquido;
   if (paridadeValor > 0) return false;
   if (listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId).length > 0) return false;
   if (getTotalAPagarCooperado(data, cooperadoId, undefined, cooperativaId) > 0) return false;
@@ -135,7 +138,7 @@ function valorLiquidoCardInicioCooperado(
   data: AppData,
   cooperadoId: string,
   cooperativaId: string | undefined,
-  paridade: ReturnType<typeof leituraFinanceiraParidadeCooperado>,
+  paridade: LeituraFinanceiraParidadeCooperado,
   fluxoPix: ReturnType<typeof getValorQuantoVouReceberMotorLegado>
 ): number {
   const valorParidade = paridade.valorLiquido > 0 ? paridade.valorLiquido : 0;
@@ -177,7 +180,7 @@ export function resolverInicioCardMotorFromAppData(
   opts?: { apresentacaoConsolidada?: boolean }
 ): InicioCardMotorSnapshot {
   void opts?.apresentacaoConsolidada;
-  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+  const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId);
   const fluxoPix = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
   const mesFallback = paridade.mesesResumo[paridade.mesesResumo.length - 1] ?? getCurrentMesReferencia();
   const mesLabel = paridade.mesLabel?.trim() || formatMesReferencia(mesFallback);
@@ -221,7 +224,7 @@ function motorInicioCardComReciboBic(
   motorBase: InicioCardMotorSnapshot
 ): InicioCardMotorSnapshot {
   const fluxoPix = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
-  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+  const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId);
   const valorExibir = valorLiquidoCardInicioCooperado(
     data,
     cooperadoId,

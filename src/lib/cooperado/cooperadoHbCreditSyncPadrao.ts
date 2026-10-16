@@ -1,6 +1,6 @@
 import type { User } from "@/types";
 import { isCloudSessionActive } from "@/lib/security/clientSession";
-import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import { hbCreditMesPrincipal } from "@/lib/hb-credit/hbCreditLeituraBic";
 import { resolveHbCreditLimiteSyncTargets } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 import { refreshContaCoopValorReceberPilot } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
@@ -37,7 +37,7 @@ export async function executarCooperadoHbCreditSyncPadrao(
   if (!cnpj) return false;
 
   const canonico = resolverCooperadoIdCanonico(data, user.cooperadoId, cooperativaId);
-  const paridade = leituraFinanceiraParidadeCooperado(data, canonico, cooperativaId);
+  const paridade = cooperadoLeituraFinanceiraExibicao(data, canonico, cooperativaId);
   const mesReferencia =
     paridade.mesesResumo[paridade.mesesResumo.length - 1] ??
     paridade.mesesResumo[0] ??

@@ -17,7 +17,7 @@ import {
   resolverCooperadoIdCanonico,
 } from "@/services/cooperadoCloudService";
 import { listarMesesPendentesPagamentoResponsavel } from "@/services/cooperadoEntregasService";
-import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { resolveLeituraFinanceiraCooperadoCore } from "@/lib/bic/bicLeituraPorta";
 import {
   getMesesReferenciaPagamento,
   getPagamentoConfirmadoCooperadoMes,
@@ -151,7 +151,7 @@ export function hbCreditMesPrincipal(
   cooperadoId: string,
   cooperativaId: string | undefined
 ): string {
-  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+  const paridade = resolveLeituraFinanceiraCooperadoCore(data, cooperadoId, cooperativaId);
   const meses = paridade.mesesResumo;
   if (meses.length) return meses[meses.length - 1]!;
   const bicMes = loadBicLeituraCentralCooperado().bicCentralMesPrincipalQuantoVouReceber;
@@ -261,7 +261,7 @@ function hbCreditCreditoBaseParidadeQuantoVouReceberReais(
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   if (!coopId) return 0;
 
-  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
+  const paridade = resolveLeituraFinanceiraCooperadoCore(data, cooperadoId, coopId);
   if (paridade.valorLiquido > 0.005) return round2(paridade.valorLiquido);
 
   const m6 = hbCreditValorAReceberAgregado(data, cooperadoId, cooperativaId);

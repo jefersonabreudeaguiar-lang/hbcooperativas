@@ -37,6 +37,15 @@ const MIN_INTERVAL_MS = 45_000;
 
 let inflight: Promise<boolean> | null = null;
 
+export function isCooperadoGaSyncBaseInformacoesFinanceirasInflight(): boolean {
+  return inflight != null;
+}
+
+export async function awaitCooperadoGaSyncBaseInformacoesFinanceirasInflight(): Promise<void> {
+  if (!inflight) return;
+  await inflight.catch(() => false);
+}
+
 function pullJaRecente(userId: string): boolean {
   if (typeof sessionStorage === "undefined") return false;
   try {

@@ -84,10 +84,7 @@ import {
   bicCentralResolvePainelParaExibicao,
 } from "@/services/bicLeituraCentralCooperado";
 import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
-import {
-  leituraFinanceiraParidadeCooperado,
-  leituraFinanceiraParidadeCooperadoMesReferencia,
-} from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { leituraFinanceiraParidadeCooperadoMesReferencia } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
@@ -1185,7 +1182,7 @@ function FichaCorridaPageInner() {
       return paridadeCooperadoMobile.mesesResumo;
     }
     if (aba === "pagar") {
-      const { mesesResumo } = leituraFinanceiraParidadeCooperado(
+      const { mesesResumo } = cooperadoLeituraFinanceiraExibicao(
         data,
         cooperadoSelecionadoId,
         coopId
@@ -1226,7 +1223,7 @@ function FichaCorridaPageInner() {
       return paridadeCooperadoMobile.descontosExtras;
     }
     if (aba === "pagar") {
-      return leituraFinanceiraParidadeCooperado(data, cooperadoSelecionadoId, coopId).descontosExtras;
+      return cooperadoLeituraFinanceiraExibicao(data, cooperadoSelecionadoId, coopId).descontosExtras;
     }
     return [];
   }, [

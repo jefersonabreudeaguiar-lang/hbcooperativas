@@ -77,12 +77,14 @@ function main() {
       !f.includes("cooperadoFinanceiroParidadeUniversal") &&
       !f.includes("bicLeituraCentralCooperado") &&
       !f.includes("bicLeituraPorta") &&
-      !f.includes("cooperadoLeituraFinanceiraExibicao")
+      !f.includes("cooperadoLeituraFinanceiraExibicao") &&
+      !f.includes("cooperadoFinanceiroParidadeProbe") &&
+      !f.includes("CooperadoMinhaFichaTab")
   );
 
   const report = {
     generatedAt: new Date().toISOString(),
-    movement: "I",
+    movement: "II",
     buckets: BUCKETS.map((b) => ({
       id: b.id,
       label: b.label,
