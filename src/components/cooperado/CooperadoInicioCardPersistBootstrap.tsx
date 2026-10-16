@@ -16,6 +16,11 @@ import {
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { scheduleCooperadoFinanceiroDisplayWarmup } from "@/lib/cooperado/cooperadoFinanceiroDisplayWarmup";
+import {
+  COOPERADO_BIC_HYBRID_FINANCE_DOMAINS,
+  cooperadoBicHybridLightUiActive,
+} from "@/lib/cooperado/cooperadoBicHybridLight";
+import { useAppDataDomainsRevisionWhenActive } from "@/hooks/useAppData";
 
 /**
  * Mantém cache do card “A receber” após login/sync e quando AppData local muda.
@@ -23,13 +28,19 @@ import { scheduleCooperadoFinanceiroDisplayWarmup } from "@/lib/cooperado/cooper
 export function CooperadoInicioCardPersistBootstrap() {
   const { user } = useAuth();
   const { syncing, lastSyncedAt, cooperadoPagamentosHydrated } = useSyncStatus();
-  const dataRevision = useSyncExternalStore(
-    (onStoreChange) =>
-      isCooperadoPwaMessengerMode() ? () => {} : subscribe(onStoreChange),
-    () =>
-      isCooperadoPwaMessengerMode() || !isAppDataWarm() ? -1 : getDataRevision(),
+  const messenger = isCooperadoPwaMessengerMode();
+  const bicHybridFinance = cooperadoBicHybridLightUiActive(user);
+  const appDataUiOn = !messenger;
+  const dataRevisionGlobal = useSyncExternalStore(
+    (onStoreChange) => (bicHybridFinance ? () => {} : appDataUiOn ? subscribe(onStoreChange) : () => {}),
+    () => (bicHybridFinance || !appDataUiOn || !isAppDataWarm() ? -1 : getDataRevision()),
     () => -1
   );
+  const financeDomainsRevision = useAppDataDomainsRevisionWhenActive(
+    appDataUiOn && bicHybridFinance,
+    COOPERADO_BIC_HYBRID_FINANCE_DOMAINS
+  );
+  const dataRevision = bicHybridFinance ? financeDomainsRevision : dataRevisionGlobal;
   const lastSyncedRef = useRef<number | null>(null);
 
   useEffect(() => {

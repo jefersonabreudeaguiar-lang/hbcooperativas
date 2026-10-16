@@ -23,6 +23,7 @@ import {
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { cooperadoMobilePilotDeferAppDataEagerWarm } from "@/lib/cooperado/cooperadoMobilePilotPerf";
+import { shouldDeferAppDataEagerWarmForCooperadoBicHybrid } from "@/lib/cooperado/cooperadoBicHybridLight";
 
 /** Mesma chave que `cooperadoEventDrivenSync` — evita import circular no cold start. */
 const HB_OPERACIONAL_SYNCED_BUILD = "hb-coop-operacional-synced-build";
@@ -110,7 +111,11 @@ function isStaffDeferAppDataEagerWarmEnabled(): boolean {
 
 function shouldDeferAppDataEagerWarmForSession(session: ReturnType<typeof getSession>): boolean {
   if (!session) return false;
-  if (isCooperadoPwaMessengerMode() || cooperadoMobilePilotDeferAppDataEagerWarm(session)) {
+  if (
+    isCooperadoPwaMessengerMode() ||
+    cooperadoMobilePilotDeferAppDataEagerWarm(session) ||
+    shouldDeferAppDataEagerWarmForCooperadoBicHybrid(session)
+  ) {
     return true;
   }
   if (isStaffDeferAppDataEagerWarmEnabled() && isStaffGestaoRole(session.role)) {

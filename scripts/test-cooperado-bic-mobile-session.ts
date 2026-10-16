@@ -22,6 +22,7 @@ const session = readFileSync(
 assert.ok(session.includes("MAX_SYNCS_PER_SESSION"));
 assert.ok(session.includes("8_000"));
 assert.ok(session.includes("bicSession: true"));
+assert.ok(session.includes("isCooperadoBicHybridLightEnabled"));
 
 const vercel = readFileSync(join(import.meta.dirname ?? __dirname, "../vercel.json"), "utf8");
 assert.ok(vercel.includes('"NEXT_PUBLIC_COOPERADO_FINANCEIRO_APPDATA_LIVE": "false"'));

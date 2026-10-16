@@ -10,6 +10,11 @@ import { runCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/co
 import { dispatchCooperadoPwaLeveUiSnapshotRefresh } from "@/lib/cooperado/cooperadoPwaLeveUiEvents";
 import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
 import { requestCooperadoGaFinanceiroExibicaoRecoverySync } from "@/services/syncRequest";
+import {
+  isCooperadoBicHybridLightEnabled,
+  scheduleCooperadoBicHybridIdleTask,
+} from "@/lib/cooperado/cooperadoBicHybridLight";
+import { cooperadoGaExibicaoFinanceiraAindaZerada } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 
 const SESSION_COUNT_PREFIX = "hb.coop.bicMobileSessionSyncCount";
 /** 1ª imediata pós-interativo + 2 reforços — sensação “quase ao vivo”. */
@@ -51,9 +56,16 @@ function clearTimers(): void {
 }
 
 function rematerializarBicSnapshots(user: Omit<User, "password">): void {
-  cooperadoPilotForcarRematerializacaoFinanceira(user);
-  cooperadoRematerializarFinanceiroLocalSePossivel(user);
-  dispatchCooperadoPwaLeveUiSnapshotRefresh();
+  const run = () => {
+    cooperadoPilotForcarRematerializacaoFinanceira(user);
+    cooperadoRematerializarFinanceiroLocalSePossivel(user);
+    dispatchCooperadoPwaLeveUiSnapshotRefresh();
+  };
+  if (isCooperadoBicHybridLightEnabled()) {
+    scheduleCooperadoBicHybridIdleTask(run);
+  } else {
+    run();
+  }
 }
 
 async function runBicSessionSyncTick(user: Omit<User, "password">, tickIndex: number): Promise<void> {
@@ -63,8 +75,15 @@ async function runBicSessionSyncTick(user: Omit<User, "password">, tickIndex: nu
 
   incrementSessionSyncCount(user.id);
 
+  const hybridLight = isCooperadoBicHybridLightEnabled();
+
   if (tickIndex === 0) {
     await runCooperadoGaSyncBaseInformacoesFinanceiras(user, { force: true, bicSession: true });
+  } else if (hybridLight) {
+    await runCooperadoGaSyncBaseInformacoesFinanceiras(user, { bicSession: true, light: true });
+    if (cooperadoGaExibicaoFinanceiraAindaZerada(user)) {
+      requestCooperadoGaFinanceiroExibicaoRecoverySync({ garantia: true });
+    }
   } else {
     requestCooperadoGaFinanceiroExibicaoRecoverySync({ garantia: true });
     await runCooperadoGaSyncBaseInformacoesFinanceiras(user, { force: true, bicSession: true });

@@ -16,9 +16,11 @@ import { scheduleCooperadoHbCreditLimiteAndAccountWarmup } from "@/lib/cooperado
 import { markCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
 import { fetchCooperativaCloudRevision } from "@/services/cooperativaSyncRevisionService";
 import {
+  cloudRevisionChangedSinceApplied,
   fingerprintCooperativaCloudRevision,
   persistAppliedCooperativaCloudRevision,
 } from "@/lib/performance/cooperadoEventDrivenSync";
+import { isCooperadoBicHybridLightEnabled } from "@/lib/cooperado/cooperadoBicHybridLight";
 import { runCooperadoNotasContratosLightPull } from "@/lib/cooperado/cooperadoNotasContratosLightPull";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { syncOperacionalFromCloud } from "@/services/cooperativaSyncCloudService";
@@ -66,7 +68,7 @@ export function cooperadoGaPrecisaSyncBaseInformacoesFinanceiras(
 /** Puxa operacional + notas da nuvem e atualiza snapshots locais (paridade = base). */
 export async function runCooperadoGaSyncBaseInformacoesFinanceiras(
   user: Omit<User, "password"> | null | undefined,
-  opts?: { force?: boolean; bicSession?: boolean }
+  opts?: { force?: boolean; bicSession?: boolean; light?: boolean }
 ): Promise<boolean> {
   if (typeof window === "undefined") return false;
   if (!user || user.role !== "cooperado" || !user.cooperadoId) return false;
@@ -78,12 +80,18 @@ export async function runCooperadoGaSyncBaseInformacoesFinanceiras(
   ) {
     return false;
   }
+  const lightReconcile =
+    Boolean(opts?.light) &&
+    Boolean(opts?.bicSession) &&
+    isCooperadoBicHybridLightEnabled();
   if (!opts?.force && !opts?.bicSession && pullJaRecente(user.id)) return false;
   if (inflight) return inflight;
 
   inflight = (async () => {
     if (typeof navigator !== "undefined" && !navigator.onLine) return false;
-    markCooperadoUserSyncVisible();
+    if (!lightReconcile) {
+      markCooperadoUserSyncVisible();
+    }
     preloadAppData();
     const warm = isAppDataWarm() ? true : await waitForAppDataWarm(20_000);
     if (!warm) return false;
@@ -95,16 +103,24 @@ export async function runCooperadoGaSyncBaseInformacoesFinanceiras(
     const digits = normalizeCnpj(cnpj ?? "");
     if (digits.length !== 14) return false;
 
-    markPull(user.id);
+    const remote = await fetchCooperativaCloudRevision(digits);
+    const nuvemMudou = remote ? cloudRevisionChangedSinceApplied(digits, remote) : true;
 
-    const op = await syncOperacionalFromCloud(digits);
-    if (!op.ok) {
-      await syncNotasPedidoFromCloud(digits, { retryFull: true }).catch(() => {});
-    } else {
-      await syncNotasPedidoFromCloud(digits, { retryFull: false }).catch(() => {});
+    if (lightReconcile && remote && !nuvemMudou) {
+      return true;
     }
 
-    const remote = await fetchCooperativaCloudRevision(digits);
+    markPull(user.id);
+
+    if (!lightReconcile || nuvemMudou) {
+      const op = await syncOperacionalFromCloud(digits);
+      if (!op.ok) {
+        await syncNotasPedidoFromCloud(digits, { retryFull: true }).catch(() => {});
+      } else {
+        await syncNotasPedidoFromCloud(digits, { retryFull: false }).catch(() => {});
+      }
+    }
+
     if (remote) {
       await runCooperadoNotasContratosLightPull({ cnpj: digits, user, remote }).catch(() => false);
       persistAppliedCooperativaCloudRevision(digits, fingerprintCooperativaCloudRevision(remote));

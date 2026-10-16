@@ -1,9 +1,10 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import type { Cooperado } from "@/types";
+import type { AppData, Cooperado } from "@/types";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { useAppDataSelector } from "@/hooks/useAppData";
+import { useAppDataSelector, useAppDataSelectorForDomains } from "@/hooks/useAppData";
+import { cooperadoBicHybridLightUiActive } from "@/lib/cooperado/cooperadoBicHybridLight";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { AssinaturaStatusAviso } from "@/components/cooperado/AssinaturaStatusAviso";
@@ -27,15 +28,25 @@ export function CooperadoInicioCooperadoLiveRoot({
   children: ReactNode;
 }) {
   const { user } = useAuth();
-  const cooperadoLive = useAppDataSelector(
-    (data) => {
-      if (!data || !cooperadoIdCard) return undefined;
-      const coopId = cooperativaIdCard ?? (user ? getUserCooperativaId(user, data) : undefined);
-      const id = resolverCooperadoIdCanonico(data, cooperadoIdCard, coopId);
-      return data.cooperados.find((c) => c.id === id) ?? undefined;
-    },
+  const bicHybridShell = cooperadoBicHybridLightUiActive(user);
+  const cooperadoSelector = (data: AppData) => {
+    if (!data || !cooperadoIdCard) return undefined;
+    const coopId = cooperativaIdCard ?? (user ? getUserCooperativaId(user, data) : undefined);
+    const id = resolverCooperadoIdCanonico(data, cooperadoIdCard, coopId);
+    return data.cooperados.find((c) => c.id === id) ?? undefined;
+  };
+  const cooperadoLiveGlobal = useAppDataSelector(cooperadoSelector, [
+    cooperadoIdCard,
+    cooperativaIdCard,
+    user?.id,
+    user?.cooperativaId,
+  ]);
+  const cooperadoLiveDomains = useAppDataSelectorForDomains(
+    ["shell"],
+    cooperadoSelector,
     [cooperadoIdCard, cooperativaIdCard, user?.id, user?.cooperativaId]
   );
+  const cooperadoLive = bicHybridShell ? cooperadoLiveDomains : cooperadoLiveGlobal;
   return (
     <CooperadoInicioLiveContext.Provider value={cooperadoLive ?? undefined}>
       {children}

@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useMemo, type ReactNode } from "react";
+import type { AppData } from "@/types";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { cooperadoApresentacaoFinanceiraConsolidadaForSession } from "@/lib/cooperado/cooperadoApresentacaoFinanceiraPilot";
@@ -9,7 +10,11 @@ import {
   cooperadoLocalResumeReady,
   isCooperadoManualOperacionalSync,
 } from "@/lib/performance/cooperadoColdStart";
-import { useAppDataSelector } from "@/hooks/useAppData";
+import { useAppDataSelector, useAppDataSelectorForDomains } from "@/hooks/useAppData";
+import {
+  COOPERADO_BIC_HYBRID_FINANCE_DOMAINS,
+  cooperadoBicHybridLightUiActive,
+} from "@/lib/cooperado/cooperadoBicHybridLight";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import {
   cooperadoAguardandoPrimeiraFatiaFinanceira,
@@ -41,18 +46,26 @@ function CooperadoApresentacaoFinanceiraGateInner({ children }: { children: Reac
   const { syncing, syncingForUi, cooperadoPagamentosHydrated, lastSyncedAt } = useSyncStatus();
   const offline = typeof navigator !== "undefined" && !navigator.onLine;
   const padraoJeferson = Boolean(user && isCooperadoMobileGaPromoted(user));
+  const bicHybridFinance = cooperadoBicHybridLightUiActive(user);
 
-  const exibirComFatiaFinanceiraLocal = useAppDataSelector(
-    (data) => {
-      if (user?.role !== "cooperado" || !user.cooperadoId || !isAppDataWarm()) return false;
-      const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
-      if (!coopId) return false;
-      const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-      if (cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, coopId)) return false;
-      return cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId);
-    },
-    [user?.id, user?.role, user?.cooperadoId, user?.cooperativaId]
+  const exibirFatiaSelector = (data: AppData) => {
+    if (user?.role !== "cooperado" || !user.cooperadoId || !isAppDataWarm()) return false;
+    const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
+    if (!coopId) return false;
+    const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+    if (cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, coopId)) return false;
+    return cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId);
+  };
+  const exibirFatiaDeps = [user?.id, user?.role, user?.cooperadoId, user?.cooperativaId];
+  const exibirComFatiaFinanceiraLocalGlobal = useAppDataSelector(exibirFatiaSelector, exibirFatiaDeps);
+  const exibirComFatiaFinanceiraLocalDomains = useAppDataSelectorForDomains(
+    COOPERADO_BIC_HYBRID_FINANCE_DOMAINS,
+    exibirFatiaSelector,
+    exibirFatiaDeps
   );
+  const exibirComFatiaFinanceiraLocal = bicHybridFinance
+    ? exibirComFatiaFinanceiraLocalDomains
+    : exibirComFatiaFinanceiraLocalGlobal;
 
   const exibirComDadosLocais = Boolean(
     user?.role === "cooperado" &&
@@ -64,38 +77,52 @@ function CooperadoApresentacaoFinanceiraGateInner({ children }: { children: Reac
         exibirComFatiaFinanceiraLocal)
   );
 
-  const financeiroUiGate = useAppDataSelector(
-    (data) => {
-      if (user?.role !== "cooperado" || !user.cooperadoId) {
-        return { aguardandoFatia: false, consistentes: true };
-      }
-      if (padraoJeferson && !isAppDataWarm()) {
-        return { aguardandoFatia: false, consistentes: true };
-      }
-      if (!isAppDataWarm()) {
-        return { aguardandoFatia: true, consistentes: false };
-      }
-      const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
-      if (!coopId) {
-        return { aguardandoFatia: true, consistentes: false };
-      }
-      const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-      const aguardandoFatia = cooperadoAguardandoPrimeiraFatiaFinanceira(
-        data,
-        cooperadoId,
-        coopId,
-        { syncing: syncingForUi, lastSyncedAt, offline }
-      );
-      const consistentes = cooperadoDadosFinanceirosConsistentesParaApresentacao(
-        data,
-        cooperadoId,
-        coopId,
-        { offline }
-      );
-      return { aguardandoFatia, consistentes };
-    },
-    [user?.id, user?.role, user?.cooperadoId, user?.cooperativaId, syncingForUi, lastSyncedAt, offline]
+  const financeiroUiGateSelector = (data: AppData) => {
+    if (user?.role !== "cooperado" || !user.cooperadoId) {
+      return { aguardandoFatia: false, consistentes: true };
+    }
+    if (padraoJeferson && !isAppDataWarm()) {
+      return { aguardandoFatia: false, consistentes: true };
+    }
+    if (!isAppDataWarm()) {
+      return { aguardandoFatia: true, consistentes: false };
+    }
+    const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
+    if (!coopId) {
+      return { aguardandoFatia: true, consistentes: false };
+    }
+    const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+    const aguardandoFatia = cooperadoAguardandoPrimeiraFatiaFinanceira(
+      data,
+      cooperadoId,
+      coopId,
+      { syncing: syncingForUi, lastSyncedAt, offline }
+    );
+    const consistentes = cooperadoDadosFinanceirosConsistentesParaApresentacao(
+      data,
+      cooperadoId,
+      coopId,
+      { offline }
+    );
+    return { aguardandoFatia, consistentes };
+  };
+  const financeiroUiGateDeps = [
+    user?.id,
+    user?.role,
+    user?.cooperadoId,
+    user?.cooperativaId,
+    syncingForUi,
+    lastSyncedAt,
+    offline,
+    padraoJeferson,
+  ];
+  const financeiroUiGateGlobal = useAppDataSelector(financeiroUiGateSelector, financeiroUiGateDeps);
+  const financeiroUiGateDomains = useAppDataSelectorForDomains(
+    COOPERADO_BIC_HYBRID_FINANCE_DOMAINS,
+    financeiroUiGateSelector,
+    financeiroUiGateDeps
   );
+  const financeiroUiGate = bicHybridFinance ? financeiroUiGateDomains : financeiroUiGateGlobal;
 
   const input = {
     role: user?.role,
