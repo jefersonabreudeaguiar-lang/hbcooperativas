@@ -101,20 +101,17 @@ export async function POST(request: Request) {
     const actorId = gate.ctx.session?.sub ?? payCooperadoId;
     const clientWantsFast = body?.fast !== false;
 
-    const prepare = await prepareHbCreditPaymentAuthorize(
-      gate.ctx.supabase,
-      cnpj,
-      payCooperadoId,
-      actorId
-    );
-    if (!prepare.ok) {
-      return NextResponse.json(
-        { ok: false, error: prepare.error, code: prepare.code ?? "HB_LIMIT_PREPARE_FAILED" },
-        { status: 503 }
-      );
-    }
+    const runPrepare = () =>
+      prepareHbCreditPaymentAuthorize(gate.ctx.supabase, cnpj, payCooperadoId, actorId);
 
     if (isCooperadoTransferIntentId(parsed.intentId)) {
+      const prepare = await runPrepare();
+      if (!prepare.ok) {
+        return NextResponse.json(
+          { ok: false, error: prepare.error, code: prepare.code ?? "HB_LIMIT_PREPARE_FAILED" },
+          { status: 503 }
+        );
+      }
       const { data: intentRow } = await gate.ctx.supabase
         .from("hb_credit_cooperado_transfer_intents")
         .select("receiver_cooperado_id")
@@ -148,24 +145,64 @@ export async function POST(request: Request) {
       });
     }
 
-    let result = await validateIntentForCooperado(
-      gate.ctx.supabase,
-      parsed.intentId,
-      parsed.nonce,
-      payCooperadoId,
-      cnpj,
-      { fast: clientWantsFast }
-    );
-    if (!result.ok && clientWantsFast && result.code === HB_CREDIT_INSUFFICIENT_CODE) {
-      result = await validateIntentForCooperado(
+    if (clientWantsFast) {
+      /** Híbrido: mercado + valor na tela antes do reconcile M6; prepare aquece authorize em paralelo. */
+      const prepareInBackground = runPrepare();
+      let result = await validateIntentForCooperado(
         gate.ctx.supabase,
         parsed.intentId,
         parsed.nonce,
         payCooperadoId,
         cnpj,
-        { fast: false }
+        { fast: true }
+      );
+      if (!result.ok && result.code === HB_CREDIT_INSUFFICIENT_CODE) {
+        const prepare = await prepareInBackground;
+        if (!prepare.ok) {
+          return NextResponse.json(
+            { ok: false, error: prepare.error, code: prepare.code ?? "HB_LIMIT_PREPARE_FAILED" },
+            { status: 503 }
+          );
+        }
+        result = await validateIntentForCooperado(
+          gate.ctx.supabase,
+          parsed.intentId,
+          parsed.nonce,
+          payCooperadoId,
+          cnpj,
+          { fast: false }
+        );
+      } else if (result.ok) {
+        void prepareInBackground.catch(() => {});
+      }
+      if (!result.ok) {
+        return NextResponse.json({ ok: false, error: result.error, code: result.code }, { status: 400 });
+      }
+      return NextResponse.json({
+        ok: true,
+        valid: true,
+        intent: result.intent,
+        parceiroNome: result.parceiroNome,
+        limite: result.limite,
+      });
+    }
+
+    const prepare = await runPrepare();
+    if (!prepare.ok) {
+      return NextResponse.json(
+        { ok: false, error: prepare.error, code: prepare.code ?? "HB_LIMIT_PREPARE_FAILED" },
+        { status: 503 }
       );
     }
+
+    const result = await validateIntentForCooperado(
+      gate.ctx.supabase,
+      parsed.intentId,
+      parsed.nonce,
+      payCooperadoId,
+      cnpj,
+      { fast: false }
+    );
     if (!result.ok) {
       return NextResponse.json({ ok: false, error: result.error, code: result.code }, { status: 400 });
     }

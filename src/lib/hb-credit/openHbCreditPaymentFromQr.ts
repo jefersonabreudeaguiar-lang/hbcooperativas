@@ -25,12 +25,13 @@ export function kickHbCreditQrValidation(opts: QrValidateOpts): Promise<HbCredit
 
   const promise = validateCreditQr(opts.cnpj, opts.cooperadoId, payload, { fast: true })
     .then((res) => {
-      if (!res.intent || !res.limite || !res.parceiroNome) return null;
+      if (!res.intent || !res.limite) return null;
+      const parceiroNome = (res.parceiroNome ?? "").trim() || "Mercado";
       const draft: HbCreditPaymentDraft = {
         v: 1,
         qrPayload: payload,
         intent: res.intent,
-        parceiroNome: res.parceiroNome,
+        parceiroNome,
         limite: res.limite,
         savedAt: new Date().toISOString(),
       };

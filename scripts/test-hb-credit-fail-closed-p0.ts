@@ -102,16 +102,45 @@ function record(id: string, cond: boolean, detail?: string) {
   record("T5 sync fail → not SYNCED (invariant)", !incoherent.ok);
 }
 
-// T6 — prepare awaited na rota authorize
+// T6 — prepare fail-closed: validate (QR) antes do PIN; authorize com retry guardado
 {
-  const route = readFileSync(resolve("src/app/api/credit/authorize/route.ts"), "utf8");
+  const intents = readFileSync(resolve("src/app/api/credit/payment-intents/route.ts"), "utf8");
+  const authorize = readFileSync(resolve("src/app/api/credit/authorize/route.ts"), "utf8");
+
+  const validatePrepareIdx = intents.indexOf('if (action === "validate")');
+  const validateBlock = validatePrepareIdx >= 0 ? intents.slice(validatePrepareIdx) : "";
   record(
-    "T6 prepare awaited",
-    /await prepareHbCreditPaymentAuthorize/.test(route) && !/void prepareHbCreditPaymentAuthorize/.test(route)
+    "T6 validate fast hybrid + slow path prepare guard",
+    /prepareInBackground/.test(validateBlock) &&
+      /HB_CREDIT_INSUFFICIENT_CODE/.test(validateBlock) &&
+      /const prepare = await runPrepare\(\)/.test(validateBlock) &&
+      validateBlock.indexOf("const prepare = await runPrepare()") <
+        validateBlock.lastIndexOf("fast: false")
   );
+
+  const transferIdx = authorize.indexOf("isCooperadoTransferIntentId(intentId)");
+  const transferBlock =
+    transferIdx >= 0 ? authorize.slice(transferIdx, transferIdx + 1200) : "";
   record(
-    "T6 prepare failure blocks authorize",
-    /if \(!prepare\.ok\)/.test(route) && /authorizePayment/.test(route)
+    "T6 authorize transfer blocked when prepare fails",
+    /ensureLimitePronto/.test(transferBlock) &&
+      /if \(!prepareTransfer\.ok\)/.test(transferBlock) &&
+      transferBlock.indexOf("if (!prepareTransfer.ok)") <
+        transferBlock.indexOf("authorizeCooperadoTransferPayment")
+  );
+
+  record(
+    "T6 authorize retry only after successful prepare",
+    /const prepAgain = await ensureLimitePronto\(\)/.test(authorize) &&
+      /if \(prepAgain\.ok\)/.test(authorize) &&
+      /prepAgain\.error/.test(authorize) &&
+      /authorizePayment/.test(authorize)
+  );
+
+  record(
+    "T6 authorize uses awaited prepare (no fire-and-forget)",
+    /await prepareHbCreditPaymentAuthorize/.test(authorize) &&
+      !/void prepareHbCreditPaymentAuthorize/.test(authorize)
   );
 }
 
@@ -156,6 +185,18 @@ function record(id: string, cond: boolean, detail?: string) {
     "T9 ensure mark only after snapshot",
     /hbCreditAccountRowSnapshotCoherent\(refreshed\.row\)/.test(ensureBlock) &&
       /markHbCreditLimitSynced/.test(ensureBlock)
+  );
+}
+
+// T10b — validate QR fast path não bloqueia em prepare (híbrido instantâneo)
+{
+  const route = readFileSync(resolve("src/app/api/credit/payment-intents/route.ts"), "utf8");
+  const validateBlock = route.slice(route.indexOf('if (action === "validate")'));
+  record(
+    "T10b fast validate hybrid (prepare paralelo)",
+    /clientWantsFast/.test(validateBlock) &&
+      /prepareInBackground/.test(validateBlock) &&
+      /validateIntentForCooperado[\s\S]*fast: true/.test(validateBlock)
   );
 }
 

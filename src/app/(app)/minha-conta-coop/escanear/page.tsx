@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
@@ -9,6 +9,8 @@ import { HbCreditQrScanner } from "@/components/hb-credit/HbCreditQrScanner";
 import { HbCreditScannerErrorBoundary } from "@/components/hb-credit/HbCreditScannerErrorBoundary";
 import { Button } from "@/components/ui/Button";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAppData } from "@/hooks/useAppData";
+import { preloadAppData } from "@/services/dataStore";
 import { prepareAndOpenHbCreditPaymentFromQrScan } from "@/lib/hb-credit/openHbCreditPaymentFromQr";
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 import { resolveCooperadoHbCreditCnpjDigits } from "@/lib/hb-credit/resolveCooperadoHbCreditCnpj";
@@ -29,15 +31,20 @@ export default function EscanearQrContaCoopPage() {
 function EscanearQrContent() {
   const router = useRouter();
   const { user, cooperadoId } = usePermissions();
+  const data = useAppData();
   const [validating, setValidating] = useState(false);
   const [scanError, setScanError] = useState("");
+
+  useEffect(() => {
+    preloadAppData();
+  }, []);
 
   const hbApiCooperadoId = useMemo(
     () => resolveHbCreditApiCooperadoId(user, cooperadoId),
     [user, cooperadoId]
   );
 
-  const cnpj = useMemo(() => resolveCooperadoHbCreditCnpjDigits(user), [user]);
+  const cnpj = useMemo(() => resolveCooperadoHbCreditCnpjDigits(user, data), [user, data]);
 
   const handleScan = useCallback(
     (payload: string) => {
