@@ -37,7 +37,10 @@ import { validateHbFinancialLimitRow } from "@/modules/hb-credit/engine/hbCredit
 import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { signedLedgerAmountCentsForExtrato } from "@/lib/hb-credit/ledgerLabels";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
-import type { AuthoritativeCreditBaseErrorPayload } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
+import type {
+  AuthoritativeCreditBaseErrorPayload,
+  AuthoritativeCreditBaseFailureCode,
+} from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import { resolveAuthoritativeCreditBase } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import { pickCreditosBaseForLimitSync } from "@/modules/hb-credit/engine/creditBaseValidation";
 import { capContaCoopLimiteToAuthoritativeBase, projetarLimitesListaCooperados } from "@/modules/hb-credit/engine/creditBaseHbGuard";
@@ -209,19 +212,29 @@ async function persistCooperativaLiberacaoPercent(
   return { ok: true };
 }
 
-async function resolveCreditosBaseForLiberacaoColetiva(
+export type CreditosBaseForLiberacaoResult =
+  | { ok: true; creditosBaseCents: Record<string, number> }
+  | { ok: false; code: AuthoritativeCreditBaseFailureCode; message: string };
+
+/** Base para liberação de limites — sempre autoritativa (paridade com POST /api/credit/sync-limite). */
+export async function resolveCreditosBaseForLiberacaoColetiva(
   supabase: SupabaseClient,
   cnpj: string,
   cooperadoIds: string[],
   clientBases: Record<string, number>
-): Promise<Record<string, number>> {
+): Promise<CreditosBaseForLiberacaoResult> {
   const auth = await resolveAuthoritativeCreditBase(supabase, cnpj, cooperadoIds);
-  if (!auth.ok) return clientBases;
-  return pickCreditosBaseForLimitSync({
-    authoritative: auth.creditosBaseCents,
-    cooperadoIds,
-    clientPreview: clientBases,
-  }).creditosBaseCents;
+  if (!auth.ok) {
+    return { ok: false, code: auth.code, message: auth.message };
+  }
+  return {
+    ok: true,
+    creditosBaseCents: pickCreditosBaseForLimitSync({
+      authoritative: auth.creditosBaseCents,
+      cooperadoIds,
+      clientPreview: clientBases,
+    }).creditosBaseCents,
+  };
 }
 
 /** @deprecated leitura legada — não usar para novas liberações */
@@ -1925,7 +1938,9 @@ export async function getLimiteCooperadoAlinhadoAEntregas(
   if (!limite) return null;
 
   const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, [cooperadoId]);
-  if (!authoritative.ok) return limite;
+  if (!authoritative.ok) {
+    return capContaCoopLimiteToAuthoritativeBase(limite, 0, 0, null);
+  }
 
   const canon = resolverCooperadoIdCanonico(
     authoritative.creditoBaseAppData,
@@ -1999,7 +2014,9 @@ export async function getLimiteCooperadoExibicaoParidadeLimites(
   if (!limite) return null;
 
   const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, [cooperadoId]);
-  if (!authoritative.ok) return limite;
+  if (!authoritative.ok) {
+    return capContaCoopLimiteToAuthoritativeBase(limite, 0, 0, null);
+  }
 
   const canon = resolverCooperadoIdCanonico(
     authoritative.creditoBaseAppData,
@@ -3258,12 +3275,26 @@ export async function previewLimiteColetivoPercentual(
   itens: LimiteColetivoPreviewItem[];
 }> {
   const digits = normalizeCnpj(cnpj);
-  const basesEfetivas = await resolveCreditosBaseForLiberacaoColetiva(
+  const basesResolved = await resolveCreditosBaseForLiberacaoColetiva(
     supabase,
     cnpj,
     cooperadoIds,
     creditosBaseCents
   );
+  if (!basesResolved.ok) {
+    return {
+      limiteAtualTotal: 0,
+      novoLimiteTotal: 0,
+      totalApos: 0,
+      tetoGlobal: 0,
+      tetoGlobalPercent: 0,
+      ok: false,
+      error: basesResolved.message,
+      percentual,
+      itens: [],
+    };
+  }
+  const basesEfetivas = basesResolved.creditosBaseCents;
   const tetoReq = await requireConfiguredTeto(supabase, digits, basesEfetivas);
   if (!tetoReq.ok) {
     return {

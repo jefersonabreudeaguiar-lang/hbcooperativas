@@ -67,7 +67,7 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
 
     const syncAccountFromCloud = async () => {
       if (user?.role === "cooperado") {
-        await persistirHbCreditAccountCooperado(user, { syncLimiteFromFicha: false });
+        await persistirHbCreditAccountCooperado(user);
         refreshFromCache();
         return;
       }

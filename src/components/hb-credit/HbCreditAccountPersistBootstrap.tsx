@@ -66,7 +66,7 @@ export function HbCreditAccountPersistBootstrap() {
 
   const persist = () => {
     if (user?.role === "cooperado") {
-      void persistirHbCreditAccountCooperado(user, { syncLimiteFromFicha: false }).then((ok) => {
+      void persistirHbCreditAccountCooperado(user).then((ok) => {
         if (ok) notifyHbCreditAccountCacheUpdated();
       });
     }

@@ -11,6 +11,8 @@ import {
   setLimiteColetivoPercentual,
   setLimiteCooperado,
   setTetoGlobalPercent,
+  resolveCreditosBaseForLiberacaoColetiva,
+  listLimitesCooperados,
 } from "@/lib/supabase/contaCoopStorage";
 import { requireCreditApi, requireCreditCnpj, requireCreditStaff } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
@@ -91,10 +93,44 @@ export async function POST(request: Request) {
     if (!creditosValidation.ok) {
       return NextResponse.json({ error: creditosValidation.error, code: creditosValidation.code }, { status: 400 });
     }
-    const creditosBaseCents = creditosValidation.sanitized;
+    const clientCreditosBaseCents = creditosValidation.sanitized;
+
+    const resolveBasesForPost = async (cooperadoIds: string[]) => {
+      const ids = cooperadoIds.filter(Boolean);
+      if (!ids.length) {
+        return { ok: true as const, creditosBaseCents: clientCreditosBaseCents };
+      }
+      return resolveCreditosBaseForLiberacaoColetiva(
+        gate.ctx.supabase,
+        cnpj,
+        ids,
+        clientCreditosBaseCents
+      );
+    };
+
+    const basesOrErrorResponse = async (cooperadoIds: string[]) => {
+      const resolved = await resolveBasesForPost(cooperadoIds);
+      if (!resolved.ok) {
+        return {
+          errorResponse: NextResponse.json(
+            { error: resolved.message, code: resolved.code },
+            { status: resolved.code === "OPERACIONAL_UNAVAILABLE" ? 503 : 400 }
+          ),
+        };
+      }
+      return { creditosBaseCents: resolved.creditosBaseCents };
+    };
 
     if (action === "set_teto") {
     const tetoPercent = Number(body?.tetoPercentual ?? body?.tetoPercent ?? 0);
+    const idsTeto = Object.keys(clientCreditosBaseCents);
+    const cooperadoIdsTeto =
+      idsTeto.length > 0
+        ? idsTeto
+        : (await listLimitesCooperados(gate.ctx.supabase, cnpj)).map((l) => l.cooperadoId);
+    const basesTeto = await basesOrErrorResponse(cooperadoIdsTeto);
+    if ("errorResponse" in basesTeto) return basesTeto.errorResponse;
+    const creditosBaseCents = basesTeto.creditosBaseCents;
     const result = await setTetoGlobalPercent(
       gate.ctx.supabase,
       cnpj,
@@ -109,6 +145,9 @@ export async function POST(request: Request) {
   if (action === "preview_individual") {
     const cooperadoId = String(body?.cooperadoId ?? "");
     const novoCents = Number(body?.novoLimiteCentavos ?? reaisToCents(Number(body?.novoLimiteReais ?? 0)));
+    const basesPreview = await basesOrErrorResponse([cooperadoId]);
+    if ("errorResponse" in basesPreview) return basesPreview.errorResponse;
+    const creditosBaseCents = basesPreview.creditosBaseCents;
     const preview = await previewLimiteAlteracao(
       gate.ctx.supabase,
       cnpj,
@@ -122,6 +161,9 @@ export async function POST(request: Request) {
   if (action === "set_individual") {
     const cooperadoId = String(body?.cooperadoId ?? "");
     const novoCents = Number(body?.novoLimiteCentavos ?? reaisToCents(Number(body?.novoLimiteReais ?? 0)));
+    const basesIndividual = await basesOrErrorResponse([cooperadoId]);
+    if ("errorResponse" in basesIndividual) return basesIndividual.errorResponse;
+    const creditosBaseCents = basesIndividual.creditosBaseCents;
     const result = await setLimiteCooperado(
       gate.ctx.supabase,
       cnpj,
@@ -136,6 +178,9 @@ export async function POST(request: Request) {
 
   if (action === "set_coletivo") {
     const cooperadoIds = (body?.cooperadoIds ?? []) as string[];
+    const basesColetivo = await basesOrErrorResponse(cooperadoIds);
+    if ("errorResponse" in basesColetivo) return basesColetivo.errorResponse;
+    const creditosBaseCents = basesColetivo.creditosBaseCents;
     const percentual = Number(body?.percentual);
     if (Number.isFinite(percentual)) {
       const result = await setLimiteColetivoPercentual(
@@ -164,6 +209,9 @@ export async function POST(request: Request) {
 
   if (action === "preview_coletivo") {
     const cooperadoIds = (body?.cooperadoIds ?? []) as string[];
+    const basesPreviewColetivo = await basesOrErrorResponse(cooperadoIds);
+    if ("errorResponse" in basesPreviewColetivo) return basesPreviewColetivo.errorResponse;
+    const creditosBaseCents = basesPreviewColetivo.creditosBaseCents;
     const percentual = Number(body?.percentual);
     if (Number.isFinite(percentual)) {
       const preview = await previewLimiteColetivoPercentual(

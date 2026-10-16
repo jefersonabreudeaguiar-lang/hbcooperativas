@@ -901,7 +901,14 @@ function ContaCoopContent() {
       if (!creditosBaseCents) return;
       const cooperadoIds = cooperadosAtivos.map((c) => c.id);
       const tetoAtual = dashboard?.teto.tetoGlobalPercent ?? 100;
+      const tetoGravar = Math.max(pct, tetoAtual);
 
+      await postCreditLimites({
+        action: "set_teto",
+        cnpj,
+        tetoPercentual: tetoGravar,
+        creditosBaseCents,
+      });
       await postCreditLimites({
         action: "set_coletivo",
         cnpj,
@@ -909,9 +916,6 @@ function ContaCoopContent() {
         cooperadoIds,
         percentual: pct,
       });
-      if (Math.abs(pct - tetoAtual) > 0.001) {
-        await postCreditLimites({ action: "set_teto", cnpj, tetoPercentual: pct, creditosBaseCents });
-      }
 
       setPercentualColetivo(String(pct));
       setPreviewColetivo(null);
