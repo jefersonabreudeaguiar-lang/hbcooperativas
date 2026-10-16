@@ -55,6 +55,7 @@ import {
 import { avaliarIntegridadeFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
 import { ensureOperacionalAlinhadoComNuvem } from "@/services/operacionalRestoreService";
 import { refreshContaCoopDescontosAfterOperacionalSync } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
+import { isStaffConferenciaModalOpen } from "@/lib/performance/staffConferenciaSyncTier";
 import { isStaffHbCoopBackgroundSyncRoute } from "@/lib/hb-credit/staffHbSyncRoute";
 import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes, notaPertenceCooperado } from "@/services/cooperadoCloudService";
@@ -899,6 +900,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         currentUser.role === "tesoureiro" ||
         currentUser.role === "admin";
       const refreshHb = (): Promise<void> => {
+        if (isStaffConferenciaModalOpen()) return Promise.resolve();
         if (staffUser && !isStaffHbCoopBackgroundSyncRoute()) return Promise.resolve();
         return refreshContaCoopDescontosAfterOperacionalSync({
           cnpj,

@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import {
   useAppDataSelector,
+  useAppDataSelectorForDomainsWhenActive,
   useAppDataSnapshotForDomainsWhenActive,
 } from "@/hooks/useAppData";
 import {
@@ -2029,10 +2030,13 @@ export default function NotasPedidoStaffMain() {
   const mostrarFilaResponsavelConteudo =
     !isCooperado && (vistaConteudo === "fila" || vistaConteudo === "cooperado");
 
+  const abertoNavCountActive = !isCooperado && tabActive && !conferirModal;
   const cooperadosComLancamentoAbertoCount =
-    useAppDataSelector(
+    useAppDataSelectorForDomainsWhenActive(
+      abertoNavCountActive,
+      ["financeiro", "notas"],
       (d) => (!coopId || isCooperado ? 0 : countCooperadosLancamentosEmAbertoResponsavel(d, coopId)),
-      [coopId, isCooperado, hbDescontosRevision]
+      [coopId, isCooperado]
     ) ?? 0;
 
   const dadosCarregandoFilaConferencia =
@@ -2297,19 +2301,23 @@ export default function NotasPedidoStaffMain() {
     puxarNotasResponsavelDaNuvem,
   ]);
 
-  const filaZombieCount = useAppDataSelector(
-    (d) => {
-      if (isCooperado || !coopId) return 0;
-      if (vistaResponsavel !== "fila" && vistaResponsavel !== "cooperado") return 0;
-      let count = 0;
-      for (const nota of d.notasPedido) {
-        if (!notaPertenceCooperativa(d, nota, coopId)) continue;
-        if (isNotaZombieNaFilaConferencia(nota)) count += 1;
-      }
-      return count;
-    },
-    [isCooperado, coopId, vistaResponsavel]
-  );
+  const filaZombieScanActive =
+    !isCooperado && Boolean(coopId) && tabActive && filaDetalhada && !conferirModal;
+  const filaZombieCount =
+    useAppDataSelectorForDomainsWhenActive(
+      filaZombieScanActive,
+      ["notas"],
+      (d) => {
+        if (!coopId) return 0;
+        let count = 0;
+        for (const nota of d.notasPedido) {
+          if (!notaPertenceCooperativa(d, nota, coopId)) continue;
+          if (isNotaZombieNaFilaConferencia(nota)) count += 1;
+        }
+        return count;
+      },
+      [coopId]
+    ) ?? 0;
 
   useEffect(() => {
     if (isCooperado || !coopId || !data || filaZombieCount === 0 || !tabActive) return;

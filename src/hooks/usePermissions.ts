@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { useAppData, useAppDataSelector } from "@/hooks/useAppData";
+import { useAppDataSelector } from "@/hooks/useAppData";
 import { shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
 import { canUser, canGerenciarEquipe, getUserFuncaoLabel, isDiretoriaRole, isResponsavelRole } from "@/permissions";
 import { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
@@ -11,10 +11,18 @@ import type { Action, Resource } from "@/types";
 
 export function usePermissions() {
   const { user, accountUser } = useAuth();
-  const data = useAppData();
   const authSubject = accountUser ?? user;
-  const permUser =
-    user && accountUser && shouldRenderStaffPainelUi(accountUser, data) ? accountUser : user;
+  const staffPainelAtivo = useAppDataSelector(
+    (d) => Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, d)),
+    [
+      accountUser?.id,
+      accountUser?.email,
+      accountUser?.role,
+      accountUser?.cooperadoId,
+      accountUser?.cooperativaId,
+    ]
+  );
+  const permUser = user && accountUser && staffPainelAtivo ? accountUser : user;
 
   const coopId = useAppDataSelector(
     (data) => (user ? getUserCooperativaId(user, data) : undefined),

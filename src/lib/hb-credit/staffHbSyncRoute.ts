@@ -1,9 +1,8 @@
+/** Rotas onde warmup HB faz sentido — fora daqui (ex.: Notas/Conferir) evita lote cooperativa-wide. */
 const STAFF_HB_COOP_WIDE_PREFIXES = [
   "/conta-coop",
   "/relatorios",
   "/ficha-corrida",
-  "/notas-pedido",
-  "/cooperados",
 ] as const;
 
 /** Rotas HB staff — navegação / contexto amplo (warmup, etc.). */
@@ -17,14 +16,11 @@ const STAFF_HB_COOP_BACKGROUND_SYNC_PREFIXES = [
   "/conta-coop",
   "/relatorios",
   "/ficha-corrida",
-  "/notas-pedido",
-  "/cooperados",
 ] as const;
 
 /**
  * Sync cooperativa-wide em background (ficha-descontos / sync-limite em lote).
- * Inclui ficha, entregas e cooperados — resumo de pagamento e “A receber” alinhados ao HB.
- * Inclui `/conta-coop` para sync-limite em lote (todos os cooperados, mesmo pipeline do mobile).
+ * Não inclui `/notas-pedido` nem `/cooperados` — evita travar Conferir com refresh HB em massa.
  */
 export function isStaffHbCoopBackgroundSyncRoute(pathname?: string): boolean {
   const p = pathname ?? (typeof window !== "undefined" ? window.location.pathname : "");

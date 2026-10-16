@@ -9,6 +9,7 @@ import { getUserCooperativaId } from "@/utils/cooperativa";
 import { shouldSyncHbFichaBaseDescontos } from "@/lib/hb-credit/hbFichaBaseOperacional";
 import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedule";
 import { isStaffHbCoopWideSyncRoute } from "@/lib/hb-credit/staffHbSyncRoute";
+import { isStaffConferenciaModalOpen } from "@/lib/performance/staffConferenciaSyncTier";
 import {
   isCooperadoManualOperacionalSync,
   scheduleStaffPostInteractiveTask,
@@ -46,6 +47,7 @@ export function useHbCreditDescontosWarmup(user: Omit<User, "password"> | null) 
         return;
       }
       if (hbAccountGatePending) return;
+      if (isStaffConferenciaModalOpen()) return;
       const staffRole =
         current.role === "responsavel" || current.role === "tesoureiro" || current.role === "admin";
       if (staffRole && !isStaffHbCoopWideSyncRoute(pathname)) return;
