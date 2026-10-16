@@ -390,7 +390,9 @@ function FichaCorridaPageInner() {
         return;
       }
       if (!isCooperado) {
-        requestSyncTier("financeiro_delta", { force: false });
+        if (aba === "pagar" || Boolean(cooperadoFilter)) {
+          requestSyncTier("financeiro_delta", { force: false });
+        }
         return;
       }
       requestAppSync();
@@ -403,7 +405,7 @@ function FichaCorridaPageInner() {
     }
     const t = window.setTimeout(run, idleTimeout > 3_000 ? 400 : 0);
     return () => window.clearTimeout(t);
-  }, [messenger, isCooperado, tabActive, user, data, coopIdEarly, apresentacaoFinanceiroUi]);
+  }, [messenger, isCooperado, tabActive, user, data, coopIdEarly, apresentacaoFinanceiroUi, aba, cooperadoFilter]);
 
   useEffect(() => {
     if (!tabActive || !data || !coopId || !user) {
@@ -594,10 +596,9 @@ function FichaCorridaPageInner() {
 
   useEffect(() => {
     if (isCooperado || aba !== "pagar" || !cooperadoFilter || !data || !coopId) return;
-    if (!cooperadoPendentePagamentoResponsavel(data, cooperadoFilter, undefined, coopId)) {
-      setCooperadoFilter("");
-    }
-  }, [isCooperado, aba, cooperadoFilter, data, coopId, mesAtivo]);
+    if (cooperadosParaPagar.some((c) => c.id === cooperadoFilter)) return;
+    setCooperadoFilter("");
+  }, [isCooperado, aba, cooperadoFilter, data, coopId, cooperadosParaPagar]);
 
   useEffect(() => {
     setAbaMesPagamentoResponsavel("pendente");
@@ -1022,15 +1023,28 @@ function FichaCorridaPageInner() {
     return bicCentralBuildValorExibicaoCooperadoOpts(data, cooperadoSelecionadoId, mesAtivo, coopId);
   }, [data, cooperadoSelecionadoId, mesAtivo, coopId]);
 
+  const mesHbSyncPilot = useMemo(() => {
+    if (isCooperado) return mesReferenciaHbCooperado;
+    if (aba === "pagar" && mesesPendentesPagamento.length > 0) {
+      return mesesPendentesPagamento[mesesPendentesPagamento.length - 1]!;
+    }
+    return mesAtivo;
+  }, [isCooperado, mesReferenciaHbCooperado, aba, mesesPendentesPagamento, mesAtivo]);
+
   useSyncContaCoopValorReceberPilot(
-    !financeiroDormant && tabActive && exibicaoOpts && cooperadoSelecionadoId && coopId
+    !financeiroDormant &&
+      tabActive &&
+      exibicaoOpts &&
+      cooperadoSelecionadoId &&
+      coopId &&
+      (isCooperado || aba === "pagar")
       ? {
           cooperadoId: cooperadoSelecionadoId,
-          mesReferencia: isCooperado ? mesReferenciaHbCooperado : mesAtivo,
+          mesReferencia: mesHbSyncPilot,
           cooperativaId: coopId,
           cooperadoNome: exibicaoOpts.cooperadoNome,
           user,
-          initialDelayMs: 600,
+          initialDelayMs: isCooperado ? 600 : 1_200,
         }
       : undefined
   );
@@ -1160,7 +1174,10 @@ function FichaCorridaPageInner() {
       ? resumoExibicao && exibicaoOpts
         ? bicCentralGetValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
         : 0
-      : (financeiroAberto?.valorLiquido ?? 0);
+      : aba === "pagar" && data && cooperadoSelecionadoId
+        ? (resumoPagamentoConsolidado?.valorLiquido ??
+          leituraFinanceiraParidadeCooperado(data, cooperadoSelecionadoId, coopId).valorLiquido)
+        : (financeiroAberto?.valorLiquido ?? 0);
 
   const descontosExtrasResumo = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return [];
