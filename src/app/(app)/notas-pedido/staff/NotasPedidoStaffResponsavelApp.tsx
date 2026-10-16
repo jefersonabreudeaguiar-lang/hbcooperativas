@@ -4111,7 +4111,7 @@ export default function NotasPedidoStaffMain() {
     })();
   };
 
-  const executarExclusaoEntregaResponsavel = (alvo: NotaPedido) => {
+  const executarExclusaoEntregaResponsavel = async (alvo: NotaPedido): Promise<void> => {
     if (!isDiretoria || !user || !data || !coopId) return;
     const permanecerEmCorrecoes = vistaResponsavel === "correcoes";
     const check = podeExcluirEntregaNota(data, alvo.id, coopId);
