@@ -12,6 +12,14 @@ const indicator = readFileSync(join(ROOT, "src/lib/cooperado/cooperadoMobilePilo
 const star = readFileSync(join(ROOT, "src/components/cooperado/CooperadoMobilePilotStarBadge.tsx"), "utf8");
 const hbPilot = readFileSync(join(ROOT, "src/lib/cooperado/cooperadoMobilePilotHbCredit.ts"), "utf8");
 const bottomNav = readFileSync(join(ROOT, "src/lib/cooperado/cooperadoMobilePilotBottomNav.ts"), "utf8");
+const valorDiag = readFileSync(
+  join(ROOT, "src/lib/cooperado/cooperadoValorBrowserMobileDiag.ts"),
+  "utf8"
+);
+const valorPanel = readFileSync(
+  join(ROOT, "src/components/cooperado/CooperadoJefersonValorDiagPanel.tsx"),
+  "utf8"
+);
 
 function assert(cond: boolean, msg: string) {
   if (!cond) {
@@ -36,5 +44,7 @@ assert(indicator.includes("cooperadoMobilePilotShowHeaderStar"), "estrela header
 assert(star.includes("CooperadoMobilePilotStarBadge"), "componente estrela");
 assert(hbPilot.includes("isCooperadoMobilePilotHbCreditUi"), "HB Créditos UI piloto");
 assert(bottomNav.includes("COOPERADO_PILOT_HB_PAY_TAB_HREF"), "aba Pagar piloto");
+assert(valorDiag.includes("isCooperadoMobilePilot"), "diag valores só piloto Jeferson");
+assert(valorPanel.includes("canUseCooperadoValorBrowserMobileDiag"), "painel diag gated piloto");
 
 console.log("test-cooperado-mobile-pilot.ts done.");

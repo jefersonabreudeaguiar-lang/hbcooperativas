@@ -26,6 +26,7 @@ import {
   buildInlineCooperadoBootShellScript,
 } from "@/lib/performance/cooperadoBootShell";
 import { RqlPerfDebugBootstrap } from "@/components/performance/RqlPerfDebugBootstrap";
+import { CooperadoJefersonValorDiagPanel } from "@/components/cooperado/CooperadoJefersonValorDiagPanel";
 import { CooperadoBootShellDismiss } from "@/components/performance/CooperadoBootShellDismiss";
 import { PwaStandaloneRepairAck } from "@/components/pwa/PwaStandaloneRepairAck";
 import { buildInlineCooperadoPwaStealthReloadScript } from "@/lib/pwa/cooperadoPwaStealthReload";
@@ -127,6 +128,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <PwaStandaloneRepairAck />
           <CooperadoPwaStealthReloadHost />
           <RqlPerfDebugBootstrap />
+          <CooperadoJefersonValorDiagPanel />
           <ClientReleaseShieldHost />
           <CooperadoFleetMaintenanceHost />
           <PwaSilentServiceWorker />

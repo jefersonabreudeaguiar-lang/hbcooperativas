@@ -23,6 +23,10 @@ import {
   markCooperadoBicSessionRematerialized,
   shouldSkipCooperadoBicSessionReinforcementPull,
 } from "@/lib/cooperado/cooperadoBicSessionReinforcementSkip";
+import {
+  cooperadoBrowserDesktopBicPerfActive,
+  cooperadoBrowserDesktopFinanceiroEstavel,
+} from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
 
 const SESSION_COUNT_PREFIX = "hb.coop.bicMobileSessionSyncCount";
 /** 1ª imediata pós-interativo + 2 reforços — sensação “quase ao vivo”. */
@@ -127,12 +131,22 @@ export function scheduleCooperadoBicMobileSessionSync(
   clearTimers();
   activeUserId = user!.id;
 
+  if (cooperadoBrowserDesktopBicPerfActive(user) && cooperadoBrowserDesktopFinanceiroEstavel(user)) {
+    scheduleCooperadoBicHybridIdleTask(() => rematerializarBicSnapshots(user!), 1_200);
+    return;
+  }
+
   if (readSessionSyncCount(user!.id) >= MAX_SYNCS_PER_SESSION) {
     rematerializarBicSnapshots(user!);
     return;
   }
 
-  SESSION_SYNC_DELAYS_MS.forEach((delayMs, tickIndex) => {
+  const delays =
+    cooperadoBrowserDesktopBicPerfActive(user)
+      ? ([0] as const)
+      : SESSION_SYNC_DELAYS_MS;
+
+  delays.forEach((delayMs, tickIndex) => {
     const run = () => void runBicSessionSyncTick(user!, tickIndex);
     if (delayMs <= 0) {
       scheduleCooperadoPostInteractiveTask(run);

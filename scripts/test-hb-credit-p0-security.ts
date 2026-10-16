@@ -107,8 +107,17 @@ function testVisibility() {
     respMobileOn.some((i) => i.href === "/conta-coop")
   );
 
-  const drawer = getCooperadoDrawerMenuItems(cooperadoUser, true, true);
-  ok("drawer cooperado sem HB Créditos", !drawer.some((i) => i.href === "/minha-conta-coop"));
+  const drawerOn = getCooperadoDrawerMenuItems(cooperadoUser, true, true);
+  ok(
+    "drawer cooperado inclui HB Créditos quando módulo ligado (atalho fora da bottom nav)",
+    drawerOn.some((i) => i.href === "/minha-conta-coop")
+  );
+
+  const drawerOff = getCooperadoDrawerMenuItems(cooperadoUser, false, true);
+  ok(
+    "drawer cooperado sem HB quando módulo desligado",
+    !drawerOff.some((i) => i.href === "/minha-conta-coop")
+  );
 }
 
 function testCreditBaseValidation() {

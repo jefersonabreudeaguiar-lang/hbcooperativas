@@ -28,4 +28,16 @@ assert.ok(gaBase.includes("lightReconcile"));
 const vercel = readFileSync(join(import.meta.dirname ?? __dirname, "../vercel.json"), "utf8");
 assert.ok(vercel.includes('"NEXT_PUBLIC_COOPERADO_BIC_HYBRID_LIGHT": "true"'));
 
+const desktopPerf = readFileSync(
+  join(import.meta.dirname ?? __dirname, "../src/lib/cooperado/cooperadoBrowserDesktopPerf.ts"),
+  "utf8"
+);
+assert.ok(desktopPerf.includes("cooperadoBrowserDesktopBicPerfActive"));
+const pulse = readFileSync(
+  join(import.meta.dirname ?? __dirname, "../src/lib/bic/bicRevisionPulse.ts"),
+  "utf8"
+);
+assert.ok(pulse.includes("cooperadoBrowserDesktopFinanceiroEstavel"));
+assert.ok(session.includes("cooperadoBrowserDesktopBicPerfActive"));
+
 console.log("OK test-cooperado-bic-hybrid-light");

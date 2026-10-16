@@ -31,6 +31,7 @@ import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import { cooperadoMotorTemObrigacaoReceber } from "@/lib/cooperadoInicioCardPolicy";
 import { resolverMotorCardInicioParidadeFinanceiro } from "@/lib/cooperado/cooperadoInicioCardParidadeMotor";
+import { cooperadoBrowserDesktopBicPerfActive } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
 
 const SESSION_KEY = "hb.coop.gaBaseInformacoesPull.v1";
 const MIN_INTERVAL_MS = 45_000;
@@ -137,7 +138,9 @@ export async function runCooperadoGaSyncBaseInformacoesFinanceiras(
 
     cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user);
     cooperadoPilotForcarRematerializacaoFinanceira(user);
-    dispatchCooperadoPwaLeveUiSnapshotRefresh();
+    if (!cooperadoBrowserDesktopBicPerfActive(user) || nuvemMudou) {
+      dispatchCooperadoPwaLeveUiSnapshotRefresh();
+    }
     scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
 
     const dataAfter = getData();

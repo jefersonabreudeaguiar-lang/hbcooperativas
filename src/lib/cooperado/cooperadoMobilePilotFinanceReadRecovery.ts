@@ -20,6 +20,11 @@ import {
 import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { scheduleCooperadoHbCreditLimiteAndAccountWarmup } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
 import { requestCooperadoGaFinanceiroExibicaoRecoverySync } from "@/services/syncRequest";
+import {
+  cooperadoBrowserDesktopBicPerfActive,
+  cooperadoBrowserDesktopFinanceiroEstavel,
+} from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
+import { scheduleCooperadoBicHybridIdleTask } from "@/lib/cooperado/cooperadoBicHybridLight";
 
 function pilotFinanceCtx(user: Omit<User, "password">) {
   if (!user.cooperadoId) return null;
@@ -73,19 +78,30 @@ export function cooperadoPilotForcarRematerializacaoFinanceira(
 
   const run = () => {
     if (!isAppDataWarm()) return;
+    if (cooperadoBrowserDesktopFinanceiroEstavel(user)) return;
     rematerializarCooperadoPwaSnapshotsSeNecessario(user);
     tentarCooperadoPilotFinanceiroRematerializacaoLocal(user);
     persistirInicioCardCooperadoNotificarPwaLeve(user);
     persistirCooperadoPwaFichaResumoSnapshotFromUser(user, true);
-    dispatchCooperadoPwaLeveUiSnapshotRefresh();
+    if (!cooperadoBrowserDesktopBicPerfActive(user)) {
+      dispatchCooperadoPwaLeveUiSnapshotRefresh();
+    }
+  };
+
+  const scheduleRun = () => {
+    if (cooperadoBrowserDesktopBicPerfActive(user)) {
+      scheduleCooperadoBicHybridIdleTask(run, 1_500);
+      return;
+    }
+    run();
   };
 
   if (isAppDataWarm()) {
-    run();
+    scheduleRun();
     return;
   }
   void waitForAppDataWarm(12_000).then((warm) => {
-    if (warm) run();
+    if (warm) scheduleRun();
   });
 }
 
@@ -118,6 +134,10 @@ export function scheduleCooperadoPilotFinanceReadRecovery(
 ): void {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return;
   if (financeRecoveryAlreadyRanThisSession(user.id)) return;
+  if (cooperadoBrowserDesktopFinanceiroEstavel(user)) {
+    markFinanceRecoverySession(user.id);
+    return;
+  }
   const leaseKey = user.id;
   recoveryLeaseByUser.get(leaseKey)?.();
 
@@ -134,7 +154,9 @@ export function scheduleCooperadoPilotFinanceReadRecovery(
       ctx.cooperativaId
     );
     if (materialized && cooperadoFinanceiroCardCacheTemValor(user)) {
-      dispatchCooperadoPwaLeveUiSnapshotRefresh();
+      if (!cooperadoBrowserDesktopBicPerfActive(user)) {
+        dispatchCooperadoPwaLeveUiSnapshotRefresh();
+      }
       return true;
     }
     return false;

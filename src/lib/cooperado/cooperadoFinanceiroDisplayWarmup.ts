@@ -11,6 +11,7 @@ import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMesseng
 import { tryAckCooperadoAppReleaseWhenLocalReady } from "@/lib/cooperado/cooperadoMobileReleaseLocalAck";
 import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
 import { preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
+import { cooperadoBrowserDesktopFinanceiroEstavel } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
 
 let warmupInFlight: Promise<void> | null = null;
 
@@ -50,6 +51,10 @@ export function scheduleCooperadoFinanceiroDisplayWarmup(
 ): void {
   if (!cooperadoFinanceiroDisplayWarmupEligible(user) || !user?.id) return;
   if (financeWarmupAlreadyRanThisSession(user.id)) return;
+  if (cooperadoBrowserDesktopFinanceiroEstavel(user)) {
+    markFinanceWarmupSession(user.id);
+    return;
+  }
 
   const run = () => {
     if (warmupInFlight) return;

@@ -16,13 +16,19 @@ import {
   fingerprintCooperativaCloudRevision,
 } from "@/lib/performance/cooperadoEventDrivenSync";
 import { scheduleCooperadoBicHybridIdleTask } from "@/lib/cooperado/cooperadoBicHybridLight";
+import {
+  cooperadoBrowserDesktopBicPerfActive,
+  cooperadoBrowserDesktopFinanceiroEstavel,
+} from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
 import { markCooperadoBicFinanceiroFresh } from "@/lib/bic/cooperadoBicSonataSyncUi";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 
-const PULSE_INTERVAL_MS = 55_000;
-const MIN_GAP_MS = 42_000;
+const PULSE_INTERVAL_MS_MOBILE = 55_000;
+const PULSE_INTERVAL_MS_DESKTOP = 180_000;
+const MIN_GAP_MS_MOBILE = 42_000;
+const MIN_GAP_MS_DESKTOP = 90_000;
 
 let activeUserId: string | null = null;
 let timerId: number | null = null;
@@ -40,10 +46,20 @@ function rematerializarSilencioso(user: Omit<User, "password">): void {
   scheduleCooperadoBicHybridIdleTask(run);
 }
 
+function pulseMinGapMs(user: Omit<User, "password">): number {
+  return cooperadoBrowserDesktopBicPerfActive(user) ? MIN_GAP_MS_DESKTOP : MIN_GAP_MS_MOBILE;
+}
+
+function pulseIntervalMs(user: Omit<User, "password">): number {
+  return cooperadoBrowserDesktopBicPerfActive(user)
+    ? PULSE_INTERVAL_MS_DESKTOP
+    : PULSE_INTERVAL_MS_MOBILE;
+}
+
 async function runRevisionPulse(user: Omit<User, "password">): Promise<void> {
   if (inflight) return;
   if (typeof document !== "undefined" && document.hidden) return;
-  if (Date.now() - lastPulseAt < MIN_GAP_MS) return;
+  if (Date.now() - lastPulseAt < pulseMinGapMs(user)) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   if (!isAppDataWarm()) return;
 
@@ -72,6 +88,13 @@ async function runRevisionPulse(user: Omit<User, "password">): Promise<void> {
       return;
     }
 
+    if (cooperadoBrowserDesktopBicPerfActive(user)) {
+      if (!cooperadoBrowserDesktopFinanceiroEstavel(user)) {
+        recordBicParidadePulse("rematerializeOnly");
+        rematerializarSilencioso(user);
+      }
+      return;
+    }
     recordBicParidadePulse("rematerializeOnly");
     rematerializarSilencioso(user);
   } finally {
@@ -99,7 +122,7 @@ export function scheduleCooperadoBicRevisionPulse(
   activeUserId = user!.id;
 
   const tick = () => void runRevisionPulse(user!);
-  timerId = window.setInterval(tick, PULSE_INTERVAL_MS);
+  timerId = window.setInterval(tick, pulseIntervalMs(user!));
 
   const vis = () => onVisibility(user!);
   document.addEventListener("visibilitychange", vis);

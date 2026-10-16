@@ -49,18 +49,10 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
   const hbApiCooperadoId = resolveHbCreditApiCooperadoId(user, cooperadoId);
   const [snap, setSnap] = useState<HbCreditAccountPersistido | null>(null);
 
-  const abrirHbCreditos = useCallback(
-    (e?: { preventDefault?: () => void }) => {
-      e?.preventDefault?.();
-      clearCooperadoOptimisticTab();
-      try {
-        router.push("/minha-conta-coop");
-      } catch {
-        window.location.assign("/minha-conta-coop");
-      }
-    },
-    [router]
-  );
+  /** Paridade com drawer (Link nativo): só limpa aba otimista; navegação pelo href. */
+  const onHbNavClick = useCallback(() => {
+    clearCooperadoOptimisticTab();
+  }, []);
 
   useEffect(() => {
     try {
@@ -180,7 +172,7 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
     return (
       <Link
         href="/minha-conta-coop"
-        onClick={abrirHbCreditos}
+        onClick={onHbNavClick}
         className="flex items-center gap-4 rounded-2xl border-2 border-emerald-200 bg-gradient-to-r from-emerald-50 to-green-50 px-5 py-4 hover:border-emerald-300 transition-colors"
       >
         <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-700 text-white shrink-0">
@@ -198,7 +190,7 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
   return (
     <Link
       href="/minha-conta-coop"
-      onClick={abrirHbCreditos}
+      onClick={onHbNavClick}
       className="block overflow-hidden rounded-2xl border-2 border-emerald-300/80 bg-gradient-to-br from-emerald-800 via-green-700 to-teal-700 p-5 text-white shadow-md hover:border-emerald-200 transition-colors"
     >
       <div className="flex items-start gap-4">
