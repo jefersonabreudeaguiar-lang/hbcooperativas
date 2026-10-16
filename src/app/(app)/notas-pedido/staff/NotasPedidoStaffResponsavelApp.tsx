@@ -4111,7 +4111,7 @@ export default function NotasPedidoStaffMain() {
     })();
   };
 
-  const executarExclusaoEntregaResponsavel = async (alvo: NotaPedido) => {
+  const executarExclusaoEntregaResponsavel = (alvo: NotaPedido) => {
     if (!isDiretoria || !user || !data || !coopId) return;
     const permanecerEmCorrecoes = vistaResponsavel === "correcoes";
     const check = podeExcluirEntregaNota(data, alvo.id, coopId);
@@ -4120,12 +4120,9 @@ export default function NotasPedidoStaffMain() {
       return;
     }
 
-    let cnpj = getCooperativaCnpj(data, coopId);
-    if (!cnpj) {
-      cnpj = (await resolveCooperativaCnpj(data, coopId, user)) ?? undefined;
-    }
-    if (cnpj) {
-      queueNotaDelete(cnpj, alvo.id);
+    const cnpjHint = getCooperativaCnpj(data, coopId);
+    if (cnpjHint) {
+      queueNotaDelete(cnpjHint, alvo.id);
     }
 
     updateData((d) => {
@@ -4157,18 +4154,29 @@ export default function NotasPedidoStaffMain() {
         : "Entrega excluída."
     );
 
-    if (cnpj) {
-      const notaId = alvo.id;
+    const notaId = alvo.id;
+    const syncExclusaoNuvem = () => {
       void (async () => {
+        let cnpj = cnpjHint ?? (await resolveCooperativaCnpj(getData(), coopId, user)) ?? undefined;
+        if (!cnpj) {
+          requestAppSyncLight();
+          return;
+        }
+        if (!cnpjHint) {
+          queueNotaDelete(cnpj, notaId);
+        }
         const del = await deleteNotaPedidoFromCloud(cnpj, notaId);
         if (del.ok) {
           unqueueNotaDelete(cnpj, notaId);
         }
-        await flushPendingNotaDeletes(cnpj);
+        void flushPendingNotaDeletes(cnpj);
         await pushOperacionalToCloud(cnpj, getData(), coopId, STAFF_OPERACIONAL_PUSH);
       })();
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      requestIdleCallback(syncExclusaoNuvem, { timeout: 1_200 });
     } else {
-      requestAppSyncLight();
+      window.setTimeout(syncExclusaoNuvem, 0);
     }
 
     if (permanecerEmCorrecoes) {
@@ -4238,14 +4246,9 @@ export default function NotasPedidoStaffMain() {
     if (!excluirNotaTarget || !user || !data || !coopId) return;
 
     if (excluirComoResponsavel) {
-      setExcluindo(true);
-      try {
-        await executarExclusaoEntregaResponsavel(excluirNotaTarget);
-      } finally {
-        setExcluindo(false);
-        setExcluirNotaTarget(null);
-        setExcluirComoResponsavel(false);
-      }
+      executarExclusaoEntregaResponsavel(excluirNotaTarget);
+      setExcluirNotaTarget(null);
+      setExcluirComoResponsavel(false);
       return;
     }
 
