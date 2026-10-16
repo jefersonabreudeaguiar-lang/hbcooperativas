@@ -577,7 +577,7 @@ function ContaCoopContent() {
   }, [cnpj, user?.cooperativaId, cooperadoIdsAtivos.length, syncLimitesComFicha]);
 
   const revalidateLimitesLista = useCallback(
-    async (opts?: { background?: boolean; force?: boolean }) => {
+    async (opts?: { background?: boolean; force?: boolean; authoritative?: boolean }) => {
       if (!cnpj || cnpj.length !== 14) return;
       if (!cooperadoIdsAtivosRef.current.length) return;
       if (limitesListaPendingRef.current) return;
@@ -593,7 +593,10 @@ function ContaCoopContent() {
       const ids = cooperadoIdsAtivosRef.current;
       const t0 = contaCoopPerfStart("GET /api/credit/limites");
       try {
-        const full = await fetchCreditLimites(cnpj, { fast: true });
+        const full = await fetchCreditLimites(
+          cnpj,
+          opts?.authoritative ? { cooperadoIds: ids } : { fast: true, cooperadoIds: ids }
+        );
         applyLimitesFetchResult(full, ids);
       } catch (e) {
         setLimitesListaAviso(mensagemErroListaLimitesStaff(e));
@@ -753,7 +756,7 @@ function ContaCoopContent() {
   );
 
   const refreshLimitesAposLiberacao = useCallback(async () => {
-    await revalidateLimitesLista({ force: true, background: true });
+    await revalidateLimitesLista({ force: true, background: true, authoritative: true });
   }, [revalidateLimitesLista]);
 
   const refreshHbNuvemEmBackground = useCallback(() => {
@@ -939,6 +942,7 @@ function ContaCoopContent() {
         novoLimiteReais: Number(novoLimiteReais.replace(",", ".")),
         creditosBaseCents,
       });
+      notifyHbCreditLimiteSynced({ immediate: true });
       setSuccess("Limite individual salvo. Atualizando lista…");
       await refreshLimitesAposLiberacao();
     } catch (e) {

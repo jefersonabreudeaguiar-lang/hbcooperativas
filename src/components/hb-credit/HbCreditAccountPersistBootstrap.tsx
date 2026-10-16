@@ -147,7 +147,6 @@ export function HbCreditAccountPersistBootstrap() {
     cnpj: coopCnpj,
     cooperadoId: hbApiCooperadoId,
     enabled:
-      !cooperadoSyncManual &&
       hbNavOn &&
       user?.role === "cooperado" &&
       Boolean(coopCnpj && hbApiCooperadoId) &&

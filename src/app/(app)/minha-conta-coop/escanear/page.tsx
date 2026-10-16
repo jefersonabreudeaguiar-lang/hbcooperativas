@@ -10,7 +10,7 @@ import { HbCreditScannerErrorBoundary } from "@/components/hb-credit/HbCreditSca
 import { Button } from "@/components/ui/Button";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAppData } from "@/hooks/useAppData";
-import { preloadAppData } from "@/services/dataStore";
+import { preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
 import { prepareAndOpenHbCreditPaymentFromQrScan } from "@/lib/hb-credit/openHbCreditPaymentFromQr";
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 import { resolveCooperadoHbCreditCnpjDigits } from "@/lib/hb-credit/resolveCooperadoHbCreditCnpj";
@@ -34,9 +34,11 @@ function EscanearQrContent() {
   const data = useAppData();
   const [validating, setValidating] = useState(false);
   const [scanError, setScanError] = useState("");
+  const [appDataReady, setAppDataReady] = useState(false);
 
   useEffect(() => {
     preloadAppData();
+    void waitForAppDataWarm(12_000).finally(() => setAppDataReady(true));
   }, []);
 
   const hbApiCooperadoId = useMemo(
@@ -66,6 +68,13 @@ function EscanearQrContent() {
   );
 
   if (!hbApiCooperadoId || cnpj.length !== 14) {
+    if (!appDataReady && user?.role === "cooperado") {
+      return (
+        <div className={cn(hbCooperadoFlowPage, "mx-auto max-w-lg gap-4 px-4 pb-8")}>
+          <p className="text-sm text-gray-600">Preparando pagamento HB Créditos…</p>
+        </div>
+      );
+    }
     return (
       <div className={cn(hbCooperadoFlowPage, "mx-auto max-w-lg gap-4 px-4 pb-8")}>
         <AlertBanner variant="error" title="Não foi possível abrir o pagamento">
