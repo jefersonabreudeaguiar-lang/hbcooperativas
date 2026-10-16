@@ -313,6 +313,11 @@ export async function fetchCloudSessionProfile(): Promise<CloudSessionProfile | 
     });
     if (res.status === 401) {
       clearAccessToken();
+      try {
+        await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      } catch {
+        /* offline */
+      }
       return null;
     }
     if (!res.ok) return null;
@@ -363,7 +368,7 @@ async function ensureCloudSessionReadyOnce(profile?: CloudSessionProfile): Promi
 
   lastCloudSyncError =
     lastCloudSyncError ||
-    "Sessão na nuvem expirada ou desalinhada. Saia, entre de novo e aguarde alguns segundos.";
+    "Sessão na nuvem expirada ou desalinhada. Toque em «Desconectar e entrar de novo», faça login com e-mail e senha e aguarde alguns segundos antes de abrir a HB Créditos.";
   return false;
 }
 
