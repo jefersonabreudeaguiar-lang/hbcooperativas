@@ -11,7 +11,6 @@ import { getData, getDataRevision, isAppDataWarm, subscribe } from "@/services/d
 import {
   getCooperadoDrawerMenuItems,
   getCooperadoShellMenusBeforeDataWarm,
-  getStaffShellMenusBeforeDataWarm,
   getMenuItems,
   getMobileNavItems,
   isCooperadoAppUser,
@@ -20,15 +19,7 @@ import {
   isHbCreditStaffNavEligible,
 } from "@/permissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
-import {
-  resolveStaffNavigationUser,
-  shouldRenderStaffPainelUi,
-  shouldRenderStaffPainelUiSession,
-} from "@/lib/staffNavigationUser";
-import {
-  shouldPrioritizeStaffColdShell,
-  staffShellMenusBeforeDataWarm,
-} from "@/lib/responsavel/responsavelPainelContrato";
+import { resolveStaffNavigationUser, shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
 import { isContaCoopUiVisibleForUser } from "@/utils/contaCoopUiVisibility";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import { cooperadoPilotMobileBottomNavItems } from "@/lib/cooperado/cooperadoMobilePilotBottomNav";
@@ -81,30 +72,14 @@ export function useAppShellNavigation(): AppShellNavigation | null {
   const shellCore = useMemo(() => {
     if (!subject) return null;
     if (!isAppDataWarm()) {
-      const staffPainelUi = Boolean(
-        accountUser && shouldRenderStaffPainelUiSession(accountUser)
-      );
-      if (shouldPrioritizeStaffColdShell(accountUser, false)) {
-        const navUser: NavUser = accountUser!;
-        const staffMenus = staffShellMenusBeforeDataWarm(navUser);
-        return {
-          navUser,
-          cooperadoNome: navUser.name ?? "",
-          staffPainelUi: true,
-          coopId: navUser.cooperativaId,
-          beforeDataWarm: true,
-          coldStaffMenus: staffMenus,
-        };
-      }
-      const isCooperadoShell =
-        isCooperadoAppUser(subject) || subject.role === "cooperado";
-      const navUser: NavUser = isCooperadoShell
+      if (!isCooperadoAppUser(subject) && subject.role !== "cooperado") return null;
+      const navUser: NavUser = isCooperadoAppUser(subject)
         ? { ...subject, role: "cooperado" as const }
         : subject;
       return {
         navUser,
         cooperadoNome: subject.name ?? "",
-        staffPainelUi,
+        staffPainelUi: false,
         coopId: subject.cooperativaId,
         beforeDataWarm: true,
       };
@@ -131,54 +106,19 @@ export function useAppShellNavigation(): AppShellNavigation | null {
     if (!shellCore) return null;
     const { navUser, cooperadoNome, staffPainelUi, coopId, beforeDataWarm } = shellCore;
     if (beforeDataWarm) {
-      const coldStaff =
-        "coldStaffMenus" in shellCore && shellCore.coldStaffMenus
-          ? shellCore.coldStaffMenus
-          : null;
-      if (coldStaff) {
-        return {
-          navUser,
-          cooperadoNome,
-          staffPainelUi,
-          coopId,
-          contaCoopUiVisible: false,
-          moduleNavEligible: false,
-          desktopMenu: coldStaff.desktopMenu,
-          mobileMenu: coldStaff.mobileMenu,
-          drawerMenu: coldStaff.drawerMenu,
-        };
-      }
-      const cooperadoShell =
-        isCooperadoAppUser(navUser) || navUser.role === "cooperado";
-      if (cooperadoShell) {
-        const menus = getCooperadoShellMenusBeforeDataWarm(navUser);
-        const hbWarmShell =
-          isCooperadoAppUser(navUser) &&
-          isContaCoopUiVisibleForUser(navUser) &&
-          Boolean(navUser.cooperadoId?.trim());
-        return {
-          navUser,
-          cooperadoNome,
-          staffPainelUi,
-          coopId,
-          contaCoopUiVisible: hbWarmShell,
-          moduleNavEligible: hbWarmShell,
-          desktopMenu: menus.desktopMenu,
-          mobileMenu: cooperadoPilotMobileBottomNavItems(menus.mobileMenu, navUser, hbWarmShell),
-          drawerMenu: menus.drawerMenu,
-        };
-      }
-      const staffMenus = getStaffShellMenusBeforeDataWarm(navUser);
+      const menus = getCooperadoShellMenusBeforeDataWarm(navUser);
+      const hbWarmShell =
+        isCooperadoAppUser(navUser) && isContaCoopUiVisibleForUser(navUser) && Boolean(navUser.cooperadoId?.trim());
       return {
         navUser,
         cooperadoNome,
         staffPainelUi,
         coopId,
-        contaCoopUiVisible: false,
-        moduleNavEligible: false,
-        desktopMenu: staffMenus.desktopMenu,
-        mobileMenu: staffMenus.mobileMenu,
-        drawerMenu: staffMenus.drawerMenu,
+        contaCoopUiVisible: hbWarmShell,
+        moduleNavEligible: hbWarmShell,
+        desktopMenu: menus.desktopMenu,
+        mobileMenu: cooperadoPilotMobileBottomNavItems(menus.mobileMenu, navUser, hbWarmShell),
+        drawerMenu: menus.drawerMenu,
       };
     }
     const data = getData();

@@ -277,7 +277,7 @@ function hbCreditCreditoBaseParidadeQuantoVouReceberReais(
 }
 
 /**
- * Crédito-base HB (limite/teto) — ficha em aberto, limitado ao M6 «A receber» (líquido).
+ * Crédito-base HB (limite/teto) — valor bruto da ficha nos meses em aberto.
  * Após quitação/liquidação do «A receber», base = 0 até nova entrega gerar pendência.
  */
 export function hbCreditCreditoBaseReais(
@@ -287,16 +287,7 @@ export function hbCreditCreditoBaseReais(
 ): number {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const bruto = hbCreditCreditoBaseBrutoFichaAbertoReais(data, cooperadoId, cooperativaId);
-  if (bruto > 0) {
-    const m6 = hbCreditValorAReceberAgregado(data, cooperadoId, cooperativaId);
-    if (m6.aguardandoAssinatura && m6.valorRecibo > 0.005) {
-      return round2(Math.min(bruto, m6.valorRecibo));
-    }
-    if (m6.valor > 0.005) {
-      return round2(Math.min(bruto, m6.valor));
-    }
-    return bruto;
-  }
+  if (bruto > 0) return bruto;
 
   if (!coopId) return 0;
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);

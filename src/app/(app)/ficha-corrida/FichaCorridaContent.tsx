@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useMemo, useState, useEffect, useCallback, useLayoutEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useCallback, useLayoutEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard, History, Users, ChevronDown, Pencil, RefreshCw, Eye } from "lucide-react";
 import { useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
@@ -60,12 +60,7 @@ import {
 } from "@/services/bicLeituraCentralFicha";
 import { listarPagamentosAguardandoAssinatura, listarPagamentosReciboAguardandoVerificacao } from "@/services/filaDoDiaService";
 import { listCooperadosPagamentoPendenteResponsavel } from "@/services/responsavelPainelIndex";
-import {
-  cooperativaCnpjDigitsFromAppData,
-  pickResumoStaffFichaPagar,
-  responsavelBadgeFilaPagarCount,
-  responsavelFichaAppDataDomains,
-} from "@/lib/responsavel/responsavelFichaFinanceiroLeitura";
+import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
@@ -225,6 +220,8 @@ function TabelaResumoItens({
   );
 }
 
+const FICHA_APP_DATA_DOMAINS: AppDataNotifyDomain[] = ["financeiro", "shell"];
+
 /** Gate financeiro L1 fica no AppLayout (shell); evita provider duplicado no dual-mount de abas. */
 export default function FichaCorridaPage() {
   return <FichaCorridaPageInner />;
@@ -234,10 +231,6 @@ function FichaCorridaPageInner() {
   const ready = useEnsureAppDataWarm();
   const tabActive = useCooperadoTabPanelActive("/ficha-corrida");
   const { user, isCooperado, cooperadoId, check } = usePermissions();
-  const fichaAppDataDomains = useMemo(
-    (): AppDataNotifyDomain[] => responsavelFichaAppDataDomains(isCooperado),
-    [isCooperado]
-  );
   /** Celular/PWA: Financeiro com resumo de entregas e mês pago como antes da separação desktop. */
   const messenger = isCooperadoPwaMessengerMode();
   const pilotFinanceiroLeve = cooperadoMobilePilotSnapshotFirstInicio(user);
@@ -261,9 +254,9 @@ function FichaCorridaPageInner() {
     tabActive && (isCooperado ? cooperadoPwaUiSubscribesAppData() : true);
   const dataLive = useAppDataSelectorForDomainsWhenActive(
     appDataPanelActive,
-    fichaAppDataDomains,
+    FICHA_APP_DATA_DOMAINS,
     (d) => d,
-    [fichaAppDataDomains]
+    []
   );
   const [appDataWarmTick, setAppDataWarmTick] = useState(0);
   const dataDormant = useCooperadoDormantAppData(
@@ -377,11 +370,6 @@ function FichaCorridaPageInner() {
   const [coopCnpjResumo, setCoopCnpjResumo] = useState("");
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
-  const coopCnpjDigits = useMemo(
-    () => cooperativaCnpjDigitsFromAppData(data, coopId),
-    [data, coopId]
-  );
-  const { syncing: syncCooperativaUi } = useSyncStatus();
   const fluxoReciboAssinatura = cooperadoUsarFluxoReciboAssinaturaNaUi();
   const {
     apresentacaoConsolidada,
@@ -616,32 +604,29 @@ function FichaCorridaPageInner() {
     return listarPagamentosReciboAguardandoVerificacao(data, coopId);
   }, [data, coopId]);
 
-  const totalBadgeFilaPagar = useMemo(
-    () =>
-      responsavelBadgeFilaPagarCount({
-        cooperadosParaPagarCount: cooperadosParaPagar.length,
-        aguardandoAssinaturaCount: pagamentosAguardandoAssinatura.length,
-        aguardandoVerificacaoCount: pagamentosAguardandoVerificacao.length,
-        cnpjDigits: coopCnpjDigits || coopCnpjResumo,
-      }),
-    [
-      coopCnpjDigits,
-      coopCnpjResumo,
-      cooperadosParaPagar.length,
-      pagamentosAguardandoAssinatura.length,
-      pagamentosAguardandoVerificacao.length,
-    ]
-  );
+  const totalBadgeFilaPagar = useMemo(() => {
+    const aguard = pagamentosAguardandoAssinatura.length;
+    const verif = pagamentosAguardandoVerificacao.length;
+    const restoreAtivo = Boolean(coopCnpjResumo && isOperacionalCloudAuthoritative(coopCnpjResumo));
+    if (restoreAtivo) {
+      return aguard + verif;
+    }
+    return cooperadosParaPagar.length + aguard + verif;
+  }, [
+    coopCnpjResumo,
+    cooperadosParaPagar,
+    pagamentosAguardandoAssinatura,
+    pagamentosAguardandoVerificacao,
+  ]);
 
   const cooperadosNoSelect = !isCooperado && aba === "pagar" ? cooperadosParaPagar : cooperadosComFicha;
 
   useEffect(() => {
     if (isCooperado || aba !== "pagar" || !cooperadoFilter || !data || !coopId) return;
-    if (syncCooperativaUi) return;
     if (!cooperadoPendentePagamentoResponsavel(data, cooperadoFilter, undefined, coopId)) {
       setCooperadoFilter("");
     }
-  }, [isCooperado, aba, cooperadoFilter, data, coopId, mesAtivo, syncCooperativaUi]);
+  }, [isCooperado, aba, cooperadoFilter, data, coopId, mesAtivo]);
 
   useEffect(() => {
     setAbaMesPagamentoResponsavel("pendente");
@@ -1105,33 +1090,8 @@ function FichaCorridaPageInner() {
       : undefined
   );
 
-  const ultimoResumoStaffPagarRef = useRef<ReturnType<typeof resumoFromPagamento> | null>(null);
-
   const resumo = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return null;
-    const staffFichaPagarPendente =
-      !isCooperado && aba === "pagar" && !visualizandoHistoricoPagamentoResponsavel;
-    if (staffFichaPagarPendente) {
-      const staffResumo = pickResumoStaffFichaPagar({
-        data,
-        cooperadoId: cooperadoSelecionadoId,
-        cooperativaId: coopId,
-        mesesPendentesPagamento,
-        resumoPagamentoConsolidado,
-        financeiroAberto,
-        pagamentoAguardando: pagamentoAguardandoExibicao ?? pagamentoAguardando,
-        mesAtivo,
-        resumoAjustes,
-        fluxoReciboAssinatura,
-      });
-      if (staffResumo) {
-        ultimoResumoStaffPagarRef.current = staffResumo;
-        return staffResumo;
-      }
-      if (syncCooperativaUi && ultimoResumoStaffPagarRef.current) {
-        return ultimoResumoStaffPagarRef.current;
-      }
-    }
     if (isCooperado && !visualizandoHistorico && paridadeCooperadoMobile) {
       if (conferindoPagamentoNuvem && paridadeCooperadoMobile.valorLiquido > 0) {
         return paridadeCooperadoMobile.resumo;
@@ -1162,11 +1122,7 @@ function FichaCorridaPageInner() {
         ajustesCompartilhadosMes
       );
     }
-    if (
-      pagamentoConfirmado &&
-      (!isCooperado || visualizandoHistorico) &&
-      !staffFichaPagarPendente
-    ) {
+    if (pagamentoConfirmado && (!isCooperado || visualizandoHistorico)) {
       return resumoFromPagamento(pagamentoConfirmado);
     }
     const aguardandoResumo = fluxoReciboAssinatura
@@ -1218,9 +1174,6 @@ function FichaCorridaPageInner() {
     conferindoPagamentoNuvem,
     paridadeCooperadoMobile,
     fluxoReciboAssinatura,
-    aba,
-    visualizandoHistoricoPagamentoResponsavel,
-    syncCooperativaUi,
   ]);
 
   const resumoExibicao = resumo;

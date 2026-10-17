@@ -11,7 +11,6 @@ import {
   resolveAuthoritativePanelRole,
 } from "../src/lib/security/responsavelPanelAccess.ts";
 import { shouldRenderStaffPainelUi } from "../src/lib/staffNavigationUser.ts";
-import { evaluateResponsavelPainelAbertura } from "../src/lib/responsavel/responsavelPainelContrato.ts";
 
 const COOP = "coop-1";
 
@@ -74,17 +73,11 @@ function evaluateDashboardStaffOpen(
   dataReady: boolean
 ): { canGestao: boolean; staffPainelUi: boolean; open: boolean } {
   const authSubject = accountUser;
-  const gate = evaluateResponsavelPainelAbertura({
-    accountUser,
-    authSubject,
-    data,
-    dataReady,
-  });
-  return {
-    canGestao: gate.canGestao,
-    staffPainelUi: gate.staffPainelUi,
-    open: gate.showAdminPainel,
-  };
+  const staffPainelUi = Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data));
+  const canGestao = dataReady
+    ? Boolean(authSubject && canAccessPainelResponsavel(authSubject, data))
+    : Boolean(authSubject && canAccessPainelResponsavelSession(authSubject));
+  return { canGestao, staffPainelUi, open: canGestao && staffPainelUi };
 }
 
 // CASO 1 — responsável válido (perfil duplo) abre painel staff no desktop

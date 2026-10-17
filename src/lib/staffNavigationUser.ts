@@ -1,8 +1,5 @@
 import type { AppData, User } from "@/types";
-import {
-  canAccessPainelResponsavel,
-  canAccessPainelResponsavelSession,
-} from "@/lib/security/responsavelPanelAccess";
+import { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
 import { isMobileCooperativaApp } from "@/lib/mobileExperience";
 import { preferPainelResponsavelMobile } from "@/lib/mobilePainelPreference";
 
@@ -12,15 +9,6 @@ export function shouldRenderStaffPainelUi(
   data?: AppData | null
 ): boolean {
   if (!accountUser || !canAccessPainelResponsavel(accountUser, data)) return false;
-  if (!isMobileCooperativaApp()) return true;
-  return preferPainelResponsavelMobile();
-}
-
-/** Antes do AppData aquecer — evita cair no painel cooperado com tela vazia no browser. */
-export function shouldRenderStaffPainelUiSession(
-  accountUser: Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active"> | null | undefined
-): boolean {
-  if (!accountUser || !canAccessPainelResponsavelSession(accountUser)) return false;
   if (!isMobileCooperativaApp()) return true;
   return preferPainelResponsavelMobile();
 }
