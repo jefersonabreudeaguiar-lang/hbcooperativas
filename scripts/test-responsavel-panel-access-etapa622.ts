@@ -11,6 +11,11 @@ import {
   resolveAuthoritativePanelRole,
 } from "../src/lib/security/responsavelPanelAccess.ts";
 import { shouldRenderStaffPainelUi } from "../src/lib/staffNavigationUser.ts";
+import {
+  listarMesesEmAbertoPagamentoResponsavel,
+  listarMesesPendentesPagamentoResponsavel,
+} from "../src/services/cooperadoEntregasService.ts";
+import type { PagamentoCooperadoRegistro } from "../src/types/index.ts";
 
 const COOP = "coop-1";
 
@@ -37,6 +42,7 @@ function emptyData(users: User[]): AppData {
     descontos: [],
     valoresAvulsos: [],
     fechamentosMensais: [],
+    arquivosMensais: [],
   } as AppData;
 }
 
@@ -139,6 +145,65 @@ function evaluateDashboardStaffOpen(
   const fixedRole = resolveAppUserRole(staleSession, data);
   assert.equal(fixedRole, "responsavel");
   assert.equal(canAccessPainelResponsavelSession(staleSession, data), true);
+}
+
+// CASO 5 — mês com pagamento confirmado não entra em «em aberto» do responsável
+{
+  const record = staffUser();
+  const mes = "2026-09";
+  const data = emptyData([record]);
+  data.cooperados = [
+    {
+      id: "coop-member-1",
+      nomeCompleto: "Cooperado Teste",
+      cooperativaId: COOP,
+      status: "ativo",
+      chavePix: "pix@test",
+    } as AppData["cooperados"][0],
+  ];
+  data.fichaCorrida = [
+    {
+      id: "f1",
+      cooperadoId: "coop-member-1",
+      cooperativaId: COOP,
+      mesReferencia: mes,
+      notaPedidoId: "n1",
+      status: "pago",
+      valorBruto: 100,
+      valorLiquido: 90,
+      createdAt: "2026-09-01T00:00:00.000Z",
+      updatedAt: "2026-09-15T00:00:00.000Z",
+    },
+  ];
+  data.notasPedido = [
+    {
+      id: "n1",
+      cooperadoId: "coop-member-1",
+      cooperativaId: COOP,
+      mesReferencia: mes,
+      status: "pago",
+      valorLiquido: 90,
+      itens: [],
+      createdAt: "2026-09-01T00:00:00.000Z",
+      dataEntrega: "2026-09-01",
+    } as AppData["notasPedido"][0],
+  ];
+  const pagamento: PagamentoCooperadoRegistro = {
+    id: "pg-1",
+    cooperadoId: "coop-member-1",
+    cooperativaId: COOP,
+    mesReferencia: mes,
+    status: "confirmado",
+    valorLiquido: 90,
+    valorBruto: 100,
+    pagoEm: "2026-09-20T00:00:00.000Z",
+    createdAt: "2026-09-20T00:00:00.000Z",
+    fichaIds: ["f1"],
+    notaPedidoIds: ["n1"],
+  };
+  data.pagamentosCooperado = [pagamento];
+  const abertos = listarMesesEmAbertoPagamentoResponsavel(data, "coop-member-1", COOP);
+  assert.equal(abertos.includes(mes), false, "mês pago não deve ficar em aberto");
 }
 
 console.log("test-responsavel-panel-access-etapa622: OK");

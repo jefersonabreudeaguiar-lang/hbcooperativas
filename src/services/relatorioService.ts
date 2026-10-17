@@ -3,7 +3,7 @@ import { getCooperadoNome, round2, sumBy } from "@/utils/calculations";
 import { formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia } from "@/utils/format";
 import { notaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import {
-  listarMesesPendentesPagamentoResponsavel,
+  listarMesesEmAbertoPagamentoResponsavel,
   getConsolidadoFinanceiroCooperado,
   cooperadoPendentePagamentoResponsavel,
 } from "@/services/cooperadoEntregasService";
@@ -409,7 +409,7 @@ export function getRelatorioPagarCooperadoEmAberto(
         (!cooperadoId || c.id === cooperadoId)
     )
     .map((c) => {
-      const meses = listarMesesPendentesPagamentoResponsavel(data, c.id, cooperativaId);
+      const meses = listarMesesEmAbertoPagamentoResponsavel(data, c.id, cooperativaId);
       const consolidado = getConsolidadoFinanceiroCooperado(data, c.id, cooperativaId);
       let entregas = 0;
       const porMes: LinhaPagarCooperadoEmAberto["porMes"] = [];
@@ -682,7 +682,7 @@ export function listarMesesComDebitoCooperativa(data: AppData, cooperativaId?: s
   for (const c of data.cooperados) {
     if (c.status !== "ativo") continue;
     if (cooperativaId && c.cooperativaId !== cooperativaId) continue;
-    for (const mes of listarMesesPendentesPagamentoResponsavel(data, c.id, cooperativaId)) {
+    for (const mes of listarMesesEmAbertoPagamentoResponsavel(data, c.id, cooperativaId)) {
       set.add(mes);
     }
   }

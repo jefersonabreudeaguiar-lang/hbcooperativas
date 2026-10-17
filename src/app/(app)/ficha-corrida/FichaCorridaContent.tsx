@@ -99,7 +99,7 @@ import { cooperadoBicFinanceiroSyncHintForUi } from "@/lib/bic/cooperadoBicSonat
 import {
   cooperadoMesQuitado,
   cooperadoPendentePagamentoResponsavel,
-  listarMesesPendentesPagamentoResponsavel,
+  listarMesesEmAbertoPagamentoResponsavel,
   getPagamentoConfirmadoMes,
   getPagamentoRegistradoMes,
   listarMesesComPagamentoRegistradoCooperado,
@@ -704,7 +704,7 @@ function FichaCorridaPageInner() {
 
   const mesesPendentesPagamento = useMemo(() => {
     if (!data || !cooperadoSelecionadoId || isCooperado) return [];
-    return listarMesesPendentesPagamentoResponsavel(data, cooperadoSelecionadoId, coopId);
+    return listarMesesEmAbertoPagamentoResponsavel(data, cooperadoSelecionadoId, coopId);
   }, [coopId, cooperadoSelecionadoId, data, isCooperado]);
 
   const resumoPagamentoConsolidado = useMemo(() => {
@@ -1184,10 +1184,10 @@ function FichaCorridaPageInner() {
     if (visualizandoHistorico && pagamentoConfirmadoMes) {
       return resumoFromPagamento(pagamentoConfirmadoMes);
     }
-    if (!isCooperado && financeiroAberto && !pagamentoAguardando) {
+    if (!isCooperado && financeiroAberto && !pagamentoAguardando && !staffFichaPagarPendente) {
       return financeiroAberto.resumo;
     }
-    if (!isCooperado && resumoPagamentoConsolidado) {
+    if (!isCooperado && resumoPagamentoConsolidado && !staffFichaPagarPendente) {
       return resumoPagamentoConsolidado;
     }
     return bicCentralGetResumoPagamentoExibicao(

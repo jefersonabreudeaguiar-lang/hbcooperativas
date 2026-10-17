@@ -7,10 +7,14 @@ import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthor
 import { bicCentralValorAReceberAgregado } from "@/services/bicLeituraCentralCooperado";
 import { projetarAppDataFinanceiroParaCreditoBase } from "@/modules/hb-credit/engine/projetarAppDataFinanceiroParaCreditoBase";
 import type { ConsolidadoFinanceiroCooperado } from "@/services/cooperadoEntregasService";
-import { listarMesesPendentesPagamentoResponsavel } from "@/services/cooperadoEntregasService";
+import {
+  listarMesesEmAbertoPagamentoResponsavel,
+  mesReferenciaPagamentoResponsavelEmAberto,
+} from "@/services/cooperadoEntregasService";
 import { bicCentralGetResumoPagamentoExibicao } from "@/services/bicLeituraCentralFicha";
 import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
 import {
+  getResumoPagamentoConsolidadoCooperado,
   getTotalAPagarCooperado,
   resumoFromPagamento,
   type AjustesResumoPagamento,
@@ -89,7 +93,7 @@ export function getTotalValoresAPagarGestaoCooperativa(
   return round2(
     cooperados.reduce((s, c) => {
       const coopScope = cooperativaId ?? c.cooperativaId;
-      const meses = listarMesesPendentesPagamentoResponsavel(data, c.id, coopScope);
+      const meses = listarMesesEmAbertoPagamentoResponsavel(data, c.id, coopScope);
       let sub = 0;
       for (const mes of meses) {
         sub += getTotalAPagarCooperado(data, c.id, mes, coopScope);
@@ -128,31 +132,54 @@ export function pickResumoStaffFichaPagar(
     fluxoReciboAssinatura,
   } = input;
 
-  if (resumoPagamentoConsolidado) {
-    return resumoPagamentoConsolidado;
+  const mesesEmAberto = mesesPendentesPagamento.filter((mes) =>
+    mesReferenciaPagamentoResponsavelEmAberto(data, cooperadoId, mes, cooperativaId)
+  );
+
+  const ajustesPorMes: Record<string, AjustesResumoPagamento> | undefined =
+    resumoAjustes && mesAtivo ? { [mesAtivo]: resumoAjustes } : undefined;
+
+  if (mesesEmAberto.length > 1) {
+    const consolidado = getResumoPagamentoConsolidadoCooperado(
+      data,
+      cooperadoId,
+      mesesEmAberto,
+      cooperativaId,
+      ajustesPorMes
+    );
+    if (consolidado.valorLiquido > 0.005) return consolidado;
   }
 
-  if (
-    financeiroAberto &&
-    financeiroAberto.valorLiquido > 0.005 &&
-    mesesPendentesPagamento.length > 0
-  ) {
-    return financeiroAberto.resumo;
-  }
-
-  if (fluxoReciboAssinatura && pagamentoAguardando && mesesPendentesPagamento.length === 0) {
-    return resumoFromPagamento(pagamentoAguardando);
-  }
-
-  if (mesesPendentesPagamento.length > 0) {
-    const mes = mesesPendentesPagamento[mesesPendentesPagamento.length - 1] ?? mesAtivo;
-    return bicCentralGetResumoPagamentoExibicao(
+  if (mesesEmAberto.length === 1) {
+    const mes = mesesEmAberto[0]!;
+    const exibicao = bicCentralGetResumoPagamentoExibicao(
       data,
       cooperadoId,
       mes,
       cooperativaId,
       resumoAjustes
     );
+    if (exibicao.valorLiquido > 0.005) return exibicao;
+  }
+
+  if (
+    resumoPagamentoConsolidado &&
+    mesesEmAberto.length === mesesPendentesPagamento.length &&
+    resumoPagamentoConsolidado.valorLiquido > 0.005
+  ) {
+    return resumoPagamentoConsolidado;
+  }
+
+  if (
+    financeiroAberto &&
+    financeiroAberto.valorLiquido > 0.005 &&
+    mesesEmAberto.length > 0
+  ) {
+    return financeiroAberto.resumo;
+  }
+
+  if (fluxoReciboAssinatura && pagamentoAguardando && mesesEmAberto.length === 0) {
+    return resumoFromPagamento(pagamentoAguardando);
   }
 
   return null;

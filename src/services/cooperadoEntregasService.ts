@@ -591,6 +591,42 @@ export function listarMesesPendentesPagamentoResponsavel(
   return listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
 }
 
+/**
+ * Mês ainda devendo PIX (ficha/resumo) — exclui quitados e período só aguardando assinatura do recibo.
+ * Usado na aba Pagar do responsável e nos totais «em aberto» da gestão.
+ */
+export function mesReferenciaPagamentoResponsavelEmAberto(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): boolean {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  if (cooperadoMesQuitado(data, cooperadoId, mesReferencia, coopId)) return false;
+
+  const valorAberto = getTotalAPagarCooperado(data, cooperadoId, mesReferencia, coopId);
+  if (valorAberto > 0.005) return true;
+  if (cooperadoMesComFichaPagaSemPagamentoCooperativa(data, cooperadoId, mesReferencia, coopId)) {
+    return true;
+  }
+  if (temValoresAvulsosPendentesMes(data, cooperadoId, mesReferencia, coopId)) return true;
+
+  const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia, coopId);
+  if (aguardando && valorAberto <= 0.005) return false;
+
+  return false;
+}
+
+export function listarMesesEmAbertoPagamentoResponsavel(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): string[] {
+  return listarMesesPendentesPagamentoResponsavel(data, cooperadoId, cooperativaId).filter((mes) =>
+    mesReferenciaPagamentoResponsavelEmAberto(data, cooperadoId, mes, cooperativaId)
+  );
+}
+
 export type ConsolidadoFinanceiroCooperado = {
   meses: string[];
   mesReferenciaPrincipal: string;
@@ -723,7 +759,7 @@ export function cooperadoPendentePagamentoResponsavel(
   mesReferencia?: string,
   cooperativaId?: string
 ): boolean {
-  const meses = listarMesesPendentesPagamentoResponsavel(data, cooperadoId, cooperativaId);
+  const meses = listarMesesEmAbertoPagamentoResponsavel(data, cooperadoId, cooperativaId);
   if (mesReferencia && !meses.includes(mesReferencia)) return false;
   if (!meses.length) return false;
 
