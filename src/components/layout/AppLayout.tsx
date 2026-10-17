@@ -490,10 +490,8 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   const staffPainelUi = shell?.staffPainelUi ?? false;
   const cooperadoKeepAliveShell =
     Boolean(navUser) &&
-    isCooperadoAppUser(navUser) &&
-    (isAppDataWarm()
-      ? resolveAppUserRole(navUser!, getData()) === "cooperado"
-      : navUser!.role === "cooperado");
+    !staffPainelUi &&
+    (navUser!.role === "cooperado" || isCooperadoAppUser(navUser));
 
   const staffKeepAliveShell =
     Boolean(navUser) &&

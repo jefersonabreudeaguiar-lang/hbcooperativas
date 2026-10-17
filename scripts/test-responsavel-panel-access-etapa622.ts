@@ -277,4 +277,18 @@ function evaluateDashboardStaffOpen(
   assert.equal(abertos.includes(mes), false, "mês debitado no caixa não deve ficar em aberto");
 }
 
+// CASO 7 — sessão cooperado sem AppData não vira responsável silenciosamente
+{
+  const session = {
+    id: "u-coop",
+    email: "coop@coop.test",
+    name: "Cooperado",
+    role: "cooperado" as const,
+    cooperativaId: COOP,
+    cooperadoId: "coop-member-2",
+    active: true,
+  } as Omit<User, "password">;
+  assert.equal(resolveAppUserRole(session, null), "cooperado");
+}
+
 console.log("test-responsavel-panel-access-etapa622: OK");

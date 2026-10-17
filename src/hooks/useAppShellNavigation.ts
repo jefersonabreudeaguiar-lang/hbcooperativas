@@ -32,6 +32,7 @@ import {
 import { isContaCoopUiVisibleForUser } from "@/utils/contaCoopUiVisibility";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import { cooperadoPilotMobileBottomNavItems } from "@/lib/cooperado/cooperadoMobilePilotBottomNav";
+import { isMobileCooperativaApp } from "@/lib/mobileExperience";
 
 export type AppShellMenuItem = { href: string; label: string; resource: Resource };
 
@@ -70,12 +71,18 @@ function hbModuleNavEligible(
  */
 export function useAppShellNavigation(): AppShellNavigation | null {
   const { user, accountUser } = useAuth();
-  const gestaoAccount = accountUser ?? user;
-  const coldData = isAppDataWarm() ? getData() : null;
-  const staffColdUi = Boolean(
-    gestaoAccount && shouldRenderStaffPainelUiSession(gestaoAccount, coldData)
+  const experienceUser = user ?? accountUser;
+  const mobileCooperadoShell = Boolean(
+    experienceUser &&
+      isMobileCooperativaApp() &&
+      (experienceUser.role === "cooperado" || isCooperadoAppUser(experienceUser))
   );
-  const subject = staffColdUi && gestaoAccount ? gestaoAccount : user ?? accountUser;
+  const gestaoAccount = mobileCooperadoShell ? null : accountUser ?? user;
+  const coldData = isAppDataWarm() ? getData() : null;
+  const staffColdUi =
+    !mobileCooperadoShell &&
+    Boolean(gestaoAccount && shouldRenderStaffPainelUiSession(gestaoAccount, coldData));
+  const subject = experienceUser;
   useEnsureAppDataWarm();
   const dataRevision = useSyncExternalStore(
     subscribe,
@@ -84,7 +91,7 @@ export function useAppShellNavigation(): AppShellNavigation | null {
   );
 
   const shellCore = useMemo(() => {
-    const gestao = accountUser ?? user;
+    const gestao = mobileCooperadoShell ? null : accountUser ?? user;
     const effectiveSubject = subject ?? gestao;
     if (!effectiveSubject) return null;
     const cold = isAppDataWarm() ? getData() : null;
@@ -118,9 +125,11 @@ export function useAppShellNavigation(): AppShellNavigation | null {
       };
     }
     const data = getData();
-    const navUser = resolveStaffNavigationUser(accountUser, effectiveSubject, data) ?? effectiveSubject;
+    const navUser = resolveStaffNavigationUser(gestao, effectiveSubject, data) ?? effectiveSubject;
     const cooperadoNome = resolveCooperadoNome(navUser, data);
-    const staffPainelUi = Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data));
+    const staffPainelUi =
+      !mobileCooperadoShell &&
+      Boolean(gestao && shouldRenderStaffPainelUi(gestao, data));
     const coopId = getUserCooperativaId(navUser, data);
     return { navUser, cooperadoNome, staffPainelUi, coopId, beforeDataWarm: false };
   }, [
@@ -132,6 +141,7 @@ export function useAppShellNavigation(): AppShellNavigation | null {
     accountUser?.role,
     user?.id,
     user?.role,
+    mobileCooperadoShell,
     dataRevision,
   ]);
 

@@ -62,10 +62,18 @@ export function resolveExperienceUser<T extends Omit<User, "password">>(
 ): T | null {
   if (!user) return null;
 
+  const sessionRole = normalizeUserRole(user.role);
+  const mobile = isMobileCooperativaApp();
+  if (mobile && sessionRole === "cooperado") {
+    const cooperadoId = resolveCooperadoExperienceId(user) ?? user.cooperadoId;
+    return cooperadoId
+      ? asCooperadoExperience(user, cooperadoId, data)
+      : { ...user, role: "cooperado" as UserRole };
+  }
+
   const allowPainel =
     canAccessPainelResponsavel(user, data) ||
     canAccessPainelResponsavelSession(user, data);
-  const mobile = isMobileCooperativaApp();
 
   if (allowPainel && (!mobile || preferPainelResponsavelMobile())) {
     return user;

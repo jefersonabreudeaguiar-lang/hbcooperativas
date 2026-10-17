@@ -277,12 +277,37 @@ export function isCooperadoAppUser(
   return Boolean(user.cooperadoId?.trim());
 }
 
+function isMobileCooperativaAppClient(): boolean {
+  if (typeof window === "undefined") return false;
+  const standalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+  if (standalone) return true;
+  if (window.matchMedia("(max-width: 1023px)").matches) return true;
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+}
+
 /** Papel efetivo para menu/rotas — cooperadoId prevalece; painel da diretoria só para quem foi autorizado. */
 export function resolveAppUserRole(
   user: Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active">,
   data?: AppData | null
 ): UserRole {
   const sessionRole = normalizeUserRole(user.role);
+  /** App cooperado no celular/PWA: JWT cooperado não vira gestão por users[] ou perfil duplo. */
+  if (sessionRole === "cooperado" && isMobileCooperativaAppClient()) {
+    return "cooperado";
+  }
+  if (sessionRole === "cooperado" && !data) {
+    return "cooperado";
+  }
+  if (sessionRole === "cooperado" && data) {
+    const fromData = resolveAuthoritativePanelRole(user, data);
+    if (isDiretoriaRole(fromData)) {
+      const userForAccess = { ...user, role: fromData };
+      if (canAccessPainelResponsavel(userForAccess, data)) return fromData;
+    }
+    return "cooperado";
+  }
   if (canAccessPainelResponsavelSession(user, data)) {
     const fromData = data ? resolveAuthoritativePanelRole(user, data) : null;
     if (fromData && isDiretoriaRole(fromData)) return fromData;

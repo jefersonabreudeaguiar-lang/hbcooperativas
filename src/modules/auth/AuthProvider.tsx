@@ -16,7 +16,7 @@ import type { User } from "@/types";
 import { normalizeUserRole, resolveAppUserRole } from "@/permissions";
 import { canAccessPainelResponsavelSession } from "@/lib/security/responsavelPanelAccess";
 import { resolveExperienceUser, resolveMobileCooperadoId } from "@/lib/mobileExperience";
-import { PAINEL_MOBILE_PREF_EVENT } from "@/lib/mobilePainelPreference";
+import { PAINEL_MOBILE_PREF_EVENT, setPreferPainelResponsavelMobile } from "@/lib/mobilePainelPreference";
 import {
   ensureCooperadoAppDataEagerWarm,
   isCooperadoInstantResumeEnabled,
@@ -302,6 +302,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccountUser(safeUser);
       setActiveCloudProfile(userToCloudProfile(safeUser));
       const role = resolveAppUserRole(safeUser, getData());
+      if (role === "cooperado") {
+        setPreferPainelResponsavelMobile(false);
+      }
       const sessionReady =
         role === "parceiro" || (await ensureCloudSessionReady(userToCloudProfile(safeUser)));
       if (!sessionReady) {
@@ -399,6 +402,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     setLoading(true);
     setAccountUser(null);
+    setPreferPainelResponsavelMobile(false);
     await logoutAndClearSession();
     if (typeof window !== "undefined") {
       window.location.replace("/login");
