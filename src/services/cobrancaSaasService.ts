@@ -291,15 +291,13 @@ function statusLabel(s: CobrancaSaasStatusMes): string {
   }
 }
 
-export function contratoServicoAssinado(coop: Cooperativa | undefined): boolean {
-  const cob = coop?.cobrancaSaas;
-  return Boolean(
-    cob?.contratoServicoAssinadoEm && cob.contratoServicoVersao === CONTRATO_SERVICO_VERSAO
-  );
+/** Contrato SaaS desligado — cobrança segue só com PIX + confirmação do criador no admin. */
+export function contratoServicoAssinado(_coop?: Cooperativa): boolean {
+  return true;
 }
 
-export function precisaAssinarContratoServico(coop: Cooperativa | undefined): boolean {
-  return !contratoServicoAssinado(coop);
+export function precisaAssinarContratoServico(_coop?: Cooperativa): boolean {
+  return false;
 }
 
 /** Registra assinatura localmente — leve; ciclo de cobrança pode rodar depois (idle). */
@@ -543,10 +541,6 @@ export function responsavelInformouPagamentoSaas(
   if (!coop || !cob?.cicloInicioEm) {
     return { data: next, ok: false, error: "Ciclo de cobrança ainda não iniciado." };
   }
-  if (precisaAssinarContratoServico(coop)) {
-    return { data: next, ok: false, error: "Assine o contrato de serviço antes de informar pagamento." };
-  }
-
   const periodo = getPeriodoCobrancaSaas(cob.cicloInicioEm);
   const lanc = lancamentoPeriodoAtual(cob, periodo.periodoId);
   if (!lanc || (lanc.status !== "enviada" && lanc.status !== "rejeitada")) {

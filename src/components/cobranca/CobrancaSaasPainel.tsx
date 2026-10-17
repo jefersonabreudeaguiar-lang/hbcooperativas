@@ -20,7 +20,6 @@ import { getData, updateData } from "@/services/dataStore";
 import {
   ensureCobrancaPeriodoAtualSaas,
   getPainelCobrancaSaasResponsavel,
-  precisaAssinarContratoServico,
   responsavelInformouPagamentoSaas,
   sincronizarCicloCobrancaSaas,
 } from "@/services/cobrancaSaasService";
@@ -45,7 +44,7 @@ export function CobrancaSaasPainel() {
     if (!user || !coopId || user.role === "cooperado") return;
     const d = getData();
     const coop = d.cooperativas.find((c) => c.id === coopId);
-    if (!coop || precisaAssinarContratoServico(coop)) return;
+    if (!coop) return;
     updateData((current) => {
       const before = JSON.stringify(current.cooperativas.find((c) => c.id === coopId)?.cobrancaSaas ?? {});
       let next = sincronizarCicloCobrancaSaas(current, coopId);
@@ -60,7 +59,7 @@ export function CobrancaSaasPainel() {
     return getPainelCobrancaSaasResponsavel(data, coopId);
   }, [data, coopId]);
 
-  if (!user || !data || !isDiretoriaRole(user.role) || !painel || painel.precisaContrato) {
+  if (!user || !data || !isDiretoriaRole(user.role) || !painel) {
     return null;
   }
 

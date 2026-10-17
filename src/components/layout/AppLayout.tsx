@@ -26,8 +26,7 @@ import {
   StaffSidebarSyncVersionLine,
 } from "@/components/sync/SyncStatusChip";
 import { CooperadoSubtleUpdateNotice } from "@/components/cooperado/CooperadoSubtleUpdateNotice";
-import { CobrancaSaasPainel } from "@/components/payments/CobrancaSaasPainelWrapper";
-import { ContratoServicoAppGate } from "@/components/cobranca/ContratoServicoAppGate";
+import { CobrancaSaasPainel } from "@/components/cobranca/CobrancaSaasPainel";
 import { cn } from "@/utils/format";
 import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
 import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
@@ -613,7 +612,6 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           )}
-          <ContratoServicoAppGate />
           <CobrancaSaasPainel />
           {navUser && isCooperadoAppUser(navUser) && <CooperadoFinanceiroSyncBanner />}
           {navUser && isCooperadoAppUser(navUser) && <CooperadoPwaMessengerAppDataWarm />}
