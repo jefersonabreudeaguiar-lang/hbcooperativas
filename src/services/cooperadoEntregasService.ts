@@ -37,6 +37,7 @@ import { idsNotasPedidoExcluidas } from "@/services/notaPedidoService";
 import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { resolverCooperativaIdReciboLatch } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
+import { pagamentoCooperadoTemDebitoNoLivroCaixa } from "@/services/livroCaixaService";
 
 export interface ResumoMesEntregasCooperado {
   mesReferencia: string;
@@ -372,6 +373,7 @@ export function filtrarResumosMesesNaoQuitados(
   return resumos.filter(
     (r) =>
       !cooperadoMesQuitado(data, cooperadoId, r.mesReferencia) &&
+      !cooperadoMesLiquidadoPorPagamentoNoLivroCaixa(data, cooperadoId, r.mesReferencia, coopId) &&
       !cooperadoMesSemRecebimentoPendenteNaFicha(data, cooperadoId, r.mesReferencia, coopId) &&
       !cooperadoMesSomentePagamentoHistorico(data, cooperadoId, r.mesReferencia, coopId)
   );
@@ -603,6 +605,9 @@ export function mesReferenciaPagamentoResponsavelEmAberto(
 ): boolean {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   if (cooperadoMesQuitado(data, cooperadoId, mesReferencia, coopId)) return false;
+  if (cooperadoMesLiquidadoPorPagamentoNoLivroCaixa(data, cooperadoId, mesReferencia, coopId)) {
+    return false;
+  }
 
   const valorAberto = getTotalAPagarCooperado(data, cooperadoId, mesReferencia, coopId);
   if (valorAberto > 0.005) return true;
@@ -625,6 +630,53 @@ export function listarMesesEmAbertoPagamentoResponsavel(
   return listarMesesPendentesPagamentoResponsavel(data, cooperadoId, cooperativaId).filter((mes) =>
     mesReferenciaPagamentoResponsavelEmAberto(data, cooperadoId, mes, cooperativaId)
   );
+}
+
+/** PIX confirmado e debitado no livro caixa — mês quitado na operação/contabilidade. */
+export function cooperadoMesTemPagamentoConfirmadoDebitadoNoCaixa(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): boolean {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  const confirmadoMes = getPagamentoConfirmadoMes(data, cooperadoId, mesReferencia, coopId);
+  if (
+    confirmadoMes &&
+    confirmadoMes.status === "confirmado" &&
+    pagamentoCooperadoTemDebitoNoLivroCaixa(data, confirmadoMes.id)
+  ) {
+    return true;
+  }
+  for (const p of data.pagamentosCooperado) {
+    if (p.status !== "confirmado") continue;
+    const pCanon = resolverCooperadoIdCanonico(data, p.cooperadoId, p.cooperativaId ?? coopId);
+    if (p.cooperadoId !== cooperadoId && p.cooperadoId !== canonico && pCanon !== canonico) continue;
+    if (!pagamentoCobreMesReferenciaComEscopo(data, p, mesReferencia)) continue;
+    if (pagamentoCooperadoTemDebitoNoLivroCaixa(data, p.id)) return true;
+  }
+  return false;
+}
+
+/** Sem ficha pendente nem avulso — pagamento já contabilizado no caixa. */
+export function cooperadoMesLiquidadoPorPagamentoNoLivroCaixa(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): boolean {
+  if (!cooperadoMesTemPagamentoConfirmadoDebitadoNoCaixa(data, cooperadoId, mesReferencia, cooperativaId)) {
+    return false;
+  }
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const fichasPend = listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId).filter((f) =>
+    fichaValidaNoExtrato(data, f)
+  );
+  if (fichasPend.length > 0) return false;
+  if (temValoresAvulsosPendentesMes(data, cooperadoId, mesReferencia, coopId)) return false;
+  if (cooperadoMesComFichaPagaSemPagamentoCooperativa(data, cooperadoId, mesReferencia, coopId)) return false;
+  return true;
 }
 
 export type ConsolidadoFinanceiroCooperado = {

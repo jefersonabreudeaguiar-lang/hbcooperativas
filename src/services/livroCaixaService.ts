@@ -181,6 +181,16 @@ export function alocarSequenciaEvento(
   };
 }
 
+/** Pagamento cooperado já lançado como débito no livro caixa (PIX confirmado pelo responsável). */
+export function pagamentoCooperadoTemDebitoNoLivroCaixa(
+  data: AppData,
+  pagamentoId: string
+): boolean {
+  return (data.livroCaixa ?? []).some(
+    (l) => l.origemId === `pg_caixa_${pagamentoId}` && l.tipo === "debito"
+  );
+}
+
 export function pagamentoIdFromOrigemId(origemId?: string): string | null {
   if (!origemId) return null;
   if (origemId.startsWith("pg_caixa_")) return origemId.slice("pg_caixa_".length);

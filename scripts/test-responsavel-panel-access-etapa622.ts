@@ -206,4 +206,75 @@ function evaluateDashboardStaffOpen(
   assert.equal(abertos.includes(mes), false, "mês pago não deve ficar em aberto");
 }
 
+// CASO 6 — débito no livro caixa remove mês do «Em aberto» (Conferir entregas)
+{
+  const mes = "2026-08";
+  const data = emptyData([]);
+  data.cooperados = [
+    {
+      id: "coop-member-1",
+      nomeCompleto: "Cooperado Teste",
+      cooperativaId: COOP,
+      status: "ativo",
+      chavePix: "pix@test",
+    } as AppData["cooperados"][0],
+  ];
+  data.fichaCorrida = [
+    {
+      id: "f1",
+      cooperadoId: "coop-member-1",
+      cooperativaId: COOP,
+      mesReferencia: mes,
+      notaPedidoId: "n1",
+      status: "pago",
+      valorBruto: 200,
+      valorLiquido: 180,
+      createdAt: "2026-08-01T00:00:00.000Z",
+      updatedAt: "2026-08-15T00:00:00.000Z",
+    },
+  ];
+  data.notasPedido = [
+    {
+      id: "n1",
+      cooperadoId: "coop-member-1",
+      cooperativaId: COOP,
+      mesReferencia: mes,
+      status: "pago",
+      valorLiquido: 180,
+      itens: [],
+      createdAt: "2026-08-01T00:00:00.000Z",
+      dataEntrega: "2026-08-01",
+    } as AppData["notasPedido"][0],
+  ];
+  const pagamento: PagamentoCooperadoRegistro = {
+    id: "pg-caixa-1",
+    cooperadoId: "coop-member-1",
+    cooperativaId: COOP,
+    mesReferencia: mes,
+    status: "confirmado",
+    valorLiquido: 180,
+    valorBruto: 200,
+    pagoEm: "2026-08-22T00:00:00.000Z",
+    createdAt: "2026-08-22T00:00:00.000Z",
+    fichaIds: ["f1"],
+    notaPedidoIds: ["n1"],
+  };
+  data.pagamentosCooperado = [pagamento];
+  data.livroCaixa = [
+    {
+      id: "lc-1",
+      cooperativaId: COOP,
+      data: "2026-08-22",
+      mesReferencia: mes,
+      tipo: "debito",
+      valor: 180,
+      historico: "Pagamento merenda",
+      origem: "pagamento_cooperado",
+      origemId: "pg_caixa_pg-caixa-1",
+    },
+  ];
+  const abertos = listarMesesEmAbertoPagamentoResponsavel(data, "coop-member-1", COOP);
+  assert.equal(abertos.includes(mes), false, "mês debitado no caixa não deve ficar em aberto");
+}
+
 console.log("test-responsavel-panel-access-etapa622: OK");

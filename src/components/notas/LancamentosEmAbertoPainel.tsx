@@ -55,8 +55,8 @@ function LancamentosEmAbertoPainelInner({ coopId, cooperadoId }: LancamentosEmAb
   return (
     <div className="space-y-4">
       <AlertBanner variant="info" title="Lançamentos em aberto">
-        Entregas já conferidas pelo responsável, com valor a pagar ao cooperado. Ao confirmar o pagamento do mês,
-        a linha some daqui; novos lançamentos no mesmo mês voltam a somar automaticamente.
+        Entregas já conferidas pelo responsável, com valor a pagar ao cooperado. Quando o PIX é confirmado e debitado
+        no livro caixa, a linha some daqui; novos lançamentos no mesmo mês voltam a somar automaticamente.
       </AlertBanner>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
