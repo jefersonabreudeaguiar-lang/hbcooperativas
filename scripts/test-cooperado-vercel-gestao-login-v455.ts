@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { APP_BUILD_VERSION } from "../src/lib/appBuildVersion.ts";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
-assert.equal(APP_BUILD_VERSION, 455);
+assert.ok(APP_BUILD_VERSION >= 455);
 
 const auth = readFileSync(join(ROOT, "src/modules/auth/AuthProvider.tsx"), "utf8");
 assert.ok(

@@ -4,8 +4,13 @@
  */
 import type { AppData, Cooperado, NotaPedido } from "@/types";
 import { cooperadoPendentePagamentoResponsavel } from "@/services/cooperadoEntregasService";
-import { listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
+import {
+  fichaPertenceCooperado,
+  listCooperadosDaCooperativa,
+  resolverCooperadoIdCanonico,
+} from "@/services/cooperadoCloudService";
 import { getDataOperationalTruth, getDataRevision } from "@/services/dataStore";
+import { listarMesesFichaEmAbertoCooperado } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
 import { idsNotasPedidoExcluidas } from "@/services/notaPedidoService";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { notaElegivelParaFilaConferenciaResponsavel, sanitizarNotaParaFilaConferencia } from "@/utils/notaStatus";
@@ -31,6 +36,7 @@ type RelatorioAbertoCache = {
 };
 
 let relatorioAbertoCache: RelatorioAbertoCache | null = null;
+let relatorioAbertoLatch: { coopId: string; linhas: LinhaPagarCooperadoEmAberto[] } | null = null;
 
 function cooperadoIdsDaCooperativa(data: AppData, coopId: string): Set<string> {
   const ids = new Set<string>();
@@ -78,6 +84,63 @@ function appDataParaPainelResponsavel(data: AppData): AppData {
     return { ...truth, notasPedido };
   }
   return { ...truth, notasPedido };
+}
+
+/** Conferência/push scoped filtra fichas em `getData()` — em aberto usa o snapshot mais completo. */
+function appDataParaRelatorioEmAberto(data: AppData): AppData {
+  const truth = getDataOperationalTruth();
+  if (truth === data) return data;
+  const fichasData = data.fichaCorrida?.length ?? 0;
+  const fichasTruth = truth.fichaCorrida?.length ?? 0;
+  const coopData = data.cooperados?.length ?? 0;
+  const coopTruth = truth.cooperados?.length ?? 0;
+  if (fichasTruth > fichasData || (fichasTruth === fichasData && coopTruth > coopData)) {
+    return {
+      ...truth,
+      notasPedido: mergeNotasPedidoParaPainel(truth.notasPedido, data.notasPedido),
+    };
+  }
+  return data;
+}
+
+/** Só sai da lista em aberto com PIX confirmado e ficha ainda presente (sync incompleto não apaga). */
+export function cooperadoEmAbertoPodeSair(
+  data: AppData,
+  cooperadoId: string,
+  coopId: string
+): boolean {
+  if (!cooperadoId || !coopId) return false;
+  const aberto = listarMesesFichaEmAbertoCooperado(data, cooperadoId, coopId);
+  if (aberto.total > 0.005) return false;
+  const temFicha = (data.fichaCorrida ?? []).some((f) =>
+    fichaPertenceCooperado(data, f, cooperadoId, coopId)
+  );
+  if (!temFicha) return false;
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  return (data.pagamentosCooperado ?? []).some((p) => {
+    if (p.status !== "confirmado") return false;
+    if (p.cooperativaId && p.cooperativaId !== coopId) return false;
+    if (p.cooperadoId === cooperadoId || p.cooperadoId === canonico) return true;
+    return resolverCooperadoIdCanonico(data, p.cooperadoId, p.cooperativaId ?? coopId) === canonico;
+  });
+}
+
+/** Mantém cooperados já vistos até quitação real — sync/conferência não zera a lista. */
+export function fundirLinhasEmAbertoEstavel(
+  anterior: LinhaPagarCooperadoEmAberto[],
+  motor: LinhaPagarCooperadoEmAberto[],
+  data: AppData,
+  coopId: string
+): LinhaPagarCooperadoEmAberto[] {
+  if (anterior.length === 0) return motor;
+  const byId = new Map(motor.map((l) => [l.cooperadoId, l]));
+  for (const old of anterior) {
+    if (byId.has(old.cooperadoId)) continue;
+    if (!cooperadoEmAbertoPodeSair(data, old.cooperadoId, coopId)) {
+      byId.set(old.cooperadoId, old);
+    }
+  }
+  return [...byId.values()].sort((a, b) => a.cooperado.localeCompare(b.cooperado, "pt-BR"));
 }
 
 function buildPainelCache(data: AppData, coopId: string): PainelCache {
@@ -149,7 +212,8 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
   cooperadoId?: string
 ): LinhaPagarCooperadoEmAberto[] {
   if (!coopId) return [];
-  if (cooperadoId) return getRelatorioPagarCooperadoEmAberto(data, coopId, cooperadoId);
+  const dataAberto = appDataParaRelatorioEmAberto(data);
+  if (cooperadoId) return getRelatorioPagarCooperadoEmAberto(dataAberto, coopId, cooperadoId);
   const revision = getDataRevision();
   if (
     relatorioAbertoCache &&
@@ -158,7 +222,11 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
   ) {
     return relatorioAbertoCache.linhas;
   }
-  const linhas = getRelatorioPagarCooperadoEmAberto(data, coopId);
+  const motor = getRelatorioPagarCooperadoEmAberto(dataAberto, coopId);
+  const anterior =
+    relatorioAbertoLatch && relatorioAbertoLatch.coopId === coopId ? relatorioAbertoLatch.linhas : [];
+  const linhas = fundirLinhasEmAbertoEstavel(anterior, motor, dataAberto, coopId);
+  relatorioAbertoLatch = { coopId, linhas };
   relatorioAbertoCache = { revision, coopId, linhas };
   return linhas;
 }
@@ -171,4 +239,5 @@ export function countCooperadosLancamentosEmAbertoResponsavel(data: AppData, coo
 export function resetResponsavelPainelIndexCache(): void {
   painelCache = null;
   relatorioAbertoCache = null;
+  relatorioAbertoLatch = null;
 }
