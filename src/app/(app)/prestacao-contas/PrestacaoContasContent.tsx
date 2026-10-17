@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
-import { isDiretoriaRole, canUser } from "@/permissions";
+import { canUser } from "@/permissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { PageHeader } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
@@ -640,10 +640,9 @@ function CooperadoView({
 
 export default function PrestacaoContasPage() {
   const data = useAppData();
-  const { user } = usePermissions();
+  const { user, isCooperado } = usePermissions();
   const router = useRouter();
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
-  const isDiretoria = user ? isDiretoriaRole(user.role) : false;
 
   useEffect(() => {
     if (!user) return;
@@ -657,12 +656,12 @@ export default function PrestacaoContasPage() {
       <PageHeader
         title="Prestação de contas"
         subtitle={
-          isDiretoria
+          !isCooperado
             ? "Registre repasses e confira as notas enviadas pelos cooperados"
             : "Envie fotos das notas comprobatórias dos repasses recebidos"
         }
       />
-      {isDiretoria && coopId ? (
+      {!isCooperado && coopId ? (
         <ResponsavelView coopId={coopId} data={data} />
       ) : user.cooperadoId ? (
         <CooperadoView cooperadoId={user.cooperadoId} coopId={coopId} data={data} />
