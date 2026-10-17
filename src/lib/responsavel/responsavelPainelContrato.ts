@@ -5,17 +5,10 @@
  * Testes: npm run test:responsavel-painel
  */
 import type { AppData, User } from "@/types";
-import {
-  canAccessPainelResponsavel,
-  canAccessPainelResponsavelSession,
-} from "@/lib/security/responsavelPanelAccess";
-import {
-  shouldRenderStaffPainelUi,
-  shouldRenderStaffPainelUiSession,
-} from "@/lib/staffNavigationUser";
+import { evaluateResponsavelIdentidade } from "@/lib/responsavel/responsavelIdentidade";
 import { getStaffShellMenusBeforeDataWarm } from "@/permissions";
 
-export const RESPONSAVEL_PAINEL_CONTRATO_VERSION = 1;
+export const RESPONSAVEL_PAINEL_CONTRATO_VERSION = 2;
 
 /** Rotas mínimas do shell gestão (cold start + warm). Não remover sem bump de contrato. */
 export const STAFF_SHELL_MIN_HREFS = [
@@ -43,24 +36,17 @@ export function evaluateResponsavelPainelAbertura(opts: {
   dataReady: boolean;
 }): ResponsavelPainelAbertura {
   const { accountUser, authSubject, data, dataReady } = opts;
-  /** Conta de gestão — perfil duplo pode atrasar `accountUser`; sessão em `authSubject` abre o painel. */
-  const gestaoAccount = accountUser ?? authSubject;
-  const staffPainelUi = dataReady
-    ? Boolean(gestaoAccount && shouldRenderStaffPainelUi(gestaoAccount, data ?? null))
-    : Boolean(gestaoAccount && shouldRenderStaffPainelUiSession(gestaoAccount, data));
-  const canGestao = dataReady
-    ? Boolean(gestaoAccount && canAccessPainelResponsavel(gestaoAccount, data ?? null))
-    : Boolean(gestaoAccount && canAccessPainelResponsavelSession(gestaoAccount, data));
-  const showAdminPainel =
-    canGestao &&
-    (staffPainelUi ||
-      (!dataReady &&
-        Boolean(gestaoAccount && shouldRenderStaffPainelUiSession(gestaoAccount, data))));
+  const identidade = evaluateResponsavelIdentidade({
+    accountUser: accountUser ?? authSubject,
+    experienceUser: authSubject,
+    data,
+    dataReady,
+  });
 
   return {
-    canGestao,
-    staffPainelUi,
-    showAdminPainel,
+    canGestao: identidade.canGestao,
+    staffPainelUi: identidade.staffPainelUi,
+    showAdminPainel: identidade.showAdminPainel,
   };
 }
 
@@ -74,7 +60,11 @@ export function shouldPrioritizeStaffColdShell(
   data?: AppData | null
 ): boolean {
   if (appDataWarm || !gestaoAccount) return false;
-  return shouldRenderStaffPainelUiSession(gestaoAccount, data);
+  return evaluateResponsavelIdentidade({
+    accountUser: gestaoAccount,
+    data,
+    dataReady: false,
+  }).staffPainelUi;
 }
 
 export function staffShellMenusBeforeDataWarm(accountUser: AuthSubject) {

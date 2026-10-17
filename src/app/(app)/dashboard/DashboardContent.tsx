@@ -28,7 +28,6 @@ import { getData, getDataRevision, isAppDataWarm } from "@/services/dataStore";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { evaluateResponsavelPainelAbertura } from "@/lib/responsavel/responsavelPainelContrato";
 import { canAccessPainelResponsavelSession } from "@/lib/security/responsavelPanelAccess";
-import { isMobileCooperativaApp } from "@/lib/mobileExperience";
 import { shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
 import { StatCard } from "@/components/ui/Card";
 import { Card } from "@/components/ui/Card";
@@ -867,20 +866,12 @@ export default function DashboardPage() {
 
   if (!authSubject) return <PageSkeleton />;
 
-  const abrirGestao =
-    painelAbertura.showAdminPainel ||
-    (painelAbertura.canGestao && !isMobileCooperativaApp());
-
-  if (abrirGestao || painelAbertura.staffPainelUi) {
+  if (painelAbertura.staffPainelUi || painelAbertura.showAdminPainel) {
     return <AdminDashboard />;
   }
 
-  if (isCooperadoAppUser(authSubject)) {
+  if (isCooperadoAppUser(user ?? authSubject) || user?.role === "cooperado") {
     return <CooperadoDashboard />;
-  }
-
-  if (painelAbertura.canGestao) {
-    return <AdminDashboard />;
   }
 
   if (!dataReady && !instantResume) return <PageSkeleton />;

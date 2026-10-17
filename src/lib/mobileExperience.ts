@@ -4,12 +4,8 @@ import {
   resolveMobileCooperadoId,
   resolveMobileCooperadoIdFromEmail,
 } from "@/lib/hb-credit/mobileCooperadoLink";
-import {
-  canAccessPainelResponsavel,
-  canAccessPainelResponsavelSession,
-  resolveCooperadoExperienceId,
-} from "@/lib/security/responsavelPanelAccess";
-import { preferPainelResponsavelMobile } from "@/lib/mobilePainelPreference";
+import { resolveCooperadoExperienceId } from "@/lib/security/responsavelPanelAccess";
+import { evaluateResponsavelIdentidade } from "@/lib/responsavel/responsavelIdentidade";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 
@@ -62,45 +58,37 @@ export function resolveExperienceUser<T extends Omit<User, "password">>(
 ): T | null {
   if (!user) return null;
 
-  const sessionRole = normalizeUserRole(user.role);
   const mobile = isMobileCooperativaApp();
-  if (mobile && sessionRole === "cooperado") {
-    const cooperadoId = resolveCooperadoExperienceId(user) ?? user.cooperadoId;
+  const identidade = evaluateResponsavelIdentidade({
+    accountUser: user,
+    data,
+    dataReady: Boolean(data),
+    mobile,
+  });
+
+  if (identidade.staffPainelUi) {
+    return user;
+  }
+
+  if (identidade.modo === "cooperado" || isCooperadoAppUser(user)) {
+    const cooperadoId =
+      resolveCooperadoExperienceId(user) ??
+      user.cooperadoId ??
+      resolveMobileCooperadoId(user);
     return cooperadoId
       ? asCooperadoExperience(user, cooperadoId, data)
       : { ...user, role: "cooperado" as UserRole };
   }
 
-  const allowPainel =
-    canAccessPainelResponsavel(user, data) ||
-    canAccessPainelResponsavelSession(user, data);
-
-  if (allowPainel && (!mobile || preferPainelResponsavelMobile())) {
+  if (identidade.modo === "parceiro" || identidade.modo === "contador") {
     return user;
   }
-
-  if (isCooperadoAppUser(user)) {
-    const cooperadoId = resolveCooperadoExperienceId(user) ?? user.cooperadoId;
-    return cooperadoId
-      ? asCooperadoExperience(user, cooperadoId, data)
-      : { ...user, role: "cooperado" as UserRole };
-  }
-
-  if (!allowPainel) {
-    const cooperadoId = resolveCooperadoExperienceId(user);
-    if (cooperadoId) return asCooperadoExperience(user, cooperadoId, data);
-    return user;
-  }
-
-  if (!mobile) return user;
 
   const role = normalizeUserRole(user.role);
-  if (role !== "responsavel" && role !== "tesoureiro" && role !== "admin") {
-    return user;
+  if (mobile && (role === "responsavel" || role === "tesoureiro" || role === "admin")) {
+    const mobileCooperadoId = resolveMobileCooperadoId(user);
+    if (mobileCooperadoId) return asCooperadoExperience(user, mobileCooperadoId, data);
   }
 
-  const mobileCooperadoId = resolveMobileCooperadoId(user);
-  if (!mobileCooperadoId) return user;
-
-  return asCooperadoExperience(user, mobileCooperadoId, data);
+  return user;
 }

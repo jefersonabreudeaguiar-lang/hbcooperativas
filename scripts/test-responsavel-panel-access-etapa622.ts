@@ -11,6 +11,8 @@ import {
   resolveAuthoritativePanelRole,
 } from "../src/lib/security/responsavelPanelAccess.ts";
 import { shouldRenderStaffPainelUi } from "../src/lib/staffNavigationUser.ts";
+import { evaluateResponsavelIdentidade } from "../src/lib/responsavel/responsavelIdentidade.ts";
+import { evaluateResponsavelPainelAbertura } from "../src/lib/responsavel/responsavelPainelContrato.ts";
 import {
   listarMesesEmAbertoPagamentoResponsavel,
   listarMesesPendentesPagamentoResponsavel,
@@ -289,6 +291,85 @@ function evaluateDashboardStaffOpen(
     active: true,
   } as Omit<User, "password">;
   assert.equal(resolveAppUserRole(session, null), "cooperado");
+}
+
+// CASO 8 — Etapa 0: os quatro casos de identidade
+{
+  const staffPuro = staffUser({ cooperadoId: undefined });
+  const duplo = staffUser();
+  const coop = cooperadoUser();
+  const dataStaff = emptyData([staffPuro, duplo, coop]);
+
+  const rPuro = evaluateResponsavelIdentidade({
+    accountUser: staffPuro,
+    data: dataStaff,
+    dataReady: true,
+    mobile: false,
+  });
+  assert.equal(rPuro.caso, "responsavel_puro");
+  assert.equal(rPuro.staffPainelUi, true);
+
+  const rCoop = evaluateResponsavelIdentidade({
+    accountUser: coop,
+    data: emptyData([coop]),
+    dataReady: true,
+    mobile: true,
+  });
+  assert.equal(rCoop.caso, "cooperado_puro");
+  assert.equal(rCoop.staffPainelUi, false);
+
+  const rDuploDesk = evaluateResponsavelIdentidade({
+    accountUser: duplo,
+    data: dataStaff,
+    dataReady: true,
+    mobile: false,
+  });
+  assert.equal(rDuploDesk.caso, "duplo_desktop");
+  assert.equal(rDuploDesk.staffPainelUi, true);
+
+  const rDuploMob = evaluateResponsavelIdentidade({
+    accountUser: duplo,
+    data: dataStaff,
+    dataReady: true,
+    mobile: true,
+    preferPainelResponsavel: false,
+  });
+  assert.equal(rDuploMob.caso, "duplo_mobile_cooperado");
+  assert.equal(rDuploMob.staffPainelUi, false);
+
+  const rDuploMobGestao = evaluateResponsavelIdentidade({
+    accountUser: duplo,
+    data: dataStaff,
+    dataReady: true,
+    mobile: true,
+    preferPainelResponsavel: true,
+  });
+  assert.equal(rDuploMobGestao.caso, "duplo_mobile_gestao");
+  assert.equal(rDuploMobGestao.staffPainelUi, true);
+}
+
+// CASO 9 — JWT cooperado no celular não abre painel gestão
+{
+  const jwtCoop = {
+    ...staffUser(),
+    role: "cooperado" as const,
+  };
+  const abertura = evaluateResponsavelPainelAbertura({
+    accountUser: jwtCoop,
+    authSubject: { ...jwtCoop, role: "cooperado" },
+    data: emptyData([staffUser()]),
+    dataReady: true,
+  });
+  const idMobile = evaluateResponsavelIdentidade({
+    accountUser: jwtCoop,
+    data: emptyData([staffUser()]),
+    dataReady: true,
+    mobile: true,
+    preferPainelResponsavel: false,
+  });
+  assert.equal(idMobile.staffPainelUi, false);
+  assert.equal(idMobile.modo, "cooperado");
+  void abertura;
 }
 
 console.log("test-responsavel-panel-access-etapa622: OK");

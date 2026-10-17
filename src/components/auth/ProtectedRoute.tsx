@@ -11,7 +11,8 @@ import { getSession } from "@/services/dataStore";
 import { repairBrowserProfileIfStale } from "@/lib/pwa/browserProfileRepair";
 import { buildCooperadoLoginPath } from "@/lib/cooperado/cooperadoCanonicalEntryUrl";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
-import { canAccessPainelResponsavelSession } from "@/lib/security/responsavelPanelAccess";
+import { evaluateResponsavelIdentidade } from "@/lib/responsavel/responsavelIdentidade";
+import { isMobileCooperativaApp } from "@/lib/mobileExperience";
 
 function protectedRouteInitialProfileRepairDone(): boolean {
   if (typeof window === "undefined") return false;
@@ -68,7 +69,13 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       return;
     }
     const sessionGate = accountUser ?? user;
-    if (canAccessPainelResponsavelSession(sessionGate)) {
+    const identidade = evaluateResponsavelIdentidade({
+      accountUser: sessionGate,
+      experienceUser: user,
+      dataReady: false,
+      mobile: isMobileCooperativaApp(),
+    });
+    if (identidade.staffPainelUi) {
       setProfileRepairDone(true);
       return;
     }

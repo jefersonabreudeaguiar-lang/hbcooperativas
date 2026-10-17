@@ -1,0 +1,216 @@
+/**
+ * Contrato único de identidade da sessão (Etapa 0).
+ *
+ * Quatro casos:
+ * 1. responsável puro — sempre gestão
+ * 2. cooperado puro — sempre cooperado
+ * 3. perfil duplo no desktop — gestão
+ * 4. perfil duplo no celular — cooperado, salvo se pediu o painel da cooperativa
+ *
+ * JWT cooperado no celular/PWA nunca vira menu de gestão.
+ */
+import type { AppData, User, UserRole } from "@/types";
+import {
+  canAccessPainelResponsavel,
+  canAccessPainelResponsavelSession,
+} from "@/lib/security/responsavelPanelAccess";
+import { preferPainelResponsavelMobile } from "@/lib/mobilePainelPreference";
+
+export const RESPONSAVEL_IDENTIDADE_VERSION = 1;
+
+export type ResponsavelIdentidadeCaso =
+  | "none"
+  | "parceiro"
+  | "contador"
+  | "cooperado_puro"
+  | "responsavel_puro"
+  | "duplo_desktop"
+  | "duplo_mobile_cooperado"
+  | "duplo_mobile_gestao";
+
+export type ResponsavelIdentidadeModo = "none" | "parceiro" | "contador" | "cooperado" | "gestao";
+
+type AuthSubject = Pick<
+  User,
+  "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active" | "mobileCooperadoId"
+>;
+
+export type ResponsavelIdentidade = {
+  caso: ResponsavelIdentidadeCaso;
+  modo: ResponsavelIdentidadeModo;
+  /** A conta pode operar gestão (papel/email), independente da UI atual. */
+  canGestao: boolean;
+  /** A sessão atual deve mostrar shell/painel da cooperativa. */
+  staffPainelUi: boolean;
+  showAdminPainel: boolean;
+};
+
+export type EvaluateResponsavelIdentidadeOpts = {
+  accountUser?: AuthSubject | null;
+  experienceUser?: AuthSubject | null;
+  data?: AppData | null;
+  dataReady?: boolean;
+  /** Injeta viewport — testes. Sem valor, detecta celular/PWA. */
+  mobile?: boolean;
+  /** Injeta preferência “ver painel da cooperativa” no celular. */
+  preferPainelResponsavel?: boolean;
+};
+
+function normalizeRole(role: string): UserRole {
+  if (role === "presidente") return "responsavel";
+  return role as UserRole;
+}
+
+function isDiretoriaRole(role: UserRole | string): boolean {
+  const normalized = normalizeRole(String(role));
+  return normalized === "responsavel" || normalized === "admin" || normalized === "tesoureiro";
+}
+
+function detectMobileCooperativaApp(): boolean {
+  if (typeof window === "undefined") return false;
+  const standalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+  if (standalone) return true;
+  if (window.matchMedia("(max-width: 1023px)").matches) return true;
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+}
+
+function temVinculoCooperado(user: AuthSubject | null | undefined): boolean {
+  return Boolean(user?.cooperadoId?.trim() || user?.mobileCooperadoId?.trim());
+}
+
+function resolveCanGestao(
+  account: AuthSubject,
+  data: AppData | null | undefined,
+  dataReady: boolean
+): boolean {
+  if (dataReady) return canAccessPainelResponsavel(account, data ?? null);
+  return canAccessPainelResponsavelSession(account, data);
+}
+
+/**
+ * Quem é gestão nesta sessão — única fonte para shell, dashboard, permissões e guards.
+ */
+export function evaluateResponsavelIdentidade(
+  opts: EvaluateResponsavelIdentidadeOpts
+): ResponsavelIdentidade {
+  const account = opts.accountUser ?? opts.experienceUser ?? null;
+  if (!account) {
+    return {
+      caso: "none",
+      modo: "none",
+      canGestao: false,
+      staffPainelUi: false,
+      showAdminPainel: false,
+    };
+  }
+
+  const dataReady = Boolean(opts.dataReady);
+  const sessionRole = normalizeRole(account.role);
+  const jwtCooperado = sessionRole === "cooperado";
+  const mobile =
+    opts.mobile ??
+    (typeof window === "undefined" && jwtCooperado ? true : detectMobileCooperativaApp());
+  const preferPainel =
+    opts.preferPainelResponsavel ?? (mobile ? preferPainelResponsavelMobile() : false);
+  const canGestao = resolveCanGestao(account, opts.data, dataReady);
+  const vinculoCooperado = temVinculoCooperado(account);
+  const jwtDiretoria = isDiretoriaRole(sessionRole);
+
+  if (sessionRole === "parceiro") {
+    return {
+      caso: "parceiro",
+      modo: "parceiro",
+      canGestao: false,
+      staffPainelUi: false,
+      showAdminPainel: false,
+    };
+  }
+  if (sessionRole === "contador") {
+    return {
+      caso: "contador",
+      modo: "contador",
+      canGestao: false,
+      staffPainelUi: false,
+      showAdminPainel: false,
+    };
+  }
+
+  /** JWT cooperado no celular: nunca gestão, mesmo com e-mail builtin ou users[] staff. */
+  if (mobile && jwtCooperado && !preferPainel) {
+    return {
+      caso: canGestao && vinculoCooperado ? "duplo_mobile_cooperado" : "cooperado_puro",
+      modo: "cooperado",
+      canGestao,
+      staffPainelUi: false,
+      showAdminPainel: false,
+    };
+  }
+
+  if (!canGestao) {
+    return {
+      caso: "cooperado_puro",
+      modo: "cooperado",
+      canGestao: false,
+      staffPainelUi: false,
+      showAdminPainel: false,
+    };
+  }
+
+  const perfilDuplo = canGestao && vinculoCooperado;
+
+  if (mobile && perfilDuplo && !preferPainel) {
+    return {
+      caso: "duplo_mobile_cooperado",
+      modo: "cooperado",
+      canGestao: true,
+      staffPainelUi: false,
+      showAdminPainel: false,
+    };
+  }
+
+  if (mobile && perfilDuplo && preferPainel) {
+    return {
+      caso: "duplo_mobile_gestao",
+      modo: "gestao",
+      canGestao: true,
+      staffPainelUi: true,
+      showAdminPainel: true,
+    };
+  }
+
+  if (!mobile && perfilDuplo) {
+    return {
+      caso: "duplo_desktop",
+      modo: "gestao",
+      canGestao: true,
+      staffPainelUi: true,
+      showAdminPainel: true,
+    };
+  }
+
+  if (canGestao && (jwtDiretoria || !jwtCooperado || !mobile)) {
+    return {
+      caso: perfilDuplo ? "duplo_desktop" : "responsavel_puro",
+      modo: "gestao",
+      canGestao: true,
+      staffPainelUi: true,
+      showAdminPainel: true,
+    };
+  }
+
+  return {
+    caso: "cooperado_puro",
+    modo: "cooperado",
+    canGestao,
+    staffPainelUi: false,
+    showAdminPainel: false,
+  };
+}
+
+export function identidadeMostraPainelGestao(
+  opts: EvaluateResponsavelIdentidadeOpts
+): boolean {
+  return evaluateResponsavelIdentidade(opts).staffPainelUi;
+}

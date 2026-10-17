@@ -1,29 +1,28 @@
 import type { AppData, User } from "@/types";
-import {
-  canAccessPainelResponsavel,
-  canAccessPainelResponsavelSession,
-} from "@/lib/security/responsavelPanelAccess";
-import { isMobileCooperativaApp } from "@/lib/mobileExperience";
-import { preferPainelResponsavelMobile } from "@/lib/mobilePainelPreference";
+import { identidadeMostraPainelGestao } from "@/lib/responsavel/responsavelIdentidade";
 
 /** Usuário para menu, permissões e dashboard admin — conta real quando o painel está ativo. */
 export function shouldRenderStaffPainelUi(
-  accountUser: Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active"> | null | undefined,
+  accountUser: Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active" | "mobileCooperadoId"> | null | undefined,
   data?: AppData | null
 ): boolean {
-  if (!accountUser || !canAccessPainelResponsavel(accountUser, data)) return false;
-  if (!isMobileCooperativaApp()) return true;
-  return preferPainelResponsavelMobile();
+  return identidadeMostraPainelGestao({
+    accountUser,
+    data,
+    dataReady: Boolean(data),
+  });
 }
 
 /** Antes do AppData aquecer — evita cair no painel cooperado com tela vazia no browser. */
 export function shouldRenderStaffPainelUiSession(
-  accountUser: Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active"> | null | undefined,
+  accountUser: Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active" | "mobileCooperadoId"> | null | undefined,
   data?: AppData | null
 ): boolean {
-  if (!accountUser || !canAccessPainelResponsavelSession(accountUser, data)) return false;
-  if (!isMobileCooperativaApp()) return true;
-  return preferPainelResponsavelMobile();
+  return identidadeMostraPainelGestao({
+    accountUser,
+    data,
+    dataReady: false,
+  });
 }
 
 export function resolveStaffNavigationUser<T extends Omit<User, "password">>(

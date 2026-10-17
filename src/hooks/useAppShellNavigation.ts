@@ -29,6 +29,7 @@ import {
   shouldPrioritizeStaffColdShell,
   staffShellMenusBeforeDataWarm,
 } from "@/lib/responsavel/responsavelPainelContrato";
+import { evaluateResponsavelIdentidade } from "@/lib/responsavel/responsavelIdentidade";
 import { isContaCoopUiVisibleForUser } from "@/utils/contaCoopUiVisibility";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import { cooperadoPilotMobileBottomNavItems } from "@/lib/cooperado/cooperadoMobilePilotBottomNav";
@@ -72,16 +73,15 @@ function hbModuleNavEligible(
 export function useAppShellNavigation(): AppShellNavigation | null {
   const { user, accountUser } = useAuth();
   const experienceUser = user ?? accountUser;
-  const mobileCooperadoShell = Boolean(
-    experienceUser &&
-      isMobileCooperativaApp() &&
-      (experienceUser.role === "cooperado" || isCooperadoAppUser(experienceUser))
-  );
-  const gestaoAccount = mobileCooperadoShell ? null : accountUser ?? user;
   const coldData = isAppDataWarm() ? getData() : null;
-  const staffColdUi =
-    !mobileCooperadoShell &&
-    Boolean(gestaoAccount && shouldRenderStaffPainelUiSession(gestaoAccount, coldData));
+  const identidade = evaluateResponsavelIdentidade({
+    accountUser: accountUser ?? user,
+    experienceUser,
+    data: coldData,
+    dataReady: isAppDataWarm(),
+    mobile: isMobileCooperativaApp(),
+  });
+  const mobileCooperadoShell = identidade.modo === "cooperado";
   const subject = experienceUser;
   useEnsureAppDataWarm();
   const dataRevision = useSyncExternalStore(
@@ -91,7 +91,7 @@ export function useAppShellNavigation(): AppShellNavigation | null {
   );
 
   const shellCore = useMemo(() => {
-    const gestao = mobileCooperadoShell ? null : accountUser ?? user;
+    const gestao = identidade.staffPainelUi ? accountUser ?? user : null;
     const effectiveSubject = subject ?? gestao;
     if (!effectiveSubject) return null;
     const cold = isAppDataWarm() ? getData() : null;
@@ -141,7 +141,8 @@ export function useAppShellNavigation(): AppShellNavigation | null {
     accountUser?.role,
     user?.id,
     user?.role,
-    mobileCooperadoShell,
+    identidade.staffPainelUi,
+    identidade.modo,
     dataRevision,
   ]);
 
