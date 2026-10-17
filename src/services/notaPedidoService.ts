@@ -2184,6 +2184,7 @@ function fichaCobertaPorPagamentoCooperativa(
   ficha: FichaCorrida,
   pagamento: PagamentoCooperadoRegistro
 ): boolean {
+  if (ficha.status === "pago") return true;
   if (pagamento.notaPedidoIds?.includes(ficha.notaPedidoId)) return true;
   if (pagamento.fichaIds?.includes(ficha.id)) return true;
   const nota = data.notasPedido.find((n) => n.id === ficha.notaPedidoId);
@@ -2198,8 +2199,11 @@ function fichaCobertaPorPagamentoCooperativa(
     ? notaReferenciaTemporalEscopoPagamento(nota)
     : Date.parse(ficha.dataLancamento ?? ficha.createdAt ?? "");
   const pagoTs = Date.parse(pagamento.pagoEm ?? pagamento.createdAt ?? "");
-  if (!Number.isNaN(notaTs) && !Number.isNaN(pagoTs) && notaTs <= pagoTs) return true;
-  return false;
+  if (!Number.isNaN(notaTs) && !Number.isNaN(pagoTs)) {
+    return notaTs <= pagoTs;
+  }
+  /** Mesmo mês do PIX, sem data confiável — mês já liquidado, não reabre. */
+  return true;
 }
 
 export function listarPagamentosConfirmadosQueCobremMes(
