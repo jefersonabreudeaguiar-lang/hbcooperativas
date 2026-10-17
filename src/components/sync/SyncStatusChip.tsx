@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { RefreshCw, Check } from "lucide-react";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { requestAppSyncImmediate } from "@/services/syncRequest";
+import { requestManualCooperadoReleaseUpgrade } from "@/lib/pwa/fetchOfficialClientRelease";
 import {
   COOPERADO_ATUALIZAR_MENSAGEM_AMOR,
   executarCooperadoAtualizarManual,
@@ -125,6 +126,7 @@ export function StaffAtualizarButton({ className }: { className?: string }) {
         startedAtRef.current = Date.now();
         setBusy(true);
         requestAppSyncImmediate();
+        void requestManualCooperadoReleaseUpgrade();
       }}
       disabled={spinning}
       className={cn(

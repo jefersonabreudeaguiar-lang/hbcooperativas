@@ -159,6 +159,7 @@ assert.equal(fundirLinhasEmAbertoEstavel(nove, extra, dataComNCooperados(10), CO
 resetResponsavelPainelIndexCache();
 const relatorio9 = getRelatorioLancamentosEmAbertoResponsavel(dataComNCooperados(9), COOP);
 assert.equal(relatorio9.length, 9, "motor inicial lista os 9 cooperados em aberto");
+assert.equal(relatorio9[0]?.total, 100, "Conferir Em aberto usa líquido, não bruto");
 
 resetResponsavelPainelIndexCache();
 const leitura = appDataParaConferirLeitura(dataComNCooperados(9));

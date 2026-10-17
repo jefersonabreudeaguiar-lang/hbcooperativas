@@ -409,7 +409,9 @@ export function getRelatorioPagarCooperadoEmAberto(
         (!cooperadoId || c.id === cooperadoId)
     )
     .map((c) => {
-      const aberto = listarMesesFichaEmAbertoCooperado(data, c.id, cooperativaId);
+      const aberto = listarMesesFichaEmAbertoCooperado(data, c.id, cooperativaId, {
+        usarLiquido: true,
+      });
       const porMes: LinhaPagarCooperadoEmAberto["porMes"] = aberto.porMes.map((m) => ({
         mes: m.mes,
         mesLabel: formatMesReferencia(m.mes),

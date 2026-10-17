@@ -207,7 +207,11 @@ import {
 } from "@/services/conferenciaDecisaoNuvemSync";
 import { ConferenciaNuvemSyncBanner } from "@/components/notas-pedido/ConferenciaNuvemSyncBanner";
 import { getInstituicoesCatalogo, getProdutosContrato } from "@/services/catalogoContratosService";
-import { countNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
+import {
+  countNotasFilaConferenciaResponsavel,
+  resetResponsavelPainelIndexCache,
+} from "@/services/responsavelPainelIndex";
+import { StaffConferirProducaoBar } from "@/components/conferir/StaffConferirProducaoBar";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, filtrarResumosMesesNaoQuitados } from "@/services/cooperadoEntregasService";
 import {
   staffListarResumosFichaEmAberto,
@@ -2023,6 +2027,8 @@ export default function NotasPedidoStaffMain() {
 
   const abrirLancamentosAbertoResponsavel = () => {
     prefetchStaffNotasLancamentosAbertoChunk();
+    resetResponsavelPainelIndexCache();
+    requestAppSyncImmediate();
     startVistaTransition(() => {
       setVistaResponsavel("aberto");
       setAbaConferenciaKey("");
@@ -2047,6 +2053,12 @@ export default function NotasPedidoStaffMain() {
   const mostrarPainelLancamentosAberto = !isCooperado && vistaConteudo === "aberto";
   const mostrarFilaResponsavelConteudo =
     !isCooperado && (vistaConteudo === "fila" || vistaConteudo === "cooperado");
+
+  useEffect(() => {
+    if (!mostrarPainelLancamentosAberto || !coopId) return;
+    resetResponsavelPainelIndexCache();
+    requestAppSyncImmediate();
+  }, [mostrarPainelLancamentosAberto, coopId]);
 
   const dadosCarregandoFilaConferencia =
     mostrarFilaResponsavelConteudo && (data === null || !isAppDataWarm());
@@ -4463,6 +4475,8 @@ export default function NotasPedidoStaffMain() {
           </div>
         ) : undefined}
       />
+
+      {!isCooperado && <StaffConferirProducaoBar />}
 
       {!isCooperado && (
         <nav

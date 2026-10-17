@@ -9,6 +9,7 @@ import {
   listCooperadosDaCooperativa,
 } from "@/services/cooperadoCloudService";
 import { getDataOperationalTruth, getDataRevision } from "@/services/dataStore";
+import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { listarMesesFichaEmAbertoCooperado } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
 import { idsNotasPedidoExcluidas } from "@/services/notaPedidoService";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
@@ -38,6 +39,16 @@ type RelatorioAbertoCache = {
 let relatorioAbertoCache: RelatorioAbertoCache | null = null;
 let relatorioAbertoLatch: { coopId: string; linhas: LinhaPagarCooperadoEmAberto[] } | null = null;
 let conferirLeituraLatch: AppData | null = null;
+let conferirLatchBuild = APP_BUILD_VERSION;
+
+function garantirCacheDoBuildAtual(): void {
+  if (conferirLatchBuild === APP_BUILD_VERSION) return;
+  painelCache = null;
+  relatorioAbertoCache = null;
+  relatorioAbertoLatch = null;
+  conferirLeituraLatch = null;
+  conferirLatchBuild = APP_BUILD_VERSION;
+}
 
 function cooperadoIdsDaCooperativa(data: AppData, coopId: string): Set<string> {
   const ids = new Set<string>();
@@ -134,6 +145,7 @@ function aplicarLastroCompletenessConferir(candidato: AppData): AppData {
  * O filtro de push em `getData()` não alimenta a tela.
  */
 export function appDataParaConferirLeitura(data: AppData): AppData {
+  garantirCacheDoBuildAtual();
   const truth = getDataOperationalTruth();
   return aplicarLastroCompletenessConferir(escolherSnapshotMaisCompleto(truth, data));
 }
@@ -148,7 +160,9 @@ export function cooperadoEmAbertoPodeSair(
   coopId: string
 ): boolean {
   if (!cooperadoId || !coopId) return false;
-  const aberto = listarMesesFichaEmAbertoCooperado(data, cooperadoId, coopId);
+  const aberto = listarMesesFichaEmAbertoCooperado(data, cooperadoId, coopId, {
+    usarLiquido: true,
+  });
   if (aberto.total > 0.005) return false;
   return (data.fichaCorrida ?? []).some((f) =>
     fichaPertenceCooperado(data, f, cooperadoId, coopId)
@@ -160,7 +174,9 @@ function linhaEmAbertoSoFichaSemPix(
   data: AppData,
   coopId: string
 ): LinhaPagarCooperadoEmAberto | null {
-  const aberto = listarMesesFichaEmAbertoCooperado(data, base.cooperadoId, coopId);
+  const aberto = listarMesesFichaEmAbertoCooperado(data, base.cooperadoId, coopId, {
+    usarLiquido: true,
+  });
   if (aberto.total <= 0.005) return null;
   return {
     ...base,
@@ -315,4 +331,5 @@ export function resetResponsavelPainelIndexCache(): void {
   relatorioAbertoCache = null;
   relatorioAbertoLatch = null;
   conferirLeituraLatch = null;
+  conferirLatchBuild = APP_BUILD_VERSION;
 }

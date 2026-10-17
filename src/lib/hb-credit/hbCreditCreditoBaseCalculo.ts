@@ -7,7 +7,14 @@ import { fichaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/
 import { listarFichasEmAbertoPagamento } from "@/services/notaPedidoService";
 import { round2 } from "@/utils/calculations";
 
-function valorFichaEmAberto(ficha: { valorBruto?: number; valorLiquido?: number }): number {
+function valorFichaEmAberto(
+  ficha: { valorBruto?: number; valorLiquido?: number },
+  usarLiquido = false
+): number {
+  if (usarLiquido) {
+    const liquido = Number(ficha.valorLiquido);
+    if (Number.isFinite(liquido) && liquido > 0) return liquido;
+  }
   const bruto = Number(ficha.valorBruto);
   if (Number.isFinite(bruto) && bruto > 0) return bruto;
   const liquido = Number(ficha.valorLiquido);
@@ -24,7 +31,8 @@ export type MesFichaEmAberto = {
 export function listarMesesFichaEmAbertoCooperado(
   data: AppData,
   cooperadoId: string,
-  cooperativaId: string | undefined
+  cooperativaId: string | undefined,
+  opts?: { usarLiquido?: boolean }
 ): { meses: string[]; porMes: MesFichaEmAberto[]; total: number } {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   if (!coopId) return { meses: [], porMes: [], total: 0 };
@@ -39,7 +47,7 @@ export function listarMesesFichaEmAbertoCooperado(
   for (const mes of [...mesesSet].sort()) {
     const fichas = listarFichasEmAbertoPagamento(data, canonico, mes, coopId);
     if (!fichas.length) continue;
-    const mesTotal = round2(fichas.reduce((s, f) => s + valorFichaEmAberto(f), 0));
+    const mesTotal = round2(fichas.reduce((s, f) => s + valorFichaEmAberto(f, opts?.usarLiquido), 0));
     if (mesTotal <= 0.005) continue;
     porMes.push({ mes, entregas: fichas.length, total: mesTotal });
     total = round2(total + mesTotal);

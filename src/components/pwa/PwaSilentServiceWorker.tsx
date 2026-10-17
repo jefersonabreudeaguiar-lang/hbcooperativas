@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
-import { shouldAutoAlignClientRelease } from "@/lib/pwa/clientRelease";
 import { registerHbServiceWorker } from "@/lib/pwa/registerHbServiceWorker";
 
 /**
@@ -13,7 +12,10 @@ import { registerHbServiceWorker } from "@/lib/pwa/registerHbServiceWorker";
 export function PwaSilentServiceWorker() {
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
-    if (!shouldAutoAlignClientRelease()) return;
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+    if (!standalone) return;
 
     const purgeLegacySw = () => {
       void registerHbServiceWorker();
