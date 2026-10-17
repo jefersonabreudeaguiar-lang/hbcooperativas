@@ -12,7 +12,7 @@ import { lerInicioCardPersistidoFlex } from "@/lib/cooperadoInicioCardPersistenc
 import { canUseRqlPerfHomologPanel } from "@/lib/performance/rqlPerfHomologAccess";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import {
-  listarMesesPendentesPagamentoResponsavel,
+  listarMesesEmAbertoPagamentoResponsavel,
   listarMesesReferenciaResumoFinanceiroParidade,
 } from "@/services/cooperadoEntregasService";
 import {
@@ -61,7 +61,7 @@ export function buildCooperadoFinanceiroParidadeProbe(
     lerInicioCardPersistidoFlex(cooperadoId, cooperativaId)
   );
 
-  const mesesStaff = listarMesesPendentesPagamentoResponsavel(data, cooperadoId, cooperativaId);
+  const mesesStaff = listarMesesEmAbertoPagamentoResponsavel(data, cooperadoId, cooperativaId);
   const mesesParidadeCanon = listarMesesReferenciaResumoFinanceiroParidade(
     data,
     cooperadoId,

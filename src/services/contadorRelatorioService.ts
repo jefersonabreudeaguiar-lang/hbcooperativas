@@ -7,7 +7,7 @@ import {
   listarFichasExtratoCooperadoMes,
   type ItemResumoFichaMes,
 } from "@/services/notaPedidoService";
-import { listarMesesPendentesPagamentoResponsavel } from "@/services/cooperadoEntregasService";
+import { listarMesesEmAbertoPagamentoResponsavel } from "@/services/cooperadoEntregasService";
 import { listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { formatMesesReferenciaRotulo } from "@/utils/format";
 import { generateId, addAuditEntry } from "@/services/dataStore";
@@ -97,7 +97,7 @@ export function getRelatorioNotasFiscaisCooperados(
 
   for (const cooperado of cooperados) {
     if (cooperadoId && cooperado.id !== cooperadoId) continue;
-    const mesesPendentes = listarMesesPendentesPagamentoResponsavel(data, cooperado.id, cooperativaId);
+    const mesesPendentes = listarMesesEmAbertoPagamentoResponsavel(data, cooperado.id, cooperativaId);
     const mesesCoop = meses.filter((m) => mesesPendentes.includes(m));
     if (!mesesCoop.length) continue;
 

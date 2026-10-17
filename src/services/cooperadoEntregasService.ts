@@ -604,6 +604,9 @@ export function mesReferenciaPagamentoResponsavelEmAberto(
   cooperativaId?: string
 ): boolean {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  if ((data.fechamentos ?? []).some((f) => f.mesReferencia === mesReferencia && f.bloqueado)) {
+    return false;
+  }
   if (cooperadoMesQuitado(data, cooperadoId, mesReferencia, coopId)) return false;
   if (cooperadoMesLiquidadoPorPagamentoNoLivroCaixa(data, cooperadoId, mesReferencia, coopId)) {
     return false;
