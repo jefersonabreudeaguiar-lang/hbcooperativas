@@ -1,5 +1,5 @@
 /**
- * Responsável na fila Conferir: cooperado envia foto → nuvem atualiza antes do pull lento.
+ * Responsável na fila Conferir: cooperado envia foto → aparece em poucos segundos.
  * Regressão: NEXT_PUBLIC_STAFF_FILA_NOTAS_LIVE_POLL=0
  */
 
@@ -8,7 +8,7 @@ function readEnvMs(name: string, fallback: number): number {
   const raw = (process.env[name] ?? "").trim();
   if (!raw) return fallback;
   const n = Number(raw);
-  return Number.isFinite(n) && n >= 3_000 ? Math.round(n) : fallback;
+  return Number.isFinite(n) && n >= 1_500 ? Math.round(n) : fallback;
 }
 
 export function isStaffFilaNotasLivePollEnabled(): boolean {
@@ -30,7 +30,7 @@ export function resolveStaffNotasPullMinIntervalMs(filaConferenciaAtiva: boolean
   if (!filaConferenciaAtiva || !isStaffFilaNotasLivePollEnabled()) {
     return readEnvMs("NEXT_PUBLIC_STAFF_NOTAS_PULL_MIN_MS", 90_000);
   }
-  return readEnvMs("NEXT_PUBLIC_STAFF_FILA_NOTAS_PULL_MIN_MS", 5_000);
+  return readEnvMs("NEXT_PUBLIC_STAFF_FILA_NOTAS_PULL_MIN_MS", 2_000);
 }
 
 /** Timer periódico na aba Notas (staff). */
@@ -38,12 +38,12 @@ export function resolveStaffNotasPollIntervalMs(filaConferenciaAtiva: boolean): 
   if (!filaConferenciaAtiva || !isStaffFilaNotasLivePollEnabled()) {
     return readEnvMs("NEXT_PUBLIC_STAFF_NOTAS_POLL_INTERVAL_MS", 120_000);
   }
-  return readEnvMs("NEXT_PUBLIC_STAFF_FILA_NOTAS_POLL_INTERVAL_MS", 10_000);
+  return readEnvMs("NEXT_PUBLIC_STAFF_FILA_NOTAS_POLL_INTERVAL_MS", 3_000);
 }
 
 /** Poll leve uploadProgress (meta + partes na nuvem). */
 export function resolveStaffFilaUploadProgressPollMs(): number {
-  return readEnvMs("NEXT_PUBLIC_STAFF_FILA_UPLOAD_PROGRESS_MS", 5_000);
+  return readEnvMs("NEXT_PUBLIC_STAFF_FILA_UPLOAD_PROGRESS_MS", 2_500);
 }
 
 export const STAFF_FILA_UPLOAD_PROGRESS_MAX_NOTAS = 12;

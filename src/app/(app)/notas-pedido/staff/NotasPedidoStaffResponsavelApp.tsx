@@ -2146,7 +2146,7 @@ export default function NotasPedidoStaffMain() {
       const now = Date.now();
       if (!opts?.forceFull && !opts?.bypassMinGap) {
         const minGap = filaLive ? resolveStaffNotasPullMinIntervalMs(true) : 90_000;
-        const gap = filaLocalVazia && filaLive ? Math.min(minGap, 4_000) : minGap;
+        const gap = filaLocalVazia && filaLive ? Math.min(minGap, 2_000) : minGap;
         if (now - responsavelNotasPullAtRef.current < gap) return;
       }
       responsavelNotasPullAtRef.current = now;
@@ -2273,10 +2273,8 @@ export default function NotasPedidoStaffMain() {
       const ids = pendentesEstaveis
         .slice(0, STAFF_FILA_UPLOAD_PROGRESS_MAX_NOTAS)
         .map((n) => n.id);
-      if (ids.length === 0) {
-        puxarNotasResponsavelDaNuvem();
-        return;
-      }
+      puxarNotasResponsavelDaNuvem();
+      if (ids.length === 0) return;
       staffFilaUploadProgressInflightRef.current = true;
       void refreshStaffFilaNotasFromUploadProgress(cnpj, ids, { onlyIfBehind: true })
         .finally(() => {

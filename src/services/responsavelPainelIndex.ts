@@ -122,7 +122,12 @@ function aplicarLastroCompletenessConferir(candidato: AppData): AppData {
     conferirLeituraLatch = candidato;
     return candidato;
   }
-  return prev;
+  const prevIds = new Set(prev.notasPedido.map((n) => n.id));
+  const novas = candidato.notasPedido.filter((n) => !prevIds.has(n.id));
+  const fundido =
+    novas.length === 0 ? prev : { ...prev, notasPedido: [...prev.notasPedido, ...novas] };
+  conferirLeituraLatch = fundido;
+  return fundido;
 }
 
 /**

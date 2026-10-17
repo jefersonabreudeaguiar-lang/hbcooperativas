@@ -4,10 +4,10 @@
  */
 
 function readBootDelayMs(): number {
-  if (typeof process === "undefined") return 6_000;
-  const raw = (process.env.NEXT_PUBLIC_STAFF_NOTAS_POLL_BOOT_DELAY_MS ?? "6000").trim();
+  if (typeof process === "undefined") return 800;
+  const raw = (process.env.NEXT_PUBLIC_STAFF_NOTAS_POLL_BOOT_DELAY_MS ?? "800").trim();
   const n = Number(raw);
-  if (!Number.isFinite(n) || n < 0) return 6_000;
+  if (!Number.isFinite(n) || n < 0) return 800;
   return Math.round(n);
 }
 
@@ -30,6 +30,7 @@ export function scheduleStaffResponsavelNotasPollLoop(opts: {
       opts.onVisible();
     };
     document.addEventListener("visibilitychange", onVisible);
+    if (!document.hidden) opts.onPoll();
     intervalId = window.setInterval(() => {
       if (document.hidden) return;
       opts.onPoll();

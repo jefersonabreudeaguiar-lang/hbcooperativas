@@ -195,4 +195,19 @@ assert.equal(
   "PIX confirmado autoriza snapshot com menos fichas"
 );
 
+resetResponsavelPainelIndexCache();
+appDataParaConferirLeitura(full);
+const comNotaNova = { ...full, fichaCorrida: [] as FichaCorrida[] };
+comNotaNova.cooperados = [...full.cooperados, cooperado(10)];
+comNotaNova.notasPedido = [
+  ...full.notasPedido,
+  { ...nota(10), status: "aguardando_conferencia" as const },
+];
+const leituraNova = appDataParaConferirLeitura(comNotaNova);
+assert.equal(leituraNova.fichaCorrida.length, 9, "lastro mantém fichas no sync incompleto");
+assert.ok(
+  leituraNova.notasPedido.some((n) => n.id === "n-10"),
+  "nota nova do cooperado entra mesmo com snapshot pobre de fichas"
+);
+
 console.log("ok: conferir leitura contrato v458 — snapshot + lastro + BIC");
