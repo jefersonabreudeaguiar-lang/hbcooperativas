@@ -8,22 +8,21 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { APP_BUILD_VERSION } from "../src/lib/appBuildVersion.ts";
 
-assert.ok(APP_BUILD_VERSION >= 461, "build de produção da faixa ao vivo");
+assert.ok(APP_BUILD_VERSION >= 462, "build depois do hotfix da tela branca");
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (rel: string) => readFileSync(join(root, rel), "utf8");
 
 const release = read("src/lib/pwa/clientRelease.ts");
 assert.match(
-  release,
-  /return typeof window !== "undefined"/,
-  "Chrome e PWA alinham com a produção — não só o atalho instalado"
+  /function shouldAutoAlignClientRelease[\s\S]{0,280}display-mode: standalone/.test(release)
+    ? "ok"
+    : "",
+  /^ok$/,
+  "Chrome do responsável não dá hard-reload sozinho (só PWA)"
 );
-assert.ok(
-  !release.includes("display-mode: standalone)") ||
-    !/function shouldAutoAlignClientRelease[\s\S]{0,180}display-mode: standalone/.test(release),
-  "shouldAutoAlign não fica preso em standalone"
-);
+const chunkGuard = read("src/lib/pwa/chunkDplAlignGuard.ts");
+assert.match(chunkGuard, /if\(!standalone\(\)\)return/, "chunk dpl não manda o browser para pwa-launch");
 
 const staffApp = read("src/app/(app)/notas-pedido/staff/NotasPedidoStaffResponsavelApp.tsx");
 assert.match(staffApp, /StaffConferirProducaoBar/, "faixa ao vivo no Conferir");
@@ -45,6 +44,6 @@ assert.match(
 );
 
 const sw = read("public/sw.js");
-assert.match(sw, /hb-coop-build-461/, "SW no mesmo build");
+assert.match(sw, /hb-coop-build-462/, "SW no mesmo build");
 
-console.log("ok: conferir produção UI v461 — Chrome alinha e Em aberto sincroniza");
+console.log("ok: conferir v462 — Chrome do responsável sem reload automático");

@@ -442,9 +442,13 @@ export function clearStaffReleasePendingIfMatches(build: number): void {
   }
 }
 
-/** Toda aba (Chrome e PWA) alinha com a produção — senão o responsável fica no JS antigo. */
+/** PWA instalado: alinha sozinho. Aba do Chrome do responsável: sem reload forçado (tela branca). */
 export function shouldAutoAlignClientRelease(): boolean {
-  return typeof window !== "undefined";
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
 }
 
 function releaseAlignSessionTarget(): string | null {
