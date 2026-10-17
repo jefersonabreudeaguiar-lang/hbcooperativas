@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useDeferredValue, useMemo } from "react";
+import { memo, useCallback, useDeferredValue, useMemo, useRef } from "react";
 import { DataTable } from "@/components/ui/Table";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { NotaFotoImg } from "@/components/ui/NotaFotoImg";
@@ -15,6 +15,7 @@ import {
   sanitizarNotaParaFilaConferencia,
 } from "@/utils/notaStatus";
 import { notaPertenceCooperado } from "@/services/cooperadoCloudService";
+import { appDataParaConferirLeitura } from "@/services/responsavelPainelIndex";
 import type { NotaPedido } from "@/types";
 import { Camera, ChevronRight, FileText } from "lucide-react";
 function getEscolaNotaLabel(nota: NotaPedido, instituicoes: { id: string; nome: string }[]): string {
@@ -47,14 +48,15 @@ function NotasPedidoHistoricoResponsavelInner({
 }: Props) {
   const notas = useAppDataSelector(
     (d) => {
+      const leitura = appDataParaConferirLeitura(d);
       const filtrarPorGrupoAtivo = Boolean(abaConferenciaEfetiva);
-      return d.notasPedido
+      return leitura.notasPedido
         .filter((n) => {
-          if (!notaPertenceCooperativa(d, n, coopId)) return false;
+          if (!notaPertenceCooperativa(leitura, n, coopId)) return false;
           if (filtrarPorGrupoAtivo) {
-            if (!notaPertenceGrupoConferencia(n, d, abaConferenciaEfetiva, coopId)) return false;
+            if (!notaPertenceGrupoConferencia(n, leitura, abaConferenciaEfetiva, coopId)) return false;
           } else if (filtroCooperadoId) {
-            if (!notaPertenceCooperado(d, n, filtroCooperadoId, coopId)) return false;
+            if (!notaPertenceCooperado(leitura, n, filtroCooperadoId, coopId)) return false;
           }
           if (statusFilter && !notaPassaFiltroStatusListaConferencia(n.status, statusFilter)) return false;
           return true;
@@ -64,10 +66,19 @@ function NotasPedidoHistoricoResponsavelInner({
     [coopId, filtroCooperadoId, abaConferenciaEfetiva, statusFilter]
   );
 
-  const instituicoes = useAppDataSelector((d) => d.instituicoes, []);
-  const cooperados = useAppDataSelector((d) => d.cooperados, []);
+  const instituicoes = useAppDataSelector((d) => appDataParaConferirLeitura(d).instituicoes, []);
+  const cooperados = useAppDataSelector((d) => appDataParaConferirLeitura(d).cooperados, []);
 
-  const notasDeferred = useDeferredValue(notas ?? []);
+  const lastNotasRef = useRef(notas);
+  if (notas) lastNotasRef.current = notas;
+  const lastInstituicoesRef = useRef(instituicoes);
+  if (instituicoes) lastInstituicoesRef.current = instituicoes;
+  const lastCooperadosRef = useRef(cooperados);
+  if (cooperados) lastCooperadosRef.current = cooperados;
+
+  const notasDeferred = useDeferredValue(notas ?? lastNotasRef.current ?? []);
+  const instituicoesEstaveis = instituicoes ?? lastInstituicoesRef.current ?? [];
+  const cooperadosEstaveis = cooperados ?? lastCooperadosRef.current ?? [];
 
   const columns = useMemo(
     () => [
@@ -76,12 +87,12 @@ function NotasPedidoHistoricoResponsavelInner({
       {
         key: "coop",
         label: "Cooperado",
-        render: (n: NotaPedido) => getCooperadoNome(cooperados ?? [], n.cooperadoId),
+        render: (n: NotaPedido) => getCooperadoNome(cooperadosEstaveis, n.cooperadoId),
       },
       {
         key: "escola",
         label: "Escola",
-        render: (n: NotaPedido) => getEscolaNotaLabel(n, instituicoes ?? []),
+        render: (n: NotaPedido) => getEscolaNotaLabel(n, instituicoesEstaveis),
       },
       {
         key: "tipo",
@@ -96,7 +107,7 @@ function NotasPedidoHistoricoResponsavelInner({
       },
       { key: "status", label: "Status", render: (n: NotaPedido) => <NotaStatusBadge status={n.status} /> },
     ],
-    [cooperados, instituicoes]
+    [cooperadosEstaveis, instituicoesEstaveis]
   );
 
   const handleRowView = useCallback(
@@ -112,7 +123,7 @@ function NotasPedidoHistoricoResponsavelInner({
 
   const renderMobileCard = useCallback(
     (n: NotaPedido) => {
-      const escola = getEscolaNotaLabel(n, instituicoes ?? []);
+      const escola = getEscolaNotaLabel(n, instituicoesEstaveis);
       const foto = getFotoExibicaoNota(n);
       return (
         <button
@@ -139,7 +150,7 @@ function NotasPedidoHistoricoResponsavelInner({
                 {formatDate(n.dataEntrega)} · {n.numeroNota}
               </p>
               {n.lancamentoDireto && <p className="text-xs text-amber-700 mt-0.5">Avulso · sem nota</p>}
-              <p className="text-xs text-gray-600 mt-0.5">{getCooperadoNome(cooperados ?? [], n.cooperadoId)}</p>
+              <p className="text-xs text-gray-600 mt-0.5">{getCooperadoNome(cooperadosEstaveis, n.cooperadoId)}</p>
               {n.valorLiquido > 0 && (
                 <p className="text-sm font-semibold text-green-700 mt-1">{formatCurrency(n.valorLiquido)}</p>
               )}
@@ -149,7 +160,7 @@ function NotasPedidoHistoricoResponsavelInner({
         </button>
       );
     },
-    [cooperados, instituicoes, handleRowView]
+    [cooperadosEstaveis, instituicoesEstaveis, handleRowView]
   );
 
   return (

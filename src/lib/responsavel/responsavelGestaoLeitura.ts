@@ -6,6 +6,7 @@ import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify"
 import type { ConsolidadoFinanceiroCooperado } from "@/services/cooperadoEntregasService";
 import { mesReferenciaPagamentoResponsavelEmAberto } from "@/services/cooperadoEntregasService";
 import { bicCentralGetResumoPagamentoExibicao } from "@/services/bicLeituraCentralFicha";
+import { staffCooperadoLeituraFinanceiraExibicao } from "@/lib/bic/bicStaffLeituraCooperado";
 import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
 import {
   getResumoPagamentoConsolidadoCooperado,
@@ -108,6 +109,11 @@ export function pickResumoStaffFichaPagar(
   const mesesEmAberto = mesesPendentesPagamento.filter((mes) =>
     mesReferenciaPagamentoResponsavelEmAberto(data, cooperadoId, mes, cooperativaId)
   );
+
+  const bic = staffCooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId);
+  if (mesesEmAberto.length > 0 && bic.valorLiquido > 0.005 && bic.resumo.valorLiquido > 0.005) {
+    return bic.resumo;
+  }
 
   const ajustesPorMes: Record<string, AjustesResumoPagamento> | undefined =
     resumoAjustes && mesAtivo ? { [mesAtivo]: resumoAjustes } : undefined;

@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { APP_BUILD_VERSION } from "../src/lib/appBuildVersion.ts";
 import type { AppData, FichaCorrida, NotaPedido, PagamentoCooperadoRegistro } from "../src/types/index.ts";
 import {
+  appDataParaConferirLeitura,
   cooperadoEmAbertoPodeSair,
   fundirLinhasEmAbertoEstavel,
   getRelatorioLancamentosEmAbertoResponsavel,
@@ -158,5 +159,11 @@ assert.equal(fundirLinhasEmAbertoEstavel(nove, extra, dataComNCooperados(10), CO
 resetResponsavelPainelIndexCache();
 const relatorio9 = getRelatorioLancamentosEmAbertoResponsavel(dataComNCooperados(9), COOP);
 assert.equal(relatorio9.length, 9, "motor inicial lista os 9 cooperados em aberto");
+
+resetResponsavelPainelIndexCache();
+const leitura = appDataParaConferirLeitura(dataComNCooperados(9));
+assert.equal(leitura.fichaCorrida.length, 9);
+const leituraVazia = appDataParaConferirLeitura({ ...leitura, fichaCorrida: [] });
+assert.equal(leituraVazia.fichaCorrida.length, 9, "contrato de leitura não troca 9 fichas por vazio");
 
 console.log("ok: em aberto estável — 9 cooperados não oscilam sem PIX");

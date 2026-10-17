@@ -26,7 +26,7 @@ import { listarPendentesConferenciaResponsavel } from "@/lib/conferencia/respons
 import { resolveStaffNotasPedidoNotifyDomains } from "@/lib/performance/staffNotasPedidoNotifyDomains";
 import { scheduleStaffResponsavelNotasPollLoop } from "@/lib/performance/staffResponsavelNotasPullBoot";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
-import { useResponsavelFilaConferencia } from "@/hooks/useResponsavelFilaConferencia";
+import { useConferirProjection } from "@/hooks/useConferirProjection";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId, resolveGestaoCooperativaId } from "@/utils/cooperativa";
 import { PageHeader, DataTable, FilterBar, Modal } from "@/components/ui/Table";
@@ -207,13 +207,10 @@ import {
 } from "@/services/conferenciaDecisaoNuvemSync";
 import { ConferenciaNuvemSyncBanner } from "@/components/notas-pedido/ConferenciaNuvemSyncBanner";
 import { getInstituicoesCatalogo, getProdutosContrato } from "@/services/catalogoContratosService";
-import {
-  countCooperadosLancamentosEmAbertoResponsavel,
-  countNotasFilaConferenciaResponsavel,
-} from "@/services/responsavelPainelIndex";
+import { countNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, filtrarResumosMesesNaoQuitados } from "@/services/cooperadoEntregasService";
-import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
 import {
+  staffListarResumosFichaEmAberto,
   staffListarResumosMensaisEntregas,
   staffMesPrincipalQuantoVouReceber,
 } from "@/lib/bic/bicStaffLeituraCooperado";
@@ -1825,7 +1822,7 @@ export default function NotasPedidoStaffMain() {
       ["notas", "financeiro"],
       (d) => {
         if (!cooperadoId || !coopId || abaCooperado !== "ficha") return [];
-        return listarResumosFichaEmAbertoCooperado(d, cooperadoId, coopId);
+        return staffListarResumosFichaEmAberto(d, cooperadoId, coopId);
       },
       [cooperadoId, coopId, hbDescontosRevision, abaCooperado]
     ) ?? [];
@@ -1841,18 +1838,24 @@ export default function NotasPedidoStaffMain() {
   }, [data, cooperadoId, user?.name]);
 
 
-  const filaDetalhada =
-    !isCooperado && (vistaResponsavel === "fila" || vistaResponsavel === "cooperado");
-
   const {
+    filaDetalhada,
+    dataLeitura,
     pendingDeleteIds,
-    pendentesTodas,
     pendentesEstaveis,
     pendentesPorCooperado,
-    filaBadgeCount,
+    filaNavCount,
     removerNotaDaFilaSticky,
     touchNotaNaFilaSticky,
-  } = useResponsavelFilaConferencia(coopId, isCooperado, filaDetalhada, tabActive);
+    emAbertoCount: cooperadosComLancamentoAbertoCount,
+  } = useConferirProjection({
+    coopId,
+    vista: vistaResponsavel,
+    panelActive: tabActive,
+    isCooperado,
+    cooperadoId: filtroCooperadoId || undefined,
+    conferirModal,
+  });
 
   useEffect(() => {
     if (!filaDetalhada) return;
@@ -1863,8 +1866,6 @@ export default function NotasPedidoStaffMain() {
     const t = window.setTimeout(() => aquecerUiConferencia(), 800);
     return () => window.clearTimeout(t);
   }, [filaDetalhada, aquecerUiConferencia]);
-
-  const filaNavCount = filaDetalhada ? pendentesEstaveis.length : filaBadgeCount;
 
   useEffect(() => {
     if (isCooperado || vistaResponsavel !== "cooperado" || !filtroCooperadoId) return;
@@ -2046,15 +2047,6 @@ export default function NotasPedidoStaffMain() {
   const mostrarPainelLancamentosAberto = !isCooperado && vistaConteudo === "aberto";
   const mostrarFilaResponsavelConteudo =
     !isCooperado && (vistaConteudo === "fila" || vistaConteudo === "cooperado");
-
-  const abertoNavCountActive = !isCooperado && tabActive && !conferirModal;
-  const cooperadosComLancamentoAbertoCount =
-    useAppDataSelectorForDomainsWhenActive(
-      abertoNavCountActive,
-      ["financeiro", "notas"],
-      (d) => (!coopId || isCooperado ? 0 : countCooperadosLancamentosEmAbertoResponsavel(d, coopId)),
-      [coopId, isCooperado]
-    ) ?? 0;
 
   const dadosCarregandoFilaConferencia =
     mostrarFilaResponsavelConteudo && (data === null || !isAppDataWarm());
@@ -4665,12 +4657,12 @@ export default function NotasPedidoStaffMain() {
 
       {!isCooperado && (
         <div className="mb-6 space-y-4">
-          {mostrarCorrecoesResponsavel && coopId && (
+          {mostrarCorrecoesResponsavel && coopId && (dataLeitura ?? data) && (
             <CorrecoesEntregasPanel
-              data={data}
+              data={(dataLeitura ?? data) as NonNullable<typeof data>}
               coopId={coopId}
               cooperados={cooperadosCoop}
-              getEscolaLabel={(n) => getEscolaNotaLabel(n, data.instituicoes)}
+              getEscolaLabel={(n) => getEscolaNotaLabel(n, (dataLeitura ?? data)?.instituicoes ?? [])}
               onApagar={executarExclusaoEntregaResponsavel}
               onRelancar={executarRelancarEntregaResponsavel}
             />

@@ -13,6 +13,7 @@ import {
   bicCentralListarResumosMensaisEntregas,
   bicCentralMesPrincipalQuantoVouReceber,
 } from "@/services/bicLeituraCentralCooperado";
+import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
 
 const STAFF_DOMAINS: AppDataNotifyDomain[] = ["shell", "financeiro", "notas"];
 
@@ -65,6 +66,22 @@ export function staffListarResumosMensaisEntregas(
   cooperativaId?: string
 ) {
   return bicCentralListarResumosMensaisEntregas(data, cooperadoId, cooperativaId);
+}
+
+/** Ficha em aberto do staff — mesma porta BIC no valor, lista operacional. */
+export function staffListarResumosFichaEmAberto(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+) {
+  const resumos = listarResumosFichaEmAbertoCooperado(data, cooperadoId, cooperativaId);
+  if (resumos.length === 0) return resumos;
+  const bic = staffCooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId);
+  if (!(bic.valorLiquido > 0.005)) return resumos;
+  if (resumos.length === 1) {
+    return [{ ...resumos[0]!, valorAReceber: bic.valorLiquido }];
+  }
+  return resumos;
 }
 
 export function resetBicStaffLeituraMemoForTests(): void {

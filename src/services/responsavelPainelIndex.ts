@@ -18,6 +18,7 @@ import {
   getRelatorioPagarCooperadoEmAberto,
   type LinhaPagarCooperadoEmAberto,
 } from "@/services/relatorioService";
+import { anotarLinhasEmAbertoComBic } from "@/lib/bic/anotarLinhasEmAbertoComBic";
 
 type PainelCache = {
   revision: number;
@@ -37,6 +38,7 @@ type RelatorioAbertoCache = {
 
 let relatorioAbertoCache: RelatorioAbertoCache | null = null;
 let relatorioAbertoLatch: { coopId: string; linhas: LinhaPagarCooperadoEmAberto[] } | null = null;
+let conferirLeituraLatch: AppData | null = null;
 
 function cooperadoIdsDaCooperativa(data: AppData, coopId: string): Set<string> {
   const ids = new Set<string>();
@@ -76,31 +78,60 @@ function mergeNotasPedidoParaPainel(truth: NotaPedido[], react: NotaPedido[]): N
   return [...byId.values()];
 }
 
-function appDataParaPainelResponsavel(data: AppData): AppData {
-  const truth = getDataOperationalTruth();
-  const notasPedido = mergeNotasPedidoParaPainel(truth.notasPedido, data.notasPedido);
-  if (notasPedido === truth.notasPedido) return truth;
-  if (notasPedido === data.notasPedido && truth === getDataOperationalTruth()) {
-    return { ...truth, notasPedido };
+function scoreSnapshotConferir(d: AppData): { fichas: number; notas: number; cooperados: number; pix: number } {
+  let pix = 0;
+  for (const p of d.pagamentosCooperado ?? []) {
+    if (p.status === "confirmado") pix += 1;
   }
-  return { ...truth, notasPedido };
+  return {
+    fichas: d.fichaCorrida?.length ?? 0,
+    notas: d.notasPedido?.length ?? 0,
+    cooperados: d.cooperados?.length ?? 0,
+    pix,
+  };
 }
 
-/** Conferência/push scoped filtra fichas em `getData()` — em aberto usa o snapshot mais completo. */
-function appDataParaRelatorioEmAberto(data: AppData): AppData {
-  const truth = getDataOperationalTruth();
+/** Snapshot incompleto (sync/push) não substitui o último completo sem prova de PIX. */
+export function snapshotConferirPoorerSemProva(next: AppData, prev: AppData): boolean {
+  const n = scoreSnapshotConferir(next);
+  const p = scoreSnapshotConferir(prev);
+  if (n.cooperados === 0 && p.cooperados > 0) return true;
+  if (n.notas === 0 && p.notas > 0 && n.pix <= p.pix) return true;
+  if (n.fichas === 0 && p.fichas > 0 && n.pix <= p.pix) return true;
+  if (n.fichas < p.fichas && n.pix <= p.pix) return true;
+  return false;
+}
+
+function escolherSnapshotMaisCompleto(truth: AppData, data: AppData): AppData {
   if (truth === data) return data;
-  const fichasData = data.fichaCorrida?.length ?? 0;
-  const fichasTruth = truth.fichaCorrida?.length ?? 0;
-  const coopData = data.cooperados?.length ?? 0;
-  const coopTruth = truth.cooperados?.length ?? 0;
-  if (fichasTruth > fichasData || (fichasTruth === fichasData && coopTruth > coopData)) {
-    return {
-      ...truth,
-      notasPedido: mergeNotasPedidoParaPainel(truth.notasPedido, data.notasPedido),
-    };
+  const t = scoreSnapshotConferir(truth);
+  const d = scoreSnapshotConferir(data);
+  const truthRicher =
+    t.fichas > d.fichas ||
+    (t.fichas === d.fichas && (t.notas > d.notas || (t.notas === d.notas && t.cooperados > d.cooperados)));
+  const base = truthRicher ? truth : data;
+  const other = base === truth ? data : truth;
+  const notasPedido = mergeNotasPedidoParaPainel(base.notasPedido, other.notasPedido);
+  if (notasPedido === base.notasPedido) return base;
+  return { ...base, notasPedido };
+}
+
+function aplicarLastroCompletenessConferir(candidato: AppData): AppData {
+  const prev = conferirLeituraLatch;
+  if (!prev || !snapshotConferirPoorerSemProva(candidato, prev)) {
+    conferirLeituraLatch = candidato;
+    return candidato;
   }
-  return data;
+  return prev;
+}
+
+/**
+ * Foto única da aba Conferir: verdade operacional + merge de notas, com lastro de completeness.
+ * O filtro de push em `getData()` não alimenta a tela.
+ */
+export function appDataParaConferirLeitura(data: AppData): AppData {
+  const truth = getDataOperationalTruth();
+  return aplicarLastroCompletenessConferir(escolherSnapshotMaisCompleto(truth, data));
 }
 
 /** Só sai da lista em aberto com PIX confirmado e ficha ainda presente (sync incompleto não apaga). */
@@ -180,7 +211,7 @@ function getPainelCache(data: AppData, coopId: string): PainelCache {
   if (painelCache && painelCache.revision === revision && painelCache.coopId === coopId) {
     return painelCache;
   }
-  painelCache = buildPainelCache(appDataParaPainelResponsavel(data), coopId);
+  painelCache = buildPainelCache(appDataParaConferirLeitura(data), coopId);
   return painelCache;
 }
 
@@ -212,8 +243,14 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
   cooperadoId?: string
 ): LinhaPagarCooperadoEmAberto[] {
   if (!coopId) return [];
-  const dataAberto = appDataParaRelatorioEmAberto(data);
-  if (cooperadoId) return getRelatorioPagarCooperadoEmAberto(dataAberto, coopId, cooperadoId);
+  const dataAberto = appDataParaConferirLeitura(data);
+  if (cooperadoId) {
+    return anotarLinhasEmAbertoComBic(
+      dataAberto,
+      getRelatorioPagarCooperadoEmAberto(dataAberto, coopId, cooperadoId),
+      coopId
+    );
+  }
   const revision = getDataRevision();
   if (
     relatorioAbertoCache &&
@@ -225,7 +262,11 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
   const motor = getRelatorioPagarCooperadoEmAberto(dataAberto, coopId);
   const anterior =
     relatorioAbertoLatch && relatorioAbertoLatch.coopId === coopId ? relatorioAbertoLatch.linhas : [];
-  const linhas = fundirLinhasEmAbertoEstavel(anterior, motor, dataAberto, coopId);
+  const linhas = anotarLinhasEmAbertoComBic(
+    dataAberto,
+    fundirLinhasEmAbertoEstavel(anterior, motor, dataAberto, coopId),
+    coopId
+  );
   relatorioAbertoLatch = { coopId, linhas };
   relatorioAbertoCache = { revision, coopId, linhas };
   return linhas;
@@ -240,4 +281,5 @@ export function resetResponsavelPainelIndexCache(): void {
   painelCache = null;
   relatorioAbertoCache = null;
   relatorioAbertoLatch = null;
+  conferirLeituraLatch = null;
 }

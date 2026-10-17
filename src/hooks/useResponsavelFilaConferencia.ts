@@ -16,7 +16,7 @@ import {
   isNotaSaiuDaFilaConferencia,
   notaElegivelParaFilaConferenciaResponsavel,
 } from "@/utils/notaStatus";
-import { buildPendentesEstaveisConferencia } from "@/utils/filaConferenciaSticky";
+import { buildPendentesEstaveisConferencia, lastroContagemFila } from "@/utils/filaConferenciaSticky";
 
 /**
  * Fila de conferência do responsável — cálculo pesado (sticky) só quando a aba Conferir está ativa.
@@ -123,6 +123,12 @@ export function useResponsavelFilaConferencia(
     return agruparPendentesPorCooperado(data, pendentesEstaveis, coopId);
   }, [pendentesEstaveis, coopId, filaDetalhada]);
 
+  const lastFilaEstavelCountRef = useRef(0);
+  if (filaDetalhada) lastFilaEstavelCountRef.current = pendentesEstaveis.length;
+  const filaNavCount = filaDetalhada
+    ? pendentesEstaveis.length
+    : lastroContagemFila(filaBadgeCount, lastFilaEstavelCountRef.current);
+
   const touchNotaNaFilaSticky = useCallback((nota: NotaPedido) => {
     stickyRef.current.ids.add(nota.id);
     stickyRef.current.snapshot.set(nota.id, nota);
@@ -139,6 +145,7 @@ export function useResponsavelFilaConferencia(
     pendentesEstaveis,
     pendentesPorCooperado,
     filaBadgeCount,
+    filaNavCount,
     touchNotaNaFilaSticky,
     removerNotaDaFilaSticky,
   };

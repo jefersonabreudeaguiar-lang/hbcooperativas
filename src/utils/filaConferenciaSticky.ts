@@ -94,3 +94,9 @@ export function buildPendentesEstaveisConferencia(
     })
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
+
+/** Badge não cai a zero se a última lista visível ainda tinha notas (sync incompleto). */
+export function lastroContagemFila(live: number, lastGood: number): number {
+  if (live === 0 && lastGood > 0) return lastGood;
+  return live;
+}
