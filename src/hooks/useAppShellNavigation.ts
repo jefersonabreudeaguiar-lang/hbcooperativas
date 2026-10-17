@@ -70,7 +70,11 @@ function hbModuleNavEligible(
  */
 export function useAppShellNavigation(): AppShellNavigation | null {
   const { user, accountUser } = useAuth();
-  const subject = user ?? accountUser;
+  const coldData = isAppDataWarm() ? getData() : null;
+  const staffColdUi = Boolean(
+    accountUser && shouldRenderStaffPainelUiSession(accountUser, coldData)
+  );
+  const subject = staffColdUi && accountUser ? accountUser : user ?? accountUser;
   useEnsureAppDataWarm();
   const dataRevision = useSyncExternalStore(
     subscribe,

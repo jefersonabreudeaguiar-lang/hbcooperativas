@@ -131,8 +131,9 @@ function evaluateDashboardStaffOpen(
   } as Omit<User, "password">;
   assert.equal(resolveAuthoritativePanelRole(staleSession, data), "responsavel");
   assert.equal(canAccessPainelResponsavel(staleSession, data), true);
-  const fixedRole = resolveAppUserRole({ ...staleSession, role: "responsavel" }, data);
+  const fixedRole = resolveAppUserRole(staleSession, data);
   assert.equal(fixedRole, "responsavel");
+  assert.equal(canAccessPainelResponsavelSession(staleSession, data), true);
 }
 
 console.log("test-responsavel-panel-access-etapa622: OK");

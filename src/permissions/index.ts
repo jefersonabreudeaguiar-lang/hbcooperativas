@@ -1,5 +1,8 @@
 import type { Action, AppData, ModoAcesso, Resource, User, UserRole } from "@/types";
-import { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
+import {
+  canAccessPainelResponsavel,
+  resolveAuthoritativePanelRole,
+} from "@/lib/security/responsavelPanelAccess";
 export { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
 import { isHbCreditEnabledClient } from "@/modules/hb-credit/config";
 import { filterContaCoopNavItems, isContaCoopUiPublic } from "@/utils/contaCoopUiVisibility";
@@ -277,13 +280,16 @@ export function resolveAppUserRole(
   user: Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active">,
   data?: AppData | null
 ): UserRole {
-  const role = normalizeUserRole(user.role);
+  const role = data
+    ? resolveAuthoritativePanelRole(user, data)
+    : normalizeUserRole(user.role);
+  const userForAccess = role === normalizeUserRole(user.role) ? user : { ...user, role };
   /** Perfil duplo: diretoria com cooperadoId não perde papel staff na sessão (painel responsável). */
   if (isDiretoriaRole(role)) {
-    if (!canAccessPainelResponsavel(user, data)) return "cooperado";
+    if (!canAccessPainelResponsavel(userForAccess, data)) return "cooperado";
     return role;
   }
-  if (isCooperadoAppUser({ ...user, role })) return "cooperado";
+  if (isCooperadoAppUser({ ...userForAccess, role })) return "cooperado";
   return role;
 }
 

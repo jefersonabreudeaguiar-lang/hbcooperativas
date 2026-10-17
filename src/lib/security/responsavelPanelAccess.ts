@@ -87,12 +87,33 @@ export function shouldUseCooperadoExperience(
 }
 
 /** Checagem server-side (JWT / app_users) — sem depender do AppData local. */
-export function canAccessPainelResponsavelSession(session: {
-  email?: string | null;
-  role?: string | null;
-  cooperadoId?: string | null;
-} | null | undefined): boolean {
+export function canAccessPainelResponsavelSession(
+  session: {
+    email?: string | null;
+    role?: string | null;
+    cooperadoId?: string | null;
+    id?: string | null;
+    cooperativaId?: string | null;
+    active?: boolean;
+  } | null
+    | undefined,
+  data?: AppData | null
+): boolean {
   if (!session) return false;
+
+  if (isAppCreator({ email: session.email ?? "" })) return true;
+  if (isBuiltinPainelResponsavelEmail(session.email)) return true;
+
+  if (data) {
+    if (
+      canAccessPainelResponsavel(
+        session as Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active">,
+        data
+      )
+    ) {
+      return true;
+    }
+  }
 
   const role = normalizeRole(session.role ?? "");
   if (role === "cooperado" || role === "parceiro" || role === "contador") return false;
@@ -101,9 +122,6 @@ export function canAccessPainelResponsavelSession(session: {
   if (session.cooperadoId?.trim() && role !== "responsavel" && role !== "tesoureiro") {
     return false;
   }
-
-  if (isAppCreator({ email: session.email ?? "" })) return true;
-  if (isBuiltinPainelResponsavelEmail(session.email)) return true;
 
   if (role === "responsavel" || role === "tesoureiro") return true;
   if (role === "admin") return isAppCreator({ email: session.email ?? "" });

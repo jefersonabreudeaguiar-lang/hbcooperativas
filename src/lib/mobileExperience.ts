@@ -6,6 +6,7 @@ import {
 } from "@/lib/hb-credit/mobileCooperadoLink";
 import {
   canAccessPainelResponsavel,
+  canAccessPainelResponsavelSession,
   resolveCooperadoExperienceId,
 } from "@/lib/security/responsavelPanelAccess";
 import { preferPainelResponsavelMobile } from "@/lib/mobilePainelPreference";
@@ -61,7 +62,9 @@ export function resolveExperienceUser<T extends Omit<User, "password">>(
 ): T | null {
   if (!user) return null;
 
-  const allowPainel = canAccessPainelResponsavel(user, data);
+  const allowPainel =
+    canAccessPainelResponsavel(user, data) ||
+    canAccessPainelResponsavelSession(user, data);
   const mobile = isMobileCooperativaApp();
 
   if (allowPainel && (!mobile || preferPainelResponsavelMobile())) {

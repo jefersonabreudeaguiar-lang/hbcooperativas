@@ -18,9 +18,10 @@ export function shouldRenderStaffPainelUi(
 
 /** Antes do AppData aquecer — evita cair no painel cooperado com tela vazia no browser. */
 export function shouldRenderStaffPainelUiSession(
-  accountUser: Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active"> | null | undefined
+  accountUser: Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active"> | null | undefined,
+  data?: AppData | null
 ): boolean {
-  if (!accountUser || !canAccessPainelResponsavelSession(accountUser)) return false;
+  if (!accountUser || !canAccessPainelResponsavelSession(accountUser, data)) return false;
   if (!isMobileCooperativaApp()) return true;
   return preferPainelResponsavelMobile();
 }

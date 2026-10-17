@@ -9,7 +9,11 @@ import {
   canAccessPainelResponsavelSession,
   isGestaoOnlyRoute,
 } from "@/lib/security/responsavelPanelAccess";
-import { shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
+import {
+  shouldRenderStaffPainelUi,
+  shouldRenderStaffPainelUiSession,
+} from "@/lib/staffNavigationUser";
+import { getData, isAppDataWarm } from "@/services/dataStore";
 
 export function GestaoAccessGuard({ children }: { children: React.ReactNode }) {
   const { accountUser } = useAuth();
@@ -21,21 +25,24 @@ export function GestaoAccessGuard({ children }: { children: React.ReactNode }) {
     (data) => (accountUser ? canAccessPainelResponsavel(accountUser, data) : false),
     [accountUser?.id, accountUser?.email, accountUser?.role, accountUser?.cooperadoId]
   );
+  const coldData = isAppDataWarm() ? getData() : null;
   const canGestao = dataReady
     ? canGestaoFromData
     : accountUser
-      ? canAccessPainelResponsavelSession(accountUser)
+      ? canAccessPainelResponsavelSession(accountUser, coldData)
       : false;
 
-  const staffPainelUi = useAppDataSelector(
+  const staffPainelUiWarm = useAppDataSelector(
     (data) => Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data)),
     [accountUser?.id, accountUser?.email, accountUser?.role, accountUser?.cooperadoId]
   );
+  const staffPainelUi = dataReady
+    ? Boolean(staffPainelUiWarm)
+    : Boolean(accountUser && shouldRenderStaffPainelUiSession(accountUser, coldData));
 
   useEffect(() => {
     if (!accountUser) return;
     if (!isGestaoOnlyRoute(pathname)) return;
-    if (canGestao === null) return;
     if (!canGestao || !staffPainelUi) {
       router.replace("/dashboard");
     }

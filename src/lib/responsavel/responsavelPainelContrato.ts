@@ -43,12 +43,14 @@ export function evaluateResponsavelPainelAbertura(opts: {
   dataReady: boolean;
 }): ResponsavelPainelAbertura {
   const { accountUser, authSubject, data, dataReady } = opts;
+  /** Conta de gestão — perfil duplo pode atrasar `accountUser`; sessão em `authSubject` abre o painel. */
+  const gestaoAccount = accountUser ?? authSubject;
   const staffPainelUi = dataReady
-    ? Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data ?? null))
-    : Boolean(accountUser && shouldRenderStaffPainelUiSession(accountUser));
+    ? Boolean(gestaoAccount && shouldRenderStaffPainelUi(gestaoAccount, data ?? null))
+    : Boolean(gestaoAccount && shouldRenderStaffPainelUiSession(gestaoAccount, data));
   const canGestao = dataReady
-    ? Boolean(authSubject && canAccessPainelResponsavel(authSubject, data ?? null))
-    : Boolean(authSubject && canAccessPainelResponsavelSession(authSubject));
+    ? Boolean(gestaoAccount && canAccessPainelResponsavel(gestaoAccount, data ?? null))
+    : Boolean(gestaoAccount && canAccessPainelResponsavelSession(gestaoAccount, data));
   return {
     canGestao,
     staffPainelUi,
