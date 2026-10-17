@@ -185,9 +185,24 @@ withBicOff(() => {
 // PASSO 26 — card consome snapshot como autoridade (BIC ON)
 withBicOfficial(() => {
   const data = miniDataMotorZero();
+  data.notasPedido = [
+    {
+      id: "n-open",
+      cooperadoId: COOPERADO,
+      cooperativaId: COOP,
+      mesReferencia: MES,
+      status: "conferida",
+      valorLiquido: 250,
+      valorBruto: 250,
+      itens: [{ produtoId: "p1", quantidade: 1, valorUnitario: 250, valorTotal: 250 }],
+      createdAt: "2026-09-01T00:00:00.000Z",
+      updatedAt: "2026-09-01T00:00:00.000Z",
+    },
+  ] as AppData["notasPedido"];
   data.fichaCorrida = [
     {
       id: "f-open",
+      notaPedidoId: "n-open",
       cooperadoId: COOPERADO,
       cooperativaId: COOP,
       mesReferencia: MES,
@@ -196,6 +211,9 @@ withBicOfficial(() => {
       valorDesconto: 0,
       status: "pendente",
       descricao: "Aberto",
+      dataLancamento: "2026-09-02T00:00:00.000Z",
+      createdAt: "2026-09-02T00:00:00.000Z",
+      updatedAt: "2026-09-02T00:00:00.000Z",
     },
   ] as AppData["fichaCorrida"];
   const financeiro = buildCooperadoFinanceiroUiSnapshot({

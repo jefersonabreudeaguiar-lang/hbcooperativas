@@ -506,6 +506,22 @@ export function useCooperadoInicioValorReceberCardState(input: {
         }
       }
 
+      if (
+        persistidoMesmoBuild?.display &&
+        cooperadoMotorTemObrigacaoReceber(persistidoMesmoBuild.display)
+      ) {
+        return {
+          display: persistidoMesmoBuild.display,
+          latch: {
+            motorRevision: persistidoMesmoBuild.motorRevision,
+            display: persistidoMesmoBuild.display,
+            hadPendencia: true,
+          },
+          atualizando: !input.dataReady,
+          gravarPersistencia: false,
+        };
+      }
+
       return {
         display: SNAPSHOT_VAZIO,
         latch: { motorRevision: "", display: SNAPSHOT_VAZIO, hadPendencia: false },

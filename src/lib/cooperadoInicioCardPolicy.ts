@@ -120,8 +120,8 @@ export function cooperadoMotorTemObrigacaoReceber(motor: InicioCardMotorSnapshot
 }
 
 /**
- * BIC ON — autoriza exibir R$ 0 no card início.
- * Sync parcial (motor 0 sem pagamento confirmado) retorna false.
+ * Autoriza R$ 0 no Início só com obrigação atual liquidada.
+ * PIX antigo, wipe de ficha ou sync incompleto não apagam o lastro.
  */
 export function cooperadoBicAutorizaZerarCardInicio(
   data: AppData,
@@ -134,13 +134,18 @@ export function cooperadoBicAutorizaZerarCardInicio(
   if (listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId).length > 0) return false;
   if (getTotalAPagarCooperado(data, cooperadoId, undefined, cooperativaId) > 0) return false;
 
-  if (!opts?.tinhaValorExibido) return true;
-
-  return data.pagamentosCooperado.some(
+  const temFicha = (data.fichaCorrida ?? []).some((f) =>
+    fichaPertenceCooperado(data, f, cooperadoId, cooperativaId)
+  );
+  const temPixConfirmado = (data.pagamentosCooperado ?? []).some(
     (p) =>
       pagamentoCooperadoPertenceCooperado(data, p, cooperadoId, cooperativaId) &&
       p.status === "confirmado"
   );
+
+  if (!opts?.tinhaValorExibido) return true;
+  if (!temFicha) return false;
+  return temPixConfirmado;
 }
 
 /** Mantém valor exibido se motor veio zerado sem prova de pagamento BIC. */
@@ -414,9 +419,10 @@ function aplicarPoliticaCardInicioEndurecidaComMotor(
     };
   }
 
+  const displayComObrigacao = cooperadoMotorTemObrigacaoReceber(applied.display);
   return finalizarResultadoCardBic({
     ...applied,
-    gravarPersistencia: Boolean(cooperativaId),
+    gravarPersistencia: Boolean(cooperativaId) && (displayComObrigacao || autorizaZerar),
   });
 }
 
@@ -513,7 +519,7 @@ export function aplicarPoliticaCardInicioEndurecida(
 ): InicioCardPoliticaResult {
   const pendenciaMotor = cooperadoMotorTemObrigacaoReceber(motor);
   const revisionChanged = !prev || prev.motorRevision !== motorRevision;
-  const autorizaZerar = opts.autorizaZerarValor ?? true;
+  const autorizaZerar = opts.autorizaZerarValor ?? false;
 
   if (revisionChanged) {
     const display = aplicarMotorCardComGateZeroBic(prev?.display, motor, autorizaZerar);
@@ -573,41 +579,24 @@ export function aplicarPoliticaCardInicioEndurecida(
   };
 }
 
-/** Só troca para valor menor quando quitou; senão aceita aumento ou novo crédito. */
+/**
+ * Lastro do Início: valor positivo da ficha/HB substitui o card.
+ * Só zera com PIX confirmado da obrigação atual (autorizaZerarValor).
+ */
 export function aplicarSubstituicaoMonotonaDisplay(
   anterior: InicioCardMotorSnapshot,
   motor: InicioCardMotorSnapshot,
   revisionChanged: boolean,
   opts?: { autorizaZerarValor?: boolean }
 ): InicioCardMotorSnapshot {
-  const autorizaZerar = opts?.autorizaZerarValor ?? true;
-  if (isBicCentralReadAuthorityEnabled()) {
-    const sanitized = sanitizeInicioCardSnapshotFluxoBic(motor);
-    if (!revisionChanged) {
-      const displayMudou =
-        sanitized.valor !== anterior.valor ||
-        sanitized.valorRecibo !== anterior.valorRecibo ||
-        sanitized.aguardandoAssinatura !== anterior.aguardandoAssinatura;
-      if (displayMudou && (sanitized.valor > 0 || !cooperadoMotorTemObrigacaoReceber(anterior))) {
-        return sanitized;
-      }
-      return anterior;
-    }
-    if (sanitized.valor > anterior.valor) {
-      return sanitized;
-    }
-    return aplicarMotorCardComGateZeroBic(anterior, motor, autorizaZerar);
+  const autorizaZerar = opts?.autorizaZerarValor ?? false;
+  const sanitized = sanitizeInicioCardSnapshotFluxoBic(motor);
+  if (!revisionChanged) {
+    if (sanitized.valor > 0.005) return sanitized;
+    return anterior;
   }
-  if (!revisionChanged) return anterior;
-  if (!cooperadoMotorTemObrigacaoReceber(motor)) {
-    return aplicarMotorCardComGateZeroBic(anterior, motor, autorizaZerar);
-  }
-  if (!cooperadoMotorTemObrigacaoReceber(anterior)) return motor;
-  if (motor.valor > anterior.valor) return motor;
-  if (motor.valorRecibo > anterior.valorRecibo) return motor;
-  if (motor.aguardandoAssinatura && motor.valorRecibo > 0 && !anterior.aguardandoAssinatura) return motor;
-  if (motor.valor >= anterior.valor && motor.valorRecibo >= anterior.valorRecibo) return motor;
-  return anterior;
+  if (sanitized.valor > 0.005) return sanitized;
+  return aplicarMotorCardComGateZeroBic(anterior, motor, autorizaZerar);
 }
 
 export type ResolverCardInicioInput = {

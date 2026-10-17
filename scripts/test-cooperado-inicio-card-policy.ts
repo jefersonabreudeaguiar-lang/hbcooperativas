@@ -6,6 +6,7 @@ import type { AppData } from "@/types";
 import {
   aplicarPoliticaCardInicioEndurecida,
   aplicarSubstituicaoMonotonaDisplay,
+  cooperadoBicAutorizaZerarCardInicio,
   cooperadoInicioCardEscolherDisplayEstavel,
   cooperadoMotorRevisionOperacional,
   cooperadoMotorTemObrigacaoReceber,
@@ -21,6 +22,10 @@ function miniData(overrides: Partial<AppData> = {}): AppData {
     pagamentosCooperado: [],
     fichaCorrida: [],
     notasPedido: [],
+    arquivosMensais: [],
+    mensalidades: [],
+    descontos: [],
+    valoresAvulsosReceber: [],
     config: { descontoPadraoCooperativa: 0 },
   } as unknown as AppData;
   return { ...base, ...overrides };
@@ -66,7 +71,11 @@ function main() {
 
   const anterior = { mesLabel: "Set", valor: 200, valorRecibo: 0, aguardandoAssinatura: false };
   const menor = { mesLabel: "Set", valor: 50, valorRecibo: 0, aguardandoAssinatura: false };
-  assert.equal(aplicarSubstituicaoMonotonaDisplay(anterior, menor, true).valor, 200);
+  assert.equal(
+    aplicarSubstituicaoMonotonaDisplay(anterior, menor, true).valor,
+    50,
+    "ficha ou compra HB atualiza o A receber para baixo sem apagar o card"
+  );
   assert.equal(aplicarSubstituicaoMonotonaDisplay(anterior, { ...anterior, valor: 250 }, true).valor, 250);
   assert.equal(aplicarSubstituicaoMonotonaDisplay(anterior, { mesLabel: "Set", valor: 0, valorRecibo: 0, aguardandoAssinatura: false }, true, { autorizaZerarValor: true }).valor, 0);
   assert.equal(
@@ -114,6 +123,72 @@ function main() {
     }).valor,
     0,
     "quitação completa autoriza zerar"
+  );
+
+  const dataWipeComPixAntigo = miniData({
+    pagamentosCooperado: [
+      {
+        id: "pg-antigo",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: "2026-08",
+        status: "confirmado",
+        valorLiquido: 80,
+        valorBruto: 80,
+      },
+    ],
+  } as Partial<AppData>);
+  assert.equal(
+    cooperadoBicAutorizaZerarCardInicio(dataWipeComPixAntigo, COOPERADO, COOP, {
+      tinhaValorExibido: true,
+    }),
+    false,
+    "PIX antigo sem ficha no snapshot não apaga o A receber do Início"
+  );
+
+  const dataQuitado = miniData({
+    notasPedido: [
+      {
+        id: "n1",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: "2026-10",
+        status: "pago",
+        valorLiquido: 180,
+        valorBruto: 180,
+        itens: [],
+      },
+    ],
+    fichaCorrida: [
+      {
+        id: "f1",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: "2026-10",
+        notaPedidoId: "n1",
+        status: "pago",
+        valorLiquido: 180,
+        valorBruto: 180,
+      },
+    ],
+    pagamentosCooperado: [
+      {
+        id: "pg-agora",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: "2026-10",
+        status: "confirmado",
+        valorLiquido: 180,
+        valorBruto: 180,
+        fichaIds: ["f1"],
+        notaPedidoIds: ["n1"],
+      },
+    ],
+  } as Partial<AppData>);
+  assert.equal(
+    cooperadoBicAutorizaZerarCardInicio(dataQuitado, COOPERADO, COOP, { tinhaValorExibido: true }),
+    true,
+    "PIX confirmado da obrigação atual autoriza zerar"
   );
 
   console.log("OK — política card início endurecida");
