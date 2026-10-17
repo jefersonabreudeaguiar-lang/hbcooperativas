@@ -166,4 +166,30 @@ assert.equal(leitura.fichaCorrida.length, 9);
 const leituraVazia = appDataParaConferirLeitura({ ...leitura, fichaCorrida: [] });
 assert.equal(leituraVazia.fichaCorrida.length, 9, "contrato de leitura não troca 9 fichas por vazio");
 
+const dataCincoAbertos = dataComNCooperados(9);
+for (let i = 6; i <= 9; i++) {
+  const f = dataCincoAbertos.fichaCorrida.find((x) => x.id === `f-${i}`);
+  if (f) f.status = "pago";
+  dataCincoAbertos.pagamentosCooperado.push(pixConfirmado(i));
+}
+const motorCinco = Array.from({ length: 5 }, (_, i) => linha(i + 1));
+assert.equal(
+  fundirLinhasEmAbertoEstavel(nove, motorCinco, dataCincoAbertos, COOP).length,
+  5,
+  "já pagos saem do Em aberto quando o motor traz só os reais"
+);
+assert.equal(cooperadoEmAbertoPodeSair(dataCincoAbertos, "c-7", COOP), true);
+assert.equal(cooperadoEmAbertoPodeSair(dataCincoAbertos, "c-1", COOP), false);
+
+resetResponsavelPainelIndexCache();
+const dataPixCobrePendente = dataComNCooperados(2);
+dataPixCobrePendente.pagamentosCooperado.push(pixConfirmado(2));
+const relatorioAposPix = getRelatorioLancamentosEmAbertoResponsavel(dataPixCobrePendente, COOP);
+assert.equal(
+  relatorioAposPix.some((l) => l.cooperadoId === "c-2"),
+  false,
+  "PIX confirmado tira o cooperado mesmo com ficha ainda pendente"
+);
+assert.equal(relatorioAposPix.some((l) => l.cooperadoId === "c-1"), true);
+
 console.log("ok: em aberto estável — 9 cooperados não oscilam sem PIX");

@@ -7,7 +7,6 @@ import { cooperadoPendentePagamentoResponsavel } from "@/services/cooperadoEntre
 import {
   fichaPertenceCooperado,
   listCooperadosDaCooperativa,
-  resolverCooperadoIdCanonico,
 } from "@/services/cooperadoCloudService";
 import { getDataOperationalTruth, getDataRevision } from "@/services/dataStore";
 import { listarMesesFichaEmAbertoCooperado } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
@@ -18,7 +17,7 @@ import {
   getRelatorioPagarCooperadoEmAberto,
   type LinhaPagarCooperadoEmAberto,
 } from "@/services/relatorioService";
-import { anotarLinhasEmAbertoComBic } from "@/lib/bic/anotarLinhasEmAbertoComBic";
+import { formatMesesReferenciaRotulo, formatMesReferencia } from "@/utils/format";
 
 type PainelCache = {
   revision: number;
@@ -139,7 +138,10 @@ export function appDataParaConferirLeitura(data: AppData): AppData {
   return aplicarLastroCompletenessConferir(escolherSnapshotMaisCompleto(truth, data));
 }
 
-/** Só sai da lista em aberto com PIX confirmado e ficha ainda presente (sync incompleto não apaga). */
+/**
+ * Sai do Em aberto quando não há ficha sem PIX.
+ * Sem ficha = sync incompleto — não tira. Com ficha e total 0 = já pago.
+ */
 export function cooperadoEmAbertoPodeSair(
   data: AppData,
   cooperadoId: string,
@@ -148,33 +150,62 @@ export function cooperadoEmAbertoPodeSair(
   if (!cooperadoId || !coopId) return false;
   const aberto = listarMesesFichaEmAbertoCooperado(data, cooperadoId, coopId);
   if (aberto.total > 0.005) return false;
-  const temFicha = (data.fichaCorrida ?? []).some((f) =>
+  return (data.fichaCorrida ?? []).some((f) =>
     fichaPertenceCooperado(data, f, cooperadoId, coopId)
   );
-  if (!temFicha) return false;
-  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
-  return (data.pagamentosCooperado ?? []).some((p) => {
-    if (p.status !== "confirmado") return false;
-    if (p.cooperativaId && p.cooperativaId !== coopId) return false;
-    if (p.cooperadoId === cooperadoId || p.cooperadoId === canonico) return true;
-    return resolverCooperadoIdCanonico(data, p.cooperadoId, p.cooperativaId ?? coopId) === canonico;
-  });
 }
 
-/** Mantém cooperados já vistos até quitação real — sync/conferência não zera a lista. */
+function linhaEmAbertoSoFichaSemPix(
+  base: LinhaPagarCooperadoEmAberto,
+  data: AppData,
+  coopId: string
+): LinhaPagarCooperadoEmAberto | null {
+  const aberto = listarMesesFichaEmAbertoCooperado(data, base.cooperadoId, coopId);
+  if (aberto.total <= 0.005) return null;
+  return {
+    ...base,
+    meses: aberto.meses,
+    mesesLabel: formatMesesReferenciaRotulo(aberto.meses),
+    entregas: aberto.porMes.reduce((s, m) => s + m.entregas, 0),
+    total: aberto.total,
+    porMes: aberto.porMes.map((m) => ({
+      mes: m.mes,
+      mesLabel: formatMesReferencia(m.mes),
+      entregas: m.entregas,
+      total: m.total,
+    })),
+  };
+}
+
+/** Lastro só contra lista vazia. Valor já pago não volta; total vem só da ficha sem PIX. */
 export function fundirLinhasEmAbertoEstavel(
   anterior: LinhaPagarCooperadoEmAberto[],
   motor: LinhaPagarCooperadoEmAberto[],
   data: AppData,
   coopId: string
 ): LinhaPagarCooperadoEmAberto[] {
-  if (anterior.length === 0) return motor;
-  const byId = new Map(motor.map((l) => [l.cooperadoId, l]));
+  const motorLimpo = motor
+    .map((l) => linhaEmAbertoSoFichaSemPix(l, data, coopId))
+    .filter((l): l is LinhaPagarCooperadoEmAberto => l !== null);
+
+  if (anterior.length === 0) return motorLimpo;
+
+  if (motorLimpo.length === 0) {
+    const byId = new Map<string, LinhaPagarCooperadoEmAberto>();
+    for (const old of anterior) {
+      if (cooperadoEmAbertoPodeSair(data, old.cooperadoId, coopId)) continue;
+      const vivo = linhaEmAbertoSoFichaSemPix(old, data, coopId);
+      if (vivo) byId.set(old.cooperadoId, vivo);
+      else byId.set(old.cooperadoId, old);
+    }
+    return [...byId.values()].sort((a, b) => a.cooperado.localeCompare(b.cooperado, "pt-BR"));
+  }
+
+  const byId = new Map(motorLimpo.map((l) => [l.cooperadoId, l]));
   for (const old of anterior) {
     if (byId.has(old.cooperadoId)) continue;
-    if (!cooperadoEmAbertoPodeSair(data, old.cooperadoId, coopId)) {
-      byId.set(old.cooperadoId, old);
-    }
+    const vivo = linhaEmAbertoSoFichaSemPix(old, data, coopId);
+    if (vivo) byId.set(old.cooperadoId, vivo);
   }
   return [...byId.values()].sort((a, b) => a.cooperado.localeCompare(b.cooperado, "pt-BR"));
 }
@@ -250,9 +281,10 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
   if (!coopId) return [];
   const dataAberto = appDataParaConferirLeitura(data);
   if (cooperadoId) {
-    return anotarLinhasEmAbertoComBic(
-      dataAberto,
+    return fundirLinhasEmAbertoEstavel(
+      [],
       getRelatorioPagarCooperadoEmAberto(dataAberto, coopId, cooperadoId),
+      dataAberto,
       coopId
     );
   }
@@ -267,11 +299,7 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
   const motor = getRelatorioPagarCooperadoEmAberto(dataAberto, coopId);
   const anterior =
     relatorioAbertoLatch && relatorioAbertoLatch.coopId === coopId ? relatorioAbertoLatch.linhas : [];
-  const linhas = anotarLinhasEmAbertoComBic(
-    dataAberto,
-    fundirLinhasEmAbertoEstavel(anterior, motor, dataAberto, coopId),
-    coopId
-  );
+  const linhas = fundirLinhasEmAbertoEstavel(anterior, motor, dataAberto, coopId);
   relatorioAbertoLatch = { coopId, linhas };
   relatorioAbertoCache = { revision, coopId, linhas };
   return linhas;

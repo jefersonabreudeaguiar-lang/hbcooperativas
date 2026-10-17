@@ -54,8 +54,8 @@ function LancamentosEmAbertoPainelInner({ coopId, cooperadoId }: LancamentosEmAb
   return (
     <div className="space-y-4">
       <AlertBanner variant="info" title="Lançamentos em aberto">
-        Só entram lançamentos recentes ainda sem PIX. Valores já pagos saem daqui e vão para o livro caixa; um
-        novo lançamento no mesmo mês volta a somar automaticamente.
+        Só entram ficha ainda sem PIX. Valor já pago some daqui; um novo lançamento no mesmo mês volta a
+        somar sozinho.
       </AlertBanner>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
