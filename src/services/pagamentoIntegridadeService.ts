@@ -14,7 +14,12 @@ import {
   fichaPertenceCooperado,
   resolverCooperadoIdCanonico,
 } from "@/services/cooperadoCloudService";
-import { getMesesReferenciaPagamento, promoverPagamentosAguardandoConfirmadosPeloResponsavel } from "@/services/notaPedidoService";
+import {
+  fichaCobertaPorPagamentoCooperativa,
+  getMesesReferenciaPagamento,
+  pagamentoEscopoIdsResolvemNoAppData,
+  promoverPagamentosAguardandoConfirmadosPeloResponsavel,
+} from "@/services/notaPedidoService";
 import { reconciliarLivroCaixaContabilCooperativa } from "@/services/livroCaixaService";
 import {
   aplicarPreservacaoPagamentosConfirmadosNoOperacional,
@@ -244,42 +249,26 @@ export function alinharFichaComPagamentosCooperativa(data: AppData): AppData {
 
     const fichaIdsPagamento = new Set(p.fichaIds ?? []);
     const notaIdsPagamento = new Set(p.notaPedidoIds ?? []);
-    const escopoExplicito = fichaIdsPagamento.size > 0 || notaIdsPagamento.size > 0;
+    const escopoResolvido = pagamentoEscopoIdsResolvemNoAppData(
+      { ...data, fichaCorrida },
+      p
+    );
 
-    for (const fid of fichaIdsPagamento) {
-      fichaCorrida = fichaCorrida.map((f) => {
-        if (f.id !== fid || f.status === "pago") return f;
+    const dataAtual = { ...data, fichaCorrida };
+    fichaCorrida = fichaCorrida.map((f) => {
+      if (f.status === "pago") return f;
+      if (!fichaPertenceCooperadoSafe(data, f, canonico, coopId)) return f;
+      if (fichaCobertaPorPagamentoCooperativa(dataAtual, f, p)) {
         changed = true;
         return { ...f, status: "pago" as const, updatedAt: now };
-      });
-    }
-
-    if (notaIdsPagamento.size) {
-      fichaCorrida = fichaCorrida.map((f) => {
-        if (!notaIdsPagamento.has(f.notaPedidoId)) return f;
-        if (!fichaPertenceCooperadoSafe(data, f, canonico, coopId)) return f;
-        if (f.status === "pago") return f;
-        changed = true;
-        return { ...f, status: "pago" as const, updatedAt: now };
-      });
-    }
-
-    // Registros antigos sem fichaIds/notaPedidoIds — mantém comportamento legado por mês.
-    if (!escopoExplicito) {
-      for (const mes of meses) {
-        fichaCorrida = fichaCorrida.map((f) => {
-          if (!fichaPertenceCooperadoSafe(data, f, canonico, coopId) || f.mesReferencia !== mes) return f;
-          if (f.status === "pago") return f;
-          changed = true;
-          return { ...f, status: "pago" as const, updatedAt: now };
-        });
       }
-    }
+      return f;
+    });
 
     const notaIdsComPago = new Set<string>();
     for (const f of fichaCorrida) {
       if (f.status !== "pago" || !fichaPertenceCooperadoSafe(data, f, canonico, coopId)) continue;
-      if (escopoExplicito) {
+      if (escopoResolvido) {
         if (fichaIdsPagamento.has(f.id) || notaIdsPagamento.has(f.notaPedidoId)) {
           notaIdsComPago.add(f.notaPedidoId);
         }

@@ -16,6 +16,7 @@ import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { requestAppSyncLight } from "@/services/syncRequest";
+import { posProcessarIntegridadePagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
 import {
   ensureControleAnualLivroCaixa,
   reconciliarLivroCaixaContabilCooperativa,
@@ -143,17 +144,20 @@ export default function LivroCaixaPage() {
 
   const dataCaixa = useMemo(() => {
     if (!data || !coopId) return null;
-    return reconciliarLivroCaixaContabilCooperativa(data, coopId);
+    return reconciliarLivroCaixaContabilCooperativa(
+      posProcessarIntegridadePagamentosCooperativa(data, { reconciliarLivroCaixa: false }),
+      coopId
+    );
   }, [data, coopId]);
 
-  const livroReconcilePersistedRef = useRef(false);
   useEffect(() => {
-    livroReconcilePersistedRef.current = false;
-  }, [coopId]);
-  useEffect(() => {
-    if (!data || !coopId || livroReconcilePersistedRef.current) return;
+    if (!data || !coopId) return;
+    const aligned = posProcessarIntegridadePagamentosCooperativa(data);
+    if (aligned !== data) {
+      updateData(() => aligned);
+      return;
+    }
     const reconciled = reconciliarLivroCaixaContabilCooperativa(data, coopId);
-    livroReconcilePersistedRef.current = true;
     if (reconciled !== data) updateData(() => reconciled);
   }, [data, coopId]);
 
@@ -533,7 +537,7 @@ export default function LivroCaixaPage() {
         </div>
         <p className="text-xs text-gray-500 mt-3">
           Os três totais acima somam todo o livro caixa no período escolhido (automáticos e avulsos). Saldo = créditos
-          − débitos. A tabela por cooperado detalha taxa, mensalidade e PIX; a planilha abaixo mostra o saldo corrido.
+          − débitos. A tabela por cooperado mostra bruto, taxa, mensalidade, outros descontos e o PIX líquido.
         </p>
       </Card>
 

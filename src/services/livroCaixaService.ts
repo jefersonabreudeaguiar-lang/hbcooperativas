@@ -200,8 +200,11 @@ export function pagamentoIdFromOrigemId(origemId?: string): string | null {
     const detalhe = rest.match(/^(pg_\d+)_m\d+$/);
     return detalhe ? detalhe[1] : rest;
   }
-  const desc = origemId.match(/^pg_desc_(pg_\d+)_\d+_/);
-  if (desc) return desc[1];
+  if (origemId.startsWith("pg_desc_")) {
+    const rest = origemId.slice("pg_desc_".length);
+    const detalhe = rest.match(/^(.*)_\d+_[a-z0-9_]+$/i);
+    return detalhe?.[1] ?? null;
+  }
   return null;
 }
 
@@ -459,7 +462,7 @@ export function lancarRetencoesPagamentoNoCaixa(
         ...base,
         tipo: "credito",
         valor: pagamento.descontoCooperativa,
-        historico: `Taxa cooperativa (5%) · ${nome} · ${pagamento.mesReferencia}`,
+        historico: `Taxa cooperativa · ${nome} · ${pagamento.mesReferencia}`,
         origem: "taxa_cooperativa",
         origemId: `pg_taxa_${pagamento.id}`,
       },
@@ -540,8 +543,82 @@ export function montarHistoricoPagamentoCooperadoCaixa(
   return `Pagamento merenda · ref. ${refs} · ${nome}${detalhe}`;
 }
 
+function extrasPagamentoNaoEstornados(extras: FichaCorridaDesconto[] | undefined): FichaCorridaDesconto[] {
+  return (extras ?? []).filter((d) => d.valor > 0 && !/\(estornada\)/i.test(d.motivo ?? ""));
+}
+
+/** Completa bruto, taxa e descontos a partir da ficha quando o PIX antigo veio só com o líquido. */
+export function hidratarPagamentoParaLivroCaixa(
+  data: AppData,
+  pagamento: PagamentoCooperadoRegistro
+): PagamentoCooperadoRegistro {
+  const meses = mesesReferenciaPagamento(pagamento);
+  const idsResolvem = (pagamento.fichaIds ?? []).some((id) =>
+    (data.fichaCorrida ?? []).some((f) => f.id === id)
+  ) || (pagamento.notaPedidoIds ?? []).some((id) =>
+    (data.fichaCorrida ?? []).some((f) => f.notaPedidoId === id)
+  );
+  const pagoTs = Date.parse(pagamento.pagoEm ?? pagamento.createdAt ?? "");
+  const fichas = (data.fichaCorrida ?? []).filter((f) => {
+    if ((pagamento.fichaIds ?? []).includes(f.id)) return true;
+    if ((pagamento.notaPedidoIds ?? []).includes(f.notaPedidoId)) return true;
+    if (idsResolvem) return false;
+    if (f.cooperadoId !== pagamento.cooperadoId) return false;
+    if (pagamento.cooperativaId && f.cooperativaId && f.cooperativaId !== pagamento.cooperativaId) {
+      return false;
+    }
+    if (!meses.includes(f.mesReferencia)) return false;
+    if (!Number.isFinite(pagoTs)) return true;
+    const nota = (data.notasPedido ?? []).find((n) => n.id === f.notaPedidoId);
+    if (nota?.dataEntrega) {
+      const raw =
+        nota.dataEntrega.length === 10 ? `${nota.dataEntrega}T00:00:00.000Z` : nota.dataEntrega;
+      const dia = Date.parse(raw);
+      if (Number.isFinite(dia)) return dia <= pagoTs;
+    }
+    const fichaTs = Date.parse(f.dataLancamento ?? f.createdAt ?? "");
+    return !Number.isFinite(fichaTs) || fichaTs <= pagoTs;
+  });
+  const extrasPag = extrasPagamentoNaoEstornados(pagamento.descontosExtras);
+  const extrasFicha = extrasPagamentoNaoEstornados(fichas.flatMap((f) => f.descontosDetalhe ?? []));
+  const extras = extrasPag.length > 0 ? extrasPag : extrasFicha;
+  const extrasTaxa = extras.filter((d) => d.tipo === "cooperativa");
+  const extrasOutros = extras.filter((d) => d.tipo !== "cooperativa" && d.tipo !== "credito_avulso");
+  const somaTaxaExtras = round2(extrasTaxa.reduce((s, d) => s + d.valor, 0));
+  const somaOutros = round2(extrasOutros.reduce((s, d) => s + d.valor, 0));
+  const brutoFichas = round2(fichas.reduce((s, f) => s + (Number(f.valorBruto) || 0), 0));
+  const descFichas = round2(fichas.reduce((s, f) => s + (Number(f.descontos) || 0), 0));
+  const valorLiquido = round2(Math.max(0, Number(pagamento.valorLiquido) || 0));
+  let valorBruto = round2(Math.max(0, Number(pagamento.valorBruto) || 0));
+  let descontoCooperativa = round2(Math.max(0, Number(pagamento.descontoCooperativa) || 0));
+
+  if (valorBruto <= 0.005) {
+    valorBruto =
+      brutoFichas > 0.005
+        ? brutoFichas
+        : round2(valorLiquido + descontoCooperativa + somaTaxaExtras + somaOutros);
+  }
+  if (descontoCooperativa <= 0.005) {
+    if (somaTaxaExtras > 0.005) descontoCooperativa = somaTaxaExtras;
+    else if (descFichas > 0.005 && extrasOutros.length === 0) descontoCooperativa = descFichas;
+    else {
+      const resto = round2(valorBruto - valorLiquido - somaOutros);
+      if (resto > 0.005) descontoCooperativa = resto;
+    }
+  }
+
+  return {
+    ...pagamento,
+    valorBruto,
+    valorLiquido,
+    descontoCooperativa,
+    descontosExtras: extras,
+  };
+}
+
 export function lancarPagamentoCooperadoNoCaixa(data: AppData, pagamento: PagamentoCooperadoRegistro): AppData {
   if (pagamento.status !== "confirmado") return data;
+  pagamento = hidratarPagamentoParaLivroCaixa(data, pagamento);
   const dataLanc = dataLancamentoPagamento(pagamento);
   const existenteCtx = ctxFromPagamentoExistente(data, pagamento.id);
   let next = data;
@@ -682,6 +759,7 @@ export type AuditoriaLivroCaixaContabil = {
   pagamentosSemDebitoCaixa: string[];
   pagamentosSemTaxaCoopCaixa: string[];
   pagamentosSemMensalidadeFichaCaixa: string[];
+  pagamentosSemOutrosDescontosCaixa: string[];
   mensalidadesPagasSemCreditoCaixa: string[];
   totais: {
     debitosPagamentoEsperados: number;
@@ -690,6 +768,8 @@ export type AuditoriaLivroCaixaContabil = {
     creditosTaxaCaixa: number;
     creditosMensFichaEsperados: number;
     creditosMensFichaCaixa: number;
+    creditosOutrosEsperados: number;
+    creditosOutrosCaixa: number;
   };
 };
 
@@ -701,11 +781,14 @@ export function auditarLivroCaixaContabilCooperativa(data: AppData, cooperativaI
   const pagamentosSemDebitoCaixa: string[] = [];
   const pagamentosSemTaxaCoopCaixa: string[] = [];
   const pagamentosSemMensalidadeFichaCaixa: string[] = [];
+  const pagamentosSemOutrosDescontosCaixa: string[] = [];
   let debitosPagamentoEsperados = 0;
   let creditosTaxaEsperados = 0;
   let creditosMensFichaEsperados = 0;
+  let creditosOutrosEsperados = 0;
 
-  for (const p of pagamentos) {
+  for (const raw of pagamentos) {
+    const p = hidratarPagamentoParaLivroCaixa(data, raw);
     debitosPagamentoEsperados += p.valorLiquido;
     if (!livro.some((l) => l.origemId === `pg_caixa_${p.id}` && l.tipo === "debito")) {
       pagamentosSemDebitoCaixa.push(p.id);
@@ -726,6 +809,22 @@ export function auditarLivroCaixaContabilCooperativa(data: AppData, cooperativaI
           livro.some((l) => l.origemId === mensalidadeFichaOrigemId(p.id, i, mens.length) && l.tipo === "credito")
         );
       if (!temLinha) pagamentosSemMensalidadeFichaCaixa.push(p.id);
+    }
+    const outros = (p.descontosExtras ?? []).filter(
+      (d) =>
+        d.tipo !== "mensalidade" &&
+        d.tipo !== "credito_avulso" &&
+        d.tipo !== "cooperativa" &&
+        d.valor > 0 &&
+        !/\(estornada\)/i.test(d.motivo ?? "")
+    );
+    const totalOutros = round2(outros.reduce((s, d) => s + d.valor, 0));
+    if (totalOutros > 0) {
+      creditosOutrosEsperados += totalOutros;
+      const temOutros = outros.some((d, i) =>
+        livro.some((l) => l.origemId === `pg_desc_${p.id}_${i}_${d.tipo}` && l.tipo === "credito")
+      );
+      if (!temOutros) pagamentosSemOutrosDescontosCaixa.push(p.id);
     }
   }
 
@@ -748,12 +847,16 @@ export function auditarLivroCaixaContabilCooperativa(data: AppData, cooperativaI
   const creditosMensFichaCaixa = round2(
     livro.filter((l) => l.origem === "mensalidade_ficha" && l.tipo === "credito").reduce((s, l) => s + l.valor, 0)
   );
+  const creditosOutrosCaixa = round2(
+    livro.filter((l) => l.origem === "desconto_ficha" && l.tipo === "credito").reduce((s, l) => s + l.valor, 0)
+  );
 
   return {
     cooperativaId,
     pagamentosSemDebitoCaixa,
     pagamentosSemTaxaCoopCaixa,
     pagamentosSemMensalidadeFichaCaixa,
+    pagamentosSemOutrosDescontosCaixa,
     mensalidadesPagasSemCreditoCaixa,
     totais: {
       debitosPagamentoEsperados: round2(debitosPagamentoEsperados),
@@ -762,6 +865,8 @@ export function auditarLivroCaixaContabilCooperativa(data: AppData, cooperativaI
       creditosTaxaCaixa,
       creditosMensFichaEsperados: round2(creditosMensFichaEsperados),
       creditosMensFichaCaixa,
+      creditosOutrosEsperados: round2(creditosOutrosEsperados),
+      creditosOutrosCaixa,
     },
   };
 }

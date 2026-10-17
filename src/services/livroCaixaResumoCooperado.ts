@@ -1,6 +1,7 @@
 import type { AppData, LivroCaixaLancamento, PagamentoCooperadoRegistro } from "@/types";
 import { round2 } from "@/utils/calculations";
 import {
+  hidratarPagamentoParaLivroCaixa,
   pagamentoIdFromOrigemId,
   resolverDataIsoLancamentoLivroCaixa,
 } from "@/services/livroCaixaService";
@@ -39,8 +40,10 @@ export interface EntradaLivroCooperadoLinha {
 export interface ResumoCooperadoLivroCaixaLinha {
   cooperadoId: string;
   nome: string;
+  totalBruto: number;
   creditoTaxa: number;
   creditoMensalidade: number;
+  creditoOutros: number;
   debitoPagamento: number;
   pagamentos: PagamentoDetalheLivroCooperado[];
   entradas: EntradaLivroCooperadoLinha[];
@@ -103,8 +106,10 @@ export function calcularResumoPorCooperadoLivroCaixa(
       {
         cooperadoId,
         nome,
+        totalBruto: 0,
         creditoTaxa: 0,
         creditoMensalidade: 0,
+        creditoOutros: 0,
         debitoPagamento: 0,
         pagamentos: [],
         entradas: [],
@@ -113,11 +118,11 @@ export function calcularResumoPorCooperadoLivroCaixa(
     if (l.tipo === "credito" && l.origem === "taxa_cooperativa") {
       row.creditoTaxa = round2(row.creditoTaxa + l.valor);
     }
-    if (
-      l.tipo === "credito" &&
-      (l.origem === "mensalidade_ficha" || l.origem === "mensalidade" || l.origem === "desconto_ficha")
-    ) {
+    if (l.tipo === "credito" && (l.origem === "mensalidade_ficha" || l.origem === "mensalidade")) {
       row.creditoMensalidade = round2(row.creditoMensalidade + l.valor);
+    }
+    if (l.tipo === "credito" && l.origem === "desconto_ficha") {
+      row.creditoOutros = round2(row.creditoOutros + l.valor);
     }
     if (l.tipo === "debito" && l.origem === "pagamento_cooperado") {
       row.debitoPagamento = round2(row.debitoPagamento + l.valor);
@@ -171,16 +176,17 @@ export function listarPagamentosDetalheCooperadoNoPeriodo(
     if (p.cooperadoId !== cooperadoId || p.status !== "confirmado") continue;
     if (!pagamentoNoPeriodoLancamentos(p, lancamentos)) continue;
     const meses = getMesesReferenciaPagamento(p);
+    const hidratado = hidratarPagamentoParaLivroCaixa(data, p);
     linhas.push({
       pagamentoId: p.id,
       pagoEm: p.pagoEm ?? p.createdAt ?? "",
       mesReferencia: p.mesReferencia,
       mesesLabel: meses.join(", "),
-      valorBruto: round2(p.valorBruto),
-      valorLiquido: round2(p.valorLiquido),
-      creditoTaxa: round2(Math.max(0, p.descontoCooperativa ?? 0)),
-      creditoMensalidade: creditoMensalidadePagamento(p),
-      creditoOutros: creditoOutrosPagamento(p),
+      valorBruto: round2(hidratado.valorBruto),
+      valorLiquido: round2(hidratado.valorLiquido),
+      creditoTaxa: round2(Math.max(0, hidratado.descontoCooperativa ?? 0)),
+      creditoMensalidade: creditoMensalidadePagamento(hidratado),
+      creditoOutros: creditoOutrosPagamento(hidratado),
     });
   }
   return linhas.sort(
@@ -212,11 +218,19 @@ export function enriquecerResumoCooperadoComPagamentos(
   linhas: ResumoCooperadoLivroCaixaLinha[],
   lancamentos: LivroCaixaLancamento[]
 ): ResumoCooperadoLivroCaixaLinha[] {
-  return linhas.map((row) => ({
-    ...row,
-    pagamentos: listarPagamentosDetalheCooperadoNoPeriodo(data, row.cooperadoId, lancamentos),
-    entradas: listarEntradasLivroCooperadoNoPeriodo(data, row.cooperadoId, lancamentos),
-  }));
+  return linhas.map((row) => {
+    const pagamentos = listarPagamentosDetalheCooperadoNoPeriodo(data, row.cooperadoId, lancamentos);
+    const totalBruto = round2(
+      pagamentos.reduce((s, p) => s + p.valorBruto, 0) ||
+        row.debitoPagamento + row.creditoTaxa + row.creditoMensalidade + row.creditoOutros
+    );
+    return {
+      ...row,
+      totalBruto,
+      pagamentos,
+      entradas: listarEntradasLivroCooperadoNoPeriodo(data, row.cooperadoId, lancamentos),
+    };
+  });
 }
 
 /** Resumo por cooperado + pagamentos confirmados no período (mesmo sem linha atribuída no mapa). */
@@ -236,8 +250,10 @@ export function calcularResumoPorCooperadoLivroCaixaCompleto(
     byId.set(p.cooperadoId, {
       cooperadoId: p.cooperadoId,
       nome: coop?.nomeCompleto?.trim() || "Cooperado",
+      totalBruto: round2(p.valorBruto),
       creditoTaxa: round2(Math.max(0, p.descontoCooperativa ?? 0)),
       creditoMensalidade: creditoMensalidadePagamento(p),
+      creditoOutros: creditoOutrosPagamento(p),
       debitoPagamento: round2(p.valorLiquido),
       pagamentos: [],
       entradas: [],

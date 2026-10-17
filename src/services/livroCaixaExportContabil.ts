@@ -497,10 +497,13 @@ export function buildLivroCaixaPacoteContabil(
     pendRows.push(["Pagamento sem débito no livro", id, "", ""]);
   }
   for (const id of auditoria.pagamentosSemTaxaCoopCaixa) {
-    pendRows.push(["Pagamento sem taxa 5% no livro", id, "", ""]);
+    pendRows.push(["Pagamento sem taxa cooperativa no livro", id, "", ""]);
   }
   for (const id of auditoria.pagamentosSemMensalidadeFichaCaixa) {
     pendRows.push(["Pagamento sem mensalidade ficha no livro", id, "", ""]);
+  }
+  for (const id of auditoria.pagamentosSemOutrosDescontosCaixa) {
+    pendRows.push(["Pagamento sem outros descontos no livro", id, "", ""]);
   }
   for (const id of auditoria.mensalidadesPagasSemCreditoCaixa) {
     pendRows.push(["Mensalidade PIX paga sem crédito no livro", id, "", ""]);

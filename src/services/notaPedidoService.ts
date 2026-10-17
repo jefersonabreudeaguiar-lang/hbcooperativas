@@ -1864,16 +1864,16 @@ function mesComPagamentoCooperativaRegistrado(
 
 /** Nota já incluída em PIX/registro — não recriar ficha pendente após conferência posterior. */
 function notaReferenciaTemporalEscopoPagamento(nota: NotaPedido): number {
-  // Não usar updatedAt: sync/reconciliação depois do PIX inflava a data e reabria nota já paga.
-  const stamps = [nota.dataConferencia, nota.createdAt]
-    .map((s) => Date.parse(s ?? ""))
-    .filter((t) => Number.isFinite(t));
+  // dataEntrega primeiro: createdAt/conferência refeitos no sync inflavam a data e reabriam o pago.
   if (nota.dataEntrega) {
     const raw = nota.dataEntrega.length === 10 ? `${nota.dataEntrega}T00:00:00.000Z` : nota.dataEntrega;
     const dia = Date.parse(raw);
-    if (Number.isFinite(dia)) stamps.push(dia);
+    if (Number.isFinite(dia)) return dia;
   }
-  return stamps.length ? Math.max(...stamps) : Number.NaN;
+  const conferencia = Date.parse(nota.dataConferencia ?? "");
+  if (Number.isFinite(conferencia)) return conferencia;
+  const created = Date.parse(nota.createdAt ?? "");
+  return Number.isFinite(created) ? created : Number.NaN;
 }
 
 function notaQuitadaPorPagamentoCooperativaRegistrado(
@@ -2178,8 +2178,23 @@ export function mesesReferenciaComDebitoAberto(
   return [...meses].sort();
 }
 
+/** IDs do PIX ainda apontam para ficha/nota atuais (escopo explícito válido). */
+export function pagamentoEscopoIdsResolvemNoAppData(
+  data: AppData,
+  pagamento: PagamentoCooperadoRegistro
+): boolean {
+  for (const id of pagamento.fichaIds ?? []) {
+    if ((data.fichaCorrida ?? []).some((f) => f.id === id)) return true;
+  }
+  for (const id of pagamento.notaPedidoIds ?? []) {
+    if ((data.notasPedido ?? []).some((n) => n.id === id)) return true;
+    if ((data.fichaCorrida ?? []).some((f) => f.notaPedidoId === id)) return true;
+  }
+  return false;
+}
+
 /** Ficha já quitada pelo registro de pagamento da cooperativa (mesmo com status local ainda pendente). */
-function fichaCobertaPorPagamentoCooperativa(
+export function fichaCobertaPorPagamentoCooperativa(
   data: AppData,
   ficha: FichaCorrida,
   pagamento: PagamentoCooperadoRegistro
@@ -3610,7 +3625,12 @@ export function marcarFichaComoPaga(
   const now = new Date().toISOString();
   const fichaIdsPagamento = new Set(escopo?.fichaIds ?? []);
   const notaIdsPagamento = new Set(escopo?.notaPedidoIds ?? []);
-  const escopoExplicito = fichaIdsPagamento.size > 0 || notaIdsPagamento.size > 0;
+  const escopoExplicito =
+    (fichaIdsPagamento.size > 0 || notaIdsPagamento.size > 0) &&
+    pagamentoEscopoIdsResolvemNoAppData(data, {
+      fichaIds: [...fichaIdsPagamento],
+      notaPedidoIds: [...notaIdsPagamento],
+    } as PagamentoCooperadoRegistro);
 
   const pertenceCooperadoMes = (f: FichaCorrida): boolean =>
     fichaPertenceCooperado(data, f, cooperadoId, coopId) && f.mesReferencia === mesReferencia;
