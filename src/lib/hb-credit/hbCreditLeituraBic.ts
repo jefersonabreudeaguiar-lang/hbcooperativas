@@ -11,7 +11,6 @@ import {
   listarMesesEmAbertoPagamentoResponsavel,
   listarMesesReferenciaResumoFinanceiroParidade,
 } from "@/services/cooperadoEntregasService";
-import { listarFichasPendentesPagamento } from "@/services/notaPedidoService";
 import { round2 } from "@/utils/calculations";
 import {
   listCooperadoIdsMesmoTitular,
@@ -254,71 +253,4 @@ export function hbCreditCreditoBaseBrutoFichaAbertoReais(
   return round2(total);
 }
 
-/** Bruto das fichas status pendente — paridade com «A receber» quando o mês já tem PIX/quitado parcial. */
-function hbCreditCreditoBaseBrutoFichasPendentesReais(
-  data: AppData,
-  cooperadoId: string,
-  cooperativaId: string
-): number {
-  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
-  const meses = hbCreditMesesReferenciaUnificados(data, canonico, cooperativaId);
-  let total = 0;
-  for (const mes of meses) {
-    for (const f of listarFichasPendentesPagamento(data, canonico, mes, cooperativaId)) {
-      const bruto = Number(f.valorBruto);
-      total += Number.isFinite(bruto) && bruto > 0 ? bruto : Math.max(0, Number(f.valorLiquido) || 0);
-    }
-  }
-  return round2(total);
-}
-
-/** Mesma leitura M6/Início que o cooperado vê em «Total a receber» / PIX aguardando assinatura. */
-function hbCreditCreditoBaseParidadeQuantoVouReceberReais(
-  data: AppData,
-  cooperadoId: string,
-  cooperativaId: string | undefined
-): number {
-  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  if (!coopId) return 0;
-
-  const paridade = resolveLeituraFinanceiraCooperadoCore(data, cooperadoId, coopId);
-  if (paridade.valorLiquido > 0.005) return round2(paridade.valorLiquido);
-
-  const m6 = hbCreditValorAReceberAgregado(data, cooperadoId, cooperativaId);
-  if (m6.aguardandoAssinatura && m6.valorRecibo > 0) return round2(m6.valorRecibo);
-
-  const inicio = hbCreditInicioParaBase(data, cooperadoId, cooperativaId);
-  if (inicio.aguardandoAssinatura && inicio.valorRecibo > 0) return round2(inicio.valorRecibo);
-
-  if (m6.valor > 0) return round2(m6.valor);
-  if (inicio.exibir && inicio.valor > 0) return round2(inicio.valor);
-
-  return 0;
-}
-
-/**
- * Crédito-base HB (limite/teto) — valor bruto da ficha nos meses em aberto.
- * Após quitação/liquidação do «A receber», base = 0 até nova entrega gerar pendência.
- */
-export function hbCreditCreditoBaseReais(
-  data: AppData,
-  cooperadoId: string,
-  cooperativaId: string | undefined
-): number {
-  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  if (!coopId) return 0;
-  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
-  const mesesLastro = hbCreditMesesFinanceirosAbertos(data, canonico, coopId);
-  if (!mesesLastro.length) return 0;
-
-  const paridade = hbCreditCreditoBaseParidadeQuantoVouReceberReais(data, cooperadoId, cooperativaId);
-  if (paridade > 0) return paridade;
-
-  const bruto = hbCreditCreditoBaseBrutoFichaAbertoReais(data, cooperadoId, cooperativaId);
-  if (bruto > 0) return bruto;
-
-  const pendente = hbCreditCreditoBaseBrutoFichasPendentesReais(data, cooperadoId, coopId);
-  if (pendente > 0) return pendente;
-
-  return 0;
-}
+export { hbCreditCreditoBaseReais } from "./hbCreditCreditoBaseCalculo";
