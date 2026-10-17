@@ -18,6 +18,7 @@ import {
   resumoComplementaresPosPagamento,
   fichaValidaNoExtrato,
   listarFichasPendentesPagamento,
+  listarFichasPendentesNaoCobertasPorPagamentoConfirmado,
   listarMesesDebitoAbertoCooperado,
   fichasPendentesComplementaresPosPagamentoAguardando,
   type AjustesResumoPagamento,
@@ -553,10 +554,6 @@ function listarMesesPendentesPagamentoResponsavelOperacional(
   const pendentes: string[] = [];
   for (const mes of [...mesesSet].sort((a, b) => a.localeCompare(b))) {
     if (cooperadoMesQuitado(data, cooperadoId, mes)) continue;
-    if (cooperadoMesComFichaPagaSemPagamentoCooperativa(data, cooperadoId, mes, cooperativaId)) {
-      pendentes.push(mes);
-      continue;
-    }
     if (getPagamentoAguardandoCooperado(data, cooperadoId, mes)) {
       pendentes.push(mes);
       continue;
@@ -594,8 +591,8 @@ export function listarMesesPendentesPagamentoResponsavel(
 }
 
 /**
- * Mês ainda devendo PIX (ficha/resumo) — exclui quitados e período só aguardando assinatura do recibo.
- * Usado na aba Pagar do responsável e nos totais «em aberto» da gestão.
+ * Em aberto da gestão: só lançamento recente ainda sem PIX.
+ * Ficha/nota já paga, PIX confirmado ou débito no caixa saem daqui.
  */
 export function mesReferenciaPagamentoResponsavelEmAberto(
   data: AppData,
@@ -607,20 +604,32 @@ export function mesReferenciaPagamentoResponsavelEmAberto(
   if ((data.fechamentos ?? []).some((f) => f.mesReferencia === mesReferencia && f.bloqueado)) {
     return false;
   }
-  if (cooperadoMesQuitado(data, cooperadoId, mesReferencia, coopId)) return false;
-  if (cooperadoMesLiquidadoPorPagamentoNoLivroCaixa(data, cooperadoId, mesReferencia, coopId)) {
+
+  const confirmado = getPagamentoConfirmadoMes(data, cooperadoId, mesReferencia, coopId);
+  const avulsos = temValoresAvulsosPendentesMes(data, cooperadoId, mesReferencia, coopId);
+  const descobertas = confirmado
+    ? listarFichasPendentesNaoCobertasPorPagamentoConfirmado(data, cooperadoId, mesReferencia, coopId)
+    : listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId).filter((f) =>
+        fichaValidaNoExtrato(data, f)
+      );
+
+  if (confirmado && descobertas.length === 0 && !avulsos) return false;
+  if (
+    cooperadoMesTemPagamentoConfirmadoDebitadoNoCaixa(data, cooperadoId, mesReferencia, coopId) &&
+    descobertas.length === 0 &&
+    !avulsos
+  ) {
+    return false;
+  }
+  if (cooperadoMesQuitado(data, cooperadoId, mesReferencia, coopId) && descobertas.length === 0) {
     return false;
   }
 
-  const valorAberto = getTotalAPagarCooperado(data, cooperadoId, mesReferencia, coopId);
-  if (valorAberto > 0.005) return true;
-  if (cooperadoMesComFichaPagaSemPagamentoCooperativa(data, cooperadoId, mesReferencia, coopId)) {
-    return true;
-  }
-  if (temValoresAvulsosPendentesMes(data, cooperadoId, mesReferencia, coopId)) return true;
+  if (descobertas.length > 0) return true;
+  if (avulsos && !confirmado) return true;
 
   const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia, coopId);
-  if (aguardando && valorAberto <= 0.005) return false;
+  if (aguardando && descobertas.length === 0) return false;
 
   return false;
 }
@@ -678,7 +687,6 @@ export function cooperadoMesLiquidadoPorPagamentoNoLivroCaixa(
   );
   if (fichasPend.length > 0) return false;
   if (temValoresAvulsosPendentesMes(data, cooperadoId, mesReferencia, coopId)) return false;
-  if (cooperadoMesComFichaPagaSemPagamentoCooperativa(data, cooperadoId, mesReferencia, coopId)) return false;
   return true;
 }
 
@@ -832,11 +840,6 @@ export function cooperadoPendentePagamentoResponsavel(
 
   const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId);
   if (!aguardando) {
-    for (const mes of mesReferencia ? [mesReferencia] : meses) {
-      if (cooperadoMesComFichaPagaSemPagamentoCooperativa(data, cooperadoId, mes, coopId)) {
-        return true;
-      }
-    }
     return false;
   }
 

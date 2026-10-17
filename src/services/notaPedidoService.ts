@@ -1333,7 +1333,7 @@ export function dividirEntregaEntreCooperados(
 
 /** Parte da ficha: lançamento único da nota ou fatia por foto (multi-foto). */
 export function chaveParteFichaCorrida(f: FichaCorrida): string {
-  const m = f.descricao.match(/\(foto\s+(\d+)\s*\/\s*(\d+)\)/i);
+  const m = (f.descricao ?? "").match(/\(foto\s+(\d+)\s*\/\s*(\d+)\)/i);
   const divisao = (f.divisaoEntrega?.participantes.length ?? 0) > 1;
   const coop = f.cooperadoId;
   if (divisao) {

@@ -19,6 +19,11 @@ import {
   listarMesesEmAbertoPagamentoResponsavel,
   listarMesesPendentesPagamentoResponsavel,
 } from "../src/services/cooperadoEntregasService.ts";
+import {
+  pagamentoCooperadoTemDebitoNoLivroCaixa,
+  reconciliarLivroCaixaContabilCooperativa,
+} from "../src/services/livroCaixaService.ts";
+import { getRelatorioPagarCooperadoEmAberto } from "../src/services/relatorioService.ts";
 import type { PagamentoCooperadoRegistro } from "../src/types/index.ts";
 
 const COOP = "coop-1";
@@ -47,6 +52,7 @@ function emptyData(users: User[]): AppData {
     valoresAvulsos: [],
     fechamentosMensais: [],
     arquivosMensais: [],
+    livroCaixa: [],
   } as AppData;
 }
 
@@ -497,6 +503,167 @@ function evaluateDashboardStaffOpen(
   const staff = staffUser({ cooperativaId: undefined, cooperadoId: undefined });
   const data = emptyData([staff]);
   assert.equal(resolveGestaoCooperativaId(staff, data), COOP);
+}
+
+// CASO 18 — ficha/nota paga + PIX confirmado sai de em aberto mesmo sem linha no caixa
+{
+  const mes = "2026-07";
+  const data = emptyData([]);
+  data.cooperados = [
+    {
+      id: "coop-member-1",
+      nomeCompleto: "Pago Sem Caixa",
+      cooperativaId: COOP,
+      status: "ativo",
+      chavePix: "pix@test",
+    } as AppData["cooperados"][0],
+  ];
+  data.fichaCorrida = [
+    {
+      id: "f-pago",
+      cooperadoId: "coop-member-1",
+      cooperativaId: COOP,
+      mesReferencia: mes,
+      notaPedidoId: "n-pago",
+      status: "pago",
+      valorBruto: 300,
+      valorLiquido: 270,
+      createdAt: "2026-07-01T00:00:00.000Z",
+      updatedAt: "2026-07-10T00:00:00.000Z",
+    },
+  ];
+  data.notasPedido = [
+    {
+      id: "n-pago",
+      cooperadoId: "coop-member-1",
+      cooperativaId: COOP,
+      mesReferencia: mes,
+      status: "pago",
+      valorLiquido: 270,
+      itens: [],
+      createdAt: "2026-07-01T00:00:00.000Z",
+      dataEntrega: "2026-07-01",
+    } as AppData["notasPedido"][0],
+  ];
+  data.pagamentosCooperado = [
+    {
+      id: "pg-pago-1",
+      cooperadoId: "coop-member-1",
+      cooperativaId: COOP,
+      mesReferencia: mes,
+      status: "confirmado",
+      valorLiquido: 270,
+      valorBruto: 300,
+      pagoEm: "2026-07-12T00:00:00.000Z",
+      createdAt: "2026-07-12T00:00:00.000Z",
+      fichaIds: ["f-pago"],
+      notaPedidoIds: ["n-pago"],
+    },
+  ];
+  const abertos = listarMesesEmAbertoPagamentoResponsavel(data, "coop-member-1", COOP);
+  assert.equal(abertos.includes(mes), false, "mês com PIX confirmado não fica em aberto");
+  const relatorioPago = getRelatorioPagarCooperadoEmAberto(data, COOP, "coop-member-1");
+  assert.equal(relatorioPago.length, 0, "conferir notas não lista PIX já confirmado");
+  const reconciliado = reconciliarLivroCaixaContabilCooperativa(data, COOP);
+  assert.equal(
+    pagamentoCooperadoTemDebitoNoLivroCaixa(reconciliado, "pg-pago-1"),
+    true,
+    "PIX confirmado deve ir para o livro caixa"
+  );
+}
+
+// CASO 19 — ficha já paga sem registro extra não reabre em aberto
+{
+  const mes = "2026-06";
+  const data = emptyData([]);
+  data.cooperados = [
+    {
+      id: "coop-member-1",
+      nomeCompleto: "Ficha Paga",
+      cooperativaId: COOP,
+      status: "ativo",
+      chavePix: "pix@test",
+    } as AppData["cooperados"][0],
+  ];
+  data.fichaCorrida = [
+    {
+      id: "f-so-pago",
+      cooperadoId: "coop-member-1",
+      cooperativaId: COOP,
+      mesReferencia: mes,
+      notaPedidoId: "n-so-pago",
+      status: "pago",
+      valorBruto: 80,
+      valorLiquido: 70,
+      createdAt: "2026-06-01T00:00:00.000Z",
+      updatedAt: "2026-06-08T00:00:00.000Z",
+    },
+  ];
+  data.notasPedido = [
+    {
+      id: "n-so-pago",
+      cooperadoId: "coop-member-1",
+      cooperativaId: COOP,
+      mesReferencia: mes,
+      status: "pago",
+      valorLiquido: 70,
+      itens: [],
+      createdAt: "2026-06-01T00:00:00.000Z",
+      dataEntrega: "2026-06-01",
+    } as AppData["notasPedido"][0],
+  ];
+  const abertos = listarMesesEmAbertoPagamentoResponsavel(data, "coop-member-1", COOP);
+  assert.equal(abertos.includes(mes), false, "ficha paga não volta para em aberto");
+  assert.equal(getRelatorioPagarCooperadoEmAberto(data, COOP, "coop-member-1").length, 0);
+}
+
+// CASO 20 — lançamento recente pendente (ainda sem PIX) permanece em aberto
+{
+  const mes = "2026-10";
+  const data = emptyData([]);
+  data.cooperados = [
+    {
+      id: "coop-member-1",
+      nomeCompleto: "Novo Lancamento",
+      cooperativaId: COOP,
+      status: "ativo",
+      chavePix: "pix@test",
+    } as AppData["cooperados"][0],
+  ];
+  data.fichaCorrida = [
+    {
+      id: "f-novo",
+      cooperadoId: "coop-member-1",
+      cooperativaId: COOP,
+      mesReferencia: mes,
+      notaPedidoId: "n-novo",
+      status: "pendente",
+      descricao: "Entrega recente",
+      valorBruto: 50,
+      valorLiquido: 45,
+      descontos: 5,
+      createdAt: "2026-10-16T00:00:00.000Z",
+      updatedAt: "2026-10-16T00:00:00.000Z",
+    },
+  ];
+  data.notasPedido = [
+    {
+      id: "n-novo",
+      cooperadoId: "coop-member-1",
+      cooperativaId: COOP,
+      mesReferencia: mes,
+      status: "conferida",
+      valorLiquido: 45,
+      itens: [],
+      createdAt: "2026-10-16T00:00:00.000Z",
+      dataEntrega: "2026-10-16",
+    } as AppData["notasPedido"][0],
+  ];
+  const abertos = listarMesesEmAbertoPagamentoResponsavel(data, "coop-member-1", COOP);
+  assert.equal(abertos.includes(mes), true, "lançamento recente sem PIX fica em aberto");
+  const relatorioNovo = getRelatorioPagarCooperadoEmAberto(data, COOP, "coop-member-1");
+  assert.equal(relatorioNovo.length, 1);
+  assert.ok(relatorioNovo[0].total > 0);
 }
 
 console.log("test-responsavel-panel-access-etapa622: OK");
