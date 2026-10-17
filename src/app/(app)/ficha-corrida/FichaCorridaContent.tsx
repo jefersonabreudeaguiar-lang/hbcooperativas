@@ -32,6 +32,9 @@ import {
 } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId, resolveGestaoCooperativaId } from "@/utils/cooperativa";
+import { AbaLastGoodSafeRoot } from "@/components/responsavel/AbaLastGoodSafeRoot";
+import { saveAbaLastGoodFromData } from "@/lib/responsavel/abaLastGoodCheckpoint";
+import { getInstituicoesCatalogo } from "@/services/catalogoContratosService";
 import {
   resumoFromPagamento,
   registrarPagamentoCooperado,
@@ -77,6 +80,7 @@ import {
   clearOperacionalPushFingerprint,
   confirmarPagamentoCooperadoNaNuvem,
   registrarPagamentoCooperadoNaNuvem,
+  syncContratosFromCloud,
   syncOperacionalFromCloud,
 } from "@/services/cooperativaSyncCloudService";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
@@ -228,7 +232,11 @@ function TabelaResumoItens({
 
 /** Gate financeiro L1 fica no AppLayout (shell); evita provider duplicado no dual-mount de abas. */
 export default function FichaCorridaPage() {
-  return <FichaCorridaPageInner />;
+  return (
+    <AbaLastGoodSafeRoot aba="pagar">
+      <FichaCorridaPageInner />
+    </AbaLastGoodSafeRoot>
+  );
 }
 
 function FichaCorridaPageInner() {
@@ -446,6 +454,21 @@ function FichaCorridaPageInner() {
       cancel = true;
     };
   }, [data, coopId, user?.id, tabActive]);
+
+  useEffect(() => {
+    if (isCooperado || !user || !coopId || !data) return;
+    if (getInstituicoesCatalogo(data, coopId).length > 0) return;
+    let cancel = false;
+    void resolveCooperativaCnpj(data, coopId, user).then((cnpj) => {
+      if (cancel || !cnpj) return;
+      void syncContratosFromCloud(cnpj);
+    });
+    return () => {
+      cancel = true;
+    };
+    // Uma vez por cooperativa: pull pontual se o catálogo local está vazio.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCooperado, user?.id, coopId]);
 
   /** Uma leitura BIC/paridade por revisão — cooperado mobile. */
   const paridadeCooperadoMobile = useMemo(() => {
@@ -1676,6 +1699,7 @@ function FichaCorridaPageInner() {
       setConfirmPagamento(false);
       return;
     }
+    saveAbaLastGoodFromData(nextData, coopId, "pagar");
     void (async () => {
       const cnpj = await resolveCooperativaCnpj(nextData, coopId, user);
       if (!cnpj) {

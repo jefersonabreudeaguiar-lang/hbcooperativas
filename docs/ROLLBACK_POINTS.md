@@ -1,5 +1,19 @@
 # Pontos de retorno (produção)
 
+## `rollback/pre-contrato-pagar-v437`
+
+- **Commit:** `200e4134` (tag aponta para este commit)
+- **App build:** 437
+- **Descrição:** Última versão estável antes da persistência anti-regressão das abas Contratos e Pagar cooperados (build 438+). Pagos já saem do em aberto.
+
+### Voltar o código a este ponto (local)
+
+```powershell
+cd C:\Image-Cipher\coopeagriplla-gestao
+git fetch origin
+git checkout rollback/pre-contrato-pagar-v437
+```
+
 ## `rollback/pre-hb-sync-storm-429`
 
 - **Commit:** `a071acff` (tag aponta para este commit)

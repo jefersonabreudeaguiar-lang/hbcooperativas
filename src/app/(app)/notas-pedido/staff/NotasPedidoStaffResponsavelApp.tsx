@@ -2347,8 +2347,22 @@ export default function NotasPedidoStaffMain() {
   }, [searchParams, isCooperado, data]);
 
   useEffect(() => {
-    if (!isCooperado || !user || !coopId || !data) return;
-    void sincronizarContratosEmBackground();
+    if (!user || !coopId || !data) return;
+    if (isCooperado) {
+      void sincronizarContratosEmBackground();
+      return;
+    }
+    if (getInstituicoesCatalogo(getData(), coopId).length > 0) return;
+    void (async () => {
+      const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
+      if (cnpj) {
+        try {
+          await syncContratosFromCloud(cnpj);
+        } catch {
+          /* offline — mantém contratos locais */
+        }
+      }
+    })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCooperado, user?.id, coopId]);
 

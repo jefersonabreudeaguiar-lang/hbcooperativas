@@ -26,6 +26,12 @@ import { resolveSyncTierPlan84 } from "@/lib/performance/syncPlan84";
 import { syncNotasPedidoFromCloudStaffCoalesced } from "@/lib/performance/staffNotasPullCoordinator";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import {
+  contratosAuthoritativePushRecente,
+  markContratosAuthoritativePush,
+  reaplicarAbaLastGoodSeRegrediu,
+  saveAbaLastGoodFromData,
+} from "@/lib/responsavel/abaLastGoodCheckpoint";
+import {
   OPERATIONAL_RESET_VERSION,
   applyCloudOperationalResetIfNeeded,
   needsOperationalResetCloudPush,
@@ -756,14 +762,22 @@ function mergeCatalogProducts(local: ProdutoInstituicao[], cloud: ProdutoInstitu
   return [...inactive, ...activeWinners];
 }
 
-/** Cooperado só exibe o catálogo publicado pelo responsável na nuvem. */
-function alinharCatalogoComNuvem(
+function catalogoUpdatedAtMs(iso?: string): number {
+  const n = Date.parse(iso ?? "");
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Catálogo da nuvem não apaga instituição/preço local mais novo ou recém-publicado. */
+export function alinharCatalogoComNuvem(
   instituicoes: Instituicao[],
   produtos: ProdutoInstituicao[],
   cloudInst: Instituicao[],
   cloudProd: ProdutoInstituicao[],
   coopId: string
 ): { instituicoes: Instituicao[]; produtos: ProdutoInstituicao[] } {
+  if (contratosAuthoritativePushRecente(coopId)) {
+    return { instituicoes, produtos };
+  }
   const cloudItensAtivos = cloudProd.filter((p) => p.ativo && p.precoUnitario > 0).length;
   if (cloudInst.length === 0 && cloudItensAtivos === 0) {
     return { instituicoes, produtos };
@@ -775,14 +789,28 @@ function alinharCatalogoComNuvem(
   const cloudProdKeys = new Set(
     cloudActive.map((p) => `${p.instituicaoId}::${normalizeInstNome(p.nome)}`)
   );
-
   const cloudInstComItens = new Set(cloudActive.map((p) => p.instituicaoId));
+  const newestCloudInst = Math.max(0, ...cloudInst.map((i) => catalogoUpdatedAtMs(i.updatedAt)));
+  const newestCloudProd = Math.max(0, ...cloudActive.map((p) => catalogoUpdatedAtMs(p.updatedAt)));
 
   const instituicoesAlinhadas = instituicoes.filter((i) => {
     if (i.cooperativaId !== coopId) return true;
-    if (!cloudInstIds.has(i.id)) return false;
-    if (cloudItensAtivos > 0 && !cloudInstComItens.has(i.id)) return false;
-    return true;
+    if (cloudInstIds.has(i.id)) {
+      if (cloudItensAtivos > 0 && !cloudInstComItens.has(i.id)) {
+        return produtos.some(
+          (p) => p.instituicaoId === i.id && p.ativo && p.precoUnitario > 0
+        );
+      }
+      return true;
+    }
+    const temItemLocal = produtos.some(
+      (p) => p.instituicaoId === i.id && p.ativo && p.precoUnitario > 0
+    );
+    if (!temItemLocal) return false;
+    return (
+      catalogoUpdatedAtMs(i.updatedAt) >= newestCloudInst ||
+      catalogoUpdatedAtMs(i.createdAt) >= newestCloudInst
+    );
   });
 
   const now = new Date().toISOString();
@@ -792,6 +820,12 @@ function alinharCatalogoComNuvem(
     if (cloudProdIds.has(p.id)) return p;
     const key = `${p.instituicaoId}::${normalizeInstNome(p.nome)}`;
     if (cloudProdKeys.has(key)) return p;
+    if (
+      catalogoUpdatedAtMs(p.updatedAt) >= newestCloudProd ||
+      catalogoUpdatedAtMs(p.createdAt) >= newestCloudProd
+    ) {
+      return p;
+    }
     return { ...p, ativo: false, updatedAt: now };
   });
 
@@ -1901,6 +1935,10 @@ export async function pushContratosToCloud(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cnpj: digits, section: "contratos", payload }),
     });
+    if (options?.authoritative) {
+      markContratosAuthoritativePush(cid);
+      saveAbaLastGoodFromData(merged, cid, "contratos");
+    }
   } catch {
     /* offline */
   }
@@ -2188,7 +2226,12 @@ export async function syncContratosFromCloud(cnpj: string): Promise<boolean> {
     const current = getData();
     const coopId = resolveCoopId(current, digits);
     if (!coopId) return false;
-    const merged = mergeContratosIntoData(current, bundle.contratos, coopId);
+    saveAbaLastGoodFromData(current, coopId, "contratos");
+    const merged = reaplicarAbaLastGoodSeRegrediu(
+      mergeContratosIntoData(current, bundle.contratos, coopId),
+      coopId,
+      "contratos"
+    );
     saveDataSafe(merged);
     return true;
   })().finally(() => {
@@ -2286,6 +2329,7 @@ export async function syncOperacionalFromCloud(
   );
 
   const pagamentosBaseline = current.pagamentosCooperado.filter((p) => p.cooperativaId === coopId);
+  saveAbaLastGoodFromData(current, coopId, "pagar");
 
   if (pullSeguro.permitirAplicarResetLegado) {
     const permitirPreemptiveClear = operacionalRestorePreemptiveClearPermitido(
@@ -2355,7 +2399,8 @@ export async function syncOperacionalFromCloud(
     };
   }
 
-  saveDataSafe(merged);
+  const protegido = reaplicarAbaLastGoodSeRegrediu(merged, coopId, "pagar");
+  saveDataSafe(protegido);
   const after = getData();
   if (detectCooperadoPagamentosNaoMaterializados(coopId, bundle.operacional, after)) {
     console.warn("[COOP_FIN_SYNC] pagamentos da nuvem não materializados no AppData após merge", {

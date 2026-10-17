@@ -13,7 +13,7 @@ import {
   isCooperadoPwaMessengerMode,
 } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { usePermissions } from "@/hooks/usePermissions";
-import { getUserCooperativaId } from "@/utils/cooperativa";
+import { getUserCooperativaId, resolveGestaoCooperativaId } from "@/utils/cooperativa";
 import { PageHeader } from "@/components/ui/Table";
 import { Input } from "@/components/ui/Form";
 import { Button } from "@/components/ui/Button";
@@ -36,16 +36,21 @@ const PRECOS_APP_DATA_DOMAINS: AppDataNotifyDomain[] = ["operacional", "shell"];
 export default function PrecosPage() {
   const ready = useAppDataReady();
   const tabActive = useCooperadoTabPanelActive("/precos");
-  const { user } = usePermissions();
+  const { user, isCooperado, coopId: coopIdPerm } = usePermissions();
   const messenger = isCooperadoPwaMessengerMode() && user?.role === "cooperado";
   const appDataUiOn = cooperadoPwaUiSubscribesAppData() && tabActive;
   const coopIdSel = useAppDataSelectorForDomainsWhenActive(
     appDataUiOn,
     PRECOS_APP_DATA_DOMAINS,
-    (d) => (user ? getUserCooperativaId(user, d) ?? undefined : undefined),
-    [user?.id]
+    (d) =>
+      user
+        ? isCooperado
+          ? getUserCooperativaId(user, d) ?? undefined
+          : resolveGestaoCooperativaId(user, d)
+        : undefined,
+    [user?.id, user?.cooperativaId, user?.cooperativaCnpj, isCooperado]
   );
-  const coopId = coopIdSel ?? undefined;
+  const coopId = coopIdSel ?? coopIdPerm ?? undefined;
   const [instSelecionada, setInstSelecionada] = useState<string>("");
   const [busca, setBusca] = useState("");
   const [syncing, setSyncing] = useState(false);

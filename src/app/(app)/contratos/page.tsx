@@ -4,7 +4,9 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { Plus, ChevronDown, ChevronUp, Package, Building2, Trash2, RefreshCw, CalendarDays } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
-import { getUserCooperativaId } from "@/utils/cooperativa";
+import { resolveGestaoCooperativaId } from "@/utils/cooperativa";
+import { AbaLastGoodSafeRoot } from "@/components/responsavel/AbaLastGoodSafeRoot";
+import { saveAbaLastGoodFromData } from "@/lib/responsavel/abaLastGoodCheckpoint";
 import { PageHeader, Modal } from "@/components/ui/Table";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -29,9 +31,18 @@ import { ContratosCronogramasPanel } from "@/components/contratos/ContratosCrono
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 export default function ContratosPage() {
+  return (
+    <AbaLastGoodSafeRoot aba="contratos">
+      <ContratosPageInner />
+    </AbaLastGoodSafeRoot>
+  );
+}
+
+function ContratosPageInner() {
   const data = useAppData();
-  const { check, user } = usePermissions();
-  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+  const { check, user, coopId: coopIdPerm } = usePermissions();
+  const coopId =
+    (user && data ? resolveGestaoCooperativaId(user, data) : undefined) ?? coopIdPerm ?? undefined;
 
   const [novaInstModal, setNovaInstModal] = useState(false);
   const [nomeInst, setNomeInst] = useState("");
@@ -112,6 +123,7 @@ export default function ContratosPage() {
   const pushContratos = async (dataOverride?: AppData) => {
     if (!user || !coopId) return;
     const d = dataOverride ?? getData();
+    saveAbaLastGoodFromData(d, coopId, "contratos");
     const cnpj = await resolveCooperativaCnpj(d, coopId, user);
     if (cnpj) await pushContratosToCloud(cnpj, d, coopId, { authoritative: true });
   };

@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { buildPwaRescueAutoLoginHref } from "@/lib/pwa/cooperadoPwaRescueUrl";
-import { requestAppSyncImmediate } from "@/services/syncRequest";
+import { tryRestoreAbaLastGoodInStore } from "@/lib/responsavel/abaLastGoodStore";
 import { isStaffSessionActiveInStorage } from "@/lib/staff/staffSessionRoleHint";
 
 export default function FichaCorridaSegmentError({
@@ -25,23 +25,18 @@ export default function FichaCorridaSegmentError({
       <h1 className="text-lg font-bold text-gray-900">Não foi possível abrir Pagar cooperados</h1>
       <p className="text-sm text-gray-600 max-w-sm">
         {staff
-          ? "Atualize os dados da cooperativa e tente de novo. Se persistir, use reparar atalho."
+          ? "Recarregue só esta aba. Se houver uma versão estável salva neste aparelho, ela volta automaticamente."
           : "Pode ser cache misturado após atualização. Use reparar atalho ou envie o relatório ao suporte."}
       </p>
       <div className="flex flex-col gap-2 w-full max-w-xs">
-        {staff && (
-          <Button
-            type="button"
-            onClick={() => {
-              requestAppSyncImmediate();
-              reset();
-            }}
-          >
-            Atualizar dados da cooperativa
-          </Button>
-        )}
-        <Button type="button" variant={staff ? "secondary" : "primary"} onClick={() => reset()}>
-          Tentar novamente
+        <Button
+          type="button"
+          onClick={() => {
+            if (staff) tryRestoreAbaLastGoodInStore("pagar");
+            reset();
+          }}
+        >
+          Recarregar aba
         </Button>
         <Link href={buildPwaRescueAutoLoginHref()} className="w-full">
           <Button type="button" variant="secondary" className="w-full">
