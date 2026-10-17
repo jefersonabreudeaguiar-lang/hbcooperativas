@@ -60,6 +60,7 @@ const ContaCoopFilaCloudPanel = dynamic(
   { ssr: false, loading: () => null }
 );
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
+import { useReconciliarLivroCaixaGestao } from "@/hooks/useReconciliarLivroCaixaGestao";
 import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
@@ -627,6 +628,7 @@ function AdminDashboard() {
     }
     return { coopNome, mes, instalacao, assinatura, cnpj, coopId: coopId ?? "" };
   }, [navUser?.id, navUser?.cooperativaId, navUser?.role, adminDataRevision]);
+  useReconciliarLivroCaixaGestao(meta?.coopId, Boolean(navUser && meta?.coopId));
 
   const dataRevision = adminDataRevision;
   const deferredRevision = useDeferredValue(dataRevision ?? -1);
