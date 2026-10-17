@@ -7,6 +7,7 @@ import {
   getConsolidadoFinanceiroCooperado,
   cooperadoPendentePagamentoResponsavel,
 } from "@/services/cooperadoEntregasService";
+import { getTotalValoresAPagarGestaoCooperativa } from "@/lib/responsavel/responsavelGestaoLeitura";
 import {
   agregarItensNotasCooperado,
   getPagamentoAguardandoCooperado,
@@ -391,15 +392,7 @@ export function flattenLinhasPagarCooperadoEmAberto(
 
 /** Total geral a pagar a cooperados (todos os meses em aberto). Fonte única = painel admin. */
 export function getTotalValoresAPagarEmAberto(data: AppData, cooperativaId?: string): number {
-  const cooperados = data.cooperados.filter(
-    (c) => c.status === "ativo" && (!cooperativaId || c.cooperativaId === cooperativaId)
-  );
-  return round2(
-    cooperados.reduce(
-      (s, c) => s + getTotalAPagarCooperado(data, c.id, undefined, cooperativaId ?? c.cooperativaId),
-      0
-    )
-  );
+  return getTotalValoresAPagarGestaoCooperativa(data, cooperativaId);
 }
 
 /** Valores a pagar consolidados — todos os meses pendentes por cooperado. */
@@ -431,7 +424,7 @@ export function getRelatorioPagarCooperadoEmAberto(
           total: resumo.valorLiquido,
         });
       }
-      const total = round2(getTotalAPagarCooperado(data, c.id, undefined, cooperativaId));
+      const total = round2(porMes.reduce((s, m) => s + m.total, 0));
       return {
         cooperadoId: c.id,
         cooperado: c.nomeCompleto,

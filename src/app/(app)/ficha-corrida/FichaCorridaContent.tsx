@@ -60,8 +60,12 @@ import {
 } from "@/services/bicLeituraCentralFicha";
 import { listarPagamentosAguardandoAssinatura, listarPagamentosReciboAguardandoVerificacao } from "@/services/filaDoDiaService";
 import { listCooperadosPagamentoPendenteResponsavel } from "@/services/responsavelPainelIndex";
-import { pickResumoStaffFichaPagar } from "@/lib/responsavel/responsavelFichaPagarResumo";
-import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
+import {
+  cooperativaCnpjDigitsFromAppData,
+  pickResumoStaffFichaPagar,
+  responsavelBadgeFilaPagarCount,
+  responsavelFichaAppDataDomains,
+} from "@/lib/responsavel/responsavelGestaoLeitura";
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
@@ -221,8 +225,6 @@ function TabelaResumoItens({
   );
 }
 
-const FICHA_APP_DATA_DOMAINS: AppDataNotifyDomain[] = ["financeiro", "shell"];
-
 /** Gate financeiro L1 fica no AppLayout (shell); evita provider duplicado no dual-mount de abas. */
 export default function FichaCorridaPage() {
   return <FichaCorridaPageInner />;
@@ -232,6 +234,10 @@ function FichaCorridaPageInner() {
   const ready = useEnsureAppDataWarm();
   const tabActive = useCooperadoTabPanelActive("/ficha-corrida");
   const { user, isCooperado, cooperadoId, check } = usePermissions();
+  const fichaAppDataDomains = useMemo(
+    (): AppDataNotifyDomain[] => responsavelFichaAppDataDomains(isCooperado),
+    [isCooperado]
+  );
   /** Celular/PWA: Financeiro com resumo de entregas e mês pago como antes da separação desktop. */
   const messenger = isCooperadoPwaMessengerMode();
   const pilotFinanceiroLeve = cooperadoMobilePilotSnapshotFirstInicio(user);
@@ -255,9 +261,9 @@ function FichaCorridaPageInner() {
     tabActive && (isCooperado ? cooperadoPwaUiSubscribesAppData() : true);
   const dataLive = useAppDataSelectorForDomainsWhenActive(
     appDataPanelActive,
-    FICHA_APP_DATA_DOMAINS,
+    fichaAppDataDomains,
     (d) => d,
-    []
+    [fichaAppDataDomains]
   );
   const [appDataWarmTick, setAppDataWarmTick] = useState(0);
   const dataDormant = useCooperadoDormantAppData(
@@ -605,20 +611,27 @@ function FichaCorridaPageInner() {
     return listarPagamentosReciboAguardandoVerificacao(data, coopId);
   }, [data, coopId]);
 
-  const totalBadgeFilaPagar = useMemo(() => {
-    const aguard = pagamentosAguardandoAssinatura.length;
-    const verif = pagamentosAguardandoVerificacao.length;
-    const restoreAtivo = Boolean(coopCnpjResumo && isOperacionalCloudAuthoritative(coopCnpjResumo));
-    if (restoreAtivo) {
-      return aguard + verif;
-    }
-    return cooperadosParaPagar.length + aguard + verif;
-  }, [
-    coopCnpjResumo,
-    cooperadosParaPagar,
-    pagamentosAguardandoAssinatura,
-    pagamentosAguardandoVerificacao,
-  ]);
+  const coopCnpjDigits = useMemo(
+    () => cooperativaCnpjDigitsFromAppData(data, coopId),
+    [data, coopId]
+  );
+
+  const totalBadgeFilaPagar = useMemo(
+    () =>
+      responsavelBadgeFilaPagarCount({
+        cooperadosParaPagarCount: cooperadosParaPagar.length,
+        aguardandoAssinaturaCount: pagamentosAguardandoAssinatura.length,
+        aguardandoVerificacaoCount: pagamentosAguardandoVerificacao.length,
+        cnpjDigits: coopCnpjDigits || coopCnpjResumo,
+      }),
+    [
+      coopCnpjDigits,
+      coopCnpjResumo,
+      cooperadosParaPagar.length,
+      pagamentosAguardandoAssinatura.length,
+      pagamentosAguardandoVerificacao.length,
+    ]
+  );
 
   const cooperadosNoSelect = !isCooperado && aba === "pagar" ? cooperadosParaPagar : cooperadosComFicha;
 

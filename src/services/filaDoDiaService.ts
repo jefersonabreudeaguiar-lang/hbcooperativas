@@ -7,6 +7,10 @@ import {
   countCooperadosPagamentoPendenteResponsavel,
   countNotasFilaConferenciaResponsavel,
 } from "@/services/responsavelPainelIndex";
+import {
+  cooperativaCnpjDigitsFromAppData,
+  responsavelInboxCooperadosPagarCount,
+} from "@/lib/responsavel/responsavelGestaoLeitura";
 
 export type FilaDoDiaItem = {
   id: string;
@@ -41,7 +45,11 @@ export function getFilaDoDia(data: AppData, coopId: string | undefined, mes = ge
       !p.reciboConferidoPorResponsavelEm
   ).length;
 
-  const cooperadosPagar = countCooperadosPagamentoPendenteResponsavel(data, coopId);
+  const cnpjDigits = cooperativaCnpjDigitsFromAppData(data, coopId);
+  const cooperadosPagar = responsavelInboxCooperadosPagarCount(
+    countCooperadosPagamentoPendenteResponsavel(data, coopId),
+    cnpjDigits
+  );
 
   const itensCatalogo = contarItensCatalogo(data, coopId);
   const publicarPrecos = itensCatalogo === 0 ? 1 : 0;

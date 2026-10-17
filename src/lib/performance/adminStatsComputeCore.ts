@@ -3,7 +3,6 @@
  */
 import type { AppData } from "@/types";
 import { leituraAdminSomaValorLiquidoCooperados } from "@/lib/bic/bicLeituraPorta";
-import { bicCentralValorAReceberAgregado } from "@/services/bicLeituraCentralCooperado";
 import { projetarAppDataFinanceiroParaCreditoBase } from "@/modules/hb-credit/engine/projetarAppDataFinanceiroParaCreditoBase";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import {
@@ -15,7 +14,7 @@ import { getCurrentMesReferencia } from "@/utils/format";
 import { isNotaNaFilaConferenciaResponsavel } from "@/utils/notaStatus";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { countNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
-import { getTotalValoresAPagarEmAberto } from "@/services/relatorioService";
+import { getTotalValoresAPagarGestaoCooperativa } from "@/lib/responsavel/responsavelGestaoLeitura";
 
 export interface AdminDashboardStats {
   totalVendidoMes: number;
@@ -104,19 +103,14 @@ export function computeAdminStatsPure(
 
   const valoresAPagar = opts?.skipValoresAPagar
     ? 0
-    : env.bicCentralRead
+    : env.bicLeituraPortaAdmin && env.bicCentralRead
       ? (() => {
           const base = projetarAppDataFinanceiroParaCreditoBase(d, cnpjDigitsForCooperativa(d, cooperativaId));
-          if (env.bicLeituraPortaAdmin) {
-            return round2(leituraAdminSomaValorLiquidoCooperados(base, cooperadosEscopo));
-          }
-          return round2(
-            cooperadosEscopo.reduce((s, c) => {
-              return s + bicCentralValorAReceberAgregado(base, c.id, c.cooperativaId).valor;
-            }, 0)
-          );
+          return round2(leituraAdminSomaValorLiquidoCooperados(base, cooperadosEscopo));
         })()
-      : getTotalValoresAPagarEmAberto(d, cooperativaId);
+      : getTotalValoresAPagarGestaoCooperativa(d, cooperativaId, {
+          bicCentralRead: env.bicCentralRead,
+        });
 
   return {
     totalVendidoMes: sumBy(entregasMes, (e) => e.valorBruto),
