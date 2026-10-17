@@ -68,10 +68,11 @@ export function usePermissions() {
     return canUser(permUser, resource, action);
   };
 
+  const staffUi = Boolean(staffPainelAtivo);
   const isCooperado =
-    !staffPainelAtivo && Boolean(user && (user.role === "cooperado" || isCooperadoAppUser(user)));
-  const isResponsavel = staffPainelAtivo && authSubject ? isResponsavelRole(authSubject.role) : false;
-  const isDiretoria = Boolean(staffPainelAtivo);
+    !staffUi && Boolean(user && (user.role === "cooperado" || isCooperadoAppUser(user)));
+  const isResponsavel = staffUi && authSubject ? isResponsavelRole(authSubject.role) : false;
+  const isDiretoria = staffUi;
   const podeGerenciarEquipe = authSubject ? canGerenciarEquipe(authSubject) : false;
   const funcaoLabel = permUser ? getUserFuncaoLabel(permUser) : "";
 
@@ -81,8 +82,8 @@ export function usePermissions() {
     isCooperado,
     isResponsavel,
     isDiretoria,
-    cooperadoId,
-    coopId,
+    cooperadoId: cooperadoId ?? undefined,
+    coopId: coopId ?? undefined,
     podeGerenciarEquipe,
     funcaoLabel,
   };

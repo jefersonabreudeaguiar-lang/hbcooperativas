@@ -294,7 +294,8 @@ function FichaCorridaPageInner() {
         : resolveGestaoCooperativaId(user, data)
       : undefined) ??
     coopIdPerm ??
-    user?.cooperativaId;
+    user?.cooperativaId ??
+    undefined;
 
   useLayoutEffect(() => {
     if (!tabActive || !(messenger || pilotFinanceiroLeve) || !isCooperado) return;
@@ -384,12 +385,14 @@ function FichaCorridaPageInner() {
   const [assinaturaBusyId, setAssinaturaBusyId] = useState<string | null>(null);
   const [coopCnpjResumo, setCoopCnpjResumo] = useState("");
 
-  const coopId =
+  const coopId: string | undefined =
     (user && data
       ? isCooperado
         ? getUserCooperativaId(user, data)
         : resolveGestaoCooperativaId(user, data)
-      : undefined) ?? coopIdPerm;
+      : undefined) ??
+    coopIdPerm ??
+    undefined;
   const fluxoReciboAssinatura = cooperadoUsarFluxoReciboAssinaturaNaUi();
   const {
     apresentacaoConsolidada,

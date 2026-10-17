@@ -727,12 +727,14 @@ export default function NotasPedidoStaffMain() {
   const [conferenciaFotoAmpliada, setConferenciaFotoAmpliada] = useState(false);
   const [fotosLancadasUi, setFotosLancadasUi] = useState<Set<number>>(() => new Set());
 
-  const coopId =
+  const coopId: string | undefined =
     (user && data
       ? isCooperado
         ? getUserCooperativaId(user, data)
         : resolveGestaoCooperativaId(user, data)
-      : undefined) ?? coopIdPerm;
+      : undefined) ??
+    coopIdPerm ??
+    undefined;
   const hbDescontosRevision = useContaCoopDescontosRevision();
   const cooperadoCanonico =
     isCooperado && data && cooperadoId && coopId
