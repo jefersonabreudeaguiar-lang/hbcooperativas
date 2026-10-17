@@ -27,6 +27,7 @@ import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify"
 import { getData, getDataRevision, isAppDataWarm } from "@/services/dataStore";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { evaluateResponsavelPainelAbertura } from "@/lib/responsavel/responsavelPainelContrato";
+import { isMobileCooperativaApp } from "@/lib/mobileExperience";
 import { shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
 import { StatCard } from "@/components/ui/Card";
 import { Card } from "@/components/ui/Card";
@@ -818,34 +819,19 @@ export default function DashboardPage() {
           ? false
           : cooperadoLocalResumeReady(user))
       : appLocalResumeReady(user));
-  const painelAberturaWarm = useAppDataSelector(
-    (data) =>
-      evaluateResponsavelPainelAbertura({
-        accountUser,
-        authSubject,
-        data,
-        dataReady: true,
-      }),
-    [
-      accountUser?.id,
-      accountUser?.role,
-      accountUser?.cooperadoId,
-      authSubject?.id,
-      authSubject?.role,
-      authSubject?.cooperadoId,
-      authSubject?.cooperativaId,
-    ]
-  );
-  const showAdminPainel = useMemo(() => {
-    if (painelAberturaWarm) return painelAberturaWarm.showAdminPainel;
+  const dataRevision = useAppDataSelector(() => (isAppDataWarm() ? getDataRevision() : -1), []);
+  const painelAbertura = useMemo(() => {
+    const data = isAppDataWarm() ? getData() : null;
+    const warmReady = Boolean(dataReady && data);
     return evaluateResponsavelPainelAbertura({
       accountUser,
       authSubject,
-      data: null,
-      dataReady: false,
-    }).showAdminPainel;
+      data,
+      dataReady: warmReady,
+    });
   }, [
-    painelAberturaWarm,
+    dataReady,
+    dataRevision,
     accountUser?.id,
     accountUser?.role,
     accountUser?.cooperadoId,
@@ -857,13 +843,22 @@ export default function DashboardPage() {
 
   if (!authSubject) return <PageSkeleton />;
 
-  if (showAdminPainel) {
+  const abrirGestao =
+    painelAbertura.showAdminPainel ||
+    (painelAbertura.canGestao && !isMobileCooperativaApp());
+
+  if (abrirGestao) {
     if (!dataReady) return <PageSkeleton />;
     return <AdminDashboard />;
   }
 
   if (isCooperadoAppUser(authSubject)) {
     return <CooperadoDashboard />;
+  }
+
+  if (painelAbertura.canGestao) {
+    if (!dataReady) return <PageSkeleton />;
+    return <AdminDashboard />;
   }
 
   if (!dataReady && !instantResume) return <PageSkeleton />;

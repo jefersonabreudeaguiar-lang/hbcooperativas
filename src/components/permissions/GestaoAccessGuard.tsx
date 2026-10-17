@@ -16,37 +16,38 @@ import {
 import { getData, isAppDataWarm } from "@/services/dataStore";
 
 export function GestaoAccessGuard({ children }: { children: React.ReactNode }) {
-  const { accountUser } = useAuth();
+  const { accountUser, user } = useAuth();
+  const gestaoAccount = accountUser ?? user;
   const pathname = usePathname();
   const router = useRouter();
 
   const dataReady = useAppDataReady();
   const canGestaoFromData = useAppDataSelector(
-    (data) => (accountUser ? canAccessPainelResponsavel(accountUser, data) : false),
-    [accountUser?.id, accountUser?.email, accountUser?.role, accountUser?.cooperadoId]
+    (data) => (gestaoAccount ? canAccessPainelResponsavel(gestaoAccount, data) : false),
+    [gestaoAccount?.id, gestaoAccount?.email, gestaoAccount?.role, gestaoAccount?.cooperadoId]
   );
   const coldData = isAppDataWarm() ? getData() : null;
   const canGestao = dataReady
     ? canGestaoFromData
-    : accountUser
-      ? canAccessPainelResponsavelSession(accountUser, coldData)
+    : gestaoAccount
+      ? canAccessPainelResponsavelSession(gestaoAccount, coldData)
       : false;
 
   const staffPainelUiWarm = useAppDataSelector(
-    (data) => Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data)),
-    [accountUser?.id, accountUser?.email, accountUser?.role, accountUser?.cooperadoId]
+    (data) => Boolean(gestaoAccount && shouldRenderStaffPainelUi(gestaoAccount, data)),
+    [gestaoAccount?.id, gestaoAccount?.email, gestaoAccount?.role, gestaoAccount?.cooperadoId]
   );
   const staffPainelUi = dataReady
     ? Boolean(staffPainelUiWarm)
-    : Boolean(accountUser && shouldRenderStaffPainelUiSession(accountUser, coldData));
+    : Boolean(gestaoAccount && shouldRenderStaffPainelUiSession(gestaoAccount, coldData));
 
   useEffect(() => {
-    if (!accountUser) return;
+    if (!gestaoAccount) return;
     if (!isGestaoOnlyRoute(pathname)) return;
     if (!canGestao || !staffPainelUi) {
       router.replace("/dashboard");
     }
-  }, [accountUser, canGestao, staffPainelUi, pathname, router]);
+  }, [gestaoAccount, canGestao, staffPainelUi, pathname, router]);
 
   return <>{children}</>;
 }

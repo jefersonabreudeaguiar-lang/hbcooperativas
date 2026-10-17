@@ -11,6 +11,7 @@ import { getSession } from "@/services/dataStore";
 import { repairBrowserProfileIfStale } from "@/lib/pwa/browserProfileRepair";
 import { buildCooperadoLoginPath } from "@/lib/cooperado/cooperadoCanonicalEntryUrl";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { canAccessPainelResponsavelSession } from "@/lib/security/responsavelPanelAccess";
 
 function protectedRouteInitialProfileRepairDone(): boolean {
   if (typeof window === "undefined") return false;
@@ -40,7 +41,7 @@ function AppAreaLoadingShell() {
 }
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, accountUser, loading } = useAuth();
   const router = useRouter();
   const [profileRepairDone, setProfileRepairDone] = useState(protectedRouteInitialProfileRepairDone);
 
@@ -66,7 +67,12 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       setProfileRepairDone(false);
       return;
     }
-    if (user.role !== "cooperado") {
+    const sessionGate = accountUser ?? user;
+    if (canAccessPainelResponsavelSession(sessionGate)) {
+      setProfileRepairDone(true);
+      return;
+    }
+    if (sessionGate.role !== "cooperado") {
       setProfileRepairDone(true);
       return;
     }
@@ -87,7 +93,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [loading, user?.id]);
+  }, [loading, user?.id, accountUser?.id, accountUser?.role]);
 
   const sessionForPaint = getSession();
   const cooperadoPaintWhileAuth =

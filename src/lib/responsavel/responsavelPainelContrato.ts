@@ -51,10 +51,16 @@ export function evaluateResponsavelPainelAbertura(opts: {
   const canGestao = dataReady
     ? Boolean(gestaoAccount && canAccessPainelResponsavel(gestaoAccount, data ?? null))
     : Boolean(gestaoAccount && canAccessPainelResponsavelSession(gestaoAccount, data));
+  const showAdminPainel =
+    canGestao &&
+    (staffPainelUi ||
+      (!dataReady &&
+        Boolean(gestaoAccount && shouldRenderStaffPainelUiSession(gestaoAccount, data))));
+
   return {
     canGestao,
     staffPainelUi,
-    showAdminPainel: canGestao && staffPainelUi,
+    showAdminPainel,
   };
 }
 
@@ -63,11 +69,12 @@ export function evaluateResponsavelPainelAbertura(opts: {
  * não o menu cooperado derivado de `user` experiência.
  */
 export function shouldPrioritizeStaffColdShell(
-  accountUser: AuthSubject | null | undefined,
-  appDataWarm: boolean
+  gestaoAccount: AuthSubject | null | undefined,
+  appDataWarm: boolean,
+  data?: AppData | null
 ): boolean {
-  if (appDataWarm || !accountUser) return false;
-  return shouldRenderStaffPainelUiSession(accountUser);
+  if (appDataWarm || !gestaoAccount) return false;
+  return shouldRenderStaffPainelUiSession(gestaoAccount, data);
 }
 
 export function staffShellMenusBeforeDataWarm(accountUser: AuthSubject) {
