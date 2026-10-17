@@ -9,7 +9,7 @@ import { APP_BUILD_VERSION } from "../src/lib/appBuildVersion.ts";
 import { cooperadoInicioCardEscolherDisplayEstavel } from "../src/lib/cooperadoInicioCardPolicy.ts";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
-assert.equal(APP_BUILD_VERSION, 452);
+assert.ok(APP_BUILD_VERSION >= 452);
 
 const persistido = { mesLabel: "Out", valor: 180, valorRecibo: 0, aguardandoAssinatura: false };
 const motorZero = { mesLabel: "—", valor: 0, valorRecibo: 0, aguardandoAssinatura: false };

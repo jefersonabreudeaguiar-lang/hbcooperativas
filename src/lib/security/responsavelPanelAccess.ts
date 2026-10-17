@@ -1,8 +1,16 @@
 import type { AppData, User, UserRole } from "@/types";
 import { isAppCreator, normalizeAuthEmail } from "@/lib/security/appCreator";
-import { listMembrosEquipeIncluindoInativos } from "@/services/equipeService";
+import {
+  listContadoresEquipe,
+  listMembrosEquipeIncluindoInativos,
+} from "@/services/equipeService";
+/** CNPJ cadastrado nesta instalação. */
+export const CNPJ_PAINEL_RESPONSAVEL_RESTRITO = "62351750000165";
 
-const BUILTIN_PAINEL_RESPONSAVEL_EMAILS = ["jefersonabreudeaguiar@gmail.com"];
+/** Responsável principal — concede acesso à equipe e ao contador. */
+export const EMAIL_PAINEL_RESPONSAVEL_CNPJ_RESTRITO = "invisium3@gmail.com";
+
+const BUILTIN_PAINEL_RESPONSAVEL_EMAILS: string[] = [];
 
 function normalizeRole(role: string): UserRole {
   if (role === "presidente") return "responsavel";
@@ -13,12 +21,42 @@ function isStaffRole(role: UserRole): boolean {
   return role === "responsavel" || role === "admin" || role === "tesoureiro";
 }
 
+function jwtRoleCooperado(
+  user: Pick<User, "role"> | { role?: string | null } | null | undefined
+): boolean {
+  return normalizeRole(String(user?.role ?? "")) === "cooperado";
+}
+
+function emailNorm(email: string | null | undefined): string {
+  return normalizeAuthEmail(email ?? "");
+}
+
+/** Contador a quem o responsável principal passou acesso (Equipe). */
+function isContadorEquipeConcedido(
+  user: Pick<User, "id" | "email" | "role" | "cooperativaId" | "active"> | { id?: string | null; email?: string | null; role?: string | null; cooperativaId?: string | null; active?: boolean },
+  data?: AppData | null
+): boolean {
+  if (user.active === false) return false;
+  if (normalizeRole(String(user.role ?? "")) !== "contador") return false;
+  if (!data) return true;
+  const coopId = user.cooperativaId?.trim();
+  if (!coopId) return false;
+  const norm = emailNorm(user.email ?? "");
+  return listContadoresEquipe(data, coopId).some(
+    (m) =>
+      m.active !== false &&
+      (m.id === user.id || emailNorm(m.email) === norm)
+  );
+}
+
 /** Sessão persistida pode ter role cooperado (legado); users[] local traz o papel staff real. */
 export function resolveAuthoritativePanelRole(
   user: Pick<User, "id" | "email" | "role">,
   data?: AppData | null
 ): UserRole {
   const direct = normalizeRole(user.role);
+  /** JWT cooperado não vira gestão por users[] — nem no browser. */
+  if (direct === "cooperado" && !isAppCreator(user)) return "cooperado";
   if (!data || direct !== "cooperado") return direct;
   const emailNorm = normalizeAuthEmail(user.email);
   const local =
@@ -36,16 +74,19 @@ export function isBuiltinPainelResponsavelEmail(email: string | null | undefined
 
 /** Quem pode ver o painel da diretoria (desktop e mobile). */
 export function canAccessPainelResponsavel(
-  user: Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active"> | null | undefined,
+  user: Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "cooperativaCnpj" | "active"> | null | undefined,
   data?: AppData | null
 ): boolean {
   if (!user || user.active === false) return false;
 
-  /** Builtin/criador antes do papel — users[] pode ter sido gravado como cooperado (JWT stale). */
-  if (isAppCreator(user) || isBuiltinPainelResponsavelEmail(user.email)) return true;
+  /** Cooperado (JWT) não entra no painel — browser ou celular. Só o criador. */
+  if (jwtRoleCooperado(user) && !isAppCreator(user)) return false;
+
+  if (isAppCreator(user)) return true;
 
   const role = resolveAuthoritativePanelRole(user, data);
-  if (role === "cooperado" || role === "parceiro" || role === "contador") return false;
+  if (role === "cooperado" || role === "parceiro") return false;
+  if (role === "contador") return isContadorEquipeConcedido(user, data);
   if (!isStaffRole(role)) return false;
 
   /** Cooperado puro — não entra no painel. Responsável/tesoureiro podem ter cooperadoId (perfil duplo). */
@@ -102,8 +143,11 @@ export function canAccessPainelResponsavelSession(
 ): boolean {
   if (!session) return false;
 
+  if (jwtRoleCooperado(session) && !isAppCreator({ email: session.email ?? "" })) {
+    return false;
+  }
+
   if (isAppCreator({ email: session.email ?? "" })) return true;
-  if (isBuiltinPainelResponsavelEmail(session.email)) return true;
 
   if (data) {
     if (
@@ -117,7 +161,8 @@ export function canAccessPainelResponsavelSession(
   }
 
   const role = normalizeRole(session.role ?? "");
-  if (role === "cooperado" || role === "parceiro" || role === "contador") return false;
+  if (role === "contador") return true;
+  if (role === "cooperado" || role === "parceiro") return false;
   if (!isStaffRole(role)) return false;
 
   if (session.cooperadoId?.trim() && role !== "responsavel" && role !== "tesoureiro") {

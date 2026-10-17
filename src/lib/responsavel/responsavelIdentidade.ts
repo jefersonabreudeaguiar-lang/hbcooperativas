@@ -15,8 +15,9 @@ import {
   canAccessPainelResponsavelSession,
 } from "@/lib/security/responsavelPanelAccess";
 import { preferPainelResponsavelMobile } from "@/lib/mobilePainelPreference";
+import { isAppCreator } from "@/lib/security/appCreator";
 
-export const RESPONSAVEL_IDENTIDADE_VERSION = 3;
+export const RESPONSAVEL_IDENTIDADE_VERSION = 4;
 
 export type ResponsavelIdentidadeCaso =
   | "none"
@@ -89,13 +90,21 @@ function temVinculoCooperado(user: AuthSubject | null | undefined): boolean {
   return Boolean(user?.cooperadoId?.trim() || user?.mobileCooperadoId?.trim());
 }
 
+/** JWT cooperado nunca abre o painel do responsável — celular ou browser. */
+export function cooperadoSessaoNuncaPainelGestao(
+  user: AuthSubject | null | undefined
+): boolean {
+  if (!user) return false;
+  if (isAppCreator(user)) return false;
+  return normalizeRole(user.role) === "cooperado";
+}
+
 /** Celular/PWA: sessão JWT cooperado nunca abre o painel do responsável. */
 export function cooperadoSessaoNuncaPainelGestaoMobile(
   user: AuthSubject | null | undefined,
-  mobile: boolean
+  _mobile?: boolean
 ): boolean {
-  if (!user || !mobile) return false;
-  return normalizeRole(user.role) === "cooperado";
+  return cooperadoSessaoNuncaPainelGestao(user);
 }
 
 function resolveCanGestao(
@@ -142,7 +151,7 @@ export function evaluateResponsavelIdentidade(
       showAdminPainel: false,
     };
   }
-  if (sessionRole === "contador") {
+  if (sessionRole === "contador" && !canGestao) {
     return {
       caso: "contador",
       modo: "contador",
@@ -152,8 +161,8 @@ export function evaluateResponsavelIdentidade(
     };
   }
 
-  /** JWT cooperado no celular: só app do cooperado. Preferência/users[]/builtin não viram gestão. */
-  if (cooperadoSessaoNuncaPainelGestaoMobile(account, mobile)) {
+  /** JWT cooperado: só app do cooperado. Preferência/users[]/builtin não viram gestão. */
+  if (cooperadoSessaoNuncaPainelGestao(account)) {
     return {
       caso: canGestao && vinculoCooperado ? "duplo_mobile_cooperado" : "cooperado_puro",
       modo: "cooperado",

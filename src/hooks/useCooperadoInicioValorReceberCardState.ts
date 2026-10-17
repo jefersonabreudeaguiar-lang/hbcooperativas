@@ -93,6 +93,8 @@ export function useCooperadoInicioValorReceberCardState(input: {
   carregandoValoresFinanceiros?: boolean;
   /** PWA mobile: só persistido + Atualizar explícito — sem motor ao vivo a cada sync. */
   leituraSomentePwa?: boolean;
+  /** Keep-alive: aba Início visível. Motor pesado só corre com a aba aberta. */
+  tabAtiva?: boolean;
 }): {
   snapshot: InicioCardMotorSnapshot;
   atualizando: boolean;
@@ -116,6 +118,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
     );
   });
 
+  const tabAtiva = input.tabAtiva !== false;
   const leituraSomentePwa = Boolean(
     input.leituraSomentePwa &&
       (isCooperadoPwaMobileLeveUi() || isCooperadoMobilePilotPerfActive())
@@ -197,13 +200,33 @@ export function useCooperadoInicioValorReceberCardState(input: {
 
   const resolved = useMemo(() => {
     if (leituraSomentePwa) {
-      if (isCooperadoMobilePilotPerfActive() && input.cooperadoId) {
+      if (!tabAtiva) {
+        const persistidoOcioso = persistidoExibicaoPwaLeve(persistido);
+        if (
+          persistidoOcioso?.display &&
+          cooperadoMotorTemObrigacaoReceber(persistidoOcioso.display)
+        ) {
+          return {
+            display: persistidoOcioso.display,
+            latch: {
+              motorRevision: persistidoOcioso.motorRevision,
+              display: persistidoOcioso.display,
+              hadPendencia: true,
+            },
+            atualizando: false,
+            gravarPersistencia: false,
+          };
+        }
+      }
+      if (tabAtiva && isCooperadoMobilePilotPerfActive() && input.cooperadoId) {
         const pilotDisplay = cooperadoPilotCardInicioLeituraRapida(
           input.cooperadoId,
           input.cooperativaId,
           sessionUser
         );
         if (pilotDisplay && cooperadoMotorTemObrigacaoReceber(pilotDisplay)) {
+          const persistidoValor = persistido?.display?.valor ?? 0;
+          const mudou = Math.abs(pilotDisplay.valor - persistidoValor) > 0.005;
           return {
             display: pilotDisplay,
             latch: {
@@ -212,7 +235,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
               hadPendencia: true,
             },
             atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
-            gravarPersistencia: isAppDataWarm(),
+            gravarPersistencia: isAppDataWarm() && mudou,
           };
         }
       }
@@ -241,8 +264,9 @@ export function useCooperadoInicioValorReceberCardState(input: {
         if (cooperadoPwaFinanceiroSnapshotsAusentes(canon, coopId)) return true;
         return cooperadoTemDadosFinanceirosMinimos(data, canon, coopId);
       })();
-      /** Recalcula a ficha mesmo com cache — o persistido só segura se o motor vier incompleto. */
+      /** Recalcula a ficha só com a aba Início aberta — keep-alive não pode travar a troca. */
       const gaParidadeWarm =
+        tabAtiva &&
         isCooperadoMobilePilotPerfActive() &&
         isAppDataWarm() &&
         Boolean(input.cooperadoId);
@@ -511,6 +535,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
     persistido,
     persistidoTick,
     leituraSomentePwa,
+    tabAtiva,
     appDataWarmKey,
     sessionUser?.id,
     sessionUser?.cooperativaId,

@@ -8,6 +8,7 @@ export { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAcces
 import { isHbCreditEnabledClient } from "@/modules/hb-credit/config";
 import { filterContaCoopNavItems, isContaCoopUiPublic } from "@/utils/contaCoopUiVisibility";
 import { COOPERADO_BOTTOM_TAB_HREFS } from "@/lib/performance/cooperadoBottomTabRoutes";
+import { isAppCreator } from "@/lib/security/appCreator";
 
 type PermissionMatrix = Record<UserRole, Partial<Record<Resource, Action[]>>>;
 
@@ -293,8 +294,8 @@ export function resolveAppUserRole(
   data?: AppData | null
 ): UserRole {
   const sessionRole = normalizeUserRole(user.role);
-  /** Celular/PWA: JWT cooperado permanece cooperado — users[]/builtin não viram gestão. */
-  if (sessionRole === "cooperado" && isMobileCooperativaAppClient()) {
+  /** JWT cooperado permanece cooperado — users[]/builtin não viram gestão (browser ou celular). */
+  if (sessionRole === "cooperado" && !isAppCreator(user)) {
     return "cooperado";
   }
   if (sessionRole === "cooperado" && !data) {

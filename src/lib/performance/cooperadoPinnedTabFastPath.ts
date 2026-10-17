@@ -60,7 +60,6 @@ export function tryCooperadoPilotInstantBottomTabSwitch(
   targetHref: string
 ): boolean {
   if (!cooperadoPilotInstantBottomTabSwitchEnabled()) return false;
-  if (!pilotBottomTabsCachesReady) return false;
   if (!isCooperadoBottomTabPath(currentEffectiveHref) || !isCooperadoBottomTabPath(targetHref)) {
     return false;
   }

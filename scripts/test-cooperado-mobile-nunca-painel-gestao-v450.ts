@@ -24,7 +24,7 @@ const jwtCooperado = {
 };
 
 assert.equal(cooperadoSessaoNuncaPainelGestaoMobile(jwtCooperado, true), true);
-assert.equal(cooperadoSessaoNuncaPainelGestaoMobile(jwtCooperado, false), false);
+assert.equal(cooperadoSessaoNuncaPainelGestaoMobile(jwtCooperado, false), true);
 assert.equal(
   cooperadoSessaoNuncaPainelGestaoMobile({ ...jwtCooperado, role: "responsavel" }, true),
   false

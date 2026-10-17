@@ -141,7 +141,7 @@ function evaluateDashboardStaffOpen(
   assert.equal(gateWarm.open, true);
 }
 
-// CASO 4 — sessão persistida com role cooperado stale; users[] local restaura staff
+// CASO 4 — sessão JWT cooperado não vira gestão por users[] (browser ou celular)
 {
   const record = staffUser();
   const data = emptyData([record]);
@@ -150,11 +150,11 @@ function evaluateDashboardStaffOpen(
     role: "cooperado" as const,
     password: undefined,
   } as Omit<User, "password">;
-  assert.equal(resolveAuthoritativePanelRole(staleSession, data), "responsavel");
-  assert.equal(canAccessPainelResponsavel(staleSession, data), true);
+  assert.equal(resolveAuthoritativePanelRole(staleSession, data), "cooperado");
+  assert.equal(canAccessPainelResponsavel(staleSession, data), false);
   const fixedRole = resolveAppUserRole(staleSession, data);
-  assert.equal(fixedRole, "responsavel");
-  assert.equal(canAccessPainelResponsavelSession(staleSession, data), true);
+  assert.equal(fixedRole, "cooperado");
+  assert.equal(canAccessPainelResponsavelSession(staleSession, data), false);
 }
 
 // CASO 5 — mês com pagamento confirmado não entra em «em aberto» do responsável
@@ -435,7 +435,7 @@ function evaluateDashboardStaffOpen(
   assert.equal(id.modo, "cooperado");
 }
 
-// CASO 13 — SSR (sem window) de staff com JWT cooperado não some o painel
+// CASO 13 — SSR (sem window) com JWT cooperado permanece app cooperado
 {
   const stale = staffUser({ cooperadoId: undefined, role: "cooperado" });
   const data = emptyData([{ ...stale, role: "responsavel" }]);
@@ -445,9 +445,9 @@ function evaluateDashboardStaffOpen(
     data,
     dataReady: true,
   });
-  assert.equal(abertura.staffPainelUi, true, "SSR staff não pode hidratar como cooperado");
-  assert.equal(abertura.showAdminPainel, true);
-  assert.equal(abertura.canGestao, true);
+  assert.equal(abertura.staffPainelUi, false, "JWT cooperado não hidrata como gestão");
+  assert.equal(abertura.showAdminPainel, false);
+  assert.equal(abertura.canGestao, false);
 }
 
 // CASO 14 — canGestao sem staffPainelUi (duplo mobile) não é o Início gestão, mas o fallback do dashboard usa modo
@@ -476,7 +476,7 @@ function evaluateDashboardStaffOpen(
   assert.equal(aberturaPediuPainel.modo, "gestao");
 }
 
-// CASO 15 — e-mail builtin com users[] cooperado ainda acessa o painel
+// CASO 15 — cooperado (mesmo e-mail antigo de gestão) não acessa o painel
 {
   const builtin = staffUser({
     email: "jefersonabreudeaguiar@gmail.com",
@@ -484,8 +484,8 @@ function evaluateDashboardStaffOpen(
     cooperadoId: undefined,
   });
   const data = emptyData([{ ...builtin, role: "cooperado" }]);
-  assert.equal(canAccessPainelResponsavel(builtin, data), true);
-  assert.equal(canAccessPainelResponsavelSession(builtin, data), true);
+  assert.equal(canAccessPainelResponsavel(builtin, data), false);
+  assert.equal(canAccessPainelResponsavelSession(builtin, data), false);
 }
 
 // CASO 16 — gestão resolve cooperativa pelo CNPJ quando a sessão não tem id

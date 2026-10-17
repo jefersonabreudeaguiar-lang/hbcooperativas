@@ -312,6 +312,7 @@ function CooperadoDashboard() {
       apresentacaoConsolidada,
       carregandoValoresFinanceiros,
       leituraSomentePwa: messenger || inicioSnapshotFirst,
+      tabAtiva: tabActive,
     });
 
   const exibicaoZeroRecoveryRef = useRef(false);
