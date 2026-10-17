@@ -55,6 +55,7 @@ import {
   agregarItensFichaMeses,
   getResumoPagamentoConsolidadoCooperado,
   getMesesReferenciaPagamento,
+  listarFichasEmAbertoPagamento,
 } from "@/services/notaPedidoService";
 import {
   bicCentralBuildValorExibicaoCooperadoOpts,
@@ -69,7 +70,7 @@ import {
   responsavelBadgeFilaPagarCount,
   responsavelFichaAppDataDomains,
 } from "@/lib/responsavel/responsavelGestaoLeitura";
-import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
+import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
 import { useContaCoopDescontosRevisionWhenLive } from "@/hooks/useContaCoopDescontosRevision";
@@ -971,11 +972,8 @@ function FichaCorridaPageInner() {
         : !isCooperado && aba === "pagar" && mesesPendentesPagamento.length
           ? mesesPendentesPagamento
           : [mesAtivo];
-    return data.fichaCorrida.filter(
-      (f) =>
-        fichaPertenceCooperado(data, f, cooperadoSelecionadoId, coopId) &&
-        meses.includes(f.mesReferencia) &&
-        f.status === "pendente"
+    return meses.flatMap((mes) =>
+      listarFichasEmAbertoPagamento(data, cooperadoSelecionadoId, mes, coopId)
     );
   }, [
     data,

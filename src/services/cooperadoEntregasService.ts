@@ -17,10 +17,8 @@ import {
   resumoFromPagamento,
   resumoComplementaresPosPagamento,
   fichaValidaNoExtrato,
-  listarFichasPendentesPagamento,
-  listarFichasPendentesNaoCobertasPorPagamentoConfirmado,
+  listarFichasEmAbertoPagamento,
   listarPagamentosConfirmadosQueCobremMes,
-  fichaNotaElegivelParaPagamento,
   listarMesesDebitoAbertoCooperado,
   fichasPendentesComplementaresPosPagamentoAguardando,
   type AjustesResumoPagamento,
@@ -127,12 +125,14 @@ export function listarMesesPendentesQuantoVouReceber(
   for (const mes of [...listarMesesEntregasCooperado(data, cooperadoId, cooperativaId)].sort((a, b) =>
     a.localeCompare(b)
   )) {
-    if (cooperadoMesQuitado(data, cooperadoId, mes)) continue;
-    if (cooperadoMesComFichaPagaSemPagamentoCooperativa(data, cooperadoId, mes, cooperativaId)) {
-      pendentes.push(mes);
+    if (cooperadoMesQuitado(data, cooperadoId, mes, cooperativaId)) continue;
+    if (!mesReferenciaPagamentoResponsavelEmAberto(data, cooperadoId, mes, cooperativaId)) {
+      if (getPagamentoAguardandoCooperado(data, cooperadoId, mes, cooperativaId)) {
+        pendentes.push(mes);
+      }
       continue;
     }
-    if (getPagamentoAguardandoCooperado(data, cooperadoId, mes)) {
+    if (getPagamentoAguardandoCooperado(data, cooperadoId, mes, cooperativaId)) {
       pendentes.push(mes);
       continue;
     }
@@ -176,19 +176,7 @@ export function listarMesesReferenciaResumoFinanceiroParidade(
   cooperadoId: string,
   cooperativaId?: string
 ): string[] {
-  const cnpj = cooperativaCnpjFromData(data, cooperativaId, cooperadoId);
-  const mesesResponsavel = listarMesesPendentesPagamentoResponsavel(data, cooperadoId, cooperativaId);
-  const mesesComValor = listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId);
-  if (cnpj && isOperacionalCloudAuthoritative(cnpj) && mesesResponsavel.length > 0) {
-    const staff = [...mesesResponsavel].sort();
-    const comValor = [...mesesComValor].sort();
-    const mesesAlinhados =
-      staff.length === comValor.length && staff.every((m, i) => m === comValor[i]);
-    if (!mesesAlinhados) return staff;
-  }
-  if (mesesComValor.length > 0) return [...mesesComValor].sort();
-  const mesesPendentes = listarMesesPendentesFinanceiroCooperado(data, cooperadoId, cooperativaId);
-  return [...mesesPendentes].sort();
+  return [...listarMesesEmAbertoPagamentoResponsavel(data, cooperadoId, cooperativaId)].sort();
 }
 
 /** Valor a receber no início — oculta mês quitado ou sem valor pendente. */
@@ -330,7 +318,7 @@ export function cooperadoMesSemRecebimentoPendenteNaFicha(
   if (getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia)) return false;
   if (getTotalAPagarCooperado(data, cooperadoId, mesReferencia, coopId) > 0) return false;
   if (temValoresAvulsosPendentesMes(data, cooperadoId, mesReferencia, coopId)) return false;
-  if (listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId).length > 0) {
+  if (listarFichasEmAbertoPagamento(data, cooperadoId, mesReferencia, coopId).length > 0) {
     return false;
   }
   return true;
@@ -356,7 +344,7 @@ export function cooperadoMesSomentePagamentoHistorico(
   if (getTotalAPagarCooperado(data, cooperadoId, mesReferencia, coopId) > 0) return false;
   if (temValoresAvulsosPendentesMes(data, cooperadoId, mesReferencia, coopId)) return false;
   if (
-    listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId).some((f) =>
+    listarFichasEmAbertoPagamento(data, cooperadoId, mesReferencia, coopId).some((f) =>
       fichaValidaNoExtrato(data, f)
     )
   ) {
@@ -373,13 +361,11 @@ export function filtrarResumosMesesNaoQuitados(
   cooperativaId?: string
 ): ResumoMesEntregasCooperado[] {
   const coopId = resolverCooperativaIdReciboLatch(data, cooperadoId, cooperativaId);
-  return resumos.filter(
-    (r) =>
-      !cooperadoMesQuitado(data, cooperadoId, r.mesReferencia) &&
-      !cooperadoMesLiquidadoPorPagamentoNoLivroCaixa(data, cooperadoId, r.mesReferencia, coopId) &&
-      !cooperadoMesSemRecebimentoPendenteNaFicha(data, cooperadoId, r.mesReferencia, coopId) &&
-      !cooperadoMesSomentePagamentoHistorico(data, cooperadoId, r.mesReferencia, coopId)
-  );
+  return resumos.filter((r) => {
+    const temFotoPendente = r.notas.some((n) => notaPendenteCooperado(n.status));
+    if (temFotoPendente) return true;
+    return mesReferenciaPagamentoResponsavelEmAberto(data, cooperadoId, r.mesReferencia, coopId);
+  });
 }
 
 function notasDoCooperado(data: AppData, cooperadoId: string, cooperativaId?: string): NotaPedido[] {
@@ -480,7 +466,7 @@ export function cooperadoMesQuitado(
   const coopId = resolverCooperativaIdReciboLatch(data, cooperadoId, cooperativaId);
   if (getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia, coopId)) return false;
   if (
-    listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId).some((f) =>
+    listarFichasEmAbertoPagamento(data, cooperadoId, mesReferencia, coopId).some((f) =>
       fichaValidaNoExtrato(data, f)
     )
   ) {
@@ -528,11 +514,7 @@ function listarMesesPendentesFinanceiroCooperado(
   cooperadoId: string,
   cooperativaId?: string
 ): string[] {
-  const cnpj = cooperativaCnpjFromData(data, cooperativaId, cooperadoId);
-  if (cnpj && isOperacionalCloudAuthoritative(cnpj)) {
-    return listarMesesPendentesPagamentoResponsavelOperacional(data, cooperadoId, cooperativaId);
-  }
-  return listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
+  return listarMesesEmAbertoPagamentoResponsavel(data, cooperadoId, cooperativaId);
 }
 
 /** Após restore na nuvem: fila Pagar segue ficha/pagamentos do operacional, sem inflar por notas soltas. */
@@ -612,11 +594,7 @@ export function mesReferenciaPagamentoResponsavelEmAberto(
     Boolean(confirmado) ||
     listarPagamentosConfirmadosQueCobremMes(data, cooperadoId, mesReferencia, coopId).length > 0;
   const avulsos = temValoresAvulsosPendentesMes(data, cooperadoId, mesReferencia, coopId);
-  const descobertas = temConfirmado
-    ? listarFichasPendentesNaoCobertasPorPagamentoConfirmado(data, cooperadoId, mesReferencia, coopId)
-    : listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId).filter((f) =>
-        fichaNotaElegivelParaPagamento(data, f)
-      );
+  const descobertas = listarFichasEmAbertoPagamento(data, cooperadoId, mesReferencia, coopId);
 
   if (temConfirmado && descobertas.length === 0 && !avulsos) return false;
   if (
@@ -687,7 +665,7 @@ export function cooperadoMesLiquidadoPorPagamentoNoLivroCaixa(
     return false;
   }
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  const fichasPend = listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId).filter((f) =>
+  const fichasPend = listarFichasEmAbertoPagamento(data, cooperadoId, mesReferencia, coopId).filter((f) =>
     fichaValidaNoExtrato(data, f)
   );
   if (fichasPend.length > 0) return false;
@@ -1059,7 +1037,8 @@ export function getResumoMesEntregasCooperado(
     pagas: notas.filter((n) => n.status === "pago").length,
     valorAReceber,
     valorRecebido,
-    pagamentoConfirmado,
+    /** Mês misto (PIX antigo + lançamento novo) continua em aberto, não como quitado. */
+    pagamentoConfirmado: valorAReceber > 0.005 ? undefined : pagamentoConfirmado,
     pagamentoAguardando,
   };
 }

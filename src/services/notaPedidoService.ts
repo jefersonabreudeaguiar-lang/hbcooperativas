@@ -109,7 +109,7 @@ export function agregarItensFichaMes(
   opts?: AgregarItensFichaOpts
 ): { itens: ItemResumoFichaMes[]; entregas: number; valorBruto: number } {
   const fichas = opts?.apenasPendentes
-    ? listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, cooperativaId)
+    ? listarFichasEmAbertoPagamento(data, cooperadoId, mesReferencia, cooperativaId)
     : listarFichasExtratoCooperadoMes(data, cooperadoId, mesReferencia, cooperativaId);
 
   const map = new Map<string, ItemResumoFichaMes>();
@@ -1864,9 +1864,15 @@ function mesComPagamentoCooperativaRegistrado(
 
 /** Nota já incluída em PIX/registro — não recriar ficha pendente após conferência posterior. */
 function notaReferenciaTemporalEscopoPagamento(nota: NotaPedido): number {
-  const stamps = [nota.dataConferencia, nota.updatedAt, nota.createdAt]
+  // Não usar updatedAt: sync/reconciliação depois do PIX inflava a data e reabria nota já paga.
+  const stamps = [nota.dataConferencia, nota.createdAt]
     .map((s) => Date.parse(s ?? ""))
     .filter((t) => Number.isFinite(t));
+  if (nota.dataEntrega) {
+    const raw = nota.dataEntrega.length === 10 ? `${nota.dataEntrega}T00:00:00.000Z` : nota.dataEntrega;
+    const dia = Date.parse(raw);
+    if (Number.isFinite(dia)) stamps.push(dia);
+  }
   return stamps.length ? Math.max(...stamps) : Number.NaN;
 }
 
@@ -2190,7 +2196,7 @@ function fichaCobertaPorPagamentoCooperativa(
   if (!meses.includes(mesFicha) && !meses.includes(ficha.mesReferencia)) return false;
   const notaTs = nota
     ? notaReferenciaTemporalEscopoPagamento(nota)
-    : Date.parse(ficha.createdAt ?? ficha.updatedAt ?? "");
+    : Date.parse(ficha.dataLancamento ?? ficha.createdAt ?? "");
   const pagoTs = Date.parse(pagamento.pagoEm ?? pagamento.createdAt ?? "");
   if (!Number.isNaN(notaTs) && !Number.isNaN(pagoTs) && notaTs <= pagoTs) return true;
   return false;
@@ -2234,6 +2240,33 @@ export function listarFichasPendentesNaoCobertasPorPagamentoConfirmado(
   );
   return pendentes.filter(
     (f) => !confirmados.some((p) => fichaCobertaPorPagamentoCooperativa(data, f, p))
+  );
+}
+
+/**
+ * Fonte única do «em aberto» (cooperado e responsável): só ficha ainda sem PIX.
+ * Mês já pago entra só com lançamento posterior ao pagamento.
+ */
+export function listarFichasEmAbertoPagamento(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): FichaCorrida[] {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const temConfirmado =
+    Boolean(getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia)) ||
+    listarPagamentosConfirmadosQueCobremMes(data, cooperadoId, mesReferencia, coopId).length > 0;
+  if (temConfirmado) {
+    return listarFichasPendentesNaoCobertasPorPagamentoConfirmado(
+      data,
+      cooperadoId,
+      mesReferencia,
+      coopId
+    );
+  }
+  return listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId).filter((f) =>
+    fichaNotaElegivelParaPagamento(data, f)
   );
 }
 

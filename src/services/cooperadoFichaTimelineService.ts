@@ -4,11 +4,14 @@
 import type { AppData } from "@/types";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
 import {
-  filtrarResumosMesesNaoQuitados,
+  getResumoMesEntregasCooperado,
   listarMesesComPagamentoRegistradoCooperado,
+  listarMesesEmAbertoPagamentoResponsavel,
   listarMesesPagosCooperado,
   listarResumosFotosCooperado,
+  notaPendenteCooperado,
 } from "@/services/cooperadoEntregasService";
+import { listarFichasEmAbertoPagamento } from "@/services/notaPedidoService";
 import {
   bicCentralListarResumosMensaisEntregas,
   bicCentralValorAReceberAgregado,
@@ -42,11 +45,24 @@ export function listarResumosFichaEmAbertoCooperado(
   cooperadoId: string,
   cooperativaId?: string
 ): ResumoMesEntregasCooperado[] {
-  return filtrarResumosMesesNaoQuitados(
-    data,
-    cooperadoId,
-    bicCentralListarResumosMensaisEntregas(data, cooperadoId, cooperativaId)
-  );
+  const meses = listarMesesEmAbertoPagamentoResponsavel(data, cooperadoId, cooperativaId);
+  return meses
+    .map((mes) => {
+      const base = getResumoMesEntregasCooperado(data, cooperadoId, mes, cooperativaId);
+      const abertas = listarFichasEmAbertoPagamento(data, cooperadoId, mes, cooperativaId);
+      const ids = new Set(abertas.map((f) => f.notaPedidoId));
+      const notas = base.notas.filter(
+        (n) => ids.has(n.id) || notaPendenteCooperado(n.status)
+      );
+      return {
+        ...base,
+        notas,
+        quantidadeEntregas: notas.length,
+        conferidas: notas.filter((n) => n.status === "conferida").length,
+        pagas: notas.filter((n) => n.status === "pago").length,
+      };
+    })
+    .filter((r) => r.notas.length > 0 || r.valorAReceber > 0.005);
 }
 
 /** Pendente de recebimento — mesmo agregado do Início / Quanto vou receber (BIC). */
