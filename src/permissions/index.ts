@@ -575,6 +575,17 @@ export function getCooperadoExtraItems(): { href: string; label: string }[] {
 }
 
 /** Rodapé + drawer antes do JSON local estar warm — shell utilizável no 1º frame (PWA). */
+/** Menu da gestão antes do JSON local estar warm — sidebar/rodapé no browser do responsável. */
+export function getStaffShellMenusBeforeDataWarm(user: PermissionSubject): {
+  desktopMenu: { href: string; label: string; resource: Resource }[];
+  mobileMenu: { href: string; label: string; resource: Resource }[];
+  drawerMenu: { href: string; label: string; resource: Resource }[];
+} {
+  const desktopMenu = getMenuItems(user, false, false, null, false);
+  const mobileMenu = getMobileNavItems(user, false, false, null, false);
+  return { desktopMenu, mobileMenu, drawerMenu: desktopMenu };
+}
+
 export function getCooperadoShellMenusBeforeDataWarm(
   user: PermissionSubject
 ): {
