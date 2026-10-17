@@ -49,10 +49,8 @@ const bar = readFileSync(
   join(ROOT, "src/components/permissions/PainelResponsavelMobileBar.tsx"),
   "utf8"
 );
-assert.ok(
-  bar.includes("cooperadoSessaoNuncaPainelGestaoMobile(accountUser, mobile)"),
-  "barra do responsável some na sessão JWT cooperado"
-);
+assert.ok(!bar.includes("Ver como cooperado"), "sem atalho responsável → cooperado");
+assert.ok(!bar.includes("Abrir painel responsável"), "sem atalho cooperado → responsável");
 
 const drawer = readFileSync(join(ROOT, "src/permissions/index.ts"), "utf8");
 assert.ok(

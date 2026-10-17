@@ -4,8 +4,8 @@
  * Quatro casos:
  * 1. responsável puro — sempre gestão
  * 2. cooperado puro — sempre cooperado
- * 3. perfil duplo no desktop — gestão
- * 4. perfil duplo no celular — cooperado, salvo se pediu o painel da cooperativa
+ * 3. perfil duplo (responsável + cooperadoId) — sempre gestão (não há troca de painel)
+ * 4. JWT cooperado — sempre app cooperado
  *
  * JWT cooperado no celular/PWA nunca vira menu de gestão — em hipótese alguma.
  */
@@ -14,10 +14,9 @@ import {
   canAccessPainelResponsavel,
   canAccessPainelResponsavelSession,
 } from "@/lib/security/responsavelPanelAccess";
-import { preferPainelResponsavelMobile } from "@/lib/mobilePainelPreference";
 import { isAppCreator } from "@/lib/security/appCreator";
 
-export const RESPONSAVEL_IDENTIDADE_VERSION = 4;
+export const RESPONSAVEL_IDENTIDADE_VERSION = 6;
 
 export type ResponsavelIdentidadeCaso =
   | "none"
@@ -53,7 +52,7 @@ export type EvaluateResponsavelIdentidadeOpts = {
   dataReady?: boolean;
   /** Injeta viewport — testes. Sem valor, detecta celular/PWA. */
   mobile?: boolean;
-  /** Injeta preferência “ver painel da cooperativa” no celular. */
+  /** Legado — ignorado. Não há troca de painel. */
   preferPainelResponsavel?: boolean;
 };
 
@@ -139,8 +138,6 @@ export function evaluateResponsavelIdentidade(
   const canGestao = resolveCanGestao(account, opts.data, dataReady);
   const vinculoCooperado = temVinculoCooperado(account);
   const mobile = resolveMobileFlag(opts.mobile, jwtCooperado, canGestao);
-  const preferPainel =
-    opts.preferPainelResponsavel ?? (mobile ? preferPainelResponsavelMobile() : false);
 
   if (sessionRole === "parceiro") {
     return {
@@ -184,37 +181,7 @@ export function evaluateResponsavelIdentidade(
 
   const perfilDuplo = canGestao && vinculoCooperado;
 
-  if (mobile && perfilDuplo && !preferPainel) {
-    return {
-      caso: "duplo_mobile_cooperado",
-      modo: "cooperado",
-      canGestao: true,
-      staffPainelUi: false,
-      showAdminPainel: false,
-    };
-  }
-
-  if (mobile && perfilDuplo && preferPainel) {
-    return {
-      caso: "duplo_mobile_gestao",
-      modo: "gestao",
-      canGestao: true,
-      staffPainelUi: true,
-      showAdminPainel: true,
-    };
-  }
-
-  if (!mobile && perfilDuplo) {
-    return {
-      caso: "duplo_desktop",
-      modo: "gestao",
-      canGestao: true,
-      staffPainelUi: true,
-      showAdminPainel: true,
-    };
-  }
-
-  /** Qualquer canGestao que passou dos cortes acima abre o painel. */
+  /** Sem troca de painel: gestão (incluindo perfil duplo) fica em gestão. */
   if (canGestao) {
     return {
       caso: perfilDuplo ? (mobile ? "duplo_mobile_gestao" : "duplo_desktop") : "responsavel_puro",

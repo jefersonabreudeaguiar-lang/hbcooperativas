@@ -67,7 +67,7 @@ import {
 import type { RegisterCooperadoInput, RegisterCooperativaInput } from "@/services/dataStore";
 
 interface AuthContextType {
-  /** Perfil efetivo na UI (no celular, responsável vira cooperado vinculado). */
+  /** Perfil efetivo na UI — mesmo papel do login, sem troca responsável ↔ cooperado. */
   user: Omit<User, "password"> | null;
   /** Conta real na nuvem (responsável, cooperado, etc.). */
   accountUser: Omit<User, "password"> | null;

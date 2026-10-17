@@ -347,8 +347,8 @@ function evaluateDashboardStaffOpen(
     mobile: true,
     preferPainelResponsavel: false,
   });
-  assert.equal(rDuploMob.caso, "duplo_mobile_cooperado");
-  assert.equal(rDuploMob.staffPainelUi, false);
+  assert.equal(rDuploMob.caso, "duplo_mobile_gestao");
+  assert.equal(rDuploMob.staffPainelUi, true);
 
   const rDuploMobGestao = evaluateResponsavelIdentidade({
     accountUser: duplo,
@@ -450,7 +450,7 @@ function evaluateDashboardStaffOpen(
   assert.equal(abertura.canGestao, false);
 }
 
-// CASO 14 — canGestao sem staffPainelUi (duplo mobile) não é o Início gestão, mas o fallback do dashboard usa modo
+// CASO 14 — perfil duplo no celular fica em gestão (sem troca de painel)
 {
   const duplo = staffUser();
   const abertura = evaluateResponsavelPainelAbertura({
@@ -462,8 +462,8 @@ function evaluateDashboardStaffOpen(
     preferPainelResponsavel: false,
   });
   assert.equal(abertura.canGestao, true);
-  assert.equal(abertura.staffPainelUi, false);
-  assert.equal(abertura.modo, "cooperado");
+  assert.equal(abertura.staffPainelUi, true);
+  assert.equal(abertura.modo, "gestao");
   const aberturaPediuPainel = evaluateResponsavelPainelAbertura({
     accountUser: duplo,
     authSubject: duplo,

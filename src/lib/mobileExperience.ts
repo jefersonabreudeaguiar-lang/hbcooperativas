@@ -1,15 +1,12 @@
 import type { AppData, User, UserRole } from "@/types";
 import { isCooperadoAppUser, normalizeUserRole } from "@/permissions";
-import {
-  resolveMobileCooperadoId,
-  resolveMobileCooperadoIdFromEmail,
-} from "@/lib/hb-credit/mobileCooperadoLink";
+import { resolveMobileCooperadoId } from "@/lib/hb-credit/mobileCooperadoLink";
 import { resolveCooperadoExperienceId } from "@/lib/security/responsavelPanelAccess";
 import { evaluateResponsavelIdentidade } from "@/lib/responsavel/responsavelIdentidade";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 
-export { resolveMobileCooperadoId, resolveMobileCooperadoIdFromEmail };
+export { resolveMobileCooperadoId };
 
 function isAppStandaloneMode(): boolean {
   if (typeof window === "undefined") return false;
@@ -51,7 +48,12 @@ function asCooperadoExperience<T extends Omit<User, "password">>(
   };
 }
 
-/** Papel e cooperadoId usados na UI — cooperado sempre cooperado; gestão só para quem foi autorizado. */
+function isStaffAccountRole(role: string | undefined): boolean {
+  const n = normalizeUserRole(role ?? "cooperado");
+  return n === "responsavel" || n === "tesoureiro" || n === "admin";
+}
+
+/** Papel da UI = papel do login. Sem troca responsável ↔ cooperado. */
 export function resolveExperienceUser<T extends Omit<User, "password">>(
   user: T | null | undefined,
   data?: AppData | null
@@ -66,7 +68,7 @@ export function resolveExperienceUser<T extends Omit<User, "password">>(
     mobile,
   });
 
-  if (identidade.staffPainelUi) {
+  if (identidade.staffPainelUi || isStaffAccountRole(user.role)) {
     return user;
   }
 
@@ -78,16 +80,6 @@ export function resolveExperienceUser<T extends Omit<User, "password">>(
     return cooperadoId
       ? asCooperadoExperience(user, cooperadoId, data)
       : { ...user, role: "cooperado" as UserRole };
-  }
-
-  if (identidade.modo === "parceiro" || identidade.modo === "contador") {
-    return user;
-  }
-
-  const role = normalizeUserRole(user.role);
-  if (mobile && (role === "responsavel" || role === "tesoureiro" || role === "admin")) {
-    const mobileCooperadoId = resolveMobileCooperadoId(user);
-    if (mobileCooperadoId) return asCooperadoExperience(user, mobileCooperadoId, data);
   }
 
   return user;

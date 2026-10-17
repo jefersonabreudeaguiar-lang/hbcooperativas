@@ -22,8 +22,6 @@ import {
 } from "@/config/contratoServicoApp";
 import { isDiretoriaRole } from "@/permissions";
 import { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
-import { isMobileCooperativaApp } from "@/lib/mobileExperience";
-import { preferPainelResponsavelMobile } from "@/lib/mobilePainelPreference";
 
 function agendarPosAssinaturaContrato(coopId: string) {
   const run = () => {
@@ -52,7 +50,6 @@ export function ContratoServicoAppGate() {
 
   if (!gateUser || !data || !isDiretoriaRole(gateUser.role)) return null;
   if (!canAccessPainelResponsavel(gateUser, data)) return null;
-  if (isMobileCooperativaApp() && !preferPainelResponsavelMobile()) return null;
 
   const coopId = getUserCooperativaId(gateUser, data);
   const coop = coopId ? getCooperativaById(data, coopId) : undefined;

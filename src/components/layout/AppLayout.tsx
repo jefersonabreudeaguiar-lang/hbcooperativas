@@ -27,7 +27,6 @@ import {
 } from "@/components/sync/SyncStatusChip";
 import { CooperadoSubtleUpdateNotice } from "@/components/cooperado/CooperadoSubtleUpdateNotice";
 import { CobrancaSaasPainel } from "@/components/payments/CobrancaSaasPainelWrapper";
-import { PainelResponsavelMobileBar } from "@/components/permissions/PainelResponsavelMobileBar";
 import { ContratoServicoAppGate } from "@/components/cobranca/ContratoServicoAppGate";
 import { cn } from "@/utils/format";
 import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
@@ -614,7 +613,6 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           )}
-          <PainelResponsavelMobileBar />
           <ContratoServicoAppGate />
           <CobrancaSaasPainel />
           {navUser && isCooperadoAppUser(navUser) && <CooperadoFinanceiroSyncBanner />}
