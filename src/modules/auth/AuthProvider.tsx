@@ -17,6 +17,7 @@ import { normalizeUserRole, resolveAppUserRole } from "@/permissions";
 import { canAccessPainelResponsavelSession } from "@/lib/security/responsavelPanelAccess";
 import { resolveExperienceUser, resolveMobileCooperadoId } from "@/lib/mobileExperience";
 import { PAINEL_MOBILE_PREF_EVENT, setPreferPainelResponsavelMobile } from "@/lib/mobilePainelPreference";
+import { resetCooperadoAposVazamentoPainelGestao } from "@/lib/cooperado/resetCooperadoAposVazamentoPainelGestao";
 import {
   ensureCooperadoAppDataEagerWarm,
   isCooperadoInstantResumeEnabled,
@@ -137,7 +138,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ensureCooperadoAppDataEagerWarm();
     }
     refresh();
-    applyCooperadoMobilePilotPerfDomFlag(getSession());
+    const session = getSession();
+    applyCooperadoMobilePilotPerfDomFlag(session);
+    if (session?.role === "cooperado") {
+      if (resetCooperadoAposVazamentoPainelGestao(session)) return;
+      setPreferPainelResponsavelMobile(false);
+    }
   }, [refresh]);
 
   useLayoutEffect(() => {
@@ -301,11 +307,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
       setAccountUser(safeUser);
       setActiveCloudProfile(userToCloudProfile(safeUser));
+      const jwtRole = normalizeUserRole(sessionUser?.role ?? result.role);
       const role = resolveAppUserRole(safeUser, getData());
-      const gestaoLogin = canAccessPainelResponsavelSession(safeUser);
-      if (gestaoLogin) {
+      if (jwtRole === "cooperado") {
+        if (resetCooperadoAposVazamentoPainelGestao(safeUser)) {
+          return { ok: true as const, redirectTo: "/dashboard", navigated: true as const };
+        }
+        setPreferPainelResponsavelMobile(false);
+      } else if (canAccessPainelResponsavelSession(safeUser)) {
         setPreferPainelResponsavelMobile(true);
-      } else if (role === "cooperado") {
+      } else {
         setPreferPainelResponsavelMobile(false);
       }
       const sessionReady =

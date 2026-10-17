@@ -27,6 +27,7 @@ import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify"
 import { getData, getDataRevision, isAppDataWarm } from "@/services/dataStore";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { evaluateResponsavelPainelAbertura } from "@/lib/responsavel/responsavelPainelContrato";
+import { cooperadoSessaoNuncaPainelGestaoMobile } from "@/lib/responsavel/responsavelIdentidade";
 import { canAccessPainelResponsavelSession } from "@/lib/security/responsavelPanelAccess";
 import { shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
 import { isMobileCooperativaApp } from "@/lib/mobileExperience";
@@ -892,6 +893,13 @@ export default function DashboardPage() {
   ]);
 
   if (!authSubject) return <PageSkeleton />;
+
+  if (
+    cooperadoSessaoNuncaPainelGestaoMobile(user ?? authSubject, mobile) ||
+    cooperadoSessaoNuncaPainelGestaoMobile(authSubject, mobile)
+  ) {
+    return <CooperadoDashboard />;
+  }
 
   if (painelAbertura.staffPainelUi || painelAbertura.showAdminPainel) {
     return (

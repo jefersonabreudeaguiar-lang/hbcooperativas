@@ -7,8 +7,7 @@
  * 3. perfil duplo no desktop — gestão
  * 4. perfil duplo no celular — cooperado, salvo se pediu o painel da cooperativa
  *
- * JWT cooperado puro no celular/PWA nunca vira menu de gestão.
- * Staff com JWT cooperado stale (sem vínculo) abre gestão — senão a página some.
+ * JWT cooperado no celular/PWA nunca vira menu de gestão — em hipótese alguma.
  */
 import type { AppData, User, UserRole } from "@/types";
 import {
@@ -17,7 +16,7 @@ import {
 } from "@/lib/security/responsavelPanelAccess";
 import { preferPainelResponsavelMobile } from "@/lib/mobilePainelPreference";
 
-export const RESPONSAVEL_IDENTIDADE_VERSION = 2;
+export const RESPONSAVEL_IDENTIDADE_VERSION = 3;
 
 export type ResponsavelIdentidadeCaso =
   | "none"
@@ -90,6 +89,15 @@ function temVinculoCooperado(user: AuthSubject | null | undefined): boolean {
   return Boolean(user?.cooperadoId?.trim() || user?.mobileCooperadoId?.trim());
 }
 
+/** Celular/PWA: sessão JWT cooperado nunca abre o painel do responsável. */
+export function cooperadoSessaoNuncaPainelGestaoMobile(
+  user: AuthSubject | null | undefined,
+  mobile: boolean
+): boolean {
+  if (!user || !mobile) return false;
+  return normalizeRole(user.role) === "cooperado";
+}
+
 function resolveCanGestao(
   account: AuthSubject,
   data: AppData | null | undefined,
@@ -144,11 +152,8 @@ export function evaluateResponsavelIdentidade(
     };
   }
 
-  /**
-   * JWT cooperado no celular: app cooperado — exceto staff sem vínculo
-   * (JWT stale / e-mail builtin). Esse caso é responsável puro e tem de abrir gestão.
-   */
-  if (mobile && jwtCooperado && !preferPainel && (!canGestao || vinculoCooperado)) {
+  /** JWT cooperado no celular: só app do cooperado. Preferência/users[]/builtin não viram gestão. */
+  if (cooperadoSessaoNuncaPainelGestaoMobile(account, mobile)) {
     return {
       caso: canGestao && vinculoCooperado ? "duplo_mobile_cooperado" : "cooperado_puro",
       modo: "cooperado",

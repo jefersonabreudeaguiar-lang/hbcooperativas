@@ -385,7 +385,7 @@ function evaluateDashboardStaffOpen(
   void abertura;
 }
 
-// CASO 10 — staff com JWT cooperado stale (sem vínculo) no celular abre gestão
+// CASO 10 — JWT cooperado no celular nunca abre gestão (nem users[] staff / preferência)
 {
   const stale = staffUser({ cooperadoId: undefined, role: "cooperado" });
   const data = emptyData([{ ...stale, role: "responsavel" }]);
@@ -394,15 +394,14 @@ function evaluateDashboardStaffOpen(
     data,
     dataReady: true,
     mobile: true,
-    preferPainelResponsavel: false,
+    preferPainelResponsavel: true,
   });
-  assert.equal(id.canGestao, true, "builtin/users[] staff deve ter canGestao");
-  assert.equal(id.staffPainelUi, true, "JWT cooperado stale sem vínculo abre o painel");
-  assert.equal(id.modo, "gestao");
-  assert.equal(id.caso, "responsavel_puro");
+  assert.equal(id.staffPainelUi, false, "JWT cooperado no celular nunca é painel do responsável");
+  assert.equal(id.modo, "cooperado");
+  assert.equal(id.caso, "cooperado_puro");
 }
 
-// CASO 11 — e-mail builtin com JWT cooperado no celular abre gestão
+// CASO 11 — e-mail builtin com JWT cooperado no celular continua app cooperado
 {
   const builtin = staffUser({
     email: "jefersonabreudeaguiar@gmail.com",
@@ -414,11 +413,11 @@ function evaluateDashboardStaffOpen(
     data: null,
     dataReady: false,
     mobile: true,
-    preferPainelResponsavel: false,
+    preferPainelResponsavel: true,
   });
-  assert.equal(id.canGestao, true);
-  assert.equal(id.staffPainelUi, true, "e-mail builtin no celular não pode cair em skeleton");
-  assert.equal(id.showAdminPainel, true);
+  assert.equal(id.staffPainelUi, false, "JWT cooperado no celular não vira gestão");
+  assert.equal(id.showAdminPainel, false);
+  assert.equal(id.modo, "cooperado");
 }
 
 // CASO 12 — cooperado puro no celular continua fora da gestão
