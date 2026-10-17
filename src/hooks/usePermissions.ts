@@ -7,11 +7,14 @@ import { canUser, canGerenciarEquipe, getUserFuncaoLabel, isCooperadoAppUser, is
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { isMobileCooperativaApp } from "@/lib/mobileExperience";
+import { usePainelResponsavelMobilePref } from "@/hooks/usePainelResponsavelMobilePref";
 import type { Action, Resource } from "@/types";
 
 export function usePermissions() {
   const { user, accountUser } = useAuth();
   const authSubject = accountUser ?? user;
+  const preferPainel = usePainelResponsavelMobilePref();
+  const mobile = isMobileCooperativaApp();
   const staffPainelAtivo = useAppDataSelector(
     (d) =>
       evaluateResponsavelIdentidade({
@@ -19,7 +22,8 @@ export function usePermissions() {
         experienceUser: user,
         data: d,
         dataReady: true,
-        mobile: isMobileCooperativaApp(),
+        mobile,
+        preferPainelResponsavel: preferPainel,
       }).staffPainelUi,
     [
       accountUser?.id,
@@ -29,6 +33,8 @@ export function usePermissions() {
       accountUser?.cooperativaId,
       user?.id,
       user?.role,
+      mobile,
+      preferPainel,
     ]
   );
   const permUser = staffPainelAtivo ? accountUser ?? user : user;

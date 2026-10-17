@@ -378,4 +378,96 @@ function evaluateDashboardStaffOpen(
   void abertura;
 }
 
+// CASO 10 — staff com JWT cooperado stale (sem vínculo) no celular abre gestão
+{
+  const stale = staffUser({ cooperadoId: undefined, role: "cooperado" });
+  const data = emptyData([{ ...stale, role: "responsavel" }]);
+  const id = evaluateResponsavelIdentidade({
+    accountUser: stale,
+    data,
+    dataReady: true,
+    mobile: true,
+    preferPainelResponsavel: false,
+  });
+  assert.equal(id.canGestao, true, "builtin/users[] staff deve ter canGestao");
+  assert.equal(id.staffPainelUi, true, "JWT cooperado stale sem vínculo abre o painel");
+  assert.equal(id.modo, "gestao");
+  assert.equal(id.caso, "responsavel_puro");
+}
+
+// CASO 11 — e-mail builtin com JWT cooperado no celular abre gestão
+{
+  const builtin = staffUser({
+    email: "jefersonabreudeaguiar@gmail.com",
+    role: "cooperado",
+    cooperadoId: undefined,
+  });
+  const id = evaluateResponsavelIdentidade({
+    accountUser: builtin,
+    data: null,
+    dataReady: false,
+    mobile: true,
+    preferPainelResponsavel: false,
+  });
+  assert.equal(id.canGestao, true);
+  assert.equal(id.staffPainelUi, true, "e-mail builtin no celular não pode cair em skeleton");
+  assert.equal(id.showAdminPainel, true);
+}
+
+// CASO 12 — cooperado puro no celular continua fora da gestão
+{
+  const coop = cooperadoUser();
+  const id = evaluateResponsavelIdentidade({
+    accountUser: coop,
+    data: emptyData([coop]),
+    dataReady: true,
+    mobile: true,
+    preferPainelResponsavel: false,
+  });
+  assert.equal(id.staffPainelUi, false);
+  assert.equal(id.canGestao, false);
+  assert.equal(id.modo, "cooperado");
+}
+
+// CASO 13 — SSR (sem window) de staff com JWT cooperado não some o painel
+{
+  const stale = staffUser({ cooperadoId: undefined, role: "cooperado" });
+  const data = emptyData([{ ...stale, role: "responsavel" }]);
+  const abertura = evaluateResponsavelPainelAbertura({
+    accountUser: stale,
+    authSubject: stale,
+    data,
+    dataReady: true,
+  });
+  assert.equal(abertura.staffPainelUi, true, "SSR staff não pode hidratar como cooperado");
+  assert.equal(abertura.showAdminPainel, true);
+  assert.equal(abertura.canGestao, true);
+}
+
+// CASO 14 — canGestao sem staffPainelUi (duplo mobile) não é o Início gestão, mas o fallback do dashboard usa modo
+{
+  const duplo = staffUser();
+  const abertura = evaluateResponsavelPainelAbertura({
+    accountUser: duplo,
+    authSubject: duplo,
+    data: emptyData([duplo]),
+    dataReady: true,
+    mobile: true,
+    preferPainelResponsavel: false,
+  });
+  assert.equal(abertura.canGestao, true);
+  assert.equal(abertura.staffPainelUi, false);
+  assert.equal(abertura.modo, "cooperado");
+  const aberturaPediuPainel = evaluateResponsavelPainelAbertura({
+    accountUser: duplo,
+    authSubject: duplo,
+    data: emptyData([duplo]),
+    dataReady: true,
+    mobile: true,
+    preferPainelResponsavel: true,
+  });
+  assert.equal(aberturaPediuPainel.staffPainelUi, true);
+  assert.equal(aberturaPediuPainel.modo, "gestao");
+}
+
 console.log("test-responsavel-panel-access-etapa622: OK");

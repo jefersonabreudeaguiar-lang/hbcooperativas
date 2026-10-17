@@ -9,6 +9,7 @@ import { AppSchedulerBootstrap } from "@/components/performance/AppSchedulerBoot
 import { AppIdleSecondaryBootstraps } from "@/components/performance/AppIdleSecondaryBootstraps";
 
 import { GestaoAccessGuard } from "@/components/permissions/GestaoAccessGuard";
+import { AppAreaSafeRoot } from "@/components/responsavel/AppAreaSafeRoot";
 
 /** Reforço noindex — área autenticada (cooperado, mercado, responsável). */
 export const metadata: Metadata = {
@@ -23,9 +24,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <HbCreditNavPrefetch />
         <AppIdleSecondaryBootstraps />
         <GestaoAccessGuard>
-          <AppShell>
-            <CooperadoFinanceiroGate>{children}</CooperadoFinanceiroGate>
-          </AppShell>
+          <AppAreaSafeRoot>
+            <AppShell>
+              <CooperadoFinanceiroGate>{children}</CooperadoFinanceiroGate>
+            </AppShell>
+          </AppAreaSafeRoot>
         </GestaoAccessGuard>
       </CooperativaSyncProvider>
     </ProtectedRoute>

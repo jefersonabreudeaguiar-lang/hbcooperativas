@@ -29,6 +29,8 @@ import { useAuth } from "@/modules/auth/AuthProvider";
 import { evaluateResponsavelPainelAbertura } from "@/lib/responsavel/responsavelPainelContrato";
 import { canAccessPainelResponsavelSession } from "@/lib/security/responsavelPanelAccess";
 import { shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
+import { isMobileCooperativaApp } from "@/lib/mobileExperience";
+import { usePainelResponsavelMobilePref } from "@/hooks/usePainelResponsavelMobilePref";
 import { StatCard } from "@/components/ui/Card";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -604,30 +606,41 @@ function AdminDashboard() {
   const meta = useMemo(() => {
     if (!navUser) return null;
     const mes = getCurrentMesReferencia();
-    const data = isAppDataWarm() ? getData() : null;
-    if (!data) {
-      const coopId = navUser.cooperativaId ?? "";
-      const cnpj = navUser.cooperativaCnpj ? normalizeCnpj(navUser.cooperativaCnpj) : "";
+    try {
+      const data = isAppDataWarm() ? getData() : null;
+      if (!data) {
+        const coopId = navUser.cooperativaId ?? "";
+        const cnpj = navUser.cooperativaCnpj ? normalizeCnpj(navUser.cooperativaCnpj) : "";
+        return {
+          coopNome: coopId ? "Carregando…" : "",
+          mes,
+          instalacao: null,
+          assinatura: null,
+          cnpj,
+          coopId,
+        };
+      }
+      const coopId = getUserCooperativaId(navUser, data);
+      const coopNome = getUserCooperativaNome(navUser, data);
+      const instalacao = coopId ? resumoInstalacaoApp(data, coopId) : null;
+      const assinatura = coopId ? resumoAssinaturaCadastroApp(data, coopId) : null;
+      let cnpj = "";
+      if (navUser.cooperativaCnpj) cnpj = normalizeCnpj(navUser.cooperativaCnpj);
+      else {
+        const coop = data.cooperativas.find((c) => c.id === coopId);
+        if (coop?.cnpj) cnpj = normalizeCnpj(coop.cnpj);
+      }
+      return { coopNome, mes, instalacao, assinatura, cnpj, coopId: coopId ?? "" };
+    } catch {
       return {
-        coopNome: coopId ? "Carregando…" : "",
+        coopNome: navUser.cooperativaId ? "Cooperativa" : "",
         mes,
         instalacao: null,
         assinatura: null,
-        cnpj,
-        coopId,
+        cnpj: navUser.cooperativaCnpj ? normalizeCnpj(navUser.cooperativaCnpj) : "",
+        coopId: navUser.cooperativaId ?? "",
       };
     }
-    const coopId = getUserCooperativaId(navUser, data);
-    const coopNome = getUserCooperativaNome(navUser, data);
-    const instalacao = coopId ? resumoInstalacaoApp(data, coopId) : null;
-    const assinatura = coopId ? resumoAssinaturaCadastroApp(data, coopId) : null;
-    let cnpj = "";
-    if (navUser.cooperativaCnpj) cnpj = normalizeCnpj(navUser.cooperativaCnpj);
-    else {
-      const coop = data.cooperativas.find((c) => c.id === coopId);
-      if (coop?.cnpj) cnpj = normalizeCnpj(coop.cnpj);
-    }
-    return { coopNome, mes, instalacao, assinatura, cnpj, coopId: coopId ?? "" };
   }, [navUser?.id, navUser?.cooperativaId, navUser?.role, adminDataRevision]);
   useReconciliarLivroCaixaGestao(meta?.coopId, Boolean(navUser && meta?.coopId));
 
@@ -862,6 +875,8 @@ export default function DashboardPage() {
           : cooperadoLocalResumeReady(user))
       : appLocalResumeReady(user));
   const dataRevision = useAppDataSelector(() => (isAppDataWarm() ? getDataRevision() : -1), []);
+  const mobile = isMobileCooperativaApp();
+  const preferPainel = usePainelResponsavelMobilePref();
   const painelAbertura = useMemo(() => {
     const data = isAppDataWarm() ? getData() : null;
     const warmReady = Boolean(dataReady && data);
@@ -870,6 +885,8 @@ export default function DashboardPage() {
       authSubject,
       data,
       dataReady: warmReady,
+      mobile,
+      preferPainelResponsavel: preferPainel,
     });
   }, [
     dataReady,
@@ -881,6 +898,8 @@ export default function DashboardPage() {
     authSubject?.role,
     authSubject?.cooperadoId,
     authSubject?.cooperativaId,
+    mobile,
+    preferPainel,
   ]);
 
   if (!authSubject) return <PageSkeleton />;
@@ -893,8 +912,20 @@ export default function DashboardPage() {
     );
   }
 
-  if (isCooperadoAppUser(user ?? authSubject) || user?.role === "cooperado") {
+  if (
+    painelAbertura.modo === "cooperado" ||
+    isCooperadoAppUser(user ?? authSubject) ||
+    user?.role === "cooperado"
+  ) {
     return <CooperadoDashboard />;
+  }
+
+  if (painelAbertura.canGestao) {
+    return (
+      <StaffPainelSafeRoot>
+        <AdminDashboard />
+      </StaffPainelSafeRoot>
+    );
   }
 
   if (!dataReady && !instantResume) return <PageSkeleton />;

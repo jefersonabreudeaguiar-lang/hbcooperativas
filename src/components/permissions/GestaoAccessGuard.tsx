@@ -8,6 +8,7 @@ import { isGestaoOnlyRoute } from "@/lib/security/responsavelPanelAccess";
 import { evaluateResponsavelIdentidade } from "@/lib/responsavel/responsavelIdentidade";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { isMobileCooperativaApp } from "@/lib/mobileExperience";
+import { usePainelResponsavelMobilePref } from "@/hooks/usePainelResponsavelMobilePref";
 
 export function GestaoAccessGuard({ children }: { children: React.ReactNode }) {
   const { accountUser, user } = useAuth();
@@ -15,6 +16,7 @@ export function GestaoAccessGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const dataReady = useAppDataReady();
   const mobile = isMobileCooperativaApp();
+  const preferPainel = usePainelResponsavelMobilePref();
 
   const identidadeWarm = useAppDataSelector(
     (data) =>
@@ -24,6 +26,7 @@ export function GestaoAccessGuard({ children }: { children: React.ReactNode }) {
         data,
         dataReady: true,
         mobile,
+        preferPainelResponsavel: preferPainel,
       }),
     [
       accountUser?.id,
@@ -32,6 +35,7 @@ export function GestaoAccessGuard({ children }: { children: React.ReactNode }) {
       user?.id,
       user?.role,
       mobile,
+      preferPainel,
     ]
   );
   const identidadeCold = evaluateResponsavelIdentidade({
@@ -40,6 +44,7 @@ export function GestaoAccessGuard({ children }: { children: React.ReactNode }) {
     data: isAppDataWarm() ? getData() : null,
     dataReady: false,
     mobile,
+    preferPainelResponsavel: preferPainel,
   });
   const identidade = dataReady && identidadeWarm ? identidadeWarm : identidadeCold;
 

@@ -34,6 +34,7 @@ import { isContaCoopUiVisibleForUser } from "@/utils/contaCoopUiVisibility";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import { cooperadoPilotMobileBottomNavItems } from "@/lib/cooperado/cooperadoMobilePilotBottomNav";
 import { isMobileCooperativaApp } from "@/lib/mobileExperience";
+import { usePainelResponsavelMobilePref } from "@/hooks/usePainelResponsavelMobilePref";
 
 export type AppShellMenuItem = { href: string; label: string; resource: Resource };
 
@@ -74,12 +75,15 @@ export function useAppShellNavigation(): AppShellNavigation | null {
   const { user, accountUser } = useAuth();
   const experienceUser = user ?? accountUser;
   const coldData = isAppDataWarm() ? getData() : null;
+  const preferPainel = usePainelResponsavelMobilePref();
+  const mobile = isMobileCooperativaApp();
   const identidade = evaluateResponsavelIdentidade({
     accountUser: accountUser ?? user,
     experienceUser,
     data: coldData,
     dataReady: isAppDataWarm(),
-    mobile: isMobileCooperativaApp(),
+    mobile,
+    preferPainelResponsavel: preferPainel,
   });
   const mobileCooperadoShell = identidade.modo === "cooperado";
   const subject = experienceUser;
@@ -143,6 +147,8 @@ export function useAppShellNavigation(): AppShellNavigation | null {
     user?.role,
     identidade.staffPainelUi,
     identidade.modo,
+    preferPainel,
+    mobile,
     dataRevision,
   ]);
 
@@ -150,6 +156,7 @@ export function useAppShellNavigation(): AppShellNavigation | null {
 
   return useMemo(() => {
     if (!shellCore) return null;
+    try {
     const { navUser, cooperadoNome, staffPainelUi, coopId, beforeDataWarm } = shellCore;
     if (beforeDataWarm) {
       const coldStaff =
@@ -239,5 +246,22 @@ export function useAppShellNavigation(): AppShellNavigation | null {
       mobileMenu,
       drawerMenu,
     };
+    } catch {
+      const { navUser, cooperadoNome, staffPainelUi, coopId } = shellCore;
+      const fallback = staffPainelUi
+        ? getStaffShellMenusBeforeDataWarm(navUser)
+        : getCooperadoShellMenusBeforeDataWarm(navUser);
+      return {
+        navUser,
+        cooperadoNome,
+        staffPainelUi,
+        coopId,
+        contaCoopUiVisible: false,
+        moduleNavEligible: false,
+        desktopMenu: fallback.desktopMenu,
+        mobileMenu: fallback.mobileMenu,
+        drawerMenu: fallback.drawerMenu,
+      };
+    }
   }, [shellCore, credit.enabled, credit.status, credit.serverConfirmed]);
 }

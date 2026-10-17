@@ -5,10 +5,13 @@
  * Testes: npm run test:responsavel-painel
  */
 import type { AppData, User } from "@/types";
-import { evaluateResponsavelIdentidade } from "@/lib/responsavel/responsavelIdentidade";
+import {
+  evaluateResponsavelIdentidade,
+  type ResponsavelIdentidadeModo,
+} from "@/lib/responsavel/responsavelIdentidade";
 import { getStaffShellMenusBeforeDataWarm } from "@/permissions";
 
-export const RESPONSAVEL_PAINEL_CONTRATO_VERSION = 2;
+export const RESPONSAVEL_PAINEL_CONTRATO_VERSION = 3;
 
 /** Rotas mínimas do shell gestão (cold start + warm). Não remover sem bump de contrato. */
 export const STAFF_SHELL_MIN_HREFS = [
@@ -22,6 +25,7 @@ export type ResponsavelPainelAbertura = {
   staffPainelUi: boolean;
   /** Dashboard / início gestão — nunca cair no cooperado quando true. */
   showAdminPainel: boolean;
+  modo: ResponsavelIdentidadeModo;
 };
 
 type AuthSubject = Pick<
@@ -34,6 +38,8 @@ export function evaluateResponsavelPainelAbertura(opts: {
   authSubject: AuthSubject | null | undefined;
   data: AppData | null | undefined;
   dataReady: boolean;
+  mobile?: boolean;
+  preferPainelResponsavel?: boolean;
 }): ResponsavelPainelAbertura {
   const { accountUser, authSubject, data, dataReady } = opts;
   const identidade = evaluateResponsavelIdentidade({
@@ -41,12 +47,15 @@ export function evaluateResponsavelPainelAbertura(opts: {
     experienceUser: authSubject,
     data,
     dataReady,
+    mobile: opts.mobile,
+    preferPainelResponsavel: opts.preferPainelResponsavel,
   });
 
   return {
     canGestao: identidade.canGestao,
     staffPainelUi: identidade.staffPainelUi,
     showAdminPainel: identidade.showAdminPainel,
+    modo: identidade.modo,
   };
 }
 

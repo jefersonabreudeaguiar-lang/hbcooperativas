@@ -302,7 +302,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccountUser(safeUser);
       setActiveCloudProfile(userToCloudProfile(safeUser));
       const role = resolveAppUserRole(safeUser, getData());
-      if (role === "cooperado") {
+      const gestaoLogin = canAccessPainelResponsavelSession(safeUser);
+      if (gestaoLogin) {
+        setPreferPainelResponsavelMobile(true);
+      } else if (role === "cooperado") {
         setPreferPainelResponsavelMobile(false);
       }
       const sessionReady =
@@ -318,7 +321,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             "Não foi possível abrir sua sessão na nuvem. Aguarde alguns segundos e tente de novo.",
         };
       }
-      const gestaoLogin = canAccessPainelResponsavelSession(safeUser);
       if (isCooperadoPwaMessengerMode() || isCooperadoMobileGaPromoted(safeUser)) {
         preloadAppData();
       } else if (gestaoLogin) {
