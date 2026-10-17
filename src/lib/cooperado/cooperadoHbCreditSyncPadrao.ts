@@ -6,7 +6,7 @@ import { refreshContaCoopValorReceberPilot } from "@/lib/hb-credit/syncContaCoop
 import { notifyHbCreditAccountCacheUpdated } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import { persistirHbCreditAccountCooperado } from "@/services/hbCreditAccountPersistenciaService";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { getData, isAppDataWarm, preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
+import { getData, isAppDataWarm, preloadAppData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 
@@ -39,21 +39,24 @@ export async function executarCooperadoHbCreditSyncPadrao(
   pipelineInflight = (async () => {
     pipelineLastAt = Date.now();
 
+    /** GET da conta liberada — CNPJ da sessão/cache. Não espera AppData (abertura 447+). */
+    const ok = await persistirHbCreditAccountCooperado(user, { syncLimiteFromFicha: false });
+    if (ok) notifyHbCreditAccountCacheUpdated();
+
     if (!isAppDataWarm()) {
       preloadAppData();
-      await waitForAppDataWarm(12_000);
+      return ok;
     }
-    if (!isAppDataWarm()) return false;
 
     const data = getData();
     const cooperativaId = getUserCooperativaId(user, data);
-    if (!cooperativaId) return false;
+    if (!cooperativaId) return ok;
 
     const cnpj = await resolveCooperativaCnpj(data, cooperativaId, user);
-    if (!cnpj) return false;
+    if (!cnpj) return ok;
 
     const cooperadoId = user.cooperadoId;
-    if (!cooperadoId) return false;
+    if (!cooperadoId) return ok;
 
     const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
     const paridade = cooperadoLeituraFinanceiraExibicao(data, canonico, cooperativaId);
@@ -69,8 +72,6 @@ export async function executarCooperadoHbCreditSyncPadrao(
       cooperativaId,
     }).catch(() => {});
 
-    const ok = await persistirHbCreditAccountCooperado(user, { syncLimiteFromFicha: false });
-    if (ok) notifyHbCreditAccountCacheUpdated();
     return ok;
   })().finally(() => {
     pipelineInflight = null;

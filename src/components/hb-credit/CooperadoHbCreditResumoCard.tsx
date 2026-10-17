@@ -23,6 +23,7 @@ import {
   gravarHbCreditAccountPersistido,
   HB_CREDIT_ACCOUNT_STORAGE_VERSION,
 } from "@/lib/hb-credit/hbCreditAccountPersistencia";
+import { resolveCooperadoHbCreditCnpjDigits } from "@/lib/hb-credit/resolveCooperadoHbCreditCnpj";
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import { clearCooperadoOptimisticTab } from "@/lib/performance/cooperadoOptimisticTabNavigation";
 
@@ -34,6 +35,10 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
   const router = useRouter();
   const { user, cooperadoId } = usePermissions();
   const hbApiCooperadoId = resolveHbCreditApiCooperadoId(user, cooperadoId);
+  const cnpjResolved = useMemo(() => {
+    if (cnpj.length === 14) return cnpj;
+    return resolveCooperadoHbCreditCnpjDigits(user);
+  }, [cnpj, user]);
   const [snap, setSnap] = useState<HbCreditAccountPersistido | null>(null);
 
   /** Push explícito — Link sozinho falha depois do replaceState das abas. */
@@ -57,16 +62,19 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
   }, [router]);
 
   useEffect(() => {
-    if (!hbApiCooperadoId || cnpj.length !== 14) {
+    if (!hbApiCooperadoId) {
       setSnap(null);
       return;
     }
     const readCache = (): HbCreditAccountPersistido | null =>
-      lerHbCreditAccountPersistido(cnpj, hbApiCooperadoId) ??
-      lerHbCreditAccountPersistidoFlex(hbApiCooperadoId, cnpj) ??
+      (cnpjResolved.length === 14
+        ? lerHbCreditAccountPersistido(cnpjResolved, hbApiCooperadoId)
+        : null) ??
+      lerHbCreditAccountPersistidoFlex(hbApiCooperadoId, cnpjResolved || undefined) ??
       (cooperadoId && cooperadoId !== hbApiCooperadoId
-        ? lerHbCreditAccountPersistido(cnpj, cooperadoId) ??
-          lerHbCreditAccountPersistidoFlex(cooperadoId, cnpj)
+        ? (cnpjResolved.length === 14
+            ? lerHbCreditAccountPersistido(cnpjResolved, cooperadoId)
+            : null) ?? lerHbCreditAccountPersistidoFlex(cooperadoId, cnpjResolved || undefined)
         : null);
 
     const refreshFromCache = () => setSnap(readCache());
@@ -78,8 +86,9 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
         refreshFromCache();
         return;
       }
+      if (cnpjResolved.length !== 14) return;
       try {
-        const acc = await fetchCreditAccount(cnpj, hbApiCooperadoId);
+        const acc = await fetchCreditAccount(cnpjResolved, hbApiCooperadoId);
         const account = (acc.account as ContaCoopLimiteCooperado | null) ?? null;
         const payload: HbCreditAccountPersistido = {
           v: HB_CREDIT_ACCOUNT_STORAGE_VERSION,
@@ -89,7 +98,7 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
           pinResetPending: Boolean(acc.pinResetPending),
           savedAt: new Date().toISOString(),
         };
-        gravarHbCreditAccountPersistido(cnpj, hbApiCooperadoId, payload);
+        gravarHbCreditAccountPersistido(cnpjResolved, hbApiCooperadoId, payload);
         setSnap(payload);
       } catch {
         refreshFromCache();
@@ -109,7 +118,7 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
       window.removeEventListener(HB_CREDIT_ACCOUNT_CACHE_EVENT, onCache);
       window.removeEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
     };
-  }, [hbApiCooperadoId, cooperadoId, cnpj, user]);
+  }, [hbApiCooperadoId, cooperadoId, cnpjResolved, user]);
 
   const totals = useMemo(() => {
     const acc = snap?.account;

@@ -21,7 +21,6 @@ import {
   requestCooperadoPinReset,
   setCreditFinancialPin,
 } from "@/services/creditApiService";
-import { refreshContaCoopLimiteFromFicha } from "@/lib/hb-credit/syncContaCoopLimiteFromFicha";
 import { isCooperadoTransferenciaCreditoEnabled } from "@/config/cooperadoTransferenciaCredito";
 import {
   storeHbCreditCooperadoReceberDraft,
@@ -56,10 +55,7 @@ import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValor
 import { useHbCreditAccountRevisionPoll } from "@/hooks/useHbCreditAccountRevisionPoll";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { cn } from "@/utils/format";
-import {
-  resolveHbCreditApiCooperadoId,
-  resolveHbCreditLimiteSyncTargets,
-} from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
+import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 import {
   gravarHbCreditLedgerPersistido,
   lerHbCreditLedgerPersistido,
@@ -297,21 +293,6 @@ function MinhaContaCoopContent() {
       }
     }
   }, [cnpj, hbApiCooperadoId]);
-
-  useEffect(() => {
-    if (!cnpj || cnpj.length !== 14 || !user || !data || !cooperadoId) return;
-    if (valorAReceberFicha.valor <= 0.005) return;
-    const coopId = getUserCooperativaId(user, data);
-    if (!coopId) return;
-    const limite = resolveHbCreditLimiteSyncTargets(user, data, coopId);
-    if (!limite) return;
-    void refreshContaCoopLimiteFromFicha({
-      cnpj,
-      cooperadoId: limite.apiCooperadoId,
-      cooperativaId: coopId,
-      cooperadoIds: limite.cooperadoIds,
-    }).then(() => void reload({ background: true }));
-  }, [cnpj, cooperadoId, data, user, valorAReceberFicha.valor, reload]);
 
   useEffect(() => {
     preloadAppData();

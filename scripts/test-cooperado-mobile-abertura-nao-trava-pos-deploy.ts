@@ -75,6 +75,16 @@ assert.ok(
   "abertura BIC ainda aquece HB (GET account)"
 );
 
+const hbPipeline = readFileSync(
+  join(ROOT, "src/lib/cooperado/cooperadoHbCreditSyncPadrao.ts"),
+  "utf8"
+);
+assert.equal(
+  /if \(!isAppDataWarm\(\)\) return false;/.test(hbPipeline),
+  false,
+  "GET HB na abertura não depende de AppData quente"
+);
+
 const gaBase = readFileSync(
   join(ROOT, "src/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync.ts"),
   "utf8"
