@@ -12,10 +12,7 @@ import { cooperadoTemReciboAssinadoLocalSemPendenciaUi } from "@/lib/cooperado/c
 import { lerHbCreditAccountPersistidoFlex } from "@/lib/hb-credit/hbCreditAccountPersistencia";
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
-import {
-  cooperadoAppReleaseNeedsOperacionalSync,
-  cooperadoOperacionalSyncStale,
-} from "@/lib/performance/cooperadoEventDrivenSync";
+import { cooperadoOperacionalSyncStale } from "@/lib/performance/cooperadoEventDrivenSync";
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import { cooperadoPwaFinanceiroSnapshotsAusentes } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
@@ -45,7 +42,6 @@ export function cooperadoGaExibicaoFinanceiraConfiavel(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return false;
-  if (cooperadoAppReleaseNeedsOperacionalSync()) return false;
   if (cooperadoFinanceiroCardCacheTemValor(user) || cooperadoHbCreditCacheTemValor(user)) {
     return true;
   }
@@ -70,7 +66,9 @@ export function cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(
 ): boolean {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return false;
   if (cooperadoGaExibicaoFinanceiraConfiavel(user)) return false;
-  if (cooperadoAppReleaseNeedsOperacionalSync()) return true;
+  if (cooperadoFinanceiroCardCacheTemValor(user) || cooperadoHbCreditCacheTemValor(user)) {
+    return false;
+  }
   if (!isAppDataWarm()) return true;
   const data = getData();
   const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
@@ -110,7 +108,9 @@ export function cooperadoGaValorReceberExibicaoResolvida(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return true;
-  if (cooperadoAppReleaseNeedsOperacionalSync()) return false;
+  if (cooperadoFinanceiroCardCacheTemValor(user) || cooperadoHbCreditCacheTemValor(user)) {
+    return true;
+  }
   if (cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) return false;
   if (cooperadoFinanceiroCardCacheTemValor(user)) return true;
   if (cooperadoGaExibicaoFinanceiraConfiavel(user)) return true;

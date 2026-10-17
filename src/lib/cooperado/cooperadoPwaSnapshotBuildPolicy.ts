@@ -20,12 +20,16 @@ const PWA_SNAPSHOT_KEY_MARKERS = [
 ] as const;
 
 /**
- * Paridade cooperado: snapshot local só vale no **mesmo** build do bundle.
- * (Antes: até 48 builds de tolerância — cooperados diferentes viam valores/UI distintos.)
+ * Snapshot de build recente continua válido na abertura.
+ * Exigir o build exato (443 vs 444) zerava o cache e disparava operacional_full no celular.
  */
+const PWA_SNAPSHOT_BUILD_TOLERANCE = 48;
+
 export function cooperadoPwaSnapshotBuildReadable(savedBuild: number | undefined | null): boolean {
   if (savedBuild == null || !Number.isFinite(savedBuild) || savedBuild <= 0) return true;
-  return savedBuild === APP_BUILD_VERSION;
+  if (savedBuild === APP_BUILD_VERSION) return true;
+  const delta = APP_BUILD_VERSION - savedBuild;
+  return delta >= 0 && delta <= PWA_SNAPSHOT_BUILD_TOLERANCE;
 }
 
 /** Snapshots PWA cooperado (início/ficha/entregas) — não apaga sessão nem AppData operacional. */

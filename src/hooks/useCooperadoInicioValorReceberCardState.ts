@@ -20,6 +20,7 @@ import {
   type InicioCardPersistido,
 } from "@/lib/cooperadoInicioCardPersistencia";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { cooperadoPwaSnapshotBuildReadable } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
 import { isCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { isCooperadoMobilePilotPerfActive } from "@/lib/cooperado/cooperadoMobilePilotPerf";
@@ -70,7 +71,7 @@ function persistidoExibicaoPwaLeve(
   persistido: InicioCardPersistido | null | undefined
 ): InicioCardPersistido | null {
   if (!persistido?.display) return null;
-  if (persistido.appBuild === APP_BUILD_VERSION) return persistido;
+  if (cooperadoPwaSnapshotBuildReadable(persistido.appBuild)) return persistido;
   if (
     isCooperadoMobilePilotPerfActive() &&
     cooperadoMotorTemObrigacaoReceber(persistido.display)

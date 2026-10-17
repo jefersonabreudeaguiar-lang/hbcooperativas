@@ -2,7 +2,6 @@ import type { User } from "@/types";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoGaExibicaoFinanceiraAindaZerada } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { cooperadoPostDeployQueueActive } from "@/lib/cooperado/cooperadoPostDeploySession";
-import { cooperadoAppReleaseNeedsOperacionalSync } from "@/lib/performance/cooperadoEventDrivenSync";
 import { isPwaColdStartWindow } from "@/lib/pwa/clientRelease";
 import { getSession } from "@/services/dataStore";
 
@@ -75,7 +74,6 @@ export function cooperadoGaBloqueiaOperacionalFullAutomatico(opts?: {
 }): boolean {
   if (cooperadoPostDeployQueueActive()) return false;
   if (opts?.userInitiated) return false;
-  if (cooperadoAppReleaseNeedsOperacionalSync()) return false;
   const session = getSession();
   if (!session || session.role !== "cooperado" || !isCooperadoMobileGaPromoted(session)) {
     return false;

@@ -53,7 +53,6 @@ export function cooperadoPwaFinanceiroSnapshotsMaterializados(
   cooperadoId: string,
   cooperativaId: string | undefined
 ): boolean {
-  if (cooperadoAppReleaseNeedsOperacionalSync()) return false;
   const card =
     lerInicioCardFinanceiroExibicao(cooperadoId, cooperativaId) ??
     filtrarInicioCardPersistidoLeituraBic(

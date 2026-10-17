@@ -58,7 +58,6 @@ export function cooperadoGaAparelhoPrecisaBootstrapNuvem(
   if (!user || user.role !== "cooperado" || !cooperadoMobileDeferOperacionalSyncNaAbertura(user)) {
     return false;
   }
-  if (cooperadoAppReleaseNeedsOperacionalSync()) return true;
   if (cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) return true;
   if (cooperadoFinanceiroCardCacheTemValor(user)) return false;
   if (cooperadoPilotAppDataTemFinanceiroLocal(user)) {
