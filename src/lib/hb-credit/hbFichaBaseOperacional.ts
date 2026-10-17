@@ -69,9 +69,11 @@ export function listMesesReferenciaHbFichaBaseSync(
   cooperativaId: string,
   mesFallback?: string
 ): string[] {
+  const unificados = hbCreditMesesReferenciaUnificados(data, cooperadoId, cooperativaId, mesFallback);
   if (isHbFichaBaseProjectionLegacy()) {
-    return hbCreditMesesReferenciaUnificados(data, cooperadoId, cooperativaId, mesFallback);
+    return unificados;
   }
+  if (unificados.length) return unificados;
   return mesesReferenciaComDebitoAberto(data, cooperadoId, cooperativaId);
 }
 

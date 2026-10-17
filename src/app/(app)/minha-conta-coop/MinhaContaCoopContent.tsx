@@ -706,6 +706,11 @@ function MinhaContaCoopContent() {
                 </span>
               ) : null}
             </p>
+            {saldoHb <= 0 ? (
+              <p className="mt-1 text-xs text-green-100/90">
+                A cooperativa ainda não liberou o percentual deste valor na aba Limites.
+              </p>
+            ) : null}
           </div>
         )}
 

@@ -37,6 +37,8 @@ import { validateHbFinancialLimitRow } from "@/modules/hb-credit/engine/hbCredit
 import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { signedLedgerAmountCentsForExtrato } from "@/lib/hb-credit/ledgerLabels";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
+import { hbCreditCreditoBaseReais } from "@/lib/hb-credit/hbCreditLeituraBic";
+import { resolveLeituraFinanceiraCooperadoCore } from "@/lib/bic/bicLeituraPorta";
 import type {
   AuthoritativeCreditBaseErrorPayload,
   AuthoritativeCreditBaseFailureCode,
@@ -1167,6 +1169,14 @@ export async function healHbCreditNovoCicloQuandoBaseZero(
   );
   if (base > 0) return { healed: false };
 
+  const app = authoritative.creditoBaseAppData;
+  const coopId = authoritative.cooperativaId;
+  const aReceber = resolveLeituraFinanceiraCooperadoCore(app, canon, coopId).valorLiquido;
+  const lastro = hbCreditCreditoBaseReais(app, canon, coopId);
+  if (aReceber > 0.005 || lastro > 0) {
+    return { healed: false };
+  }
+
   await reconcileCooperadoAmountUsedCents(supabase, digits, cooperadoId, actorUserId).catch(() => {});
 
   const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
@@ -2016,7 +2026,7 @@ export async function getLimiteCooperadoExibicaoParidadeLimites(
 
   const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, [cooperadoId]);
   if (!authoritative.ok) {
-    return capContaCoopLimiteToAuthoritativeBase(limite, 0, 0, null);
+    return limite;
   }
 
   const canon = resolverCooperadoIdCanonico(
@@ -3375,6 +3385,25 @@ export async function previewLimiteColetivoPercentual(
   }
 
   const totalApos = (await sumLimitesForaSelecao(supabase, digits, cooperadoIds)) + novoLimiteTotal;
+
+  if (
+    percentual > 0 &&
+    itens.length > 0 &&
+    itens.every((item) => item.creditoBaseCents <= 0)
+  ) {
+    return {
+      limiteAtualTotal: distribuido,
+      novoLimiteTotal: 0,
+      totalApos: distribuido,
+      tetoGlobal: teto.cents,
+      tetoGlobalPercent: teto.percent,
+      ok: false,
+      error:
+        "Não há crédito-base na ficha (A receber em aberto). Confira entregas conferidas antes de liberar o percentual.",
+      percentual,
+      itens,
+    };
+  }
 
   if (totalApos > teto.cents) {
     return {

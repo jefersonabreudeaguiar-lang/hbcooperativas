@@ -5,9 +5,11 @@
 import type { AppData } from "@/types";
 import {
   cooperadoMesQuitado,
+  cooperadoMesLiquidadoPorPagamentoNoLivroCaixa,
   getMesPrincipalQuantoVouReceber,
   listarMesesPendentesQuantoVouReceber,
   listarMesesEmAbertoPagamentoResponsavel,
+  listarMesesReferenciaResumoFinanceiroParidade,
 } from "@/services/cooperadoEntregasService";
 import { listarFichasPendentesPagamento } from "@/services/notaPedidoService";
 import { round2 } from "@/utils/calculations";
@@ -18,6 +20,7 @@ import {
 } from "@/services/cooperadoCloudService";
 import { resolveLeituraFinanceiraCooperadoCore } from "@/lib/bic/bicLeituraPorta";
 import {
+  getMesesReferenciaPagamento,
   getPagamentoConfirmadoCooperadoMes,
   getResumoPagamentoCooperado,
   getResumoValorAPagarRelatorio,
@@ -100,16 +103,64 @@ export function hbCreditValorAReceberAgregado(
   return bicCentralValorAReceberAgregadoLazy(data, cooperadoId, cooperativaId, HB_CREDIT_APRESENTACAO);
 }
 
+/** Mês ainda lastreia HB — não liquidado no caixa e sem fechamento bloqueado. */
+function mesHbAindaAbertoLastro(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId: string
+): boolean {
+  if ((data.fechamentos ?? []).some((f) => f.mesReferencia === mesReferencia && f.bloqueado)) {
+    return false;
+  }
+  if (cooperadoMesLiquidadoPorPagamentoNoLivroCaixa(data, cooperadoId, mesReferencia, cooperativaId)) {
+    return false;
+  }
+  if (
+    cooperadoMesQuitado(data, cooperadoId, mesReferencia, cooperativaId) &&
+    getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Mesma janela do «A receber» do cooperado: ficha em aberto + paridade BIC + PIX aguardando.
+ * Mês com PIX confirmado e débito no caixa não entra.
+ */
 function hbCreditMesesFinanceirosAbertos(
   data: AppData,
   cooperadoId: string,
   cooperativaId: string
 ): string[] {
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
-  return listarMesesEmAbertoPagamentoResponsavel(data, canonico, cooperativaId);
+  const meses = new Set<string>([
+    ...listarMesesEmAbertoPagamentoResponsavel(data, canonico, cooperativaId),
+    ...listarMesesReferenciaResumoFinanceiroParidade(data, canonico, cooperativaId),
+    ...hbCreditMesesPendentesQuantoVouReceber(data, canonico, cooperativaId),
+  ]);
+  const paridade = resolveLeituraFinanceiraCooperadoCore(data, canonico, cooperativaId);
+  for (const mes of paridade.mesesResumo ?? []) {
+    if (mes?.trim()) meses.add(mes);
+  }
+
+  const titularIds = new Set(listCooperadoIdsMesmoTitular(data, canonico, cooperativaId));
+  for (const p of data.pagamentosCooperado ?? []) {
+    if (p.status !== "aguardando_confirmacao") continue;
+    const pgCanonico = resolverCooperadoIdCanonico(data, p.cooperadoId, cooperativaId);
+    if (!titularIds.has(pgCanonico) && p.cooperadoId !== canonico) continue;
+    for (const mes of getMesesReferenciaPagamento(p)) {
+      if (mes?.trim()) meses.add(mes);
+    }
+  }
+
+  return [...meses]
+    .filter((mes) => mesHbAindaAbertoLastro(data, canonico, mes, cooperativaId))
+    .sort();
 }
 
-/** Meses em aberto — união BIC (M6) + visão responsável + PIX aguardando (cooperado = responsável). */
+/** Meses lastro HB = A receber do cooperado, sem reabrir mês já liquidado no caixa. */
 export function hbCreditMesesReferenciaUnificados(
   data: AppData,
   cooperadoId: string,
@@ -117,9 +168,7 @@ export function hbCreditMesesReferenciaUnificados(
   _mesFallback?: string
 ): string[] {
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
-  const abertos = hbCreditMesesFinanceirosAbertos(data, canonico, cooperativaId);
-  if (abertos.length) return abertos;
-  return [];
+  return hbCreditMesesFinanceirosAbertos(data, canonico, cooperativaId);
 }
 
 /** Mês principal BIC (consolidado) — fallback cooperado/responsável. */
@@ -179,8 +228,7 @@ function mesComBrutoFichaHbAberto(
   mesReferencia: string,
   cooperativaId: string
 ): boolean {
-  if (cooperadoMesQuitado(data, cooperadoId, mesReferencia)) return false;
-  if (getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia)) return false;
+  if (!mesHbAindaAbertoLastro(data, cooperadoId, mesReferencia, cooperativaId)) return false;
   const resumo = getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, cooperativaId);
   return resumo.valorBruto > 0;
 }
@@ -213,7 +261,7 @@ function hbCreditCreditoBaseBrutoFichasPendentesReais(
   cooperativaId: string
 ): number {
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
-  const meses = listarMesesEmAbertoPagamentoResponsavel(data, canonico, cooperativaId);
+  const meses = hbCreditMesesReferenciaUnificados(data, canonico, cooperativaId);
   let total = 0;
   for (const mes of meses) {
     for (const f of listarFichasPendentesPagamento(data, canonico, mes, cooperativaId)) {
@@ -258,38 +306,19 @@ export function hbCreditCreditoBaseReais(
   cooperativaId: string | undefined
 ): number {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  const bruto = hbCreditCreditoBaseBrutoFichaAbertoReais(data, cooperadoId, cooperativaId);
-  if (bruto > 0) return bruto;
-
   if (!coopId) return 0;
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
-  if (!hbCreditMesesFinanceirosAbertos(data, canonico, coopId).length) {
-    const m6 = hbCreditValorAReceberAgregado(data, cooperadoId, cooperativaId);
-    if (m6.aguardandoAssinatura) {
-      const titularIds = new Set(listCooperadoIdsMesmoTitular(data, canonico, coopId));
-      const pixAguardando = (data.pagamentosCooperado ?? []).some((p) => {
-        if (p.status !== "aguardando_confirmacao") return false;
-        const pgCanonico = resolverCooperadoIdCanonico(data, p.cooperadoId, coopId);
-        return titularIds.has(pgCanonico) || p.cooperadoId === canonico;
-      });
-      if (pixAguardando) {
-        if (m6.valorRecibo > 0) return round2(m6.valorRecibo);
-        const inicio = hbCreditInicioParaBase(data, cooperadoId, cooperativaId);
-        if (inicio.valorRecibo > 0) return round2(inicio.valorRecibo);
-      }
-      if (m6.valor > 0) return round2(m6.valor);
-      return 0;
-    }
-    if (m6.valor > 0) {
-      const pendentesQvr = hbCreditMesesPendentesQuantoVouReceber(data, canonico, coopId);
-      if (pendentesQvr.length) return round2(m6.valor);
-    }
-    return 0;
-  }
+  const mesesLastro = hbCreditMesesFinanceirosAbertos(data, canonico, coopId);
+  if (!mesesLastro.length) return 0;
+
+  const paridade = hbCreditCreditoBaseParidadeQuantoVouReceberReais(data, cooperadoId, cooperativaId);
+  if (paridade > 0) return paridade;
+
+  const bruto = hbCreditCreditoBaseBrutoFichaAbertoReais(data, cooperadoId, cooperativaId);
+  if (bruto > 0) return bruto;
 
   const pendente = hbCreditCreditoBaseBrutoFichasPendentesReais(data, cooperadoId, coopId);
   if (pendente > 0) return pendente;
 
-  const paridade = hbCreditCreditoBaseParidadeQuantoVouReceberReais(data, cooperadoId, cooperativaId);
-  return paridade > 0 ? paridade : 0;
+  return 0;
 }
