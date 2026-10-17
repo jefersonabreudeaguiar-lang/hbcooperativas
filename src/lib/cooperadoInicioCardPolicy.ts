@@ -722,10 +722,6 @@ function resolverCardInicioEndurecidoFinanceiroUiSnapshot(
 }
 
 function persistidoLeituraCardInicio(input: ResolverCardInicioInput) {
-  const financeiroCarregando =
-    !input.apresentacaoConsolidada ||
-    Boolean(input.syncing || input.carregandoFinanceiro);
-  if (input.apresentacaoConsolidada && !financeiroCarregando) return null;
   return filtrarInicioCardPersistidoLeituraBic(input.persistido);
 }
 

@@ -594,7 +594,12 @@ export function getCooperadoDrawerMenuItems(
   cooperadoNavEligible = false
 ): { href: string; label: string; resource: Resource }[] {
   const navSubject = user as Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active">;
-  if (!isCooperadoAppUser(navSubject) && resolveAppUserRole(navSubject, data) !== "cooperado") {
+  const jwtCooperado = normalizeUserRole(navSubject.role) === "cooperado";
+  if (
+    !jwtCooperado &&
+    !isCooperadoAppUser(navSubject) &&
+    resolveAppUserRole(navSubject, data) !== "cooperado"
+  ) {
     return getMenuItems(user, creditEnabled, contaCoopUiVisible, data, cooperadoNavEligible);
   }
   const navUser = { ...user, role: "cooperado" as UserRole };

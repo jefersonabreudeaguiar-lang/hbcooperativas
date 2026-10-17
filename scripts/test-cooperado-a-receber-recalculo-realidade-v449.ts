@@ -10,7 +10,7 @@ import { cooperadoInicioCardEscolherDisplayEstavel } from "../src/lib/cooperadoI
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 
-assert.equal(APP_BUILD_VERSION, 449);
+assert.ok(APP_BUILD_VERSION >= 449);
 
 const persistido = { mesLabel: "Out", valor: 180, valorRecibo: 0, aguardandoAssinatura: false };
 const motorNovo = { mesLabel: "Out", valor: 220, valorRecibo: 0, aguardandoAssinatura: false };

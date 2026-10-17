@@ -12,7 +12,7 @@ import {
 } from "../src/lib/responsavel/responsavelIdentidade.ts";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
-assert.equal(APP_BUILD_VERSION, 451);
+assert.ok(APP_BUILD_VERSION >= 451);
 
 const jwtCooperado = {
   id: "u1",

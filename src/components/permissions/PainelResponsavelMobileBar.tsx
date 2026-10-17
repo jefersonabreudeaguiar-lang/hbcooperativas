@@ -12,20 +12,23 @@ import {
   PAINEL_MOBILE_PREF_EVENT,
 } from "@/lib/mobilePainelPreference";
 import { shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
+import { cooperadoSessaoNuncaPainelGestaoMobile } from "@/lib/responsavel/responsavelIdentidade";
 import { Button } from "@/components/ui/Button";
 
 /** Só no celular da gestão — o app do cooperado não oferece atalho para o painel. */
 export function PainelResponsavelMobileBar() {
   const { accountUser } = useAuth();
+  const mobile = isMobileCooperativaApp();
   const painelAccess = useAppDataSelector(
     (data) => {
       if (!accountUser) return null;
+      if (cooperadoSessaoNuncaPainelGestaoMobile(accountUser, mobile)) return null;
       return {
         canGestao: canAccessPainelResponsavel(accountUser, data),
         staffMode: shouldRenderStaffPainelUi(accountUser, data),
       };
     },
-    [accountUser?.id, accountUser?.role]
+    [accountUser?.id, accountUser?.role, mobile]
   );
   const [painelMobile, setPainelMobile] = useState(false);
 
@@ -37,8 +40,9 @@ export function PainelResponsavelMobileBar() {
   }, []);
 
   if (!accountUser || !painelAccess) return null;
+  if (cooperadoSessaoNuncaPainelGestaoMobile(accountUser, mobile)) return null;
   if (!painelAccess.canGestao) return null;
-  if (!isMobileCooperativaApp()) return null;
+  if (!mobile) return null;
   if (!painelAccess.staffMode) return null;
 
   return (
