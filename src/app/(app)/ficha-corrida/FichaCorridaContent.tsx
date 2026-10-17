@@ -100,6 +100,7 @@ import {
   cooperadoMesQuitado,
   cooperadoPendentePagamentoResponsavel,
   listarMesesEmAbertoPagamentoResponsavel,
+  mesReferenciaPagamentoResponsavelEmAberto,
   getPagamentoConfirmadoMes,
   getPagamentoRegistradoMes,
   listarMesesComPagamentoRegistradoCooperado,
@@ -1129,6 +1130,17 @@ function FichaCorridaPageInner() {
       });
       if (staffResumo) return staffResumo;
     }
+    if (!isCooperado && aba === "ficha" && cooperadoSelecionadoId) {
+      const mesAberto = mesReferenciaPagamentoResponsavelEmAberto(
+        data,
+        cooperadoSelecionadoId,
+        mesAtivo,
+        coopId
+      );
+      if (!mesAberto && pagamentoConfirmadoMes) {
+        return resumoFromPagamento(pagamentoConfirmadoMes);
+      }
+    }
     if (isCooperado && !visualizandoHistorico && paridadeCooperadoMobile) {
       if (conferindoPagamentoNuvem && paridadeCooperadoMobile.valorLiquido > 0) {
         return paridadeCooperadoMobile.resumo;
@@ -1184,10 +1196,10 @@ function FichaCorridaPageInner() {
     if (visualizandoHistorico && pagamentoConfirmadoMes) {
       return resumoFromPagamento(pagamentoConfirmadoMes);
     }
-    if (!isCooperado && financeiroAberto && !pagamentoAguardando && !staffFichaPagarPendente) {
+    if (!isCooperado && aba !== "ficha" && financeiroAberto && !pagamentoAguardando && !staffFichaPagarPendente) {
       return financeiroAberto.resumo;
     }
-    if (!isCooperado && resumoPagamentoConsolidado && !staffFichaPagarPendente) {
+    if (!isCooperado && aba !== "ficha" && resumoPagamentoConsolidado && !staffFichaPagarPendente) {
       return resumoPagamentoConsolidado;
     }
     return bicCentralGetResumoPagamentoExibicao(
@@ -1955,7 +1967,28 @@ function FichaCorridaPageInner() {
         ) : (
           <FormField label="Mês">
             <Select value={mesFilter} onChange={(e) => setMesFilter(e.target.value)} className="min-w-[180px]">
-              {meses.map((m) => <option key={m} value={m}>{formatMesReferencia(m)}</option>)}
+              {meses.map((m) => {
+                let extra = "";
+                if (data && cooperadoSelecionadoId) {
+                  extra = mesReferenciaPagamentoResponsavelEmAberto(
+                    data,
+                    cooperadoSelecionadoId,
+                    m,
+                    coopId
+                  )
+                    ? " · em aberto"
+                    : getPagamentoConfirmadoMes(data, cooperadoSelecionadoId, m) ||
+                        cooperadoMesQuitado(data, cooperadoSelecionadoId, m, coopId)
+                      ? " · pago"
+                      : "";
+                }
+                return (
+                  <option key={m} value={m}>
+                    {formatMesReferencia(m)}
+                    {extra}
+                  </option>
+                );
+              })}
             </Select>
           </FormField>
         )}
