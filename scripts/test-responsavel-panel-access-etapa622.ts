@@ -14,6 +14,7 @@ import { shouldRenderStaffPainelUi } from "../src/lib/staffNavigationUser.ts";
 import { evaluateResponsavelIdentidade } from "../src/lib/responsavel/responsavelIdentidade.ts";
 import { evaluateResponsavelPainelAbertura } from "../src/lib/responsavel/responsavelPainelContrato.ts";
 import { getTotalValoresAPagarGestaoCooperativa } from "../src/lib/responsavel/responsavelGestaoLeitura.ts";
+import { resolveGestaoCooperativaId } from "../src/utils/cooperativa.ts";
 import {
   listarMesesEmAbertoPagamentoResponsavel,
   listarMesesPendentesPagamentoResponsavel,
@@ -468,6 +469,34 @@ function evaluateDashboardStaffOpen(
   });
   assert.equal(aberturaPediuPainel.staffPainelUi, true);
   assert.equal(aberturaPediuPainel.modo, "gestao");
+}
+
+// CASO 15 — e-mail builtin com users[] cooperado ainda acessa o painel
+{
+  const builtin = staffUser({
+    email: "jefersonabreudeaguiar@gmail.com",
+    role: "cooperado",
+    cooperadoId: undefined,
+  });
+  const data = emptyData([{ ...builtin, role: "cooperado" }]);
+  assert.equal(canAccessPainelResponsavel(builtin, data), true);
+  assert.equal(canAccessPainelResponsavelSession(builtin, data), true);
+}
+
+// CASO 16 — gestão resolve cooperativa pelo CNPJ quando a sessão não tem id
+{
+  const staff = staffUser({ cooperativaId: undefined, cooperadoId: undefined });
+  const data = emptyData([staff]);
+  data.cooperativas[0].cnpj = "12345678000199";
+  const scoped = { ...staff, cooperativaCnpj: "12.345.678/0001-99", cooperativaId: undefined };
+  assert.equal(resolveGestaoCooperativaId(scoped, data), COOP);
+}
+
+// CASO 17 — uma cooperativa ativa basta para o painel não ficar vazio
+{
+  const staff = staffUser({ cooperativaId: undefined, cooperadoId: undefined });
+  const data = emptyData([staff]);
+  assert.equal(resolveGestaoCooperativaId(staff, data), COOP);
 }
 
 console.log("test-responsavel-panel-access-etapa622: OK");

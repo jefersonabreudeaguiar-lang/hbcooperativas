@@ -41,6 +41,9 @@ export function canAccessPainelResponsavel(
 ): boolean {
   if (!user || user.active === false) return false;
 
+  /** Builtin/criador antes do papel — users[] pode ter sido gravado como cooperado (JWT stale). */
+  if (isAppCreator(user) || isBuiltinPainelResponsavelEmail(user.email)) return true;
+
   const role = resolveAuthoritativePanelRole(user, data);
   if (role === "cooperado" || role === "parceiro" || role === "contador") return false;
   if (!isStaffRole(role)) return false;
@@ -49,8 +52,6 @@ export function canAccessPainelResponsavel(
   if (user.cooperadoId?.trim() && role !== "responsavel" && role !== "tesoureiro") {
     return false;
   }
-
-  if (isAppCreator(user) || isBuiltinPainelResponsavelEmail(user.email)) return true;
 
   /** Mesma regra de canAccessPainelResponsavelSession — não exige equipe local carregada. */
   if (role === "responsavel" || role === "tesoureiro") return true;

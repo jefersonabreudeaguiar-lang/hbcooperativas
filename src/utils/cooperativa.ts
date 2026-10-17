@@ -48,6 +48,36 @@ export function resolveAdminCooperativaId(user: Omit<User, "password">, data: Ap
   return data.cooperativas.find((c) => c.status !== "inativa")?.id;
 }
 
+/**
+ * Cooperativa do painel da gestão. JWT/sessão sem cooperativaId ainda enxerga
+ * catálogo, em aberto e pagos pelo CNPJ ou pela única cooperativa ativa.
+ */
+export function resolveGestaoCooperativaId(
+  user: Omit<User, "password"> | null | undefined,
+  data: AppData | null | undefined
+): string | undefined {
+  if (!user) return undefined;
+  if (!data) return user.cooperativaId?.trim() || undefined;
+
+  const direct = getUserCooperativaId(user, data);
+  if (direct && data.cooperativas.some((c) => c.id === direct && c.status !== "inativa")) {
+    return direct;
+  }
+
+  const byCnpj = user.cooperativaCnpj ? findCooperativaByCnpj(data, user.cooperativaCnpj) : undefined;
+  if (byCnpj) return byCnpj.id;
+
+  const ativas = data.cooperativas.filter((c) => c.status !== "inativa");
+  if (ativas.length === 1) return ativas[0].id;
+
+  const comOperacao = ativas.find(
+    (c) =>
+      data.instituicoes.some((i) => i.cooperativaId === c.id) ||
+      data.cooperados.some((co) => co.cooperativaId === c.id && co.status === "ativo")
+  );
+  return comOperacao?.id ?? direct;
+}
+
 export function getUserCooperativaNome(user: Omit<User, "password">, data: AppData): string {
   const id = getUserCooperativaId(user, data);
   return getCooperativaNome(data, id);

@@ -28,7 +28,7 @@ import { scheduleStaffResponsavelNotasPollLoop } from "@/lib/performance/staffRe
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { useResponsavelFilaConferencia } from "@/hooks/useResponsavelFilaConferencia";
 import { usePermissions } from "@/hooks/usePermissions";
-import { getUserCooperativaId } from "@/utils/cooperativa";
+import { getUserCooperativaId, resolveGestaoCooperativaId } from "@/utils/cooperativa";
 import { PageHeader, DataTable, FilterBar, Modal } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, FormField, Textarea } from "@/components/ui/Form";
@@ -205,7 +205,7 @@ import {
   scheduleConferenciaRejeicaoNuvemSync,
 } from "@/services/conferenciaDecisaoNuvemSync";
 import { ConferenciaNuvemSyncBanner } from "@/components/notas-pedido/ConferenciaNuvemSyncBanner";
-import { getProdutosContrato } from "@/services/catalogoContratosService";
+import { getInstituicoesCatalogo, getProdutosContrato } from "@/services/catalogoContratosService";
 import {
   countCooperadosLancamentosEmAbertoResponsavel,
   countNotasFilaConferenciaResponsavel,
@@ -543,7 +543,7 @@ function conferenciaTemFichaParaNota(
 export default function NotasPedidoStaffMain() {
   const ready = useEnsureAppDataWarm();
   const tabActive = useCooperadoTabPanelActive("/notas-pedido");
-  const { check, user, isCooperado, isDiretoria, cooperadoId } = usePermissions();
+  const { check, user, isCooperado, isDiretoria, cooperadoId, coopId: coopIdPerm } = usePermissions();
   const { syncing, syncingForUi } = useSyncStatus();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -727,7 +727,12 @@ export default function NotasPedidoStaffMain() {
   const [conferenciaFotoAmpliada, setConferenciaFotoAmpliada] = useState(false);
   const [fotosLancadasUi, setFotosLancadasUi] = useState<Set<number>>(() => new Set());
 
-  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+  const coopId =
+    (user && data
+      ? isCooperado
+        ? getUserCooperativaId(user, data)
+        : resolveGestaoCooperativaId(user, data)
+      : undefined) ?? coopIdPerm;
   const hbDescontosRevision = useContaCoopDescontosRevision();
   const cooperadoCanonico =
     isCooperado && data && cooperadoId && coopId
@@ -2059,6 +2064,13 @@ export default function NotasPedidoStaffMain() {
     ) ?? [];
 
   const instituicoes = contratosEntrega;
+  const instituicoesCadastradas =
+    useAppDataSelectorForDomainsWhenActive(
+      tabActive && !isCooperado,
+      ["shell", "operacional"],
+      (d) => (coopId ? getInstituicoesCatalogo(d, coopId) : []),
+      [coopId]
+    ) ?? [];
 
   useEffect(() => {
     if (!coopId || isCooperado) return;
@@ -4606,11 +4618,24 @@ export default function NotasPedidoStaffMain() {
       )}
 
       {!isCooperado && instituicoes.length === 0 && (
-        <AlertBanner variant="warning" className="mb-6" title="Publique um contrato com itens e preços">
-          Para conferir entregas, cadastre instituições, itens e preços em{" "}
-          <Link href="/contratos" className="font-semibold underline">Contratos</Link>
-          {" "}e publique para os cooperados.
-        </AlertBanner>
+        !coopId || !isAppDataWarm() ? (
+          <AlertBanner variant="info" className="mb-6" title="Carregando contratos">
+            Atualizando o catálogo da cooperativa neste aparelho.
+          </AlertBanner>
+        ) : instituicoesCadastradas.length > 0 ? (
+          <AlertBanner variant="warning" className="mb-6" title="Publique os preços do contrato">
+            A instituição já está cadastrada, mas nenhum item com preço ativo chegou neste aparelho.
+            Confira em{" "}
+            <Link href="/contratos" className="font-semibold underline">Contratos</Link>
+            {" "}ou toque em Atualizar.
+          </AlertBanner>
+        ) : (
+          <AlertBanner variant="warning" className="mb-6" title="Publique um contrato com itens e preços">
+            Para conferir entregas, cadastre instituições, itens e preços em{" "}
+            <Link href="/contratos" className="font-semibold underline">Contratos</Link>
+            {" "}e publique para os cooperados.
+          </AlertBanner>
+        )
       )}
 
       {isCooperado && contratosEntrega.length === 0 && (

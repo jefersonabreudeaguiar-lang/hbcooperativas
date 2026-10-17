@@ -31,7 +31,7 @@ import {
   isCooperadoPwaMessengerMode,
 } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { usePermissions } from "@/hooks/usePermissions";
-import { getUserCooperativaId } from "@/utils/cooperativa";
+import { getUserCooperativaId, resolveGestaoCooperativaId } from "@/utils/cooperativa";
 import {
   resumoFromPagamento,
   registrarPagamentoCooperado,
@@ -234,7 +234,7 @@ export default function FichaCorridaPage() {
 function FichaCorridaPageInner() {
   const ready = useEnsureAppDataWarm();
   const tabActive = useCooperadoTabPanelActive("/ficha-corrida");
-  const { user, isCooperado, cooperadoId, check } = usePermissions();
+  const { user, isCooperado, cooperadoId, check, coopId: coopIdPerm } = usePermissions();
   const fichaAppDataDomains = useMemo(
     (): AppDataNotifyDomain[] => responsavelFichaAppDataDomains(isCooperado),
     [isCooperado]
@@ -287,7 +287,14 @@ function FichaCorridaPageInner() {
   const [abaMesCooperado, setAbaMesCooperado] = useState<"aberto" | string>("aberto");
   const [abaMesPagamentoResponsavel, setAbaMesPagamentoResponsavel] = useState<"pendente" | string>("pendente");
   const [pixStepVisited, setPixStepVisited] = useState(false);
-  const coopIdEarly = user && data ? getUserCooperativaId(user, data) : user?.cooperativaId;
+  const coopIdEarly =
+    (user && data
+      ? isCooperado
+        ? getUserCooperativaId(user, data)
+        : resolveGestaoCooperativaId(user, data)
+      : undefined) ??
+    coopIdPerm ??
+    user?.cooperativaId;
 
   useLayoutEffect(() => {
     if (!tabActive || !(messenger || pilotFinanceiroLeve) || !isCooperado) return;
@@ -377,7 +384,12 @@ function FichaCorridaPageInner() {
   const [assinaturaBusyId, setAssinaturaBusyId] = useState<string | null>(null);
   const [coopCnpjResumo, setCoopCnpjResumo] = useState("");
 
-  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+  const coopId =
+    (user && data
+      ? isCooperado
+        ? getUserCooperativaId(user, data)
+        : resolveGestaoCooperativaId(user, data)
+      : undefined) ?? coopIdPerm;
   const fluxoReciboAssinatura = cooperadoUsarFluxoReciboAssinaturaNaUi();
   const {
     apresentacaoConsolidada,

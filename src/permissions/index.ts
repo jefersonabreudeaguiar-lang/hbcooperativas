@@ -293,8 +293,12 @@ export function resolveAppUserRole(
   data?: AppData | null
 ): UserRole {
   const sessionRole = normalizeUserRole(user.role);
-  /** App cooperado no celular/PWA: JWT cooperado não vira gestão por users[] ou perfil duplo. */
-  if (sessionRole === "cooperado" && isMobileCooperativaAppClient()) {
+  /** App cooperado no celular/PWA: JWT cooperado não vira gestão — salvo conta que já é staff. */
+  if (
+    sessionRole === "cooperado" &&
+    isMobileCooperativaAppClient() &&
+    !canAccessPainelResponsavelSession(user, data)
+  ) {
     return "cooperado";
   }
   if (sessionRole === "cooperado" && !data) {

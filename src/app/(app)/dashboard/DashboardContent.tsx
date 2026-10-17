@@ -94,7 +94,7 @@ import { bicCentralBuildValorExibicaoCooperadoOpts } from "@/services/bicLeitura
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
 import { useContaCoopDescontosRevisionWhenLive } from "@/hooks/useContaCoopDescontosRevision";
 import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
-import { getUserCooperativaId, getUserCooperativaNome, normalizeCnpj } from "@/utils/cooperativa";
+import { getUserCooperativaId, getUserCooperativaNome, normalizeCnpj, resolveGestaoCooperativaId } from "@/utils/cooperativa";
 import { Camera, Wallet, ClipboardList, Users, Vote, Download, PenLine } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { resumoInstalacaoApp } from "@/services/cooperadoAppInstallService";
@@ -620,7 +620,7 @@ function AdminDashboard() {
           coopId,
         };
       }
-      const coopId = getUserCooperativaId(navUser, data);
+      const coopId = resolveGestaoCooperativaId(navUser, data);
       const coopNome = getUserCooperativaNome(navUser, data);
       const instalacao = coopId ? resumoInstalacaoApp(data, coopId) : null;
       const assinatura = coopId ? resumoAssinaturaCadastroApp(data, coopId) : null;

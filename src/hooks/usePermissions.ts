@@ -5,7 +5,7 @@ import { useAppDataSelector } from "@/hooks/useAppData";
 import { evaluateResponsavelIdentidade } from "@/lib/responsavel/responsavelIdentidade";
 import { canUser, canGerenciarEquipe, getUserFuncaoLabel, isCooperadoAppUser, isResponsavelRole } from "@/permissions";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { getUserCooperativaId } from "@/utils/cooperativa";
+import { getUserCooperativaId, resolveGestaoCooperativaId } from "@/utils/cooperativa";
 import { isMobileCooperativaApp } from "@/lib/mobileExperience";
 import { usePainelResponsavelMobilePref } from "@/hooks/usePainelResponsavelMobilePref";
 import type { Action, Resource } from "@/types";
@@ -40,16 +40,27 @@ export function usePermissions() {
   const permUser = staffPainelAtivo ? accountUser ?? user : user;
 
   const coopId = useAppDataSelector(
-    (data) => (user ? getUserCooperativaId(user, data) : undefined),
-    [user?.id, user?.cooperativaId, user?.role]
+    (data) =>
+      staffPainelAtivo
+        ? resolveGestaoCooperativaId(permUser, data)
+        : permUser
+          ? getUserCooperativaId(permUser, data)
+          : undefined,
+    [
+      permUser?.id,
+      permUser?.cooperativaId,
+      permUser?.cooperativaCnpj,
+      permUser?.cooperadoId,
+      staffPainelAtivo,
+    ]
   );
 
   const cooperadoId = useAppDataSelector(
     (data) =>
-      user?.cooperadoId
-        ? resolverCooperadoIdCanonico(data, user.cooperadoId, coopId ?? undefined)
-        : user?.cooperadoId,
-    [user?.cooperadoId, coopId]
+      permUser?.cooperadoId
+        ? resolverCooperadoIdCanonico(data, permUser.cooperadoId, coopId ?? undefined)
+        : permUser?.cooperadoId,
+    [permUser?.cooperadoId, coopId]
   );
 
   const check = (resource: Resource, action: Action) => {
@@ -62,10 +73,10 @@ export function usePermissions() {
   const isResponsavel = staffPainelAtivo && authSubject ? isResponsavelRole(authSubject.role) : false;
   const isDiretoria = Boolean(staffPainelAtivo);
   const podeGerenciarEquipe = authSubject ? canGerenciarEquipe(authSubject) : false;
-  const funcaoLabel = user ? getUserFuncaoLabel(user) : "";
+  const funcaoLabel = permUser ? getUserFuncaoLabel(permUser) : "";
 
   return {
-    user,
+    user: permUser,
     check,
     isCooperado,
     isResponsavel,
