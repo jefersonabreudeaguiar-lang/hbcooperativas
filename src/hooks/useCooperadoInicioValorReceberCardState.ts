@@ -241,11 +241,11 @@ export function useCooperadoInicioValorReceberCardState(input: {
         if (cooperadoPwaFinanceiroSnapshotsAusentes(canon, coopId)) return true;
         return cooperadoTemDadosFinanceirosMinimos(data, canon, coopId);
       })();
+      /** Recalcula a ficha mesmo com cache — o persistido só segura se o motor vier incompleto. */
       const gaParidadeWarm =
         isCooperadoMobilePilotPerfActive() &&
         isAppDataWarm() &&
-        Boolean(input.cooperadoId) &&
-        !persistidoJaTemValor;
+        Boolean(input.cooperadoId);
       const needsMotor =
         syncMotorPass ||
         (!persistidoJaTemValor && persistidoTick > 0) ||
@@ -296,7 +296,9 @@ export function useCooperadoInicioValorReceberCardState(input: {
         fromMotor &&
         cooperadoMotorTemObrigacaoReceber(fromMotor.display)
       ) {
-        return { ...fromMotor, gravarPersistencia: false };
+        const persistidoValor = persistidoMesmoBuildEarly?.display?.valor ?? 0;
+        const mudou = Math.abs(fromMotor.display.valor - persistidoValor) > 0.005;
+        return { ...fromMotor, gravarPersistencia: mudou };
       }
 
       const persistidoMesmoBuild = persistidoMesmoBuildEarly;
@@ -341,7 +343,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
       }
 
       if (motorZeradoComProva && fromMotor && displayEstavel === fromMotor.display) {
-        return { ...fromMotor, gravarPersistencia: false };
+        return { ...fromMotor, gravarPersistencia: true };
       }
 
       if (fromMotor && cooperadoMotorTemObrigacaoReceber(fromMotor.display)) {
