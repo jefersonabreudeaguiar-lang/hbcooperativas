@@ -416,7 +416,7 @@ export function listarMesesEntregasCooperado(
   cooperativaId?: string
 ): string[] {
   const set = new Set(notasDoCooperado(data, cooperadoId, cooperativaId).map((n) => n.mesReferencia));
-  for (const p of data.pagamentosCooperado) {
+  for (const p of data.pagamentosCooperado ?? []) {
     if (p.cooperadoId === cooperadoId) set.add(p.mesReferencia);
   }
   for (const mes of mesesComValoresAvulsos(data, cooperadoId, cooperativaId)) {
@@ -652,7 +652,7 @@ export function cooperadoMesTemPagamentoConfirmadoDebitadoNoCaixa(
   ) {
     return true;
   }
-  for (const p of data.pagamentosCooperado) {
+  for (const p of data.pagamentosCooperado ?? []) {
     if (p.status !== "confirmado") continue;
     const pCanon = resolverCooperadoIdCanonico(data, p.cooperadoId, p.cooperativaId ?? coopId);
     if (p.cooperadoId !== cooperadoId && p.cooperadoId !== canonico && pCanon !== canonico) continue;
@@ -1065,7 +1065,7 @@ export function listarMesesPagosCooperado(
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
   const meses = new Set<string>();
 
-  for (const p of data.pagamentosCooperado) {
+  for (const p of data.pagamentosCooperado ?? []) {
     if (p.status !== "confirmado") continue;
     const pCanon = resolverCooperadoIdCanonico(data, p.cooperadoId, coopId ?? p.cooperativaId);
     if (
@@ -1145,7 +1145,7 @@ export function somarTotalRecebidoConfirmadoCooperado(
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
   const vistos = new Set<string>();
   let total = 0;
-  for (const p of data.pagamentosCooperado) {
+  for (const p of data.pagamentosCooperado ?? []) {
     if (p.status !== "confirmado") continue;
     const pCanon = resolverCooperadoIdCanonico(data, p.cooperadoId, coopId ?? p.cooperativaId);
     if (p.cooperadoId !== cooperadoId && p.cooperadoId !== canonico && pCanon !== canonico) continue;
@@ -1166,7 +1166,7 @@ export function listarMesesComPagamentoRegistradoCooperado(
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
   const meses = new Set<string>();
 
-  for (const p of data.pagamentosCooperado) {
+  for (const p of data.pagamentosCooperado ?? []) {
     if (p.status !== "confirmado" && p.status !== "aguardando_confirmacao") continue;
     const pCanon = resolverCooperadoIdCanonico(data, p.cooperadoId, coopId ?? p.cooperativaId);
     if (

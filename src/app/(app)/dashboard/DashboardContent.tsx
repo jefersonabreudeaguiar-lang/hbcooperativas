@@ -61,6 +61,7 @@ const ContaCoopFilaCloudPanel = dynamic(
 );
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import { useReconciliarLivroCaixaGestao } from "@/hooks/useReconciliarLivroCaixaGestao";
+import { StaffPainelSafeRoot } from "@/components/responsavel/StaffPainelSafeRoot";
 import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
@@ -641,17 +642,25 @@ function AdminDashboard() {
 
   const quickStats = useMemo(() => {
     if (!meta || deferredRevision == null || deferredRevision < 0) return null;
-    return getAdminStatsCached(getData(), meta.coopId || undefined, { skipValoresAPagar: true });
+    try {
+      return getAdminStatsCached(getData(), meta.coopId || undefined, { skipValoresAPagar: true });
+    } catch {
+      return null;
+    }
   }, [deferredRevision, meta?.coopId]);
 
   const heavy = useMemo(() => {
     if (adminStatsWorker || !meta || deferredRevision == null || deferredRevision < 0) return null;
-    const d = getData();
-    const coopScope = meta.coopId || undefined;
-    return {
-      stats: getAdminStatsCached(d, coopScope),
-      fila: getFilaDoDiaCached(d, coopScope, meta.mes),
-    };
+    try {
+      const d = getData();
+      const coopScope = meta.coopId || undefined;
+      return {
+        stats: getAdminStatsCached(d, coopScope),
+        fila: getFilaDoDiaCached(d, coopScope, meta.mes),
+      };
+    } catch {
+      return null;
+    }
   }, [adminStatsWorker, deferredRevision, meta?.coopId, meta?.mes]);
 
   useEffect(() => {
@@ -660,12 +669,20 @@ function AdminDashboard() {
       return;
     }
     let cancelled = false;
-    const d = getData();
-    const coopScope = meta.coopId || undefined;
-    const fila = getFilaDoDiaCached(d, coopScope, meta.mes);
-    void requestAdminStatsFromWorker(d, coopScope, undefined, deferredRevision).then((stats) => {
-      if (!cancelled) setWorkerHeavy({ stats, fila });
-    });
+    try {
+      const d = getData();
+      const coopScope = meta.coopId || undefined;
+      const fila = getFilaDoDiaCached(d, coopScope, meta.mes);
+      void requestAdminStatsFromWorker(d, coopScope, undefined, deferredRevision)
+        .then((stats) => {
+          if (!cancelled) setWorkerHeavy({ stats, fila });
+        })
+        .catch(() => {
+          /* totais ficam em “…” */
+        });
+    } catch {
+      /* Início sem fila/totais — não tela branca */
+    }
     return () => {
       cancelled = true;
     };
@@ -869,7 +886,11 @@ export default function DashboardPage() {
   if (!authSubject) return <PageSkeleton />;
 
   if (painelAbertura.staffPainelUi || painelAbertura.showAdminPainel) {
-    return <AdminDashboard />;
+    return (
+      <StaffPainelSafeRoot>
+        <AdminDashboard />
+      </StaffPainelSafeRoot>
+    );
   }
 
   if (isCooperadoAppUser(user ?? authSubject) || user?.role === "cooperado") {
