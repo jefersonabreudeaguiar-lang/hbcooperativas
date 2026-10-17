@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import type { AppData, User } from "../src/types/index.ts";
-import { resolveAppUserRole } from "../src/permissions/index.ts";
+import { isCooperadoAppUser, resolveAppUserRole } from "../src/permissions/index.ts";
 import {
   canAccessPainelResponsavel,
   canAccessPainelResponsavelSession,
@@ -88,6 +88,11 @@ function evaluateDashboardStaffOpen(
   const effectiveRole = resolveAppUserRole(session, data);
   assert.equal(effectiveRole, "responsavel", "sessão não deve perder papel staff");
   assert.equal(canAccessPainelResponsavel(session, data), true);
+  assert.equal(
+    isCooperadoAppUser({ role: effectiveRole, cooperadoId: session.cooperadoId }),
+    false,
+    "perfil duplo staff não é cooperado app"
+  );
   const gate = evaluateDashboardStaffOpen(session, data, true);
   assert.equal(gate.open, true, "dashboard staff deve abrir");
 }

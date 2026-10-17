@@ -1,6 +1,7 @@
 import type { Action, AppData, ModoAcesso, Resource, User, UserRole } from "@/types";
 import {
   canAccessPainelResponsavel,
+  canAccessPainelResponsavelSession,
   resolveAuthoritativePanelRole,
 } from "@/lib/security/responsavelPanelAccess";
 export { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
@@ -270,6 +271,7 @@ export function isCooperadoAppUser(
 ): boolean {
   if (!user) return false;
   const role = normalizeUserRole(user.role);
+  if (isDiretoriaRole(role)) return false;
   if (role === "cooperado") return true;
   if (role === "parceiro" || role === "contador") return false;
   return Boolean(user.cooperadoId?.trim());
@@ -280,11 +282,16 @@ export function resolveAppUserRole(
   user: Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active">,
   data?: AppData | null
 ): UserRole {
-  const role = data
-    ? resolveAuthoritativePanelRole(user, data)
-    : normalizeUserRole(user.role);
-  const userForAccess = role === normalizeUserRole(user.role) ? user : { ...user, role };
-  /** Perfil duplo: diretoria com cooperadoId não perde papel staff na sessão (painel responsável). */
+  const sessionRole = normalizeUserRole(user.role);
+  if (canAccessPainelResponsavelSession(user, data)) {
+    const fromData = data ? resolveAuthoritativePanelRole(user, data) : null;
+    if (fromData && isDiretoriaRole(fromData)) return fromData;
+    if (isDiretoriaRole(sessionRole)) return sessionRole;
+    return "responsavel";
+  }
+
+  const role = data ? resolveAuthoritativePanelRole(user, data) : sessionRole;
+  const userForAccess = role === sessionRole ? user : { ...user, role };
   if (isDiretoriaRole(role)) {
     if (!canAccessPainelResponsavel(userForAccess, data)) return "cooperado";
     return role;

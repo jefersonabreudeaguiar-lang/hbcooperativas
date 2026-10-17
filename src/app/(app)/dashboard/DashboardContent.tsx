@@ -27,6 +27,7 @@ import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify"
 import { getData, getDataRevision, isAppDataWarm } from "@/services/dataStore";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { evaluateResponsavelPainelAbertura } from "@/lib/responsavel/responsavelPainelContrato";
+import { canAccessPainelResponsavelSession } from "@/lib/security/responsavelPanelAccess";
 import { isMobileCooperativaApp } from "@/lib/mobileExperience";
 import { shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
 import { StatCard } from "@/components/ui/Card";
@@ -577,23 +578,46 @@ function CooperadoDashboardInicioView({
 
 function AdminDashboard() {
   const { user, accountUser } = useAuth();
-  const navUser = useAppDataSelector(
-    (data) => {
-      if (!user) return null;
-      const staff = Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data));
-      return (staff ? accountUser : user) ?? user;
-    },
-    [user?.id, accountUser?.id, accountUser?.role]
-  );
+  const gestaoUser = accountUser ?? user;
+  const adminDataRevision = useAppDataSelector(() => (isAppDataWarm() ? getDataRevision() : -1), []);
+  const navUser = useMemo(() => {
+    if (!gestaoUser) return null;
+    if (canAccessPainelResponsavelSession(gestaoUser, isAppDataWarm() ? getData() : null)) {
+      return gestaoUser;
+    }
+    if (!isAppDataWarm()) return gestaoUser;
+    const data = getData();
+    if (shouldRenderStaffPainelUi(gestaoUser, data)) return gestaoUser;
+    return null;
+  }, [
+    gestaoUser?.id,
+    gestaoUser?.role,
+    gestaoUser?.email,
+    gestaoUser?.cooperadoId,
+    adminDataRevision,
+  ]);
   const { check } = usePermissions();
   const creditFlag = useHbCreditEnabled(navUser ?? undefined);
   const { syncing } = useSyncStatus();
 
-  const meta = useAppDataSelector((data) => {
-    if (!data || !navUser) return null;
+  const meta = useMemo(() => {
+    if (!navUser) return null;
+    const mes = getCurrentMesReferencia();
+    const data = isAppDataWarm() ? getData() : null;
+    if (!data) {
+      const coopId = navUser.cooperativaId ?? "";
+      const cnpj = navUser.cooperativaCnpj ? normalizeCnpj(navUser.cooperativaCnpj) : "";
+      return {
+        coopNome: coopId ? "Carregando…" : "",
+        mes,
+        instalacao: null,
+        assinatura: null,
+        cnpj,
+        coopId,
+      };
+    }
     const coopId = getUserCooperativaId(navUser, data);
     const coopNome = getUserCooperativaNome(navUser, data);
-    const mes = getCurrentMesReferencia();
     const instalacao = coopId ? resumoInstalacaoApp(data, coopId) : null;
     const assinatura = coopId ? resumoAssinaturaCadastroApp(data, coopId) : null;
     let cnpj = "";
@@ -603,9 +627,9 @@ function AdminDashboard() {
       if (coop?.cnpj) cnpj = normalizeCnpj(coop.cnpj);
     }
     return { coopNome, mes, instalacao, assinatura, cnpj, coopId: coopId ?? "" };
-  }, [navUser?.id, navUser?.cooperativaId, navUser?.role]);
+  }, [navUser?.id, navUser?.cooperativaId, navUser?.role, adminDataRevision]);
 
-  const dataRevision = useAppDataSelector(() => getDataRevision(), []);
+  const dataRevision = adminDataRevision;
   const deferredRevision = useDeferredValue(dataRevision ?? -1);
 
   const adminStatsWorker = isRqlAdminStatsWorkerEnabled();
@@ -847,8 +871,7 @@ export default function DashboardPage() {
     painelAbertura.showAdminPainel ||
     (painelAbertura.canGestao && !isMobileCooperativaApp());
 
-  if (abrirGestao) {
-    if (!dataReady) return <PageSkeleton />;
+  if (abrirGestao || painelAbertura.staffPainelUi) {
     return <AdminDashboard />;
   }
 
@@ -857,7 +880,6 @@ export default function DashboardPage() {
   }
 
   if (painelAbertura.canGestao) {
-    if (!dataReady) return <PageSkeleton />;
     return <AdminDashboard />;
   }
 

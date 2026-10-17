@@ -14,6 +14,7 @@ import {
 import { useRouter } from "next/navigation";
 import type { User } from "@/types";
 import { normalizeUserRole, resolveAppUserRole } from "@/permissions";
+import { canAccessPainelResponsavelSession } from "@/lib/security/responsavelPanelAccess";
 import { resolveExperienceUser, resolveMobileCooperadoId } from "@/lib/mobileExperience";
 import { PAINEL_MOBILE_PREF_EVENT } from "@/lib/mobilePainelPreference";
 import {
@@ -314,7 +315,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             "Não foi possível abrir sua sessão na nuvem. Aguarde alguns segundos e tente de novo.",
         };
       }
+      const gestaoLogin = canAccessPainelResponsavelSession(safeUser);
       if (isCooperadoPwaMessengerMode() || isCooperadoMobileGaPromoted(safeUser)) {
+        preloadAppData();
+      } else if (gestaoLogin) {
+        ensureCooperadoAppDataEagerWarm();
         preloadAppData();
       } else {
         await waitForAppDataWarm(4000);
