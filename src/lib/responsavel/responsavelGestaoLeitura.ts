@@ -4,19 +4,16 @@
 import type { AppData } from "@/types";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import type { ConsolidadoFinanceiroCooperado } from "@/services/cooperadoEntregasService";
-import {
-  listarMesesEmAbertoPagamentoResponsavel,
-  mesReferenciaPagamentoResponsavelEmAberto,
-} from "@/services/cooperadoEntregasService";
+import { mesReferenciaPagamentoResponsavelEmAberto } from "@/services/cooperadoEntregasService";
 import { bicCentralGetResumoPagamentoExibicao } from "@/services/bicLeituraCentralFicha";
 import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
 import {
   getResumoPagamentoConsolidadoCooperado,
-  getTotalAPagarCooperado,
   resumoFromPagamento,
   type AjustesResumoPagamento,
   type ResumoPagamentoCooperado,
 } from "@/services/notaPedidoService";
+import { hbCreditCreditoBaseReais } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
 import type { PagamentoCooperadoRegistro } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { round2 } from "@/utils/calculations";
@@ -74,12 +71,7 @@ export function getTotalValoresAPagarGestaoCooperativa(
   return round2(
     cooperados.reduce((s, c) => {
       const coopScope = cooperativaId ?? c.cooperativaId;
-      const meses = listarMesesEmAbertoPagamentoResponsavel(data, c.id, coopScope);
-      let sub = 0;
-      for (const mes of meses) {
-        sub += getTotalAPagarCooperado(data, c.id, mes, coopScope);
-      }
-      return s + sub;
+      return s + hbCreditCreditoBaseReais(data, c.id, coopScope);
     }, 0)
   );
 }

@@ -6,6 +6,8 @@ import assert from "node:assert/strict";
 import type { AppData } from "../src/types/index.ts";
 import { hbCreditCreditoBaseReais } from "../src/lib/hb-credit/hbCreditCreditoBaseCalculo.ts";
 import { listarFichasEmAbertoPagamento } from "../src/services/notaPedidoService.ts";
+import { getRelatorioPagarCooperadoEmAberto } from "../src/services/relatorioService.ts";
+import { getTotalValoresAPagarGestaoCooperativa } from "../src/lib/responsavel/responsavelGestaoLeitura.ts";
 
 const COOP = "coop-1";
 const CID = "coop-member-1";
@@ -251,6 +253,104 @@ function emptyData(): AppData {
   assert.equal(abertas.length, 1);
   assert.equal(abertas[0]?.id, "f-depois");
   assert.equal(hbCreditCreditoBaseReais(data, CID, COOP), 35);
+}
+
+// 4 — conferir entregas: só quem tem saldo recente; mês pago some da lista
+{
+  const pago = emptyData();
+  pago.cooperados = [
+    {
+      id: "pago-1",
+      nomeCompleto: "Já Pago",
+      cooperativaId: COOP,
+      status: "ativo",
+      chavePix: "a@test",
+    } as AppData["cooperados"][0],
+    {
+      id: CID,
+      nomeCompleto: "Recente",
+      cooperativaId: COOP,
+      status: "ativo",
+      chavePix: "b@test",
+    } as AppData["cooperados"][0],
+  ];
+  pago.notasPedido = [
+    {
+      id: "n-pago",
+      cooperadoId: "pago-1",
+      cooperativaId: COOP,
+      mesReferencia: "2026-09",
+      status: "conferida",
+      valorLiquido: 800,
+      itens: [],
+      createdAt: "2026-09-05T00:00:00.000Z",
+      dataEntrega: "2026-09-05",
+      dataConferencia: "2026-09-06T00:00:00.000Z",
+    } as AppData["notasPedido"][0],
+    {
+      id: "n-rec",
+      cooperadoId: CID,
+      cooperativaId: COOP,
+      mesReferencia: "2026-10",
+      status: "conferida",
+      valorLiquido: 45,
+      itens: [],
+      createdAt: "2026-10-17T12:00:00.000Z",
+      dataEntrega: "2026-10-17",
+      dataConferencia: "2026-10-17T12:00:00.000Z",
+    } as AppData["notasPedido"][0],
+  ];
+  pago.fichaCorrida = [
+    {
+      id: "f-pago",
+      cooperadoId: "pago-1",
+      cooperativaId: COOP,
+      mesReferencia: "2026-09",
+      notaPedidoId: "n-pago",
+      status: "pendente",
+      valorBruto: 900,
+      valorLiquido: 800,
+      descontos: 100,
+      dataLancamento: "2026-09-06T00:00:00.000Z",
+      createdAt: "2026-09-06T00:00:00.000Z",
+      updatedAt: "2026-09-06T00:00:00.000Z",
+    },
+    {
+      id: "f-rec",
+      cooperadoId: CID,
+      cooperativaId: COOP,
+      mesReferencia: "2026-10",
+      notaPedidoId: "n-rec",
+      status: "pendente",
+      valorBruto: 50,
+      valorLiquido: 45,
+      descontos: 5,
+      dataLancamento: "2026-10-17T12:00:00.000Z",
+      createdAt: "2026-10-17T12:00:00.000Z",
+      updatedAt: "2026-10-17T12:00:00.000Z",
+    },
+  ];
+  pago.pagamentosCooperado = [
+    {
+      id: "pg-pago",
+      cooperadoId: "pago-1",
+      cooperativaId: COOP,
+      mesReferencia: "2026-09",
+      status: "confirmado",
+      valorLiquido: 800,
+      valorBruto: 900,
+      fichaIds: ["f-pago-antigo"],
+      notaPedidoIds: [],
+      pagoEm: "2026-09-20T00:00:00.000Z",
+      createdAt: "2026-09-20T00:00:00.000Z",
+    },
+  ];
+  const relatorio = getRelatorioPagarCooperadoEmAberto(pago, COOP);
+  assert.equal(relatorio.length, 1, "conferir só lista quem tem a receber");
+  assert.equal(relatorio[0]?.cooperadoId, CID);
+  assert.equal(relatorio[0]?.total, hbCreditCreditoBaseReais(pago, CID, COOP));
+  assert.equal(relatorio[0]?.total, 50);
+  assert.equal(getTotalValoresAPagarGestaoCooperativa(pago, COOP), 50);
 }
 
 console.log("test-hb-em-aberto-nao-inclui-mes-pago-v443: OK");

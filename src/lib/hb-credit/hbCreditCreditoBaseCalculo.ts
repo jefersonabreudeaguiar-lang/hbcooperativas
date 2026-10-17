@@ -14,6 +14,39 @@ function valorFichaEmAberto(ficha: { valorBruto?: number; valorLiquido?: number 
   return Number.isFinite(liquido) && liquido > 0 ? liquido : 0;
 }
 
+export type MesFichaEmAberto = {
+  mes: string;
+  entregas: number;
+  total: number;
+};
+
+/** Mesma janela do HB e do «em aberto» do conferir: só ficha ainda sem PIX. */
+export function listarMesesFichaEmAbertoCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string | undefined
+): { meses: string[]; porMes: MesFichaEmAberto[]; total: number } {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  if (!coopId) return { meses: [], porMes: [], total: 0 };
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  const mesesSet = new Set<string>();
+  for (const f of data.fichaCorrida ?? []) {
+    if (!fichaPertenceCooperado(data, f, canonico, coopId)) continue;
+    if (f.mesReferencia) mesesSet.add(f.mesReferencia);
+  }
+  const porMes: MesFichaEmAberto[] = [];
+  let total = 0;
+  for (const mes of [...mesesSet].sort()) {
+    const fichas = listarFichasEmAbertoPagamento(data, canonico, mes, coopId);
+    if (!fichas.length) continue;
+    const mesTotal = round2(fichas.reduce((s, f) => s + valorFichaEmAberto(f), 0));
+    if (mesTotal <= 0.005) continue;
+    porMes.push({ mes, entregas: fichas.length, total: mesTotal });
+    total = round2(total + mesTotal);
+  }
+  return { meses: porMes.map((m) => m.mes), porMes, total };
+}
+
 /**
  * Crédito-base HB (limite/teto) — só lançamento da ficha ainda não liquidado.
  * Mês passado com PIX confirmado = 0; entrega depois do pagamento soma sozinha.
@@ -23,19 +56,5 @@ export function hbCreditCreditoBaseReais(
   cooperadoId: string,
   cooperativaId: string | undefined
 ): number {
-  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  if (!coopId) return 0;
-  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
-  const meses = new Set<string>();
-  for (const f of data.fichaCorrida ?? []) {
-    if (!fichaPertenceCooperado(data, f, canonico, coopId)) continue;
-    if (f.mesReferencia) meses.add(f.mesReferencia);
-  }
-  let total = 0;
-  for (const mes of meses) {
-    for (const f of listarFichasEmAbertoPagamento(data, canonico, mes, coopId)) {
-      total += valorFichaEmAberto(f);
-    }
-  }
-  return round2(total);
+  return listarMesesFichaEmAbertoCooperado(data, cooperadoId, cooperativaId).total;
 }

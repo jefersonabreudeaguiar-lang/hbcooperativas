@@ -4,9 +4,9 @@ import { formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferenc
 import { notaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import {
   listarMesesEmAbertoPagamentoResponsavel,
-  getConsolidadoFinanceiroCooperado,
   cooperadoPendentePagamentoResponsavel,
 } from "@/services/cooperadoEntregasService";
+import { listarMesesFichaEmAbertoCooperado } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
 import { getTotalValoresAPagarGestaoCooperativa } from "@/lib/responsavel/responsavelGestaoLeitura";
 import {
   agregarItensNotasCooperado,
@@ -409,29 +409,20 @@ export function getRelatorioPagarCooperadoEmAberto(
         (!cooperadoId || c.id === cooperadoId)
     )
     .map((c) => {
-      const meses = listarMesesEmAbertoPagamentoResponsavel(data, c.id, cooperativaId);
-      const consolidado = getConsolidadoFinanceiroCooperado(data, c.id, cooperativaId);
-      let entregas = 0;
-      const porMes: LinhaPagarCooperadoEmAberto["porMes"] = [];
-      for (const mes of meses) {
-        const resumo = getResumoValorAPagarRelatorio(data, c.id, mes, cooperativaId);
-        if (resumo.valorLiquido <= 0) continue;
-        entregas += resumo.fichaIds.length;
-        porMes.push({
-          mes,
-          mesLabel: formatMesReferencia(mes),
-          entregas: resumo.fichaIds.length,
-          total: resumo.valorLiquido,
-        });
-      }
-      const total = round2(porMes.reduce((s, m) => s + m.total, 0));
+      const aberto = listarMesesFichaEmAbertoCooperado(data, c.id, cooperativaId);
+      const porMes: LinhaPagarCooperadoEmAberto["porMes"] = aberto.porMes.map((m) => ({
+        mes: m.mes,
+        mesLabel: formatMesReferencia(m.mes),
+        entregas: m.entregas,
+        total: m.total,
+      }));
       return {
         cooperadoId: c.id,
         cooperado: c.nomeCompleto,
-        meses,
-        mesesLabel: consolidado.mesLabel,
-        entregas,
-        total,
+        meses: aberto.meses,
+        mesesLabel: formatMesesReferenciaRotulo(aberto.meses),
+        entregas: porMes.reduce((s, m) => s + m.entregas, 0),
+        total: aberto.total,
         porMes,
       };
     })
