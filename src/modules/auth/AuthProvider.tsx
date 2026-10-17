@@ -309,12 +309,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setActiveCloudProfile(userToCloudProfile(safeUser));
       const jwtRole = normalizeUserRole(sessionUser?.role ?? result.role);
       const role = resolveAppUserRole(safeUser, getData());
+      const gestaoLogin = jwtRole !== "cooperado" && canAccessPainelResponsavelSession(safeUser);
       if (jwtRole === "cooperado") {
         if (resetCooperadoAposVazamentoPainelGestao(safeUser)) {
           return { ok: true as const, redirectTo: "/dashboard", navigated: true as const };
         }
         setPreferPainelResponsavelMobile(false);
-      } else if (canAccessPainelResponsavelSession(safeUser)) {
+      } else if (gestaoLogin) {
         setPreferPainelResponsavelMobile(true);
       } else {
         setPreferPainelResponsavelMobile(false);

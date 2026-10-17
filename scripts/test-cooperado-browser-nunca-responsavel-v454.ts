@@ -19,7 +19,7 @@ import {
 } from "../src/lib/responsavel/responsavelIdentidade.ts";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
-assert.equal(APP_BUILD_VERSION, 454);
+assert.ok(APP_BUILD_VERSION >= 454);
 assert.equal(CNPJ_PAINEL_RESPONSAVEL_RESTRITO, "62351750000165");
 
 const COOP = "coop-oficial";
