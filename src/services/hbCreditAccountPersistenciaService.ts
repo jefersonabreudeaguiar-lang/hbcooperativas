@@ -49,7 +49,7 @@ export async function persistirHbCreditAccountCooperado(
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
   const cooperadoIds =
     canonico && canonico !== apiCooperadoId ? [apiCooperadoId, canonico] : [apiCooperadoId];
-  const syncLimite = options?.syncLimiteFromFicha !== false;
+  const syncLimite = options?.syncLimiteFromFicha === true;
   const dedupeKey = contaCoopAuxSyncKeyAccountPersist(cnpj, apiCooperadoId);
 
   return coalesceContaCoopAuxSync(dedupeKey, async () => {

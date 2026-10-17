@@ -2,9 +2,7 @@ import type { User } from "@/types";
 import { isCloudSessionActive } from "@/lib/security/clientSession";
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import { hbCreditMesPrincipal } from "@/lib/hb-credit/hbCreditLeituraBic";
-import { resolveHbCreditLimiteSyncTargets } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 import { refreshContaCoopValorReceberPilot } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
-import { refreshContaCoopLimiteFromFicha } from "@/lib/hb-credit/syncContaCoopLimiteFromFicha";
 import { notifyHbCreditAccountCacheUpdated } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import { persistirHbCreditAccountCooperado } from "@/services/hbCreditAccountPersistenciaService";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
@@ -20,8 +18,8 @@ let pipelineLastAt = 0;
 let pipelineIdleScheduled = false;
 
 /**
- * Pipeline HB Créditos cooperado (produção) — paridade com Conta Coop do responsável:
- * descontos HB na ficha → sync-limite na nuvem (base paridade) → GET /api/credit/account → cache local.
+ * Pipeline HB Créditos cooperado — descontos da ficha + GET da conta já liberada.
+ * Não reescreve o limite na nuvem (quem libera é o responsável).
  */
 export async function executarCooperadoHbCreditSyncPadrao(
   user: Omit<User, "password"> | null | undefined,
@@ -70,16 +68,6 @@ export async function executarCooperadoHbCreditSyncPadrao(
       mesReferencia,
       cooperativaId,
     }).catch(() => {});
-
-    const limite = resolveHbCreditLimiteSyncTargets(user, data, cooperativaId);
-    if (limite) {
-      await refreshContaCoopLimiteFromFicha({
-        cnpj,
-        cooperadoId: limite.apiCooperadoId,
-        cooperativaId,
-        cooperadoIds: limite.cooperadoIds,
-      }).catch(() => {});
-    }
 
     const ok = await persistirHbCreditAccountCooperado(user, { syncLimiteFromFicha: false });
     if (ok) notifyHbCreditAccountCacheUpdated();

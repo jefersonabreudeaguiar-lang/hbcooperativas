@@ -27,6 +27,7 @@ import {
   storeHbCreditCooperadoReceberDraft,
 } from "@/lib/hb-credit/hbCreditCooperadoReceberDraft";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
+import { normalizeHbPaymentLimiteDisponivel } from "@/modules/hb-credit/engine/paymentAffordability";
 import { round2 } from "@/utils/calculations";
 import { getData, preloadAppData, updateData, waitForAppDataWarm } from "@/services/dataStore";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
@@ -73,7 +74,6 @@ import { HbCreditCooperadoInicioPilot } from "@/components/hb-credit/HbCreditCoo
 import { HbCreditCooperadoLoadingShellPilot } from "@/components/hb-credit/HbCreditCooperadoLoadingShellPilot";
 import { CooperadoHbCreditHubPilotChrome } from "@/components/hb-credit/CooperadoHbCreditHubPilotChrome";
 import {
-  cooperadoMobilePilotHbCreditDeferLimiteSyncOnOpen,
   cooperadoPilotHbCreditHubIntroDone,
   isCooperadoMobilePilotHbCreditUi,
 } from "@/lib/cooperado/cooperadoMobilePilotHbCredit";
@@ -268,39 +268,6 @@ function MinhaContaCoopContent() {
     if (!background) setLedgerLoaded(false);
     setError("");
     try {
-      const coopId = user ? getUserCooperativaId(user, getData()) : undefined;
-      const runLimiteSync = () => {
-        if (!coopId || !user) return;
-        const limite = resolveHbCreditLimiteSyncTargets(user, getData(), coopId);
-        if (!limite) return;
-        void refreshContaCoopLimiteFromFicha({
-          cnpj,
-          cooperadoId: limite.apiCooperadoId,
-          cooperativaId: coopId,
-          cooperadoIds: limite.cooperadoIds,
-        }).catch(() => {
-          /* offline ou operacional indisponível — não bloqueia abertura da tela */
-        });
-      };
-      const deferLimite =
-        !background && pilotHbUi && cooperadoMobilePilotHbCreditDeferLimiteSyncOnOpen();
-      if (deferLimite) {
-        if (typeof requestIdleCallback === "function") {
-          requestIdleCallback(runLimiteSync, { timeout: 12_000 });
-        } else {
-          window.setTimeout(runLimiteSync, 4_000);
-        }
-      } else if (coopId && user) {
-        const limite = resolveHbCreditLimiteSyncTargets(user, getData(), coopId);
-        if (limite) {
-          await refreshContaCoopLimiteFromFicha({
-            cnpj,
-            cooperadoId: limite.apiCooperadoId,
-            cooperativaId: coopId,
-            cooperadoIds: limite.cooperadoIds,
-          }).catch(() => {});
-        }
-      }
       const acc = await fetchCreditAccount(cnpj, hbApiCooperadoId);
       const accObj = (acc.account as ContaCoopLimiteCooperado) ?? null;
       setAccount(accObj);
@@ -329,7 +296,7 @@ function MinhaContaCoopContent() {
         notifyHbCreditAccountLoaded();
       }
     }
-  }, [cnpj, hbApiCooperadoId, pilotHbUi, user]);
+  }, [cnpj, hbApiCooperadoId]);
 
   useEffect(() => {
     if (!cnpj || cnpj.length !== 14 || !user || !data || !cooperadoId) return;
@@ -601,7 +568,9 @@ function MinhaContaCoopContent() {
     );
   }
 
-  const saldoHb = account?.valorDisponivelCents ?? 0;
+  const saldoHb = account
+    ? normalizeHbPaymentLimiteDisponivel(account).valorDisponivelCents
+    : 0;
   const cashback = account?.cashbackDisponivelCents ?? 0;
   const podeLiberarCashback =
     cashback > 0 && !cashbackJaNaFicha && Boolean(mesReferenciaReceber) && !isOffline && !busy;

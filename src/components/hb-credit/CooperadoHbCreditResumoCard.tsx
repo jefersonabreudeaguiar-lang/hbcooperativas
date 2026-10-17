@@ -7,7 +7,7 @@ import { Wallet } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
-import { hbCreditEffectiveDisponivelCents } from "@/modules/hb-credit/engine/paymentAffordability";
+import { normalizeHbPaymentLimiteDisponivel } from "@/modules/hb-credit/engine/paymentAffordability";
 import {
   lerHbCreditAccountPersistido,
   lerHbCreditAccountPersistidoFlex,
@@ -107,15 +107,11 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
   const totals = useMemo(() => {
     const acc = snap?.account;
     if (!acc) return null;
-    const liberado = Math.max(0, acc.limiteLiberadoCents ?? 0);
-    const usado = Math.max(0, acc.valorUsadoCents ?? 0);
-    const creditoEfetivo = hbCreditEffectiveDisponivelCents(liberado, liberado, usado);
-    const creditoInformado = Math.max(0, acc.valorDisponivelCents ?? 0);
-    const saldo = Math.min(creditoInformado, creditoEfetivo);
+    const norm = normalizeHbPaymentLimiteDisponivel(acc);
     return {
-      saldo,
-      limite: liberado,
-      usado,
+      saldo: norm.valorDisponivelCents,
+      limite: norm.limiteLiberadoCents,
+      usado: Math.max(0, norm.valorUsadoCents ?? 0),
     };
   }, [snap]);
 

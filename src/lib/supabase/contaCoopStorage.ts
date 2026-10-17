@@ -2016,35 +2016,12 @@ export async function getLimiteCooperadoExibicaoParidadeLimites(
   cnpj: string,
   cooperadoId: string
 ): Promise<ContaCoopLimiteCooperado | null> {
-  await healHbCreditNovoCicloQuandoBaseZero(supabase, cnpj, cooperadoId, "system:hb_exibicao_paridade").catch(
-    () => {}
-  );
-  const limite = await getLimiteCooperado(supabase, cnpj, cooperadoId, {
+  /** Mesma regra da aba Limites rápida: o liberado na nuvem é o que o cooperado gasta. */
+  return getLimiteCooperado(supabase, cnpj, cooperadoId, {
     skipCycleHeal: true,
+    skipAmountUsedReconcile: true,
+    fastPreview: true,
   });
-  if (!limite) return null;
-
-  const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, [cooperadoId]);
-  if (!authoritative.ok) {
-    return limite;
-  }
-
-  const canon = resolverCooperadoIdCanonico(
-    authoritative.creditoBaseAppData,
-    cooperadoId,
-    authoritative.cooperativaId
-  );
-  const creditoBaseCents = Math.max(
-    authoritative.creditosBaseCents[cooperadoId] ?? 0,
-    authoritative.creditosBaseCents[canon] ?? 0
-  );
-  const teto = await resolveTetoGlobal(supabase, cnpj, authoritative.creditosBaseCents);
-  const tetoPercent = teto.configured ? teto.percent : 0;
-  const liberacaoPercent = teto.configured
-    ? (await getCooperativaLiberacaoPercentConfigured(supabase, cnpj)) ?? tetoPercent
-    : null;
-
-  return capContaCoopLimiteToAuthoritativeBase(limite, creditoBaseCents, tetoPercent, liberacaoPercent);
 }
 
 export async function setFinancialPin(
@@ -2795,6 +2772,7 @@ export async function validateIntentForCooperado(
   const limiteQuery = getLimiteCooperado(supabase, digits, cooperadoId, {
     skipAmountUsedReconcile: opts?.fast === true,
     fastPreview: opts?.fast === true,
+    skipCycleHeal: true,
   });
 
   const [{ data: parceiro }, limite] = await Promise.all([parceiroQuery, limiteQuery]);

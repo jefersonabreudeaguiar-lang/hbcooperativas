@@ -3,7 +3,7 @@
  * npx tsx scripts/test-hb-credit-limite-autoridade.ts
  */
 import assert from "node:assert/strict";
-import type { AppData } from "@/types";
+import type { AppData } from "../src/types/index.ts";
 import {
   resolveLimiteHbCooperadoEfetivo,
   cooperadoTemEntregasConferidasParaHb,
@@ -14,8 +14,14 @@ import {
 } from "../src/lib/hb-credit/hbCreditLeituraBic";
 import { computeAmountUsedCentsFromPayments } from "../src/lib/supabase/creditAmountUsedReconcile";
 import { computeDisponivel } from "../src/modules/hb-credit/engine/money";
+import {
+  hbCreditEffectiveDisponivelCents,
+  normalizeHbPaymentLimiteDisponivel,
+} from "../src/modules/hb-credit/engine/paymentAffordability";
 import { isHbCreditStaffNavEligible, isHbCreditNavVisible } from "../src/permissions";
 import type { ContaCoopLimiteCooperado } from "../src/modules/hb-credit/types";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 process.env.NEXT_PUBLIC_HB_CREDIT_ENABLED = "true";
 
@@ -213,6 +219,33 @@ function miniData(overrides: Partial<AppData> = {}): AppData {
     isHbCreditStaffNavEligible({ role: "responsavel" }, "disabled", false),
     true
   );
+}
+
+// CENÁRIO 8 — valor liberado na nuvem aparece para gastar (cap 0 residual não zera)
+{
+  assert.equal(hbCreditEffectiveDisponivelCents(50_000, 0, 0), 50_000);
+  assert.equal(hbCreditEffectiveDisponivelCents(50_000, 0, 10_000), 40_000);
+  const norm = normalizeHbPaymentLimiteDisponivel(limiteRow(50_000, 0));
+  assert.equal(norm.valorDisponivelCents, 50_000);
+}
+
+{
+  const ROOT = join(import.meta.dirname ?? __dirname, "..");
+  const accountGet = readFileSync(join(ROOT, "src/lib/supabase/contaCoopStorage.ts"), "utf8");
+  const fn = accountGet.slice(
+    accountGet.indexOf("export async function getLimiteCooperadoExibicaoParidadeLimites")
+  );
+  const body = fn.slice(0, fn.indexOf("export async function setFinancialPin"));
+  assert.equal(
+    /capContaCoopLimiteToAuthoritativeBase|healHbCreditNovoCicloQuandoBaseZero/.test(body),
+    false,
+    "GET conta cooperado não recorta/zera o liberado"
+  );
+  const persist = readFileSync(
+    join(ROOT, "src/services/hbCreditAccountPersistenciaService.ts"),
+    "utf8"
+  );
+  assert.match(persist, /options\?\.syncLimiteFromFicha === true/);
 }
 
 console.log("OK — HB crédito limite autoridade (6 cenários + visibilidade)");

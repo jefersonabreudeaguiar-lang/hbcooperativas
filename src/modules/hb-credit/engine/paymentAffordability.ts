@@ -10,8 +10,13 @@ export function hbCreditEffectiveDisponivelCents(
   amountUsedCents: number
 ): number {
   const released = Math.max(0, Math.round(limitReleasedCents));
+  const rawCap =
+    financialLimitCapCents == null ? null : Number(financialLimitCapCents);
+  /** Cap 0 com liberado > 0 é residual de ciclo antigo — não esconde o saldo nas compras. */
   const cap =
-    financialLimitCapCents == null ? released : Math.max(0, Math.round(financialLimitCapCents));
+    rawCap == null || !Number.isFinite(rawCap) || (rawCap <= 0 && released > 0)
+      ? released
+      : Math.max(0, Math.round(rawCap));
   const effectiveLimit = Math.min(released, cap);
   const usado = Math.max(0, Math.round(amountUsedCents));
   return Math.max(0, effectiveLimit - usado);
