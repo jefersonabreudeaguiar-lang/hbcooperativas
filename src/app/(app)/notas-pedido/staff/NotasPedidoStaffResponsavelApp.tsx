@@ -4410,6 +4410,10 @@ export default function NotasPedidoStaffMain() {
               : "Toque no botão verde para fotografar sua entrega — histórico por mês abaixo"
             : vistaResponsavel === "aberto"
               ? "Relatório de entregas já lançadas, com pagamento ainda em aberto por cooperado"
+              : vistaResponsavel === "historico"
+              ? "Arquivo de entregas já lançadas. Meses pagos não entram em Em aberto."
+              : vistaResponsavel === "correcoes"
+              ? "Apague ou relance entregas já conferidas. Pagamento no caixa exige estorno explícito."
               : pendentesEstaveis.length > 0
               ? `${pendentesEstaveis.length} ${pendentesEstaveis.length === 1 ? "nota" : "notas"} aguardando conferência e lançamento`
               : "Nenhuma pendente — use Histórico para entregas já lançadas ou Lançar entrega (avulso)"
