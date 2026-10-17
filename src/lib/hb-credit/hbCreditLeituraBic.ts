@@ -7,7 +7,7 @@ import {
   cooperadoMesQuitado,
   getMesPrincipalQuantoVouReceber,
   listarMesesPendentesQuantoVouReceber,
-  listarMesesReferenciaResumoFinanceiroParidade,
+  listarMesesEmAbertoPagamentoResponsavel,
 } from "@/services/cooperadoEntregasService";
 import { listarFichasPendentesPagamento } from "@/services/notaPedidoService";
 import { round2 } from "@/utils/calculations";
@@ -16,10 +16,8 @@ import {
   notaPertenceCooperado,
   resolverCooperadoIdCanonico,
 } from "@/services/cooperadoCloudService";
-import { listarMesesPendentesPagamentoResponsavel } from "@/services/cooperadoEntregasService";
 import { resolveLeituraFinanceiraCooperadoCore } from "@/lib/bic/bicLeituraPorta";
 import {
-  getMesesReferenciaPagamento,
   getPagamentoConfirmadoCooperadoMes,
   getResumoPagamentoCooperado,
   getResumoValorAPagarRelatorio,
@@ -108,25 +106,7 @@ function hbCreditMesesFinanceirosAbertos(
   cooperativaId: string
 ): string[] {
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
-  const meses = new Set<string>([
-    ...hbCreditMesesPendentesQuantoVouReceber(data, canonico, cooperativaId),
-    ...listarMesesPendentesPagamentoResponsavel(data, canonico, cooperativaId),
-  ]);
-
-  const titularIds = new Set(listCooperadoIdsMesmoTitular(data, canonico, cooperativaId));
-  for (const p of data.pagamentosCooperado) {
-    if (p.status !== "aguardando_confirmacao") continue;
-    const pgCanonico = resolverCooperadoIdCanonico(data, p.cooperadoId, cooperativaId);
-    if (!titularIds.has(pgCanonico) && p.cooperadoId !== canonico) continue;
-    for (const mes of getMesesReferenciaPagamento(p)) {
-      meses.add(mes);
-    }
-  }
-
-  return [...meses]
-    .filter((mes) => !cooperadoMesQuitado(data, canonico, mes))
-    .filter((mes) => !getPagamentoConfirmadoCooperadoMes(data, canonico, mes))
-    .sort();
+  return listarMesesEmAbertoPagamentoResponsavel(data, canonico, cooperativaId);
 }
 
 /** Meses em aberto — união BIC (M6) + visão responsável + PIX aguardando (cooperado = responsável). */
@@ -134,15 +114,12 @@ export function hbCreditMesesReferenciaUnificados(
   data: AppData,
   cooperadoId: string,
   cooperativaId: string,
-  mesFallback?: string
+  _mesFallback?: string
 ): string[] {
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
   const abertos = hbCreditMesesFinanceirosAbertos(data, canonico, cooperativaId);
   if (abertos.length) return abertos;
-
-  const fallback =
-    mesFallback?.trim() || hbCreditMesPrincipalFallback(data, canonico, cooperativaId);
-  return fallback ? [fallback] : [];
+  return [];
 }
 
 /** Mês principal BIC (consolidado) — fallback cooperado/responsável. */
@@ -236,12 +213,7 @@ function hbCreditCreditoBaseBrutoFichasPendentesReais(
   cooperativaId: string
 ): number {
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
-  const meses = new Set<string>([
-    ...listarMesesReferenciaResumoFinanceiroParidade(data, canonico, cooperativaId),
-    ...hbCreditMesesReferenciaUnificados(data, canonico, cooperativaId),
-    ...hbCreditMesesPendentesQuantoVouReceber(data, canonico, cooperativaId),
-    ...listarMesesPendentesPagamentoResponsavel(data, canonico, cooperativaId),
-  ]);
+  const meses = listarMesesEmAbertoPagamentoResponsavel(data, canonico, cooperativaId);
   let total = 0;
   for (const mes of meses) {
     for (const f of listarFichasPendentesPagamento(data, canonico, mes, cooperativaId)) {
