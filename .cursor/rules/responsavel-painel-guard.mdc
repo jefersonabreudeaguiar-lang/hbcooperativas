@@ -1,0 +1,52 @@
+---
+description: Blindagem painel responsável (gestão/browser) — sem retrocesso de shell, dashboard ou acesso.
+alwaysApply: true
+---
+
+# Painel responsável — não regredir
+
+Contrato: `src/lib/responsavel/responsavelPainelContrato.ts` (versão `RESPONSAVEL_PAINEL_CONTRATO_VERSION`).  
+Testes obrigatórios antes de merge que toque zona âncora: `npm run test:responsavel-painel`.
+
+## Princípio
+
+Manter o padrão atual: **conta real (`accountUser`)** para gestão; **sessão JWT** autoriza antes do AppData warm; mudanças só com bump de contrato + testes.
+
+## Proibido reintroduzir
+
+- Shell **vazio** ou menu **cooperado** no browser do responsável antes do `AppData` warm (perfil duplo com `cooperadoId`).
+- Priorizar `user` (experiência) em vez de `accountUser` para **permissões, menu gestão ou dashboard admin**.
+- `useAppShellNavigation` retornar `null` para sessão staff válida (sem `subject`).
+- Dashboard cair em **CooperadoDashboard** quando `showAdminPainel` seria true (usar `evaluateResponsavelPainelAbertura`).
+- Remover rotas âncora do menu cold: `/dashboard`, `/notas-pedido`, `/ficha-corrida` (`STAFF_SHELL_MIN_HREFS`).
+- Alterar `canAccessPainelResponsavelSession` / `shouldRenderStaffPainelUiSession` sem revisar contrato e testes.
+
+## Ordem correta (cold start)
+
+1. Se `shouldPrioritizeStaffColdShell(accountUser, false)` → menu `getStaffShellMenusBeforeDataWarm(accountUser)`, `navUser = accountUser`.
+2. Só então ramo cooperado (`user` experiência).
+
+Implementação: `useAppShellNavigation.ts` + `responsavelPainelContrato.ts`.
+
+## Arquivos âncora (diff exige `npm run test:responsavel-painel`)
+
+- `src/lib/responsavel/responsavelPainelContrato.ts`
+- `src/lib/security/responsavelPanelAccess.ts`
+- `src/lib/staffNavigationUser.ts`
+- `src/hooks/useAppShellNavigation.ts`
+- `src/permissions/index.ts` (`getStaffShellMenusBeforeDataWarm`)
+- `src/app/(app)/dashboard/DashboardContent.tsx`
+- `src/hooks/usePermissions.ts` (quando `accountUser` para staff)
+- `src/lib/staff/staffResponsavelSyncPolicy.ts` (sync gestão — não misturar com cooperado)
+- `scripts/test-responsavel-painel*.ts`
+
+## Escopo mínimo
+
+- Um problema → um diff pequeno.
+- Não refatorar cooperado mobile ou BIC no mesmo PR que painel responsável, salvo dependência explícita.
+
+## Mudança intencional de comportamento
+
+1. Incrementar `RESPONSAVEL_PAINEL_CONTRATO_VERSION`.
+2. Atualizar `scripts/test-responsavel-painel-regression.ts`.
+3. Registrar no changelog / PR o que mudou para o responsável.

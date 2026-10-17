@@ -26,11 +26,8 @@ import { cooperadoTabWarmOnPointerDown } from "@/lib/performance/cooperadoTabPoi
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { getData, getDataRevision, isAppDataWarm } from "@/services/dataStore";
 import { useAuth } from "@/modules/auth/AuthProvider";
+import { evaluateResponsavelPainelAbertura } from "@/lib/responsavel/responsavelPainelContrato";
 import { shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
-import {
-  canAccessPainelResponsavel,
-  canAccessPainelResponsavelSession,
-} from "@/lib/security/responsavelPanelAccess";
 import { StatCard } from "@/components/ui/Card";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -821,34 +818,55 @@ export default function DashboardPage() {
           ? false
           : cooperadoLocalResumeReady(user))
       : appLocalResumeReady(user));
-  const staffPainelUi = useAppDataSelector(
-    (data) => Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data)),
-    [accountUser?.id, accountUser?.role]
+  const painelAberturaWarm = useAppDataSelector(
+    (data) =>
+      evaluateResponsavelPainelAbertura({
+        accountUser,
+        authSubject,
+        data,
+        dataReady: true,
+      }),
+    [
+      accountUser?.id,
+      accountUser?.role,
+      accountUser?.cooperadoId,
+      authSubject?.id,
+      authSubject?.role,
+      authSubject?.cooperadoId,
+      authSubject?.cooperativaId,
+    ]
   );
-  const canGestaoFromData = useAppDataSelector(
-    (data) => (authSubject ? canAccessPainelResponsavel(authSubject, data) : false),
-    [authSubject?.id, authSubject?.role, authSubject?.cooperadoId, authSubject?.cooperativaId]
-  );
-  const canGestao = dataReady
-    ? canGestaoFromData
-    : authSubject
-      ? canAccessPainelResponsavelSession(authSubject)
-      : false;
+  const showAdminPainel = useMemo(() => {
+    if (painelAberturaWarm) return painelAberturaWarm.showAdminPainel;
+    return evaluateResponsavelPainelAbertura({
+      accountUser,
+      authSubject,
+      data: null,
+      dataReady: false,
+    }).showAdminPainel;
+  }, [
+    painelAberturaWarm,
+    accountUser?.id,
+    accountUser?.role,
+    accountUser?.cooperadoId,
+    authSubject?.id,
+    authSubject?.role,
+    authSubject?.cooperadoId,
+    authSubject?.cooperativaId,
+  ]);
 
   if (!authSubject) return <PageSkeleton />;
 
+  if (showAdminPainel) {
+    if (!dataReady) return <PageSkeleton />;
+    return <AdminDashboard />;
+  }
+
   if (isCooperadoAppUser(authSubject)) {
-    if (canGestao && staffPainelUi && dataReady) {
-      return <AdminDashboard />;
-    }
     return <CooperadoDashboard />;
   }
 
   if (!dataReady && !instantResume) return <PageSkeleton />;
 
-  if (canGestao && staffPainelUi) {
-    return <AdminDashboard />;
-  }
-
-  return <CooperadoDashboard />;
+  return <PageSkeleton />;
 }

@@ -21,6 +21,7 @@
     "backup:cloud": "node scripts/backup-cloud.mjs",
     "test:sync-flows": "npx tsx scripts/simulate-sync-flows.ts",
     "test:cooperado-financeiro": "npx tsx scripts/test-cooperado-financeiro-guard.ts",
+    "test:responsavel-painel": "npx tsx scripts/test-responsavel-painel.ts",
     "test:h204-orlando-global": "npx tsx scripts/test-h204-orlando-global-simulation.ts",
     "test:bic-shadow": "npx tsx scripts/test-bic-shadow-compare.ts",
     "test:bic-shadow-real": "npx tsx scripts/test-bic-shadow-real.ts",

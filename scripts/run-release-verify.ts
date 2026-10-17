@@ -102,6 +102,12 @@ const PHASE_HB: Step[] = [
   },
   {
     phase: "2",
+    title: "Painel responsável — contrato anti-regressão",
+    cmd: "npx",
+    stepArgs: ["tsx", "scripts/test-responsavel-painel.ts"],
+  },
+  {
+    phase: "2",
     title: "Recibo confirmado → assinatura cooperado",
     cmd: "npx",
     stepArgs: ["tsx", "scripts/test-cooperado-recibo-assinatura-apos-confirmado.ts"],
