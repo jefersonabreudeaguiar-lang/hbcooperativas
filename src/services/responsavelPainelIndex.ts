@@ -2,7 +2,7 @@
  * Índices cacheados por revisão do AppData — painel responsável (fila, dashboard).
  * Read-only; não altera lançamentos.
  */
-import type { AppData, Cooperado, NotaPedido } from "@/types";
+import type { AppData, Cooperado, NotaPedido, PagamentoCooperadoRegistro } from "@/types";
 import { cooperadoPendentePagamentoResponsavel } from "@/services/cooperadoEntregasService";
 import {
   fichaPertenceCooperado,
@@ -11,7 +11,10 @@ import {
 import { getDataOperationalTruth, getDataRevision } from "@/services/dataStore";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { listarMesesFichaEmAbertoCooperado } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
-import { idsNotasPedidoExcluidas } from "@/services/notaPedidoService";
+import {
+  idsNotasPedidoExcluidas,
+  listarPagamentosConfirmadosQueCobremMes,
+} from "@/services/notaPedidoService";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { notaElegivelParaFilaConferenciaResponsavel, sanitizarNotaParaFilaConferencia } from "@/utils/notaStatus";
 import {
@@ -33,6 +36,8 @@ let painelCache: PainelCache | null = null;
 type RelatorioAbertoCache = {
   revision: number;
   coopId: string;
+  pix: number;
+  fichas: number;
   linhas: LinhaPagarCooperadoEmAberto[];
 };
 
@@ -101,13 +106,40 @@ function scoreSnapshotConferir(d: AppData): { fichas: number; notas: number; coo
   };
 }
 
-/** Snapshot incompleto (sync/push) não substitui o último completo sem prova de PIX. */
+function rankPagamentoConferir(p: PagamentoCooperadoRegistro): number {
+  let rank = 0;
+  if (p.status === "confirmado") rank += 4;
+  if (p.status === "aguardando_confirmacao") rank += 2;
+  rank += (p.fichaIds?.length ?? 0) + (p.notaPedidoIds?.length ?? 0);
+  return rank;
+}
+
+/** União de PIX: o lastro de fichas não pode descartar pagamento que acabou de chegar. */
+export function mergePagamentosCooperadoParaConferir(
+  a: PagamentoCooperadoRegistro[] | undefined,
+  b: PagamentoCooperadoRegistro[] | undefined
+): PagamentoCooperadoRegistro[] {
+  const byId = new Map<string, PagamentoCooperadoRegistro>();
+  for (const p of a ?? []) {
+    if (p?.id) byId.set(p.id, p);
+  }
+  for (const p of b ?? []) {
+    if (!p?.id) continue;
+    const prev = byId.get(p.id);
+    if (!prev || rankPagamentoConferir(p) >= rankPagamentoConferir(prev)) {
+      byId.set(p.id, p);
+    }
+  }
+  return [...byId.values()];
+}
+
+/** Snapshot incompleto (sync/push) não substitui o último completo. PIX extra entra no merge, não apaga ficha. */
 export function snapshotConferirPoorerSemProva(next: AppData, prev: AppData): boolean {
   const n = scoreSnapshotConferir(next);
   const p = scoreSnapshotConferir(prev);
   if (n.cooperados === 0 && p.cooperados > 0) return true;
   if (n.notas === 0 && p.notas > 0 && n.pix <= p.pix) return true;
-  if (n.fichas === 0 && p.fichas > 0 && n.pix <= p.pix) return true;
+  if (n.fichas === 0 && p.fichas > 0) return true;
   if (n.fichas < p.fichas && n.pix <= p.pix) return true;
   return false;
 }
@@ -122,8 +154,14 @@ function escolherSnapshotMaisCompleto(truth: AppData, data: AppData): AppData {
   const base = truthRicher ? truth : data;
   const other = base === truth ? data : truth;
   const notasPedido = mergeNotasPedidoParaPainel(base.notasPedido, other.notasPedido);
-  if (notasPedido === base.notasPedido) return base;
-  return { ...base, notasPedido };
+  const pagamentosCooperado = mergePagamentosCooperadoParaConferir(
+    base.pagamentosCooperado,
+    other.pagamentosCooperado
+  );
+  const notasMudou = notasPedido !== base.notasPedido;
+  const pixMudou = pagamentosCooperado.length !== (base.pagamentosCooperado?.length ?? 0);
+  if (!notasMudou && !pixMudou) return base;
+  return { ...base, notasPedido, pagamentosCooperado };
 }
 
 function aplicarLastroCompletenessConferir(candidato: AppData): AppData {
@@ -134,8 +172,15 @@ function aplicarLastroCompletenessConferir(candidato: AppData): AppData {
   }
   const prevIds = new Set(prev.notasPedido.map((n) => n.id));
   const novas = candidato.notasPedido.filter((n) => !prevIds.has(n.id));
-  const fundido =
-    novas.length === 0 ? prev : { ...prev, notasPedido: [...prev.notasPedido, ...novas] };
+  const pagamentosCooperado = mergePagamentosCooperadoParaConferir(
+    prev.pagamentosCooperado,
+    candidato.pagamentosCooperado
+  );
+  const fundido = {
+    ...prev,
+    notasPedido: novas.length === 0 ? prev.notasPedido : [...prev.notasPedido, ...novas],
+    pagamentosCooperado,
+  };
   conferirLeituraLatch = fundido;
   return fundido;
 }
@@ -152,20 +197,27 @@ export function appDataParaConferirLeitura(data: AppData): AppData {
 
 /**
  * Sai do Em aberto quando não há ficha sem PIX.
- * Sem ficha = sync incompleto — não tira. Com ficha e total 0 = já pago.
+ * Sem ficha = sync incompleto — não tira, salvo se o PIX confirmado já cobre os meses da linha presa.
  */
 export function cooperadoEmAbertoPodeSair(
   data: AppData,
   cooperadoId: string,
-  coopId: string
+  coopId: string,
+  mesesLinha?: string[]
 ): boolean {
   if (!cooperadoId || !coopId) return false;
   const aberto = listarMesesFichaEmAbertoCooperado(data, cooperadoId, coopId, {
     usarLiquido: true,
   });
   if (aberto.total > 0.005) return false;
-  return (data.fichaCorrida ?? []).some((f) =>
+  const temFicha = (data.fichaCorrida ?? []).some((f) =>
     fichaPertenceCooperado(data, f, cooperadoId, coopId)
+  );
+  if (temFicha) return true;
+  const meses = (mesesLinha ?? []).filter(Boolean);
+  if (!meses.length) return false;
+  return meses.every(
+    (mes) => listarPagamentosConfirmadosQueCobremMes(data, cooperadoId, mes, coopId).length > 0
   );
 }
 
@@ -209,7 +261,7 @@ export function fundirLinhasEmAbertoEstavel(
   if (motorLimpo.length === 0) {
     const byId = new Map<string, LinhaPagarCooperadoEmAberto>();
     for (const old of anterior) {
-      if (cooperadoEmAbertoPodeSair(data, old.cooperadoId, coopId)) continue;
+      if (cooperadoEmAbertoPodeSair(data, old.cooperadoId, coopId, old.meses)) continue;
       const vivo = linhaEmAbertoSoFichaSemPix(old, data, coopId);
       if (vivo) byId.set(old.cooperadoId, vivo);
       else byId.set(old.cooperadoId, old);
@@ -305,10 +357,13 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
     );
   }
   const revision = getDataRevision();
+  const lastro = scoreSnapshotConferir(dataAberto);
   if (
     relatorioAbertoCache &&
     relatorioAbertoCache.revision === revision &&
-    relatorioAbertoCache.coopId === coopId
+    relatorioAbertoCache.coopId === coopId &&
+    relatorioAbertoCache.pix === lastro.pix &&
+    relatorioAbertoCache.fichas === lastro.fichas
   ) {
     return relatorioAbertoCache.linhas;
   }
@@ -317,7 +372,7 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
     relatorioAbertoLatch && relatorioAbertoLatch.coopId === coopId ? relatorioAbertoLatch.linhas : [];
   const linhas = fundirLinhasEmAbertoEstavel(anterior, motor, dataAberto, coopId);
   relatorioAbertoLatch = { coopId, linhas };
-  relatorioAbertoCache = { revision, coopId, linhas };
+  relatorioAbertoCache = { revision, coopId, pix: lastro.pix, fichas: lastro.fichas, linhas };
   return linhas;
 }
 

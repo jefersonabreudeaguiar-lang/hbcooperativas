@@ -193,4 +193,44 @@ assert.equal(
 );
 assert.equal(relatorioAposPix.some((l) => l.cooperadoId === "c-1"), true);
 
+const vinteTres = Array.from({ length: 23 }, (_, i) => linha(i + 1));
+const data23 = dataComNCooperados(23);
+const data23soPix14 = dataComNCooperados(23);
+data23soPix14.fichaCorrida = [];
+data23soPix14.notasPedido = [];
+data23soPix14.pagamentosCooperado = Array.from({ length: 14 }, (_, i) => pixConfirmado(i + 1));
+const fundido23para9 = fundirLinhasEmAbertoEstavel(vinteTres, [], data23soPix14, COOP);
+assert.equal(
+  fundido23para9.length,
+  9,
+  "lastro de 23 não segura quem já tem PIX confirmado — ficam só os 9 sem pagamento"
+);
+assert.ok(fundido23para9.every((l) => Number(l.cooperadoId.slice(2)) >= 15));
+
+resetResponsavelPainelIndexCache();
+assert.equal(getRelatorioLancamentosEmAbertoResponsavel(data23, COOP).length, 23);
+const data23comPix14 = dataComNCooperados(23);
+data23comPix14.pagamentosCooperado = Array.from({ length: 14 }, (_, i) => pixConfirmado(i + 1));
+assert.equal(
+  getRelatorioLancamentosEmAbertoResponsavel(data23comPix14, COOP).length,
+  9,
+  "sessão que viu 23 cai para 9 quando o PIX dos 14 entra na mesma leitura"
+);
+
+const data23pixSemFicha = {
+  ...data23comPix14,
+  fichaCorrida: [] as FichaCorrida[],
+  notasPedido: [] as NotaPedido[],
+};
+resetResponsavelPainelIndexCache();
+appDataParaConferirLeitura(data23);
+const leituraComPix = appDataParaConferirLeitura(data23pixSemFicha);
+assert.equal(leituraComPix.fichaCorrida.length, 23, "wipe de ficha não apaga o lastro");
+assert.equal(leituraComPix.pagamentosCooperado.length, 14, "PIX novo entra mesmo com snapshot pobre");
+assert.equal(
+  getRelatorioLancamentosEmAbertoResponsavel(data23pixSemFicha, COOP).length,
+  9,
+  "Em aberto usa o PIX fundido no lastro e não devolve os 23"
+);
+
 console.log("ok: em aberto estável — 9 cooperados não oscilam sem PIX");

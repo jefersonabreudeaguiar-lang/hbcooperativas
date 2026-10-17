@@ -44,6 +44,6 @@ assert.match(
 );
 
 const sw = read("public/sw.js");
-assert.match(sw, /hb-coop-build-462/, "SW no mesmo build");
+assert.match(sw, new RegExp(`hb-coop-build-${APP_BUILD_VERSION}`), "SW no mesmo build");
 
-console.log("ok: conferir v462 — Chrome do responsável sem reload automático");
+console.log(`ok: conferir v${APP_BUILD_VERSION} — Chrome do responsável sem reload automático`);

@@ -195,6 +195,13 @@ assert.equal(
   "PIX confirmado autoriza snapshot com menos fichas"
 );
 
+const wipeComPix = { ...full, fichaCorrida: [] as FichaCorrida[], pagamentosCooperado: [pixConfirmado(1)] };
+assert.equal(
+  snapshotConferirPoorerSemProva(wipeComPix, full),
+  true,
+  "zerar todas as fichas continua snapshot pobre — PIX entra no merge, não apaga o lastro"
+);
+
 resetResponsavelPainelIndexCache();
 appDataParaConferirLeitura(full);
 const comNotaNova = { ...full, fichaCorrida: [] as FichaCorrida[] };
