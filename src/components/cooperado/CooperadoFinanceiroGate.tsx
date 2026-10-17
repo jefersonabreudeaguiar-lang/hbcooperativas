@@ -68,15 +68,11 @@ import {
   scheduleCooperadoGaFinanceiroExibicaoRefresh,
 } from "@/lib/cooperado/cooperadoGaFinanceiroExibicaoRefreshSchedule";
 import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
-import {
-  cancelCooperadoGarantiaValorReceberSync,
-  scheduleCooperadoGarantiaValorReceberUntilResolvido,
-} from "@/lib/cooperado/cooperadoGaGarantiaValorReceberSync";
+import { cancelCooperadoGarantiaValorReceberSync } from "@/lib/cooperado/cooperadoGaGarantiaValorReceberSync";
 import { cancelCooperadoBicMobileSessionSync } from "@/lib/cooperado/cooperadoBicMobileSessionSync";
 import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoBicMobileAuthority";
 import { CooperadoBicRevisionPulseHost } from "@/components/cooperado/CooperadoBicRevisionPulseHost";
 import { markCooperadoBicFinanceiroFresh } from "@/lib/bic/cooperadoBicSonataSyncUi";
-import { scheduleCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
 import {
   cooperadoPilotAppDataTemFinanceiroLocal,
   cooperadoPilotFinanceiroExibirComSnapshotsLocais,
@@ -125,10 +121,6 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
     if (isCooperadoMobileBicLeituraAuthority(user)) {
       markCooperadoBicFinanceiroFresh();
-    }
-    if (!isCooperadoMobileBicLeituraAuthority(user)) {
-      scheduleCooperadoGarantiaValorReceberUntilResolvido(user);
-      scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user, { force: true });
     }
     return () => {
       cancelCooperadoGarantiaValorReceberSync();

@@ -6,6 +6,7 @@ import type { AppData } from "@/types";
 import {
   aplicarPoliticaCardInicioEndurecida,
   aplicarSubstituicaoMonotonaDisplay,
+  cooperadoInicioCardEscolherDisplayEstavel,
   cooperadoMotorRevisionOperacional,
   cooperadoMotorTemObrigacaoReceber,
 } from "../src/lib/cooperadoInicioCardPolicy";
@@ -77,13 +78,43 @@ function main() {
 
   assert.equal(
     cooperadoMotorTemObrigacaoReceber({ mesLabel: "x", valor: 0, valorRecibo: 10, aguardandoAssinatura: true }),
-    false,
-    "obrigação do card = valor líquido M6, não recibo legado"
+    true,
+    "fluxo recibo ativo: valorRecibo pendente também é obrigação"
   );
 
   const data = miniData();
   const revEmpty = cooperadoMotorRevisionOperacional(data, COOPERADO, COOP);
   assert.ok(typeof revEmpty === "string");
+
+  const persistidoValor = { mesLabel: "Set", valor: 180, valorRecibo: 0, aguardandoAssinatura: false };
+  const motorZero = { mesLabel: "—", valor: 0, valorRecibo: 0, aguardandoAssinatura: false };
+  assert.equal(
+    cooperadoInicioCardEscolherDisplayEstavel({
+      persistido: persistidoValor,
+      motor: motorZero,
+      autorizaZerarCompleto: false,
+    }).valor,
+    180,
+    "sair do app com motor 0 incompleto mantém A receber"
+  );
+  assert.equal(
+    cooperadoInicioCardEscolherDisplayEstavel({
+      persistido: persistidoValor,
+      motor: { ...persistidoValor, valor: 200 },
+      autorizaZerarCompleto: false,
+    }).valor,
+    200,
+    "motor com valor novo atualiza o card"
+  );
+  assert.equal(
+    cooperadoInicioCardEscolherDisplayEstavel({
+      persistido: persistidoValor,
+      motor: motorZero,
+      autorizaZerarCompleto: true,
+    }).valor,
+    0,
+    "quitação completa autoriza zerar"
+  );
 
   console.log("OK — política card início endurecida");
 }

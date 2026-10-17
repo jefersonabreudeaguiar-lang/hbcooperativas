@@ -396,6 +396,9 @@ export function MobileNav() {
                 if (!active && isCooperadoNav && isCooperadoBottomTabPath(item.href)) {
                   e.preventDefault();
                   if (tryCooperadoPinnedInstantTabSwitch(tabPath, item.href)) {
+                    startTransition(() => {
+                      router.replace(item.href);
+                    });
                     return;
                   }
                   setCooperadoOptimisticTab(item.href);

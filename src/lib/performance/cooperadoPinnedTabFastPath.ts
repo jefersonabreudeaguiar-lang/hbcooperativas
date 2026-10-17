@@ -52,7 +52,8 @@ export function isCooperadoPilotBottomTabsCachesReady(): boolean {
 }
 
 /**
- * Piloto Jeferson — troca instantânea entre as 4 abas inferiores quando todas estão em cache.
+ * Troca instantânea entre as 4 abas inferiores quando todas estão em cache.
+ * AppLayout completa com router.replace para o Next acompanhar a URL.
  */
 export function tryCooperadoPilotInstantBottomTabSwitch(
   currentEffectiveHref: string,
@@ -77,8 +78,9 @@ export function tryCooperadoPilotInstantBottomTabSwitch(
 }
 
 /**
- * Troca só entre Início ↔ Financeiro sem router.push (evita RSC lento).
- * URL + otimista atualizam; painéis já montados no dual-mount.
+ * Troca só entre Início ↔ Financeiro com paint instantâneo (cache + URL).
+ * O AppLayout ainda faz `router.replace` para o Next não ficar numa rota antiga
+ * (senão Entregas mostra Início e o atalho HB some).
  */
 export function tryCooperadoPinnedInstantTabSwitch(
   currentEffectiveHref: string,

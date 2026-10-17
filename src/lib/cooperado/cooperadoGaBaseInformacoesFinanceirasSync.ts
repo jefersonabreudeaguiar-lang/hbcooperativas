@@ -3,7 +3,10 @@
  * e rematerializa A receber + Financeiro via paridade universal.
  */
 import type { User } from "@/types";
-import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import {
+  cooperadoGaAberturaBloqueiaPullOperacionalNuvem,
+  isCooperadoMobileGaPromoted,
+} from "@/lib/cooperado/cooperadoMobilePilot";
 import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoBicMobileAuthority";
 import {
   cooperadoGaExibicaoFinanceiraAindaZerada,
@@ -78,14 +81,33 @@ export function cooperadoGaPrecisaSyncBaseInformacoesFinanceiras(
   return !cooperadoGaValorReceberExibicaoResolvida(user) || cooperadoGaExibicaoFinanceiraAindaZerada(user);
 }
 
+export type CooperadoGaSyncBaseInformacoesOpts = {
+  force?: boolean;
+  bicSession?: boolean;
+  light?: boolean;
+  userInitiated?: boolean;
+};
+
+function rematerializarAberturaSemPullNuvem(user: Omit<User, "password">): void {
+  if (isAppDataWarm()) {
+    cooperadoPilotForcarRematerializacaoFinanceira(user);
+    dispatchCooperadoPwaLeveUiSnapshotRefresh();
+  }
+  scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
+}
+
 /** Puxa operacional + notas da nuvem e atualiza snapshots locais (paridade = base). */
 export async function runCooperadoGaSyncBaseInformacoesFinanceiras(
   user: Omit<User, "password"> | null | undefined,
-  opts?: { force?: boolean; bicSession?: boolean; light?: boolean }
+  opts?: CooperadoGaSyncBaseInformacoesOpts
 ): Promise<boolean> {
   if (typeof window === "undefined") return false;
   if (!user || user.role !== "cooperado" || !user.cooperadoId) return false;
   if (!isCooperadoMobileGaPromoted(user) && !isCooperadoMobileBicLeituraAuthority(user)) return false;
+  if (cooperadoGaAberturaBloqueiaPullOperacionalNuvem(user, opts)) {
+    rematerializarAberturaSemPullNuvem(user);
+    return false;
+  }
   if (
     !opts?.force &&
     !opts?.bicSession &&
@@ -167,8 +189,8 @@ export async function runCooperadoGaSyncBaseInformacoesFinanceiras(
 
 export function scheduleCooperadoGaSyncBaseInformacoesFinanceiras(
   user: Omit<User, "password"> | null | undefined,
-  opts?: { force?: boolean }
+  opts?: CooperadoGaSyncBaseInformacoesOpts
 ): void {
-  if (!user || !cooperadoGaPrecisaSyncBaseInformacoesFinanceiras(user) && !opts?.force) return;
+  if (!user || !cooperadoGaPrecisaSyncBaseInformacoesFinanceiras(user) && !opts?.force && !opts?.userInitiated) return;
   void runCooperadoGaSyncBaseInformacoesFinanceiras(user, opts);
 }

@@ -80,6 +80,17 @@ export function cooperadoMobileDeferOperacionalSyncNaAbertura(
   return isCooperadoMobileGaPromoted(user);
 }
 
+/**
+ * Abertura cooperado: operacional/notas só no «Atualizar».
+ * `force` / sessão BIC não furam isto — era o que travava o celular no 1º segundo.
+ */
+export function cooperadoGaAberturaBloqueiaPullOperacionalNuvem(
+  user: Omit<User, "password"> | null | undefined,
+  opts?: { userInitiated?: boolean }
+): boolean {
+  return cooperadoMobileDeferOperacionalSyncNaAbertura(user) && !opts?.userInitiated;
+}
+
 /** Ramo legado “produção antiga” vs piloto — hoje todo cooperado no app usa o ramo piloto. */
 export function cooperadoMobilePilotOrDefault<T>(
   user: Omit<User, "password"> | null | undefined,

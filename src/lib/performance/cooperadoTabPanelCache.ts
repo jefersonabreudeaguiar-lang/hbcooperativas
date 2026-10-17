@@ -7,3 +7,17 @@ export function isCooperadoTabRouteLoadingElement(node: ReactNode): boolean {
   const t = el.type as { displayName?: string; name?: string };
   return t?.displayName === "CooperadoTabRouteLoading" || t?.name === "CooperadoTabRouteLoading";
 }
+
+/**
+ * Não gravar o children da aba anterior na chave da aba nova
+ * (`useDeferredValue` / RSC atrasado). Era o que fazia Entregas parecer Início.
+ */
+export function cooperadoTabCacheMayWriteForPath(opts: {
+  pathChanged: boolean;
+  childrenUnchanged: boolean;
+  childrenIsLoading: boolean;
+}): boolean {
+  if (opts.childrenIsLoading) return false;
+  if (opts.pathChanged && opts.childrenUnchanged) return false;
+  return true;
+}

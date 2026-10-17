@@ -36,7 +36,10 @@ import {
   setCooperadoPinnedPairCachesReady,
   setCooperadoPilotBottomTabsCachesReady,
 } from "@/lib/performance/cooperadoPinnedTabFastPath";
-import { isCooperadoTabRouteLoadingElement } from "@/lib/performance/cooperadoTabPanelCache";
+import {
+  cooperadoTabCacheMayWriteForPath,
+  isCooperadoTabRouteLoadingElement,
+} from "@/lib/performance/cooperadoTabPanelCache";
 import { useCooperadoEffectiveTabPath } from "@/hooks/useCooperadoEffectiveTabPath";
 import { CooperadoTabRouteLoading } from "@/components/performance/CooperadoTabRouteLoading";
 
@@ -115,6 +118,10 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   const enabled = isCooperadoMobileTabKeepAliveEnabled();
   const cacheRef = useRef<Partial<Record<string, ReactNode>>>({});
   const orderRef = useRef<string[]>([]);
+  const lastCommitRef = useRef<{ path: string; child: ReactNode }>({
+    path: pathname,
+    child: children,
+  });
   const [cacheVersion, setCacheVersion] = useState(0);
   const lowMemory = isLowMemoryDevice();
   const cacheLimit = getCooperadoMobileTabCacheLimit(lowMemory);
@@ -150,11 +157,24 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   }, [enabled, mobile, onTab, pathname, effectivePath, cacheLimit, lowMemory]);
 
   useLayoutEffect(() => {
+    const last = lastCommitRef.current;
+    const pathChanged = last.path !== pathname;
+    const childrenUnchanged = last.child === children;
+    lastCommitRef.current = { path: pathname, child: children };
+
     if (!enabled || !mobile || !onTab) return;
     if (!isCooperadoBottomTabPath(pathname)) return;
-    if (isCooperadoTabRouteLoadingElement(deferredChildren)) return;
-    cacheRef.current[pathname] = deferredChildren;
-  }, [enabled, mobile, onTab, pathname, deferredChildren]);
+    if (
+      !cooperadoTabCacheMayWriteForPath({
+        pathChanged,
+        childrenUnchanged,
+        childrenIsLoading: isCooperadoTabRouteLoadingElement(children),
+      })
+    ) {
+      return;
+    }
+    cacheRef.current[pathname] = children;
+  }, [enabled, mobile, onTab, pathname, children]);
 
   useLayoutEffect(() => {
     registerCooperadoTabPanelCacheProbe((href) => Boolean(cacheRef.current[href]));
@@ -229,11 +249,13 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   ): { panel: ReactNode | undefined; warm: boolean } => {
     const active = activePath === href;
     const cached = cacheRef.current[href];
+    const last = lastCommitRef.current;
+    const childrenStaleForPath = last.path !== pathname && last.child === children;
     /** Aba visível: sem defer — evita skeleton extra no Financeiro. */
-    const liveNode =
-      active && pathname === href ? children : deferredChildren;
+    const liveNode = active && pathname === href && !childrenStaleForPath ? children : deferredChildren;
     const liveForHref =
       pathname === href &&
+      !childrenStaleForPath &&
       !isCooperadoTabRouteLoadingElement(liveNode) &&
       liveNode != null;
 

@@ -225,8 +225,15 @@ export function persistirCooperadoPwaInicioDashboardSnapshot(
   const view = buildCooperadoPwaInicioDashboardView(d, user, apresentacaoConsolidada);
   if (!view) return null;
   const valorInicio = view.valorReceber?.valor ?? 0;
-  if (cooperadoAppReleaseNeedsOperacionalSync() && Number(valorInicio) <= 0.005) {
-    return null;
+  if (Number(valorInicio) <= 0.005) {
+    const prev = lerCooperadoPwaInicioDashboardSnapshot(cooperadoId, cooperativaId);
+    const prevValor = prev?.view?.valorReceber?.valor ?? 0;
+    if (prevValor > 0.005) {
+      return prev;
+    }
+    if (cooperadoAppReleaseNeedsOperacionalSync()) {
+      return null;
+    }
   }
   const payload: CooperadoPwaInicioDashboardSnapshot = {
     v: COOPERADO_PWA_INICIO_DASHBOARD_SNAPSHOT_VERSION,

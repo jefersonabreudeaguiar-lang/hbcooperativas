@@ -46,11 +46,48 @@ export function filtrarInicioCardPersistidoLeituraBic(
 ): import("@/lib/cooperadoInicioCardPersistencia").InicioCardPersistido | null {
   if (!persistido) return null;
   if (!isBicCentralReadAuthorityEnabled()) return persistido;
-  if (!persistidoDisplayCompativelBic(persistido.display)) return null;
+  const sanitized = sanitizeInicioCardSnapshotFluxoBic(persistido.display);
+  if (!persistidoDisplayCompativelBic(persistido.display)) {
+    if (persistido.display.valor > 0.005) {
+      return {
+        ...persistido,
+        display: sanitizeInicioCardSnapshotParaPersistenciaBic(persistido.display),
+      };
+    }
+    return null;
+  }
   return {
     ...persistido,
-    display: sanitizeInicioCardSnapshotFluxoBic(persistido.display),
+    display: sanitized,
   };
+}
+
+/**
+ * Ao sair/voltar do app: o último valor gravado não cede a um motor 0
+ * enquanto o AppData ainda não comprova quitação completa.
+ */
+export function cooperadoInicioCardEscolherDisplayEstavel(opts: {
+  persistido: InicioCardMotorSnapshot | null | undefined;
+  motor: InicioCardMotorSnapshot | null | undefined;
+  autorizaZerarCompleto: boolean;
+}): InicioCardMotorSnapshot {
+  const vazio: InicioCardMotorSnapshot = {
+    mesLabel: "—",
+    valor: 0,
+    valorRecibo: 0,
+    aguardandoAssinatura: false,
+  };
+  const persistidoOk = Boolean(
+    opts.persistido && cooperadoMotorTemObrigacaoReceber(opts.persistido)
+  );
+  const motorOk = Boolean(opts.motor && cooperadoMotorTemObrigacaoReceber(opts.motor));
+  if (motorOk && opts.motor) return opts.motor;
+  if (persistidoOk && !opts.autorizaZerarCompleto && opts.persistido) {
+    return opts.persistido;
+  }
+  if (opts.autorizaZerarCompleto && opts.motor) return opts.motor;
+  if (persistidoOk && opts.persistido) return opts.persistido;
+  return opts.motor ?? vazio;
 }
 
 export type { InicioCardMotorSnapshot } from "@/lib/cooperado/cooperadoInicioCardMotorTypes";

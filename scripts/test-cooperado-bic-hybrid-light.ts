@@ -15,8 +15,8 @@ const session = readFileSync(
   join(import.meta.dirname ?? __dirname, "../src/lib/cooperado/cooperadoBicMobileSessionSync.ts"),
   "utf8"
 );
-assert.ok(session.includes("light: true"));
-assert.ok(session.includes("hybridLight"));
+assert.ok(session.includes("scheduleCooperadoBicHybridIdleTask"));
+assert.equal(session.includes("runCooperadoGaSyncBaseInformacoesFinanceiras"), false);
 
 const gaBase = readFileSync(
   join(import.meta.dirname ?? __dirname, "../src/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync.ts"),
@@ -38,6 +38,6 @@ const pulse = readFileSync(
   "utf8"
 );
 assert.ok(pulse.includes("cooperadoBrowserDesktopFinanceiroEstavel"));
-assert.ok(session.includes("cooperadoBrowserDesktopBicPerfActive"));
+assert.ok(session.includes("cooperadoBrowserDesktopFinanceiroEstavel"));
 
 console.log("OK test-cooperado-bic-hybrid-light");

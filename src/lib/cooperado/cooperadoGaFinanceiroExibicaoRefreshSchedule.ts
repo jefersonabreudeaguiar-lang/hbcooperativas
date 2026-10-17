@@ -1,6 +1,6 @@
 /**
  * GA cooperado — reidrata A receber / Financeiro no aparelho sem sync pesada a cada tick.
- * Com BIC padrão no mobile: ver cooperadoBicMobileSessionSync (3× por sessão).
+ * Com BIC padrão no mobile: ver cooperadoBicMobileSessionSync (cache local + GET HB).
  */
 import type { User } from "@/types";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";

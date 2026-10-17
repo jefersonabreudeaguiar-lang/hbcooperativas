@@ -3,7 +3,10 @@
  * Prioridade: lançamento do responsável deve aparecer; não manter R$ 0,00 indeterminado.
  */
 import type { User } from "@/types";
-import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import {
+  cooperadoMobileDeferOperacionalSyncNaAbertura,
+  isCooperadoMobileGaPromoted,
+} from "@/lib/cooperado/cooperadoMobilePilot";
 import {
   cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem,
   cooperadoGaValorReceberExibicaoResolvida,
@@ -34,6 +37,11 @@ function clearGarantiaTimers(): void {
 }
 
 function pullNuvemFinanceiro(user: Omit<User, "password">, attempt: number): void {
+  if (cooperadoMobileDeferOperacionalSyncNaAbertura(user)) {
+    cooperadoPilotForcarRematerializacaoFinanceira(user);
+    scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
+    return;
+  }
   let precisaOperacionalFull = !cooperadoGaValorReceberExibicaoResolvida(user);
   if (isAppDataWarm() && user.cooperadoId) {
     const data = getData();

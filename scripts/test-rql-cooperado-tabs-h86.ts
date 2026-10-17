@@ -4,6 +4,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { cooperadoTabCacheMayWriteForPath } from "../src/lib/performance/cooperadoTabPanelCache.ts";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 
@@ -65,7 +66,7 @@ assert(
   read("src/lib/performance/cooperadoPinnedTabFastPath.ts").includes(
     "tryCooperadoPinnedInstantTabSwitch"
   ),
-  "troca Início↔Financeiro sem router.push quando cache pronto"
+  "troca Início↔Financeiro com paint instantâneo quando cache pronto"
 );
 assert(read("src/app/(app)/notas-pedido/NotasPedidoCooperadoMain.tsx").includes("useCooperadoPanelAppData"), "notas pausa store fora da aba");
 assert(
@@ -103,8 +104,38 @@ assert(layout.includes("setCooperadoOptimisticTab"), "pointerdown otimista no ro
 assert(layout.includes("cooperadoTabWarmOnTouchStart"), "touchstart aquece chunk no rodapé");
 assert(keep.includes("return 2") && keep.includes("PWA: LRU 2"), "PWA mensageiro LRU 2 slots");
 assert(
-  read("src/lib/performance/cooperadoMobileTabDomPolicy.ts").includes("361-inicio-live-l1"),
+  read("src/lib/performance/cooperadoMobileTabDomPolicy.ts").includes("447-tab-panel-route-lock"),
   "política DOM cooperado versionada"
+);
+assert(
+  cooperadoTabCacheMayWriteForPath({
+    pathChanged: true,
+    childrenUnchanged: true,
+    childrenIsLoading: false,
+  }) === false,
+  "não grava children da aba anterior na rota nova"
+);
+assert(
+  cooperadoTabCacheMayWriteForPath({
+    pathChanged: false,
+    childrenUnchanged: false,
+    childrenIsLoading: false,
+  }) === true,
+  "grava children quando a rota e o painel batem"
+);
+assert(
+  panel.includes("cooperadoTabCacheMayWriteForPath") && panel.includes("lastCommitRef"),
+  "keep-alive só cacheia children da rota confirmada"
+);
+assert(
+  layout.includes("router.replace(item.href)"),
+  "troca instantânea ainda alinha o Next (replace)"
+);
+assert(
+  read("src/components/hb-credit/CooperadoHbCreditResumoCard.tsx").includes(
+    'router.push("/minha-conta-coop")'
+  ),
+  "atalho HB no Início usa push explícito"
 );
 assert(
   panel.includes("[content-visibility:auto]") && panel.includes("[contain-intrinsic-size:0_500px]"),

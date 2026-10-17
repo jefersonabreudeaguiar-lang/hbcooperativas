@@ -72,12 +72,7 @@ import {
   requestCooperadoFinanceiroRecoverySync,
   requestVotacaoOperacionalSync,
 } from "@/services/syncRequest";
-import {
-  cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem,
-  cooperadoGaValorReceberExibicaoResolvida,
-} from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
-import { scheduleCooperadoGarantiaValorReceberUntilResolvido } from "@/lib/cooperado/cooperadoGaGarantiaValorReceberSync";
-import { scheduleCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
+import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { useCooperadoFluxoPadrao } from "@/hooks/useCooperadoFluxoPadrao";
@@ -322,15 +317,9 @@ function CooperadoDashboard() {
   useEffect(() => {
     if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return;
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
-    if (!cooperadoGaValorReceberExibicaoResolvida(user)) {
-      scheduleCooperadoGarantiaValorReceberUntilResolvido(user);
-      scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user, { force: true });
-    }
     if (exibicaoZeroRecoveryRef.current) return;
     if (!cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) return;
     exibicaoZeroRecoveryRef.current = true;
-    requestCooperadoFinanceiroRecoverySync();
-    scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
     scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
   }, [user?.id, user?.role, valorReceberCard.valor, hbCredit.navEnabled]);
 

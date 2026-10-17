@@ -131,7 +131,10 @@ withBicOfficial(() => {
     valorRecibo: 200,
     aguardandoAssinatura: true,
   });
-  assert.equal(filtrarInicioCardPersistidoLeituraBic(snap), null);
+  const filtradoMisto = filtrarInicioCardPersistidoLeituraBic(snap);
+  assert.ok(filtradoMisto);
+  assert.equal(filtradoMisto!.display.valor, 500, "valor a receber sobrevive ao recibo legado");
+  assert.equal(filtradoMisto!.display.aguardandoAssinatura, false);
   const result = resolverCardInicioEndurecido({
     data: null,
     cooperadoId: COOPERADO,
@@ -139,10 +142,10 @@ withBicOfficial(() => {
     apresentacaoConsolidada: true,
     carregandoFinanceiro: true,
     prevLatch: null,
-    persistido: snap,
+    persistido: filtradoMisto,
   });
   assertSemReciboNaUi(result.display);
-  assert.equal(result.display.valor, 0);
+  assert.equal(result.display.valor, 500);
 });
 
 // CASO D — motor BIC zero com AppData

@@ -10,8 +10,8 @@ const session = readFileSync(
   join(import.meta.dirname ?? __dirname, "../src/lib/cooperado/cooperadoBicMobileSessionSync.ts"),
   "utf8"
 );
-assert.ok(session.includes("shouldSkipCooperadoBicSessionReinforcementPull"));
-assert.ok(session.includes("awaitCooperadoGaSyncBaseInformacoesFinanceirasInflight"));
+assert.ok(session.includes("markCooperadoBicSessionRematerialized"));
+assert.equal(session.includes("runCooperadoGaSyncBaseInformacoesFinanceiras"), false);
 
 assert.equal(COOPERADO_BIC_SESSION_REMATERIALIZE_TTL_MS, 90_000);
 

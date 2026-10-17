@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, startTransition, type MouseEvent } from "react";
 import { Wallet } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
@@ -36,10 +36,17 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
   const hbApiCooperadoId = resolveHbCreditApiCooperadoId(user, cooperadoId);
   const [snap, setSnap] = useState<HbCreditAccountPersistido | null>(null);
 
-  /** Paridade com drawer (Link nativo): só limpa aba otimista; navegação pelo href. */
-  const onHbNavClick = useCallback(() => {
-    clearCooperadoOptimisticTab();
-  }, []);
+  /** Push explícito — Link sozinho falha depois do replaceState das abas. */
+  const onHbNavClick = useCallback(
+    (e: MouseEvent<HTMLAnchorElement>) => {
+      e.preventDefault();
+      clearCooperadoOptimisticTab();
+      startTransition(() => {
+        router.push("/minha-conta-coop");
+      });
+    },
+    [router]
+  );
 
   useEffect(() => {
     try {
