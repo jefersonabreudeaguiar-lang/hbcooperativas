@@ -12,7 +12,7 @@ import {
 } from "../src/lib/responsavel/responsavelIdentidade.ts";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
-assert.equal(APP_BUILD_VERSION, 450);
+assert.equal(APP_BUILD_VERSION, 451);
 
 const jwtCooperado = {
   id: "u1",
@@ -68,5 +68,11 @@ const reset = readFileSync(
 );
 assert.ok(reset.includes("window.location.replace(\"/dashboard\")"));
 assert.ok(reset.includes("setPreferPainelResponsavelMobile(false)"));
+
+const guard = readFileSync(
+  join(ROOT, "src/components/permissions/GestaoAccessGuard.tsx"),
+  "utf8"
+);
+assert.ok(guard.includes("resetCooperadoAposVazamentoPainelGestao"));
 
 console.log("test-cooperado-mobile-nunca-painel-gestao-v450: OK");

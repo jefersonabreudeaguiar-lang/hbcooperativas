@@ -9,6 +9,7 @@ import { evaluateResponsavelIdentidade } from "@/lib/responsavel/responsavelIden
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { isMobileCooperativaApp } from "@/lib/mobileExperience";
 import { usePainelResponsavelMobilePref } from "@/hooks/usePainelResponsavelMobilePref";
+import { resetCooperadoAposVazamentoPainelGestao } from "@/lib/cooperado/resetCooperadoAposVazamentoPainelGestao";
 
 export function GestaoAccessGuard({ children }: { children: React.ReactNode }) {
   const { accountUser, user } = useAuth();
@@ -51,6 +52,8 @@ export function GestaoAccessGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!accountUser && !user) return;
     if (!isGestaoOnlyRoute(pathname)) return;
+    const sessao = accountUser ?? user;
+    if (sessao && resetCooperadoAposVazamentoPainelGestao(sessao, pathname)) return;
     if (!identidade.staffPainelUi) {
       router.replace("/dashboard");
     }
