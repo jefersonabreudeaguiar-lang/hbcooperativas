@@ -60,6 +60,7 @@ import {
 } from "@/services/bicLeituraCentralFicha";
 import { listarPagamentosAguardandoAssinatura, listarPagamentosReciboAguardandoVerificacao } from "@/services/filaDoDiaService";
 import { listCooperadosPagamentoPendenteResponsavel } from "@/services/responsavelPainelIndex";
+import { pickResumoStaffFichaPagar } from "@/lib/responsavel/responsavelFichaPagarResumo";
 import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
@@ -632,6 +633,12 @@ function FichaCorridaPageInner() {
     setAbaMesPagamentoResponsavel("pendente");
   }, [cooperadoFilter, aba]);
 
+  useEffect(() => {
+    if (!isCooperado && aba === "pagar") {
+      setPagamentoConfirmado(null);
+    }
+  }, [isCooperado, aba, cooperadoFilter]);
+
   const cooperadoSelecionadoId = isCooperado ? cooperadoId : cooperadoFilter;
 
   const financeiroAberto = useMemo(() => {
@@ -1092,6 +1099,23 @@ function FichaCorridaPageInner() {
 
   const resumo = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return null;
+    const staffFichaPagarPendente =
+      !isCooperado && aba === "pagar" && !visualizandoHistoricoPagamentoResponsavel;
+    if (staffFichaPagarPendente) {
+      const staffResumo = pickResumoStaffFichaPagar({
+        data,
+        cooperadoId: cooperadoSelecionadoId,
+        cooperativaId: coopId,
+        mesesPendentesPagamento,
+        resumoPagamentoConsolidado,
+        financeiroAberto,
+        pagamentoAguardando: pagamentoAguardandoExibicao ?? pagamentoAguardando,
+        mesAtivo,
+        resumoAjustes,
+        fluxoReciboAssinatura,
+      });
+      if (staffResumo) return staffResumo;
+    }
     if (isCooperado && !visualizandoHistorico && paridadeCooperadoMobile) {
       if (conferindoPagamentoNuvem && paridadeCooperadoMobile.valorLiquido > 0) {
         return paridadeCooperadoMobile.resumo;
@@ -1122,7 +1146,11 @@ function FichaCorridaPageInner() {
         ajustesCompartilhadosMes
       );
     }
-    if (pagamentoConfirmado && (!isCooperado || visualizandoHistorico)) {
+    if (
+      pagamentoConfirmado &&
+      (!isCooperado || visualizandoHistorico) &&
+      !staffFichaPagarPendente
+    ) {
       return resumoFromPagamento(pagamentoConfirmado);
     }
     const aguardandoResumo = fluxoReciboAssinatura
@@ -1130,7 +1158,10 @@ function FichaCorridaPageInner() {
         ? pagamentoAguardandoExibicao
         : pagamentoAguardando
       : undefined;
-    if (aguardandoResumo) {
+    if (
+      aguardandoResumo &&
+      !(staffFichaPagarPendente && mesesPendentesPagamento.length > 0)
+    ) {
       const temEntregaNova =
         isCooperado &&
         !visualizandoHistorico &&
@@ -1174,6 +1205,8 @@ function FichaCorridaPageInner() {
     conferindoPagamentoNuvem,
     paridadeCooperadoMobile,
     fluxoReciboAssinatura,
+    aba,
+    visualizandoHistoricoPagamentoResponsavel,
   ]);
 
   const resumoExibicao = resumo;
@@ -1215,7 +1248,11 @@ function FichaCorridaPageInner() {
       ? resumoExibicao && exibicaoOpts
         ? bicCentralGetValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
         : 0
-      : (financeiroAberto?.valorLiquido ?? 0);
+      : aba === "pagar" &&
+          !visualizandoHistoricoPagamentoResponsavel &&
+          resumoPagamentoConsolidado
+        ? resumoPagamentoConsolidado.valorLiquido
+        : (financeiroAberto?.valorLiquido ?? 0);
 
   const descontosExtrasResumo = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return [];
