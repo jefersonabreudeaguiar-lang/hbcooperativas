@@ -2,14 +2,11 @@
  * RQL 8.5 — cálculo puro de stats do painel gestão (main thread ou Web Worker).
  */
 import type { AppData } from "@/types";
-import { leituraAdminSomaValorLiquidoCooperados } from "@/lib/bic/bicLeituraPorta";
-import { projetarAppDataFinanceiroParaCreditoBase } from "@/modules/hb-credit/engine/projetarAppDataFinanceiroParaCreditoBase";
-import { normalizeCnpj } from "@/utils/cooperativa";
 import {
   fichaNotaElegivelParaPagamento,
   idsNotasPedidoExcluidas,
 } from "@/services/notaPedidoService";
-import { round2, sumBy } from "@/utils/calculations";
+import { sumBy } from "@/utils/calculations";
 import { getCurrentMesReferencia } from "@/utils/format";
 import { isNotaNaFilaConferenciaResponsavel } from "@/utils/notaStatus";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
@@ -41,17 +38,6 @@ function filterByMes<T>(items: T[], getter: (item: T) => string, mes: string): T
 
 function filterByAno<T>(items: T[], getter: (item: T) => string, ano: string): T[] {
   return items.filter((item) => getter(item).startsWith(ano));
-}
-
-function cnpjDigitsForCooperativa(d: AppData, cooperativaId?: string): string | undefined {
-  if (!cooperativaId) {
-    const d0 = d.cooperativas.map((c) => normalizeCnpj(c.cnpj ?? "")).find((x) => x.length === 14);
-    return d0;
-  }
-  const coop = d.cooperativas.find((c) => c.id === cooperativaId);
-  if (!coop?.cnpj) return undefined;
-  const digits = normalizeCnpj(coop.cnpj);
-  return digits.length === 14 ? digits : undefined;
 }
 
 /** Mesma lógica de `getAdminStats`, com flag BIC explícita (worker não lê `process.env`). */
@@ -103,14 +89,7 @@ export function computeAdminStatsPure(
 
   const valoresAPagar = opts?.skipValoresAPagar
     ? 0
-    : env.bicLeituraPortaAdmin && env.bicCentralRead
-      ? (() => {
-          const base = projetarAppDataFinanceiroParaCreditoBase(d, cnpjDigitsForCooperativa(d, cooperativaId));
-          return round2(leituraAdminSomaValorLiquidoCooperados(base, cooperadosEscopo));
-        })()
-      : getTotalValoresAPagarGestaoCooperativa(d, cooperativaId, {
-          bicCentralRead: env.bicCentralRead,
-        });
+    : getTotalValoresAPagarGestaoCooperativa(d, cooperativaId);
 
   return {
     totalVendidoMes: sumBy(entregasMes, (e) => e.valorBruto),

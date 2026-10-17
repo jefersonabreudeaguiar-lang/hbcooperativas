@@ -13,6 +13,7 @@ import {
 import { shouldRenderStaffPainelUi } from "../src/lib/staffNavigationUser.ts";
 import { evaluateResponsavelIdentidade } from "../src/lib/responsavel/responsavelIdentidade.ts";
 import { evaluateResponsavelPainelAbertura } from "../src/lib/responsavel/responsavelPainelContrato.ts";
+import { getTotalValoresAPagarGestaoCooperativa } from "../src/lib/responsavel/responsavelGestaoLeitura.ts";
 import {
   listarMesesEmAbertoPagamentoResponsavel,
   listarMesesPendentesPagamentoResponsavel,
@@ -277,6 +278,11 @@ function evaluateDashboardStaffOpen(
   ];
   const abertos = listarMesesEmAbertoPagamentoResponsavel(data, "coop-member-1", COOP);
   assert.equal(abertos.includes(mes), false, "mês debitado no caixa não deve ficar em aberto");
+  assert.equal(
+    getTotalValoresAPagarGestaoCooperativa(data, COOP),
+    0,
+    "Início «A pagar» não soma mês já debitado no caixa"
+  );
 }
 
 // CASO 7 — sessão cooperado sem AppData não vira responsável silenciosamente

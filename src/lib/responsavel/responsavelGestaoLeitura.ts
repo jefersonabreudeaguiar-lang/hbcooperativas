@@ -3,9 +3,6 @@
  */
 import type { AppData } from "@/types";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
-import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
-import { bicCentralValorAReceberAgregado } from "@/services/bicLeituraCentralCooperado";
-import { projetarAppDataFinanceiroParaCreditoBase } from "@/modules/hb-credit/engine/projetarAppDataFinanceiroParaCreditoBase";
 import type { ConsolidadoFinanceiroCooperado } from "@/services/cooperadoEntregasService";
 import {
   listarMesesEmAbertoPagamentoResponsavel,
@@ -56,39 +53,23 @@ export function responsavelBadgeFilaPagarCount(opts: {
 
 export function responsavelInboxCooperadosPagarCount(
   cooperadosParaPagarCount: number,
-  cnpjDigits: string
+  _cnpjDigits?: string
 ): number {
-  if (cnpjDigits && isOperacionalCloudAuthoritative(cnpjDigits)) {
-    return 0;
-  }
   return cooperadosParaPagarCount;
 }
 
-/** Total «a pagar» — mesma base do dashboard admin e relatórios em aberto. */
+/**
+ * Total «a pagar» do Início / relatórios / Em aberto.
+ * Só meses ainda em aberto (PIX confirmado + débito no caixa sai da soma).
+ */
 export function getTotalValoresAPagarGestaoCooperativa(
   data: AppData,
   cooperativaId?: string,
-  opts?: { bicCentralRead?: boolean }
+  _opts?: { bicCentralRead?: boolean }
 ): number {
-  const bic = opts?.bicCentralRead ?? isBicCentralReadAuthorityEnabled();
   const cooperados = cooperativaId
     ? data.cooperados.filter((c) => c.status === "ativo" && c.cooperativaId === cooperativaId)
     : data.cooperados.filter((c) => c.status === "ativo");
-
-  if (bic) {
-    const cnpjDigits = cooperativaId
-      ? cooperativaCnpjDigitsFromAppData(data, cooperativaId)
-      : data.cooperativas
-          .map((c) => normalizeCnpj(c.cnpj ?? ""))
-          .find((d) => d.length === 14);
-    const base = projetarAppDataFinanceiroParaCreditoBase(data, cnpjDigits);
-    return round2(
-      cooperados.reduce(
-        (s, c) => s + bicCentralValorAReceberAgregado(base, c.id, c.cooperativaId).valor,
-        0
-      )
-    );
-  }
 
   return round2(
     cooperados.reduce((s, c) => {
