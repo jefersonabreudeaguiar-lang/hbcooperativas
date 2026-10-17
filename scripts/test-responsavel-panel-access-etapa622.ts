@@ -666,4 +666,103 @@ function evaluateDashboardStaffOpen(
   assert.ok(relatorioNovo[0].total > 0);
 }
 
+// CASO 21 — PIX com fichaIds velhos não reabre o mês; só entra entrega depois do pagamento
+{
+  const mesPago = "2026-08";
+  const mesNovo = "2026-10";
+  const data = emptyData([]);
+  data.cooperados = [
+    {
+      id: "coop-member-1",
+      nomeCompleto: "Ids Velhos",
+      cooperativaId: COOP,
+      status: "ativo",
+      chavePix: "pix@test",
+    } as AppData["cooperados"][0],
+  ];
+  data.notasPedido = [
+    {
+      id: "n-agosto",
+      cooperadoId: "coop-member-1",
+      cooperativaId: COOP,
+      mesReferencia: mesPago,
+      status: "conferida",
+      valorLiquido: 180,
+      itens: [],
+      createdAt: "2026-08-05T00:00:00.000Z",
+      dataEntrega: "2026-08-05",
+      dataConferencia: "2026-08-06T00:00:00.000Z",
+    } as AppData["notasPedido"][0],
+    {
+      id: "n-recente",
+      cooperadoId: "coop-member-1",
+      cooperativaId: COOP,
+      mesReferencia: mesNovo,
+      status: "conferida",
+      valorLiquido: 40,
+      itens: [],
+      createdAt: "2026-10-17T12:00:00.000Z",
+      dataEntrega: "2026-10-17",
+      dataConferencia: "2026-10-17T12:00:00.000Z",
+    } as AppData["notasPedido"][0],
+  ];
+  data.fichaCorrida = [
+    {
+      id: "f-agosto-novo-id",
+      cooperadoId: "coop-member-1",
+      cooperativaId: COOP,
+      mesReferencia: mesPago,
+      notaPedidoId: "n-agosto",
+      status: "pendente",
+      descricao: "remapeada",
+      valorBruto: 200,
+      valorLiquido: 180,
+      descontos: 20,
+      dataLancamento: "2026-08-06T00:00:00.000Z",
+      createdAt: "2026-08-06T00:00:00.000Z",
+      updatedAt: "2026-08-06T00:00:00.000Z",
+    },
+    {
+      id: "f-recente",
+      cooperadoId: "coop-member-1",
+      cooperativaId: COOP,
+      mesReferencia: mesNovo,
+      notaPedidoId: "n-recente",
+      status: "pendente",
+      descricao: "novo",
+      valorBruto: 45,
+      valorLiquido: 40,
+      descontos: 5,
+      dataLancamento: "2026-10-17T12:00:00.000Z",
+      createdAt: "2026-10-17T12:00:00.000Z",
+      updatedAt: "2026-10-17T12:00:00.000Z",
+    },
+  ];
+  data.pagamentosCooperado = [
+    {
+      id: "pg-agosto",
+      cooperadoId: "coop-member-1",
+      cooperativaId: COOP,
+      mesReferencia: mesPago,
+      status: "confirmado",
+      valorLiquido: 180,
+      valorBruto: 200,
+      descontoCooperativa: 20,
+      descontosExtras: [],
+      fichaIds: ["f-agosto-id-antigo"],
+      notaPedidoIds: [],
+      pagoPor: "resp",
+      pagoEm: "2026-08-20T00:00:00.000Z",
+      createdAt: "2026-08-20T00:00:00.000Z",
+    },
+  ];
+  const abertos = listarMesesEmAbertoPagamentoResponsavel(data, "coop-member-1", COOP);
+  assert.equal(abertos.includes(mesPago), false, "mês já pago não reabre por fichaIds velhos");
+  assert.equal(abertos.includes(mesNovo), true, "lançamento depois do PIX permanece em aberto");
+  const relatorio = getRelatorioPagarCooperadoEmAberto(data, COOP, "coop-member-1");
+  assert.equal(relatorio.length, 1);
+  assert.equal(relatorio[0].porMes.length, 1);
+  assert.equal(relatorio[0].porMes[0].mes, mesNovo);
+}
+
 console.log("test-responsavel-panel-access-etapa622: OK");

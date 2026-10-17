@@ -19,6 +19,8 @@ import {
   fichaValidaNoExtrato,
   listarFichasPendentesPagamento,
   listarFichasPendentesNaoCobertasPorPagamentoConfirmado,
+  listarPagamentosConfirmadosQueCobremMes,
+  fichaNotaElegivelParaPagamento,
   listarMesesDebitoAbertoCooperado,
   fichasPendentesComplementaresPosPagamentoAguardando,
   type AjustesResumoPagamento,
@@ -606,14 +608,17 @@ export function mesReferenciaPagamentoResponsavelEmAberto(
   }
 
   const confirmado = getPagamentoConfirmadoMes(data, cooperadoId, mesReferencia, coopId);
+  const temConfirmado =
+    Boolean(confirmado) ||
+    listarPagamentosConfirmadosQueCobremMes(data, cooperadoId, mesReferencia, coopId).length > 0;
   const avulsos = temValoresAvulsosPendentesMes(data, cooperadoId, mesReferencia, coopId);
-  const descobertas = confirmado
+  const descobertas = temConfirmado
     ? listarFichasPendentesNaoCobertasPorPagamentoConfirmado(data, cooperadoId, mesReferencia, coopId)
     : listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId).filter((f) =>
-        fichaValidaNoExtrato(data, f)
+        fichaNotaElegivelParaPagamento(data, f)
       );
 
-  if (confirmado && descobertas.length === 0 && !avulsos) return false;
+  if (temConfirmado && descobertas.length === 0 && !avulsos) return false;
   if (
     cooperadoMesTemPagamentoConfirmadoDebitadoNoCaixa(data, cooperadoId, mesReferencia, coopId) &&
     descobertas.length === 0 &&
