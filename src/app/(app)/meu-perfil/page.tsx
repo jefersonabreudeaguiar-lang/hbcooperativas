@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Save, Building2, Eye, EyeOff, Trash2 } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
-import { getUserCooperativaId, getCooperativaById, formatCnpj } from "@/utils/cooperativa";
+import { getUserCooperativaId, getCooperativaById, formatCnpj, normalizeCnpj } from "@/utils/cooperativa";
 import { PageHeader } from "@/components/ui/Table";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -29,7 +29,7 @@ import type { Cooperativa, MensalidadeConfig } from "@/types";
 
 export default function MeuPerfilPage() {
   const data = useAppData();
-  const { user, check } = usePermissions();
+  const { user, check, isCooperado } = usePermissions();
   const router = useRouter();
   const [form, setForm] = useState<Partial<Cooperativa>>({});
   const [mensCfg, setMensCfg] = useState<MensalidadeConfig>({
@@ -50,10 +50,10 @@ export default function MeuPerfilPage() {
   const cooperativa = data && coopId ? getCooperativaById(data, coopId) : undefined;
 
   useEffect(() => {
-    if (user && !isDiretoriaRole(user.role)) {
+    if (user && (isCooperado || !isDiretoriaRole(user.role))) {
       router.replace("/dashboard");
     }
-  }, [user, router]);
+  }, [user, isCooperado, router]);
 
   useEffect(() => {
     if (!cooperativa || !data) return;
@@ -99,6 +99,10 @@ export default function MeuPerfilPage() {
 
   const handlePublishCnpj = async () => {
     if (!cooperativa) return;
+    if (normalizeCnpj(cooperativa.cnpj ?? "").length !== 14) {
+      setCloudSyncError("CNPJ inválido — corrija no cadastro antes de publicar.");
+      return;
+    }
     setCloudSyncing(true);
     setCloudSyncError("");
     const result = await syncCooperativaWithCloud(cooperativa);
@@ -112,7 +116,7 @@ export default function MeuPerfilPage() {
     }
   };
 
-  if (!data || !user || !isDiretoriaRole(user.role)) return null;
+  if (!data || !user || isCooperado || !isDiretoriaRole(user.role)) return null;
 
   if (!cooperativa) {
     return (
@@ -124,6 +128,8 @@ export default function MeuPerfilPage() {
 
   const canEdit = check("cooperativas", "edit");
   const senhaCadastroAtiva = exigeSenhaCadastroCooperado(cooperativa, cooperativa.mensalidadeConfig);
+  const cnpjDigits = normalizeCnpj(cooperativa.cnpj ?? "");
+  const cnpjValido = cnpjDigits.length === 14;
 
   const pushPerfilParaNuvem = async () => {
     const d = getData();
@@ -247,10 +253,15 @@ export default function MeuPerfilPage() {
         subtitle="Dados da sua cooperativa — contratos ficam na aba Contratos"
       />
 
+      {!cnpjValido && (
+        <AlertBanner variant="warning" title="CNPJ inválido" className="mb-6">
+          O CNPJ precisa ter 14 dígitos. Sem isso o sync, o caixa e o cadastro de cooperados quebram.
+        </AlertBanner>
+      )}
       {cloudSynced === false && (
         <AlertBanner variant="warning" title="CNPJ ainda não está na nuvem" className="mb-6">
           Os cooperados em outros celulares não conseguem se cadastrar até publicar o CNPJ aqui.
-          <Button className="mt-3" size="sm" onClick={handlePublishCnpj} disabled={cloudSyncing}>
+          <Button className="mt-3" size="sm" onClick={handlePublishCnpj} disabled={cloudSyncing || !cnpjValido}>
             {cloudSyncing ? "Publicando..." : "Publicar CNPJ na nuvem"}
           </Button>
           {cloudSyncError && <p className="text-sm text-red-700 mt-2">{cloudSyncError}</p>}
