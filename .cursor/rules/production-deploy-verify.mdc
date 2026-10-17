@@ -1,11 +1,20 @@
 ---
-description: Após commit/push no main, confirmar deploy em produção com relatório (build + SHA + por quê).
+description: Após commit/push no main, confirmar deploy em produção com relatório (build + SHA + por quê). Nunca encerrar o turno sem esse bloco.
 alwaysApply: true
 ---
 
-# Confirmação de deploy em produção (obrigatório)
+# Confirmação de deploy em produção (obrigatório e inadiável)
 
-Depois de **qualquer `git push` para `main`** (ou quando o usuário pedir commit/push com deploy), o agente deve **confirmar de fato** se a Vercel refletiu o commit — não assumir que “subiu” só porque o push passou.
+Depois de **qualquer `git push` para `main`**, o agente **não pode encerrar o turno** sem confirmar se a Vercel refletiu o commit. Push com exit 0 **não** significa produção.
+
+O que falhou antes: commits de correção do responsável ficaram só no GitHub/local; o painel em produção continuou no build antigo. Isso **não pode se repetir**.
+
+## Sequência obrigatória (não pular nenhum passo)
+
+1. `git push origin main` **ou** `npm run push:main`
+2. `npm run confirm:production:wait -- --expect-sha <HEAD>`
+3. Se **NÃO alinhado**: diagnosticar Vercel, corrigir, esperar de novo até alinhar
+4. Só então escrever a **mensagem final** com o bloco de confirmação abaixo
 
 ## Comandos
 
@@ -18,18 +27,33 @@ Depois de **qualquer `git push` para `main`** (ou quando o usuário pedir commit
 
 Opcional: `npm run confirm:production:wait -- --expect-sha <sha>` quando o HEAD local não for o commit publicado.
 
-## O que o agente deve entregar ao usuário
+## Bloco obrigatório na última mensagem (todo commit+push)
 
-Copiar ou resumir o relatório do script, sempre com:
+A última resposta ao usuário **tem que** incluir isto — sem atalho, sem “depois eu confirmo”:
 
-1. **Status**: OK alinhado / NÃO alinhado / não foi possível ler produção
-2. **Números**: build repo vs build live, SHA esperado vs SHA live, `deploymentId`
-3. **Por quê** (uma frase clara): deploy concluído, ainda propagando, build não bumpado, push não foi main, falha Vercel, etc.
-4. **Próximo passo** se falhou (Vercel dashboard, rodar de novo `confirm:production:wait`)
+```
+### Confirmação de produção
+- Status: OK alinhado | NÃO alinhado | correção aplicada e agora alinhado
+- URL: https://hbcooperativas.vercel.app
+- Build repo vs live: <n> vs <n>
+- SHA esperado vs live: <12 hex> vs <12 hex>
+- deploymentId: <id>
+- Por quê: <uma frase>
+```
+
+Fonte de verdade: `GET https://hbcooperativas.vercel.app/api/client-release` (`build` + `gitCommitSha` + `deploymentId`).
+
+## Proibido
+
+- Encerrar o turno após push sem ter rodado `confirm:production:wait`
+- Dizer “já está em produção” só porque o push passou
+- Deixar correção do responsável/produção **commitada sem push**
+- Pular a espera “para não atrasar”
+- Encerrar com “pronto para você dar push” quando o trabalho era colocar a correção no ar
 
 ## Commit sem push
 
-Após commit no `main`, avisar que **produção só muda após push** e que a confirmação roda no push. Pode rodar `verify:production-identity` para mostrar drift atual.
+Após commit no `main` sem push, avisar que **produção não mudou**. Se a correção é para o responsável ver no app, o trabalho **não acabou**: push + espera + bloco de confirmação.
 
 ## Hooks locais (opcional)
 
