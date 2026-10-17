@@ -37,7 +37,6 @@ import { validateHbFinancialLimitRow } from "@/modules/hb-credit/engine/hbCredit
 import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { signedLedgerAmountCentsForExtrato } from "@/lib/hb-credit/ledgerLabels";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
-import { hbCreditCreditoBaseReais } from "@/lib/hb-credit/hbCreditLeituraBic";
 import { resolveLeituraFinanceiraCooperadoCore } from "@/lib/bic/bicLeituraPorta";
 import type {
   AuthoritativeCreditBaseErrorPayload,
@@ -1143,6 +1142,19 @@ export async function resetContaCoopCooperadoCredit(
   return { ok: true, limite: mapLimiteRow(data as Record<string, unknown>) };
 }
 
+function hbCreditCreditoBaseReaisLazy(
+  data: Parameters<typeof import("@/lib/hb-credit/hbCreditLeituraBic").hbCreditCreditoBaseReais>[0],
+  cooperadoId: string,
+  cooperativaId: string | undefined
+): number {
+  const mod = require("@/lib/hb-credit/hbCreditLeituraBic") as typeof import("@/lib/hb-credit/hbCreditLeituraBic");
+  const fn = mod.hbCreditCreditoBaseReais;
+  if (typeof fn !== "function") {
+    throw new Error("hbCreditCreditoBaseReais indisponível (módulo HB ainda carregando)");
+  }
+  return fn(data, cooperadoId, cooperativaId);
+}
+
 /**
  * Sem crédito-base na ficha (a receber quitado) e HB já reconciliado como quitado → zera liberado/usado (novo ciclo).
  */
@@ -1172,7 +1184,7 @@ export async function healHbCreditNovoCicloQuandoBaseZero(
   const app = authoritative.creditoBaseAppData;
   const coopId = authoritative.cooperativaId;
   const aReceber = resolveLeituraFinanceiraCooperadoCore(app, canon, coopId).valorLiquido;
-  const lastro = hbCreditCreditoBaseReais(app, canon, coopId);
+  const lastro = hbCreditCreditoBaseReaisLazy(app, canon, coopId);
   if (aReceber > 0.005 || lastro > 0) {
     return { healed: false };
   }

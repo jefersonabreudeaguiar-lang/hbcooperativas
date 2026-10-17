@@ -5,7 +5,6 @@ import {
   blindarCreditoBaseCentsHb,
   prepararAppDataParaCreditoBaseHb,
 } from "./creditBaseHbGuard";
-import { hbCreditCreditoBaseReais } from "@/lib/hb-credit/hbCreditLeituraBic";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { calcLimiteFromPercentual } from "./creditBaseLimitePercentual";
@@ -30,6 +29,20 @@ function prepararCreditoBase(data: AppData, cooperativaId?: string): AppData {
   return prepararAppDataParaCreditoBaseHb(data, cnpjParaCreditoBase(data, cooperativaId));
 }
 
+/** Lazy: ciclo creditBaseFromFicha ↔ hbCreditLeituraBic deixava o export indefinido no client. */
+function hbCreditCreditoBaseReaisLazy(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string | undefined
+): number {
+  const mod = require("@/lib/hb-credit/hbCreditLeituraBic") as typeof import("@/lib/hb-credit/hbCreditLeituraBic");
+  const fn = mod.hbCreditCreditoBaseReais;
+  if (typeof fn !== "function") {
+    throw new Error("hbCreditCreditoBaseReais indisponível (módulo HB ainda carregando)");
+  }
+  return fn(data, cooperadoId, cooperativaId);
+}
+
 /** Crédito base HB — valor bruto da ficha em meses em aberto; blindagem anti-fantasma separada. */
 export function getCreditoBaseContaCoopReais(
   data: AppData,
@@ -38,7 +51,7 @@ export function getCreditoBaseContaCoopReais(
 ): number {
   const sane = prepararCreditoBase(data, cooperativaId);
   const coopId = cooperativaId ?? sane.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  return hbCreditCreditoBaseReais(sane, cooperadoId, coopId);
+  return hbCreditCreditoBaseReaisLazy(sane, cooperadoId, coopId);
 }
 
 /** Crédito base do cooperado para limite HB Créditos (centavos). */
@@ -125,7 +138,7 @@ function creditoBaseCentsForCooperado(
 ): number {
   const coopId = cooperativaId ?? sane.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const canonico = resolverCooperadoIdCanonico(sane, cooperadoId, coopId);
-  const reais = hbCreditCreditoBaseReais(sane, canonico, coopId);
+  const reais = hbCreditCreditoBaseReaisLazy(sane, canonico, coopId);
   return blindarCreditoBaseCentsHb(sane, cooperadoId, coopId, reaisToCents(reais), sane);
 }
 
