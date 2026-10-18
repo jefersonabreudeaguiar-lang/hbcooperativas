@@ -3,8 +3,9 @@ import { isStaffRole } from "@/lib/security/staffAccessPolicy";
 import { isConferenciaAprovacaoSyncQueueActive } from "@/services/conferenciaAprovacaoSyncQueue";
 import { isConferenciaOperacionalPushScopeActive } from "@/services/conferenciaOperacionalPushScope";
 import { markRqlInteractionPhase } from "@/lib/performance/rqlMarks";
-import { getSession } from "@/services/dataStore";
+import { getData, getSession, isAppDataWarm } from "@/services/dataStore";
 import type { UserRole } from "@/types";
+import { staffLocalOperacionalVazio } from "@/lib/staff/staffOperacionalColdHydrate";
 
 const TIER_RANK: Record<SyncTier, number> = {
   pulse: 0,
@@ -68,6 +69,7 @@ export function isStaffConferenciaSyncTierCapActive(): boolean {
 export function shouldBlockStaffAutoSyncDuringConferencia(userInitiated?: boolean): boolean {
   if (userInitiated) return false;
   if (!staffSessionActive()) return false;
+  if (staffLocalOperacionalVazio(isAppDataWarm() ? getData() : null)) return false;
   return conferenciaModalOpen || conferenciaLancamentoDepth > 0;
 }
 
@@ -85,6 +87,9 @@ export function capStaffConferenciaSyncTierRequest(
 ): { tier: SyncTier; force: boolean } {
   if (!staffSessionActive() || !isStaffConferenciaSyncTierCapActive()) {
     return { tier, force };
+  }
+  if (staffLocalOperacionalVazio(isAppDataWarm() ? getData() : null)) {
+    return { tier, force: true };
   }
   if (userInitiated) return { tier, force };
   if (TIER_RANK[tier] > TIER_RANK[CONFERENCIA_CAP_TIER]) {

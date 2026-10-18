@@ -380,7 +380,14 @@ export function applyOperationalResetIfNeeded(data: AppData): { data: AppData; c
   const stored = localStorage.getItem(OPERATIONAL_RESET_STORAGE_KEY);
   if (stored === String(OPERATIONAL_RESET_VERSION)) return { data, changed: false };
 
+  const storedNum = Number(stored);
+  const primeiroAparelhoOuCacheLimpo = !stored || !Number.isFinite(storedNum) || storedNum <= 0;
   localStorage.setItem(OPERATIONAL_RESET_STORAGE_KEY, String(OPERATIONAL_RESET_VERSION));
+  if (primeiroAparelhoOuCacheLimpo) {
+    // Limpeza de cache some a chave — só restampa a versão. Não apaga PIX/livro nem publica reset.
+    return { data, changed: false };
+  }
+
   // Só a diretoria precisa republicar reset na nuvem — cooperado só limpa local e puxa de novo.
   if (sessionRoleIsStaff()) {
     markOperationalResetCloudPending();

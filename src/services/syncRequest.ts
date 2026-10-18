@@ -27,7 +27,8 @@ import {
   cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem,
   cooperadoGaValorReceberExibicaoResolvida,
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
-import { getSession } from "@/services/dataStore";
+import { getData, getSession, isAppDataWarm } from "@/services/dataStore";
+import { staffLocalOperacionalVazio } from "@/lib/staff/staffOperacionalColdHydrate";
 import {
   capStaffConferenciaSyncTierRequest,
   shouldBlockStaffAutoSyncDuringConferencia,
@@ -282,6 +283,15 @@ export function requestCooperadoAppReleaseSync(): void {
 /** Sync leve — HX 8.4: delta de notas (gestão) após conferência/lançamento. */
 export function requestAppSyncLight(): void {
   if (cooperadoBloqueiaSyncOperacionalAutomatico()) return;
+  const session = getSession();
+  const staffRole =
+    session?.role === "responsavel" ||
+    session?.role === "tesoureiro" ||
+    session?.role === "admin";
+  if (staffRole && staffLocalOperacionalVazio(isAppDataWarm() ? getData() : null)) {
+    requestSyncTier("financeiro_delta", { force: true, immediate: true });
+    return;
+  }
   requestSyncTier("notas_delta", { force: false });
 }
 

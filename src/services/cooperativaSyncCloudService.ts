@@ -1,5 +1,10 @@
 import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, NotaPedidoExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, ComunicadoExcluidoRef, LivroCaixaExcluidoRef, LivroCaixaLancamento, FichaCorrida, NotaPedido, VotacaoPauta, VotacaoVoto, ParecerContabilMensal, FechamentoSnapshot, ArquivoMensalCooperado, AjustesFichaMesCooperativa, ValorAvulsoReceber } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import {
+  expandStaffTierPlanIfOperacionalVazio,
+  markStaffOperacionalPullAplicado,
+  staffLocalOperacionalVazio,
+} from "@/lib/staff/staffOperacionalColdHydrate";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
 import { getData, getDataOperationalTruth, saveDataSafe, runWithBatchedSaveAsync } from "@/services/dataStore";
@@ -2415,6 +2420,7 @@ export async function syncOperacionalFromCloud(
   } else {
     clearOperacionalCloudAuthoritative(digits);
   }
+  markStaffOperacionalPullAplicado();
   return {
     ok: true,
     code: "ok",
@@ -2800,7 +2806,12 @@ export async function syncStaffTieredPullFromCloud(
 ): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
-  const plan = resolveSyncTierPlan84(tier, "staff");
+  const cidHint = coopId ?? resolveCoopId(getData(), digits);
+  const plan = expandStaffTierPlanIfOperacionalVazio(
+    resolveSyncTierPlan84(tier, "staff"),
+    getData(),
+    cidHint
+  );
   if (plan.bidirectionalFull) {
     await syncCooperativaBidirectionalInternal(cnpj, coopId);
     return;
@@ -2812,6 +2823,7 @@ export async function syncStaffTieredPullFromCloud(
     if (plan.pullProfile) await syncCooperativaProfileFromCloud(digits);
     const cid = coopId ?? resolveCoopId(getData(), digits);
     if (plan.pullCooperados && cid) await syncCooperadosFromCloud(digits, cid);
+    // Operacional antes das notas — evita fabricar ficha pendente sem PIX/livro.
     if (plan.pullOperacional) await syncOperacionalFromCloud(digits);
     if (plan.pullContratos) await syncContratosFromCloud(digits);
     if (plan.pullNotas) await syncNotasPedidoFromCloudStaffCoalesced(digits);
@@ -2834,7 +2846,9 @@ export async function syncCooperativaBidirectionalInternal(
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
 
-  const resetExecutedInJob = needsOperationalResetCloudPush();
+  const cidAntes = coopId ?? resolveCoopId(getData(), digits);
+  const hydrateSemPush = staffLocalOperacionalVazio(getData(), cidAntes);
+  const resetExecutedInJob = !hydrateSemPush && needsOperationalResetCloudPush();
   if (resetExecutedInJob) {
     await pushOperationalResetToCloud(digits, coopId);
   }
@@ -2851,6 +2865,11 @@ export async function syncCooperativaBidirectionalInternal(
   const d = getData();
   const cid = coopId ?? resolveCoopId(d, digits);
   if (!cid) return;
+
+  if (hydrateSemPush) {
+    // Cache limpo: só aplica a nuvem. Não publica PIX/livro [] deste aparelho.
+    return;
+  }
 
   if (options?.pushMensalidades !== false) {
     // Já puxamos a nuvem acima; push autoritativo com getData() fresco evita

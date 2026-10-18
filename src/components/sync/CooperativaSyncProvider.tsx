@@ -136,6 +136,7 @@ import {
   staffResponsavelLifecycleSyncRequest,
   staffResponsavelOpeningSyncRequest,
 } from "@/lib/staff/staffResponsavelSyncPolicy";
+import { expandStaffTierPlanIfOperacionalVazio } from "@/lib/staff/staffOperacionalColdHydrate";
 import { purgarInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { scheduleCooperadoPwaOperacionalParidadePull } from "@/lib/cooperado/cooperadoPwaFinanceiroParidadeRefresh";
 import {
@@ -789,7 +790,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
             const pushCatalog = isDiretoriaRole(currentUser.role as UserRole);
             const pushMensalidades = isDiretoriaRole(currentUser.role as UserRole);
             const tier = opts?.tier ?? "operacional_full";
-            const plan = resolveSyncTierPlan84(tier, "staff");
+            const plan = expandStaffTierPlanIfOperacionalVazio(
+              resolveSyncTierPlan84(tier, "staff"),
+              getData(),
+              currentCoopId
+            );
             if (plan.bidirectionalFull) {
               await syncCooperativaBidirectional(cnpj, currentCoopId, { pushCatalog, pushMensalidades });
             } else {
@@ -1182,14 +1187,21 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         markUserActivity();
         scheduleStaffPostInteractiveTask(() => {
           markNextCooperadoSyncSilent();
-          void runSync(staffResponsavelOpeningSyncRequest());
+          void runSync(staffResponsavelOpeningSyncRequest(isAppDataWarm() ? getData() : null));
         });
       }
+    } else if (staff) {
+      initialDelay = setTimeout(() => {
+        if (!document.hidden) {
+          markUserActivity();
+          void runSync(staffResponsavelOpeningSyncRequest(isAppDataWarm() ? getData() : null));
+        }
+      }, 400);
     } else {
       initialDelay = setTimeout(() => {
         if (!document.hidden) {
           markUserActivity();
-          void runSync({ force: staff || user?.role === "cooperado" });
+          void runSync({ force: user?.role === "cooperado" });
         }
       }, user?.role === "cooperado" ? 0 : 400);
     }
@@ -1202,7 +1214,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (staff && Date.now() - lastSyncStartedAtRef.current < getSyncMinGapMs(user?.role ?? "cooperado")) {
         return;
       }
-      const staffOpts = staff ? staffResponsavelLifecycleSyncRequest() : undefined;
+      const staffOpts = staff
+        ? staffResponsavelLifecycleSyncRequest(isAppDataWarm() ? getData() : null)
+        : undefined;
       void runSync(staffOpts);
     });
 
@@ -1220,7 +1234,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (staff && Date.now() - lastSyncStartedAtRef.current < getSyncMinGapMs(user?.role ?? "cooperado")) {
         return;
       }
-      const staffOpts = staff ? staffResponsavelLifecycleSyncRequest() : undefined;
+      const staffOpts = staff
+        ? staffResponsavelLifecycleSyncRequest(isAppDataWarm() ? getData() : null)
+        : undefined;
       void runSync(staffOpts);
     };
     document.addEventListener("visibilitychange", onVisible);
@@ -1236,7 +1252,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       }
       markUserActivity();
       if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
-      const staffOpts = staff ? staffResponsavelLifecycleSyncRequest() : undefined;
+      const staffOpts = staff
+        ? staffResponsavelLifecycleSyncRequest(isAppDataWarm() ? getData() : null)
+        : undefined;
       void runSync(staffOpts);
     };
     window.addEventListener("online", onOnline);

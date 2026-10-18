@@ -4,6 +4,7 @@ import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
 import { cooperativaTemNotasConferidasSemFichaLocal } from "@/services/fichaSyncGuard";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { posProcessarIntegridadePagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
+import { deveAdiarReconciliarFichaAposLimpezaCacheStaff } from "@/lib/staff/staffOperacionalColdHydrate";
 
 function resolveCnpjDigits(data: AppData, cnpj?: string): string {
   if (cnpj) {
@@ -26,6 +27,9 @@ export function projetarAppDataFinanceiroParaCreditoBase(data: AppData, cnpj?: s
   const digits = resolveCnpjDigits(data, cnpj);
   const coopId = data.cooperativas.find((c) => normalizeCnpj(c.cnpj ?? "") === digits)?.id;
   const operacionalAutoritativo = Boolean(digits && isOperacionalCloudAuthoritative(digits));
+  if (deveAdiarReconciliarFichaAposLimpezaCacheStaff(data, coopId)) {
+    return posProcessarIntegridadePagamentosCooperativa(data, { reconciliarLivroCaixa: false });
+  }
   const precisaReconciliarNotas =
     !operacionalAutoritativo ||
     (coopId != null && cooperativaTemNotasConferidasSemFichaLocal(data, coopId));
