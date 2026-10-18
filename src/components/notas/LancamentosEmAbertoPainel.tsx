@@ -8,6 +8,7 @@ import { useAppDataSelector } from "@/hooks/useAppData";
 import { getRelatorioLancamentosEmAbertoResponsavel } from "@/services/responsavelPainelIndex";
 import { flattenLinhasPagarCooperadoEmAberto } from "@/services/relatorioService";
 import { formatCurrency } from "@/utils/format";
+import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 
 type LancamentosEmAbertoPainelProps = {
   coopId: string;
@@ -54,8 +55,8 @@ function LancamentosEmAbertoPainelInner({ coopId, cooperadoId }: LancamentosEmAb
   return (
     <div className="space-y-4">
       <AlertBanner variant="info" title="Lançamentos em aberto">
-        Só entram ficha ainda sem PIX. Valor já pago some daqui; um novo lançamento no mesmo mês volta a
-        somar sozinho.
+        Só entram ficha ainda sem PIX. Valor já pago some daqui e fica no Livro Caixa; um lançamento
+        depois do PIX no mesmo mês volta a somar sozinho. v{APP_BUILD_VERSION}
       </AlertBanner>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -276,23 +276,30 @@ function aplicarLastroCompletenessConferir(candidato: AppData): AppData {
     prev.pagamentosCooperado,
     candidato.pagamentosCooperado
   );
-  const fundido = {
+  const fichaById = new Map((prev.fichaCorrida ?? []).map((f) => [f.id, f]));
+  for (const f of candidato.fichaCorrida ?? []) {
+    const old = fichaById.get(f.id);
+    if (!old || f.status === "pago" || old.status !== "pago") fichaById.set(f.id, f);
+  }
+  const fundido = alinharFichaComPagamentosCooperativa({
     ...prev,
+    fichaCorrida: [...fichaById.values()],
     notasPedido: novas.length === 0 ? prev.notasPedido : [...prev.notasPedido, ...novas],
     pagamentosCooperado,
-  };
+  });
   conferirLeituraLatch = fundido;
   return fundido;
 }
 
 /**
  * Foto única da aba Conferir: verdade operacional + merge de notas, com lastro de completeness.
- * O filtro de push em `getData()` não alimenta a tela.
+ * PIX confirmado alinha ficha/nota a pago antes do lastro — pago não volta a em aberto.
  */
 export function appDataParaConferirLeitura(data: AppData): AppData {
   garantirCacheDoBuildAtual();
   const truth = getDataOperationalTruth();
-  return aplicarLastroCompletenessConferir(escolherSnapshotMaisCompleto(truth, data));
+  const merged = escolherSnapshotMaisCompleto(truth, data);
+  return aplicarLastroCompletenessConferir(alinharFichaComPagamentosCooperativa(merged));
 }
 
 /**
