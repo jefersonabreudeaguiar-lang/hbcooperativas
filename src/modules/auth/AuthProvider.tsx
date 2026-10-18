@@ -52,7 +52,6 @@ import {
 } from "@/services/dataStore";
 import {
   persistirInicioCardValorReceberCooperado,
-  purgarInicioCardValorReceberCooperado,
 } from "@/services/cooperadoInicioCardPersistenciaService";
 import { markCooperadoPostLoginFinanceSync } from "@/lib/cooperado/cooperadoPostLoginFinanceSync";
 import { applyCooperadoForcedProfileCacheRepairIfNeeded } from "@/lib/pwa/cooperadoForcedProfileCacheRepair";
@@ -347,9 +346,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (role === "cooperado") {
         markCooperadoPostLoginFinanceSync();
         if (!isCooperadoPwaMessengerMode()) {
-          if (!persistirInicioCardValorReceberCooperado(safeUser)) {
-            purgarInicioCardValorReceberCooperado(safeUser);
-          }
+          persistirInicioCardValorReceberCooperado(safeUser);
         }
       }
       const redirectTo = role === "parceiro" ? "/mercado-parceiro" : "/dashboard";

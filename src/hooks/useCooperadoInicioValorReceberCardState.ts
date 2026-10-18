@@ -5,7 +5,6 @@ import type { AppData } from "@/types";
 import {
   cooperadoBicAutorizaZerarCardInicio,
   cooperadoMotorTemObrigacaoReceber,
-  filtrarInicioCardPersistidoLeituraBic,
   resolverCardInicioEndurecido,
   sanitizeInicioCardSnapshotParaPersistenciaBic,
   cooperadoInicioCardEscolherDisplayEstavel,
@@ -16,24 +15,19 @@ import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevi
 import {
   INICIO_CARD_STORAGE_VERSION,
   gravarInicioCardPersistidoFlex,
-  lerInicioCardPersistidoFlex,
-  lerInicioCardPersistidoFlexSemFiltroBuild,
   type InicioCardPersistido,
 } from "@/lib/cooperadoInicioCardPersistencia";
+import { lerInicioCardFinanceiroExibicao } from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { cooperadoPwaSnapshotBuildReadable } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
 import { isCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { isCooperadoMobilePilotPerfActive } from "@/lib/cooperado/cooperadoMobilePilotPerf";
-import {
-  COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
-  dispatchCooperadoPwaLeveUiSnapshotRefresh,
-} from "@/lib/cooperado/cooperadoPwaLeveUiEvents";
+import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUiEvents";
 import {
   cooperadoTemReciboAssinadoLocalSemPendenciaUi,
   resolverCooperativaIdReciboLatch,
 } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
-import { lerInicioCardPersistidoResume } from "@/lib/cooperado/cooperadoPwaInstantResume";
 import { inicioCardMotorFromParidadeFinanceiro } from "@/lib/cooperado/cooperadoFinanceiroParidadeInicioBridge";
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import { cooperadoPwaFichaParidadeSnapshotDivergeDeAppData } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
@@ -111,13 +105,6 @@ export function useCooperadoInicioValorReceberCardState(input: {
 
   const [persistidoTick, setPersistidoTick] = useState(0);
 
-  const [bootPersistido] = useState(() => {
-    if (!input.cooperadoId) return null;
-    return filtrarInicioCardPersistidoLeituraBic(
-      lerInicioCardPersistidoFlex(input.cooperadoId, input.cooperativaId)
-    );
-  });
-
   const tabAtiva = input.tabAtiva !== false;
   const leituraSomentePwa = Boolean(
     input.leituraSomentePwa &&
@@ -158,30 +145,9 @@ export function useCooperadoInicioValorReceberCardState(input: {
   }, [leituraSomentePwa]);
 
   const persistido = useMemo(() => {
-    if (!input.cooperadoId) return bootPersistido;
-    if (leituraSomentePwa) {
-      const fromResume = lerInicioCardPersistidoResume(input.cooperadoId, input.cooperativaId);
-      if (fromResume) return fromResume;
-      if (isCooperadoMobilePilotPerfActive()) {
-        const crossBuild = filtrarInicioCardPersistidoLeituraBic(
-          lerInicioCardPersistidoFlexSemFiltroBuild(input.cooperadoId, input.cooperativaId)
-        );
-        if (crossBuild) return crossBuild;
-      }
-      return bootPersistido;
-    }
-    return (
-      filtrarInicioCardPersistidoLeituraBic(
-        lerInicioCardPersistidoFlex(input.cooperadoId, input.cooperativaId)
-      ) ?? bootPersistido
-    );
-  }, [
-    input.cooperadoId,
-    input.cooperativaId,
-    bootPersistido,
-    persistidoTick,
-    leituraSomentePwa,
-  ]);
+    if (!input.cooperadoId) return null;
+    return lerInicioCardFinanceiroExibicao(input.cooperadoId, input.cooperativaId);
+  }, [input.cooperadoId, input.cooperativaId, persistidoTick]);
 
   const hbDescontosRevision = useContaCoopDescontosRevision();
 
@@ -561,40 +527,69 @@ export function useCooperadoInicioValorReceberCardState(input: {
 
   latchRef.current = resolved.latch;
 
+  const snapshotExibido = useMemo(() => {
+    if (cooperadoMotorTemObrigacaoReceber(resolved.display)) return resolved.display;
+    if (persistido?.display && cooperadoMotorTemObrigacaoReceber(persistido.display)) {
+      return persistido.display;
+    }
+    return resolved.display;
+  }, [resolved.display, persistido]);
+
   useEffect(() => {
-    if (!input.cooperadoId || !input.cooperativaId || !resolved.gravarPersistencia) return;
+    if (!input.cooperadoId) return;
+    if (!cooperadoMotorTemObrigacaoReceber(snapshotExibido)) return;
     gravarInicioCardPersistidoFlex(input.cooperadoId, input.cooperativaId, {
       v: INICIO_CARD_STORAGE_VERSION,
       appBuild: APP_BUILD_VERSION,
       motorRevision: resolved.latch.motorRevision,
-      display: sanitizeInicioCardSnapshotParaPersistenciaBic(resolved.display),
+      display: sanitizeInicioCardSnapshotParaPersistenciaBic(snapshotExibido),
       savedAt: new Date().toISOString(),
     });
-    if (leituraSomentePwa) {
-      dispatchCooperadoPwaLeveUiSnapshotRefresh();
-    }
   }, [
     input.cooperadoId,
     input.cooperativaId,
-    resolved.display,
+    snapshotExibido,
     resolved.latch.motorRevision,
-    resolved.gravarPersistencia,
-    leituraSomentePwa,
+  ]);
+
+  useEffect(() => {
+    if (!input.cooperadoId) return;
+    const persistirAoFechar = () => {
+      if (!cooperadoMotorTemObrigacaoReceber(snapshotExibido)) return;
+      gravarInicioCardPersistidoFlex(input.cooperadoId, input.cooperativaId, {
+        v: INICIO_CARD_STORAGE_VERSION,
+        appBuild: APP_BUILD_VERSION,
+        motorRevision: resolved.latch.motorRevision,
+        display: sanitizeInicioCardSnapshotParaPersistenciaBic(snapshotExibido),
+        savedAt: new Date().toISOString(),
+      });
+    };
+    window.addEventListener("pagehide", persistirAoFechar);
+    document.addEventListener("visibilitychange", persistirAoFechar);
+    return () => {
+      window.removeEventListener("pagehide", persistirAoFechar);
+      document.removeEventListener("visibilitychange", persistirAoFechar);
+    };
+  }, [
+    input.cooperadoId,
+    input.cooperativaId,
+    snapshotExibido,
+    resolved.latch.motorRevision,
   ]);
 
   const exibicaoIndeterminada =
     sessionUser?.role === "cooperado" &&
-    cooperadoGaValorReceberExibicaoIndeterminada(sessionUser, resolved.display);
+    cooperadoGaValorReceberExibicaoIndeterminada(sessionUser, snapshotExibido);
 
   const atualizando =
     exibicaoIndeterminada ||
     resolved.atualizando ||
     (Boolean(input.carregandoValoresFinanceiros) &&
-      cooperadoMotorTemObrigacaoReceber(resolved.display)) ||
-    (input.syncing && !cooperadoMotorTemObrigacaoReceber(resolved.display));
+      cooperadoMotorTemObrigacaoReceber(snapshotExibido)) ||
+    (input.syncing && !cooperadoMotorTemObrigacaoReceber(snapshotExibido));
 
   return {
-    snapshot: resolved.display,
+    snapshot: snapshotExibido,
     atualizando,
   };
 }

@@ -148,6 +148,10 @@ import { HistoricoHbCreditosResumo } from "@/components/ficha/HistoricoHbCredito
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
 import { CooperadoHistoricoPagamentoMes } from "@/components/cooperado/CooperadoHistoricoPagamentoMes";
 import { CooperadoQuantoVouReceberPainel } from "@/components/cooperado/CooperadoQuantoVouReceberPainel";
+import {
+  CooperadoFinanceiroSecoesNav,
+  type CooperadoFinanceiroSecao,
+} from "@/components/cooperado/CooperadoFinanceiroSecoesNav";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { DivisaoEntregaModal } from "@/components/ficha/DivisaoEntregaModal";
 import { ValoresAvulsosReceberPanel } from "@/components/ficha/ValoresAvulsosReceberPanel";
@@ -300,6 +304,7 @@ function FichaCorridaPageInner() {
     return "ficha";
   });
   const [abaMesCooperado, setAbaMesCooperado] = useState<"aberto" | string>("aberto");
+  const [abaSecaoCooperado, setAbaSecaoCooperado] = useState<CooperadoFinanceiroSecao>("resumo");
   const [abaMesPagamentoResponsavel, setAbaMesPagamentoResponsavel] = useState<"pendente" | string>("pendente");
   const [pixStepVisited, setPixStepVisited] = useState(false);
   const coopIdEarly =
@@ -1996,6 +2001,11 @@ function FichaCorridaPageInner() {
     isCooperadoInstantResumeEnabled() &&
     Boolean(user) &&
     cooperadoLocalResumeReady(user);
+  const secaoCooperadoAberta = isCooperado && !visualizandoHistorico;
+  const verResumoCooperado = !secaoCooperadoAberta || abaSecaoCooperado === "resumo";
+  const verFichaCooperado = !secaoCooperadoAberta || abaSecaoCooperado === "ficha";
+  const verCreditosCooperado = secaoCooperadoAberta && abaSecaoCooperado === "creditos";
+  const verFotosCooperado = secaoCooperadoAberta && abaSecaoCooperado === "fotos";
 
   if (!data) {
     if (isCooperado) return <FinanceiroTabSkeleton />;
@@ -2116,6 +2126,10 @@ function FichaCorridaPageInner() {
         </div>
       )}
 
+      {secaoCooperadoAberta && (
+        <CooperadoFinanceiroSecoesNav value={abaSecaoCooperado} onChange={setAbaSecaoCooperado} />
+      )}
+
       {isCooperado &&
         !visualizandoHistorico &&
         pagamentoAguardando &&
@@ -2130,7 +2144,7 @@ function FichaCorridaPageInner() {
           </AlertBanner>
         )}
 
-      {isCooperado && !visualizandoHistorico && mesQuitadoCooperado && (!pagamentoAguardando || !fluxoReciboAssinatura) && (
+      {verResumoCooperado && isCooperado && !visualizandoHistorico && mesQuitadoCooperado && (!pagamentoAguardando || !fluxoReciboAssinatura) && (
         <div className="text-center py-14 px-6 bg-white rounded-2xl border border-emerald-200 mb-6">
           <CheckCircle2 size={52} className="mx-auto text-emerald-600 mb-4" />
           <h2 className="text-xl font-bold text-gray-900">Pagamento confirmado</h2>
@@ -2147,7 +2161,8 @@ function FichaCorridaPageInner() {
         </div>
       )}
 
-      {isCooperado &&
+      {verResumoCooperado &&
+        isCooperado &&
         !visualizandoHistorico &&
         resumoQuantoVouReceber?.estado === "carregando" &&
         !mesQuitadoCooperado &&
@@ -2162,7 +2177,8 @@ function FichaCorridaPageInner() {
           />
         )}
 
-      {isCooperado &&
+      {verResumoCooperado &&
+        isCooperado &&
         !visualizandoHistorico &&
         !exibirQuantoVouReceber &&
         !mesQuitadoCooperado &&
@@ -2177,6 +2193,32 @@ function FichaCorridaPageInner() {
             <Button variant="secondary">Ver entregas</Button>
           </Link>
         </div>
+      )}
+
+      {verCreditosCooperado && cooperadoSelecionadoId && coopCnpjResumo && !exibirPagamento && (
+        <Card title="Compras no HB Créditos" className="mb-6">
+          <HistoricoHbCreditosResumo
+            cnpj={coopCnpjResumo}
+            cooperadoId={cooperadoSelecionadoId}
+            mesReferencia={mesAtivo}
+            valorEntregas={resumoExibicao?.valorEntregas ?? 0}
+            descontosExtras={descontosExtrasResumo}
+            variant="cooperado"
+          />
+        </Card>
+      )}
+      {verFotosCooperado && !exibirPagamento && (
+        <Card title="Fotos do mês a receber" className="mb-6">
+          {resumosFotosMesAbertoCooperado.length > 0 ? (
+            <CooperadoFichaFotosPanel
+              resumos={resumosFotosMesAbertoCooperado}
+              getEscolaLabel={getEscolaLabelCooperadoFinanceiro}
+              cooperativaId={coopId}
+            />
+          ) : (
+            <p className="text-sm text-gray-500">Ainda não há fotos deste mês a receber.</p>
+          )}
+        </Card>
       )}
 
       {!isCooperado && (
@@ -2337,7 +2379,7 @@ function FichaCorridaPageInner() {
         </div>
       )}
 
-      {cooperadoSelecionadoId && !cooperadoVistaMesHistorico && (
+      {verFichaCooperado && cooperadoSelecionadoId && !cooperadoVistaMesHistorico && (
         <ValoresAvulsosReceberPanel
           cooperadoId={cooperadoSelecionadoId}
           cooperativaId={coopId}
@@ -2440,7 +2482,7 @@ function FichaCorridaPageInner() {
 
       {exibirRelatorioMes && !cooperadoVistaMesHistorico && (
         <>
-          <Card
+          {verResumoCooperado && <Card
             title={
               isCooperado
                 ? visualizandoHistorico
@@ -2517,6 +2559,7 @@ function FichaCorridaPageInner() {
                               rotuloTotal="A receber"
                             />
                             {coopCnpjResumo &&
+                              !secaoCooperadoAberta &&
                               part.descontosExtras.some((d) => d.tipo === "conta_coop") && (
                                 <HistoricoHbCreditosResumo
                                   cnpj={coopCnpjResumo}
@@ -2546,6 +2589,7 @@ function FichaCorridaPageInner() {
                           rotuloTotal="A receber"
                         />
                         {coopCnpjResumo &&
+                          !secaoCooperadoAberta &&
                           descontosExtrasResumo.some((d) => d.tipo === "conta_coop") && (
                             <HistoricoHbCreditosResumo
                               cnpj={coopCnpjResumo}
@@ -2667,9 +2711,9 @@ function FichaCorridaPageInner() {
                 </ul>
               </div>
             )}
-          </Card>
+          </Card>}
 
-          <Card
+          {verFichaCooperado && <Card
             title={`Resumo das entregas · ${
               isCooperado && !visualizandoHistorico && mesesFinanceiroCooperado.length > 1
                 ? formatMesesReferenciaRotulo(mesesFinanceiroCooperado)
@@ -2678,7 +2722,7 @@ function FichaCorridaPageInner() {
                   : formatMesReferencia(mesAtivo)
             }`}
             className="mb-6"
-          >
+          > >
             <TabelaResumoItens itens={resumoItensExibicao.itens} entregas={resumoItensExibicao.entregas} />
             {fichasPendentesMes.some((f) => f.divisaoEntrega && f.divisaoEntrega.participantes.length > 1) && (
               <div className="mt-4 space-y-2">
@@ -2696,7 +2740,7 @@ function FichaCorridaPageInner() {
                   ))}
               </div>
             )}
-          </Card>
+          </Card>}
         </>
       )}
 
@@ -2704,7 +2748,7 @@ function FichaCorridaPageInner() {
         <>
           {isCooperado && resumoQuantoVouReceber ? (
             <>
-              <CooperadoQuantoVouReceberPainel
+              {verResumoCooperado && <CooperadoQuantoVouReceberPainel
                 estado={resumoQuantoVouReceber.estado}
                 mesLabel={paridadeCooperadoMobile?.mesLabel ?? resumoQuantoVouReceber.mesLabel}
                 valorDestaque={
@@ -2741,34 +2785,37 @@ function FichaCorridaPageInner() {
                       }
                     : undefined
                 }
-              />
-              {resumoExibicao &&
-                cooperadoSelecionadoId &&
-                coopCnpjResumo &&
-                !mesQuitadoCooperado &&
-                totalExibido > 0 &&
-                descontosExtrasResumo.some((d) => d.tipo === "conta_coop") && (
-                  <div className="-mt-2 mb-4 px-1">
-                    <HistoricoHbCreditosResumo
-                      cnpj={coopCnpjResumo}
-                      cooperadoId={cooperadoSelecionadoId}
-                      mesReferencia={mesAtivo}
-                      valorEntregas={resumoExibicao.valorEntregas}
-                      descontosExtras={descontosExtrasResumo}
-                      variant="cooperado"
-                    />
-                  </div>
-                )}
-              {resumosFotosMesAbertoCooperado.length > 0 && (
-                <Card title="Fotos das notas recebidas" className="mb-6">
-                  <p className="text-sm text-gray-600 mb-4">
-                    Comprovantes das entregas dos meses em aberto. Para enviar novas fotos, use a aba Entregas.
-                  </p>
-                  <CooperadoFichaFotosPanel
-                    resumos={resumosFotosMesAbertoCooperado}
-                    getEscolaLabel={getEscolaLabelCooperadoFinanceiro}
-                    cooperativaId={coopId}
+              />}
+              {verCreditosCooperado && cooperadoSelecionadoId && coopCnpjResumo && (
+                <Card title="Compras no HB Créditos" className="mb-6">
+                  <HistoricoHbCreditosResumo
+                    cnpj={coopCnpjResumo}
+                    cooperadoId={cooperadoSelecionadoId}
+                    mesReferencia={mesAtivo}
+                    valorEntregas={resumoExibicao?.valorEntregas ?? 0}
+                    descontosExtras={descontosExtrasResumo}
+                    variant="cooperado"
                   />
+                </Card>
+              )}
+              {verFotosCooperado && (
+                <Card title="Fotos do mês a receber" className="mb-6">
+                  {resumosFotosMesAbertoCooperado.length > 0 ? (
+                    <>
+                      <p className="text-sm text-gray-600 mb-4">
+                        Comprovantes das entregas em aberto. Novas fotos vão na aba Entregas.
+                      </p>
+                      <CooperadoFichaFotosPanel
+                        resumos={resumosFotosMesAbertoCooperado}
+                        getEscolaLabel={getEscolaLabelCooperadoFinanceiro}
+                        cooperativaId={coopId}
+                      />
+                    </>
+                  ) : (
+                    <p className="text-sm text-gray-500">
+                      Ainda não há fotos deste mês a receber.
+                    </p>
+                  )}
                 </Card>
               )}
             </>

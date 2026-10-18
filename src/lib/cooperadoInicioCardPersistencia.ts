@@ -169,7 +169,7 @@ export function gravarInicioCardPersistidoFlex(
   cooperativaId: string | undefined,
   payload: InicioCardPersistido
 ): void {
-  if (cooperativaId) gravarInicioCardPersistido(cooperadoId, cooperativaId, payload);
+  gravarInicioCardPersistido(cooperadoId, cooperativaId?.trim() || "pending", payload);
 }
 
 /**
