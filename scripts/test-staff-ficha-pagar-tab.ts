@@ -37,6 +37,9 @@ assert(
   /: \(financeiroAberto\?\.valorLiquido \?\? 0\);/.test(ficha),
   "totalPendente staff via financeiroAberto (backup 404)"
 );
-assert(!ficha.includes("aba === \"pagar\" || Boolean(cooperadoFilter)"), "sync financeiro_delta sempre no staff");
+assert(
+  !ficha.includes('requestSyncTier("financeiro_delta"'),
+  "Pagar cooperados não puxa operacional ao abrir"
+);
 
 console.log("test-staff-ficha-pagar-tab.ts done.");

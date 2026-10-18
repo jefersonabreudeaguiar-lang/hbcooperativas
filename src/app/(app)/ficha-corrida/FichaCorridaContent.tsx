@@ -165,7 +165,7 @@ import {
   isCooperadoInstantResumeEnabled,
   isCooperadoManualOperacionalSync,
 } from "@/lib/performance/cooperadoColdStart";
-import { requestAppSync, requestAppSyncImmediate, requestSyncTier } from "@/services/syncRequest";
+import { requestAppSync, requestAppSyncImmediate } from "@/services/syncRequest";
 import { pagamentoIdFromOrigemId } from "@/services/livroCaixaService";
 import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
 import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExibirAguardandoAssinatura";
@@ -427,7 +427,7 @@ function FichaCorridaPageInner() {
         return;
       }
       if (!isCooperado) {
-        requestSyncTier("financeiro_delta", { force: false });
+        // Pagar cooperados: não puxa operacional ao abrir a aba (evita retroceder o painel).
         return;
       }
       requestAppSync();
