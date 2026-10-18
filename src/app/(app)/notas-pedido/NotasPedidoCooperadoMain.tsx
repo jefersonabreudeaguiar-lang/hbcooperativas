@@ -197,7 +197,7 @@ import {
   scheduleConferenciaAprovacaoNuvemSync,
   scheduleConferenciaRejeicaoNuvemSync,
 } from "@/services/conferenciaDecisaoNuvemSync";
-import { getProdutosContrato } from "@/services/catalogoContratosService";
+import { getInstituicoesCatalogo, getProdutosContrato } from "@/services/catalogoContratosService";
 import { countCooperadosLancamentosEmAbertoResponsavel } from "@/services/responsavelPainelIndex";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, filtrarResumosMesesNaoQuitados } from "@/services/cooperadoEntregasService";
 import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
@@ -2096,11 +2096,17 @@ export default function NotasPedidoCooperadoMain() {
       [coopId, isCooperado, hbDescontosRevision]
     ) ?? 0;
 
-  const contratosEntrega =
-    useAppDataSelector(
-      (d) => (coopId ? getContratosEntrega(d, coopId) : []),
-      [coopId]
-    ) ?? [];
+  const contratosEntregaRaw = useAppDataSelector(
+    (d) => {
+      if (!coopId) return [];
+      const validos = getContratosEntrega(d, coopId);
+      if (validos.length > 0 || !isCooperado) return validos;
+      return getInstituicoesCatalogo(d, coopId);
+    },
+    [coopId, isCooperado]
+  );
+  const contratosEntrega = contratosEntregaRaw ?? [];
+  const catalogoContratosPronto = contratosEntregaRaw !== null;
 
   const instituicoes = contratosEntrega;
 
@@ -4417,7 +4423,10 @@ export default function NotasPedidoCooperadoMain() {
         </AlertBanner>
       )}
 
-      {isCooperado && abaCooperado === "entregas" && contratosEntrega.length === 0 && (
+      {isCooperado &&
+        abaCooperado === "entregas" &&
+        catalogoContratosPronto &&
+        contratosEntrega.length === 0 && (
         <AlertBanner variant="warning" className="mb-6" title="Aguardando contrato da cooperativa">
           O responsável ainda não publicou um contrato com itens e preços. Veja o status no topo
           (“Atualizando…” / “Atualizado”) ou fale com a cooperativa.
@@ -5188,7 +5197,11 @@ export default function NotasPedidoCooperadoMain() {
           </FormField>
 
           <FormField label="Contrato" required error={formErrors.contrato} hint={isCooperado ? "Selecionado automaticamente — altere só se precisar." : "A entrega será conferida e lançada neste contrato."}>
-            {contratosEntrega.length === 0 ? (
+            {isCooperado && !catalogoContratosPronto ? (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                Carregando contrato da cooperativa…
+              </div>
+            ) : contratosEntrega.length === 0 ? (
               <AlertBanner variant="warning">
                 Nenhum contrato disponível. {isCooperado
                   ? "Aguarde a sincronização com a cooperativa."
