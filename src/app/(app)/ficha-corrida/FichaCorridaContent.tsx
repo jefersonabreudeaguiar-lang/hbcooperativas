@@ -2722,7 +2722,7 @@ function FichaCorridaPageInner() {
                   : formatMesReferencia(mesAtivo)
             }`}
             className="mb-6"
-          > >
+          >
             <TabelaResumoItens itens={resumoItensExibicao.itens} entregas={resumoItensExibicao.entregas} />
             {fichasPendentesMes.some((f) => f.divisaoEntrega && f.divisaoEntrega.participantes.length > 1) && (
               <div className="mt-4 space-y-2">

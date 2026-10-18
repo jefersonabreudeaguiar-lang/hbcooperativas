@@ -553,10 +553,11 @@ export function useCooperadoInicioValorReceberCardState(input: {
   ]);
 
   useEffect(() => {
-    if (!input.cooperadoId) return;
+    const cooperadoId = input.cooperadoId;
+    if (!cooperadoId) return;
     const persistirAoFechar = () => {
       if (!cooperadoMotorTemObrigacaoReceber(snapshotExibido)) return;
-      gravarInicioCardPersistidoFlex(input.cooperadoId, input.cooperativaId, {
+      gravarInicioCardPersistidoFlex(cooperadoId, input.cooperativaId, {
         v: INICIO_CARD_STORAGE_VERSION,
         appBuild: APP_BUILD_VERSION,
         motorRevision: resolved.latch.motorRevision,
