@@ -75,6 +75,11 @@ assert.equal(quente.pullOperacional, false);
 assert.equal(quente.bidirectionalFull, false);
 
 assert.equal(deveAdiarReconciliarFichaAposLimpezaCacheStaff(emptyInitialData), false, "sem window = servidor");
+assert.equal(
+  deveAdiarReconciliarFichaAposLimpezaCacheStaff(soNotas as never, "coop1"),
+  false,
+  "ficha já local — não esconde o responsável"
+);
 
 markStaffOperacionalPullAplicado();
 assert.equal(staffOperacionalPullJaAplicado(), true);

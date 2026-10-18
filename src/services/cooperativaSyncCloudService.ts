@@ -112,12 +112,21 @@ export function cloudOperacionalRestoreAtivo(
   return operacional?.fullReset === true;
 }
 
+function temPagamentoCooperadoParaLivroCaixa(data: AppData): boolean {
+  return (data.pagamentosCooperado ?? []).some(
+    (p) => p.status === "confirmado" || p.status === "aguardando_confirmacao"
+  );
+}
+
 function finalizeOperacionalPullLocalState(
   data: AppData,
   operacional?: OperacionalSyncPayload | null,
   cnpj?: string
 ): AppData {
-  return posProcessarFinanceiroLocal(data, cnpj);
+  const base = posProcessarFinanceiroLocal(data, cnpj);
+  if (!temPagamentoCooperadoParaLivroCaixa(base)) return base;
+  // PIX/pagamento: ficha paga, sai de Em aberto e entra no Livro Caixa (mesmo motor do v465).
+  return posProcessarIntegridadePagamentosCooperativa(base);
 }
 
 export type ConfirmarPagamentoCooperadoNaNuvemResult = {

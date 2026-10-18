@@ -9,6 +9,10 @@ import { migrateInlinePhotosToIdb } from "@/services/localMediaMigration";
 import { compactarFotosNoArmazenamento, liberarEspacoArmazenamento, stripBinaryForPersist, buildSnapshotEmergenciaPersistencia } from "@/utils/fotoEntrega";
 import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, sincronizarMensalidadeCooperativa } from "@/services/mensalidadeService";
 import { applyOperationalResetIfNeeded, clearOperationalData } from "@/services/operationalReset";
+import {
+  noteStaffGestaoLastGood,
+  preservarStaffGestaoContraWipe,
+} from "@/lib/staff/staffGestaoSnapshotGuard";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
 import { normalizeCreatorEmail, normalizeAuthEmail } from "@/lib/security/appCreator";
 import {
@@ -840,6 +844,7 @@ function loadData(forceReload = false): AppData {
     }
 
     memoryCache = data;
+    noteStaffGestaoLastGood(data);
     scheduleAutomaticTasksIfNeeded(data);
     return data;
   } catch {
@@ -876,6 +881,12 @@ function applyConferenciaInProgressTruthIfNeeded(data: AppData): AppData {
   return preserveConferenciaInProgressOperationalTruth(data, memoryCache);
 }
 
+function applyStaffGestaoWipeGuard(data: AppData): AppData {
+  const kept = preservarStaffGestaoContraWipe(memoryCache, data);
+  noteStaffGestaoLastGood(kept);
+  return kept;
+}
+
 export function saveDataSafe(data: AppData): { ok: true } | { ok: false; error: string } {
   if (typeof window === "undefined") return { ok: true };
 
@@ -883,6 +894,7 @@ export function saveDataSafe(data: AppData): { ok: true } | { ok: false; error: 
     data = preserveOperationalTruthDuringConferenciaPushSave(data, memoryCache);
   }
   data = applyConferenciaInProgressTruthIfNeeded(data);
+  data = applyStaffGestaoWipeGuard(data);
 
   if (saveBatchDepth > 0) {
     memoryCache = data;
@@ -948,7 +960,7 @@ export function updateDataSafe(
   updater: (data: AppData) => AppData
 ): { ok: true; data: AppData } | { ok: false; error: string } {
   const current = mutationDataBaseline();
-  const updated = updater(current);
+  const updated = applyStaffGestaoWipeGuard(updater(current));
   if (updated === current) {
     return { ok: true, data: current };
   }

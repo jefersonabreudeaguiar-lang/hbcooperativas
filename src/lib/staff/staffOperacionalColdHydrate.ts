@@ -105,6 +105,9 @@ export function deveAdiarReconciliarFichaAposLimpezaCacheStaff(
   coopId?: string
 ): boolean {
   if (typeof window === "undefined") return false;
+  if ((data.fichaCorrida ?? []).some((f) => !coopId || f.cooperativaId === coopId)) {
+    return false;
+  }
   if (!staffLocalOperacionalVazio(data, coopId)) return false;
   if (staffOperacionalPullJaAplicado()) return false;
   return true;

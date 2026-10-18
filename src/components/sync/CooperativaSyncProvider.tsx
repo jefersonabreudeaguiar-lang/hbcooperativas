@@ -74,6 +74,7 @@ import {
   getData,
   isAppDataWarm,
   preloadAppData,
+  refreshData,
   saveDataSafe,
   subscribe,
   updateDataSafe,
@@ -615,7 +616,22 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       );
     }
 
-    const data = getData();
+    let data = getData();
+    if (
+      isStaffGestao &&
+      (data.cooperados?.length ?? 0) === 0 &&
+      (data.notasPedido?.length ?? 0) === 0 &&
+      (data.fichaCorrida?.length ?? 0) === 0
+    ) {
+      try {
+        const raw = window.localStorage.getItem("coopeagriplla_data");
+        if (raw && raw.length > 10_000) {
+          data = refreshData();
+        }
+      } catch {
+        /* storage */
+      }
+    }
     const currentCoopId = getUserCooperativaId(currentUser, data);
     if (!currentCoopId) {
       if (currentUser.role === "cooperado") {

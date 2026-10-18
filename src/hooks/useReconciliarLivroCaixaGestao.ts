@@ -52,6 +52,7 @@ export function useReconciliarLivroCaixaGestao(
       timer = window.setTimeout(tentar, 800);
     };
 
+    tentar();
     agendar();
     const unsub = subscribe(agendar);
     return () => {
