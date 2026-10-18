@@ -15,8 +15,8 @@ import { Card } from "@/components/ui/Card";
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
-import { requestAppSyncLight } from "@/services/syncRequest";
 import { posProcessarIntegridadePagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
+import { useReconciliarLivroCaixaGestao } from "@/hooks/useReconciliarLivroCaixaGestao";
 import {
   ensureControleAnualLivroCaixa,
   reconciliarLivroCaixaContabilCooperativa,
@@ -138,9 +138,7 @@ export default function LivroCaixaPage() {
     if (permUser && !check("livro_caixa", "view")) router.replace("/dashboard");
   }, [permUser, router]);
 
-  useEffect(() => {
-    requestAppSyncLight();
-  }, []);
+  useReconciliarLivroCaixaGestao(coopId, Boolean(coopId));
 
   const dataCaixa = useMemo(() => {
     if (!data || !coopId) return null;
@@ -148,17 +146,6 @@ export default function LivroCaixaPage() {
       posProcessarIntegridadePagamentosCooperativa(data, { reconciliarLivroCaixa: false }),
       coopId
     );
-  }, [data, coopId]);
-
-  useEffect(() => {
-    if (!data || !coopId) return;
-    const aligned = posProcessarIntegridadePagamentosCooperativa(data);
-    if (aligned !== data) {
-      updateData(() => aligned);
-      return;
-    }
-    const reconciled = reconciliarLivroCaixaContabilCooperativa(data, coopId);
-    if (reconciled !== data) updateData(() => reconciled);
   }, [data, coopId]);
 
   useEffect(() => {

@@ -35,6 +35,11 @@ const soNotas = {
   fichaCorrida: [{ id: "f1", cooperativaId: "coop1", status: "pendente" } as never],
 };
 assert.equal(staffLocalOperacionalVazio(soNotas, "coop1"), true, "fichas pendente sem PIX = frio");
+assert.equal(
+  staffPrecisaHydrateOperacionalPull(soNotas, "coop1"),
+  false,
+  "com ficha/nota local o F5 não puxa operacional vazio"
+);
 
 const comPix = {
   ...emptyInitialData,
@@ -68,7 +73,11 @@ const fullPlan = resolveSyncTierPlan84("operacional_full", "staff");
 assert.equal(fullPlan.bidirectionalFull, true);
 const fullFrio = expandStaffTierPlanIfOperacionalVazio(fullPlan, soNotas, "coop1");
 assert.equal(fullFrio.bidirectionalFull, false, "full a frio não empurra snapshot pobre");
-assert.equal(fullFrio.pullOperacional, true);
+assert.equal(fullFrio.pullOperacional, false, "ficha local: não reaplica operacional no F5");
+
+const vazioTotal = expandStaffTierPlanIfOperacionalVazio(fullPlan, emptyInitialData, "coop1");
+assert.equal(vazioTotal.pullOperacional, true, "aparelho vazio ainda hidrata uma vez");
+assert.equal(vazioTotal.bidirectionalFull, false);
 
 const quente = expandStaffTierPlanIfOperacionalVazio(notasPlan, comPix, "coop1");
 assert.equal(quente.pullOperacional, false);
@@ -104,7 +113,8 @@ assert.ok(provider.includes("expandStaffTierPlanIfOperacionalVazio"), "runSync n
 assert.ok(provider.includes("staffResponsavelOpeningSyncRequest("), "abertura passa snapshot");
 
 const light = readFileSync(join(ROOT, "src/services/syncRequest.ts"), "utf8");
-assert.ok(light.includes("staffPrecisaHydrateOperacionalPull"), "light só sobe a frio antes do 1º pull");
+assert.ok(light.includes('requestSyncTier("notas_delta"'), "light não sobe para operacional");
+assert.ok(!light.includes("staffPrecisaHydrateOperacionalPull"), "light não força financeiro no F5");
 
 const projetar = readFileSync(
   join(ROOT, "src/modules/hb-credit/engine/projetarAppDataFinanceiroParaCreditoBase.ts"),

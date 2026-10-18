@@ -70,12 +70,25 @@ export function staffLocalOperacionalVazio(
   return pagamentos.length === 0 && livro.length === 0;
 }
 
+/** Já há ficha/notas no aparelho — Ctrl+F5 não pode reaplicar operacional vazio da nuvem. */
+export function staffGestaoTemFichaOuNotaLocal(
+  data: AppData | null | undefined,
+  coopId?: string
+): boolean {
+  if (!data) return false;
+  if ((data.fichaCorrida ?? []).some((f) => pertenceCoop(f, coopId))) return true;
+  if ((data.notasPedido ?? []).some((n) => pertenceCoop(n, coopId))) return true;
+  return false;
+}
+
 export function staffPrecisaHydrateOperacionalPull(
   data: AppData | null | undefined,
   coopId?: string
 ): boolean {
   if (staffOperacionalPullJaAplicado()) return false;
-  return staffLocalOperacionalVazio(data, coopId);
+  if (!staffLocalOperacionalVazio(data, coopId)) return false;
+  if (staffGestaoTemFichaOuNotaLocal(data, coopId)) return false;
+  return true;
 }
 
 /** Expande o plano HX 8.4: puxa tudo e desliga push bidirecional. */
@@ -84,7 +97,10 @@ export function expandStaffTierPlanIfOperacionalVazio(
   data: AppData | null | undefined,
   coopId?: string
 ): SyncTierPlan84 {
-  if (!staffPrecisaHydrateOperacionalPull(data, coopId)) return plan;
+  if (!staffLocalOperacionalVazio(data, coopId)) return plan;
+  if (staffOperacionalPullJaAplicado() || staffGestaoTemFichaOuNotaLocal(data, coopId)) {
+    return { ...plan, bidirectionalFull: false, pullOperacional: false };
+  }
   return {
     ...plan,
     bidirectionalFull: false,
