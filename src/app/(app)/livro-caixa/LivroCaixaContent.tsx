@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, TrendingUp, TrendingDown, Wallet, Send, FileText, Search, Download } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, Send, FileText, Search, Download, Users, BookOpen } from "lucide-react";
 import { useAppDataSnapshotForDomains } from "@/hooks/useAppData";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -109,6 +109,7 @@ export default function LivroCaixaPage() {
   const [somenteMesAbertoRelatorio, setSomenteMesAbertoRelatorio] = useState(false);
   const [encBackupOk, setEncBackupOk] = useState(false);
   const [encRelatoriosOk, setEncRelatoriosOk] = useState(false);
+  const [abaLivro, setAbaLivro] = useState<"livro" | "resumo-cooperado">("livro");
 
   const resetForm = () => {
     setTipo("credito");
@@ -524,7 +525,7 @@ export default function LivroCaixaPage() {
         </div>
         <p className="text-xs text-gray-500 mt-3">
           Os três totais acima somam todo o livro caixa no período escolhido (automáticos e avulsos). Saldo = créditos
-          − débitos. A tabela por cooperado mostra bruto, taxa, mensalidade, outros descontos e o PIX líquido.
+          − débitos. O detalhe por cooperado fica na aba Resumo por cooperado.
         </p>
       </Card>
 
@@ -549,10 +550,46 @@ export default function LivroCaixaPage() {
         </div>
       </div>
 
-      <Card title="Resumo por cooperado">
-        <LivroCaixaResumoCooperadosTable linhas={resumoPorCooperado} />
-      </Card>
+      <div className="flex flex-wrap gap-2 border-b border-gray-200" role="tablist" aria-label="Seções do livro caixa">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={abaLivro === "livro"}
+          onClick={() => setAbaLivro("livro")}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 ${
+            abaLivro === "livro"
+              ? "border-green-600 text-green-700"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <BookOpen size={16} /> Livro
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={abaLivro === "resumo-cooperado"}
+          onClick={() => setAbaLivro("resumo-cooperado")}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 ${
+            abaLivro === "resumo-cooperado"
+              ? "border-green-600 text-green-700"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <Users size={16} /> Resumo por cooperado
+        </button>
+      </div>
 
+      {abaLivro === "resumo-cooperado" && (
+        <Card title="Resumo por cooperado">
+          <p className="text-xs text-gray-500 mb-4">
+            Bruto, taxa, mensalidade, outros descontos e o PIX líquido no período escolhido acima.
+          </p>
+          <LivroCaixaResumoCooperadosTable linhas={resumoPorCooperado} />
+        </Card>
+      )}
+
+      {abaLivro === "livro" && (
+      <>
       <Card title="Conferência rápida">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-3">
@@ -726,6 +763,8 @@ export default function LivroCaixaPage() {
           onPaginaChange={setPaginaPlanilha}
         />
       </Card>
+      </>
+      )}
 
       <Modal
         open={modalOpen}
