@@ -7,6 +7,7 @@ import { cooperadoPendentePagamentoResponsavel } from "@/services/cooperadoEntre
 import {
   fichaPertenceCooperado,
   listCooperadosDaCooperativa,
+  resolverCooperadoIdCanonico,
 } from "@/services/cooperadoCloudService";
 import { getDataOperationalTruth, getDataRevision } from "@/services/dataStore";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
@@ -14,6 +15,7 @@ import { listarMesesFichaEmAbertoCooperado } from "@/lib/hb-credit/hbCreditCredi
 import {
   idsNotasPedidoExcluidas,
   listarPagamentosConfirmadosQueCobremMes,
+  reconciliarFichaFromNotasConferidas,
 } from "@/services/notaPedidoService";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { notaElegivelParaFilaConferenciaResponsavel, sanitizarNotaParaFilaConferencia } from "@/utils/notaStatus";
@@ -32,6 +34,7 @@ type PainelCache = {
 };
 
 let painelCache: PainelCache | null = null;
+let pagarProjCache: { revision: number; coopId: string; data: AppData } | null = null;
 
 type RelatorioAbertoCache = {
   revision: number;
@@ -49,6 +52,7 @@ let conferirLatchBuild = APP_BUILD_VERSION;
 function garantirCacheDoBuildAtual(): void {
   if (conferirLatchBuild === APP_BUILD_VERSION) return;
   painelCache = null;
+  pagarProjCache = null;
   relatorioAbertoCache = null;
   relatorioAbertoLatch = null;
   conferirLeituraLatch = null;
@@ -61,6 +65,86 @@ function cooperadoIdsDaCooperativa(data: AppData, coopId: string): Set<string> {
     if (c.cooperativaId === coopId) ids.add(c.id);
   }
   return ids;
+}
+
+function notaLancadaCobrePorPix(data: AppData, nota: NotaPedido): boolean {
+  for (const p of data.pagamentosCooperado ?? []) {
+    if (p.status !== "confirmado" && p.status !== "aguardando_confirmacao") continue;
+    if (p.cooperativaId && p.cooperativaId !== nota.cooperativaId) continue;
+    if (p.notaPedidoIds?.includes(nota.id)) return true;
+    const fichaIds = new Set(p.fichaIds ?? []);
+    if (fichaIds.size === 0) continue;
+    if (
+      (data.fichaCorrida ?? []).some(
+        (f) => fichaIds.has(f.id) && f.notaPedidoId === nota.id
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Nota conferida ainda sem PIX — entra na aba Pagar mesmo sem ficha persistida. */
+export function cooperadoTemNotaConferidaSemPix(
+  data: AppData,
+  cooperadoId: string,
+  coopId: string
+): boolean {
+  return listarNotasConferidasSemPixCooperado(data, cooperadoId, coopId).length > 0;
+}
+
+export function listarMesesNotaConferidaSemPix(
+  data: AppData,
+  cooperadoId: string,
+  coopId: string
+): string[] {
+  const meses = new Set<string>();
+  for (const n of listarNotasConferidasSemPixCooperado(data, cooperadoId, coopId)) {
+    if (n.mesReferencia) meses.add(n.mesReferencia);
+  }
+  return [...meses].sort();
+}
+
+function listarNotasConferidasSemPixCooperado(
+  data: AppData,
+  cooperadoId: string,
+  coopId: string
+): NotaPedido[] {
+  if (!cooperadoId || !coopId) return [];
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  const excluidas = idsNotasPedidoExcluidas(data, coopId);
+  const out: NotaPedido[] = [];
+  for (const n of data.notasPedido ?? []) {
+    if (n.cooperativaId !== coopId) continue;
+    if (n.status !== "conferida") continue;
+    if (excluidas.has(n.id)) continue;
+    if (n.valorLiquido <= 0 && (n.itens ?? []).every((i) => i.quantidade <= 0)) continue;
+    const nCanon = resolverCooperadoIdCanonico(data, n.cooperadoId, n.cooperativaId);
+    if (n.cooperadoId !== cooperadoId && n.cooperadoId !== canonico && nCanon !== canonico) {
+      continue;
+    }
+    if (notaLancadaCobrePorPix(data, n)) continue;
+    out.push(n);
+  }
+  return out;
+}
+
+/**
+ * Foto da aba Pagar: lastro do Conferir + ficha reconstruída das notas conferidas.
+ * Só leitura — não persiste.
+ */
+export function appDataParaPagarCooperadosResponsavel(data: AppData, coopId?: string): AppData {
+  garantirCacheDoBuildAtual();
+  const revision = getDataRevision();
+  const key = coopId ?? "";
+  if (pagarProjCache && pagarProjCache.revision === revision && pagarProjCache.coopId === key) {
+    return pagarProjCache.data;
+  }
+  const leitura = appDataParaConferirLeitura(data);
+  const next = reconciliarFichaFromNotasConferidas(leitura);
+  pagarProjCache = { revision, coopId: key, data: next };
+  return next;
 }
 
 function candidatosCooperadoPagamento(data: AppData, coopId: string): Set<string> {
@@ -80,6 +164,15 @@ function candidatosCooperadoPagamento(data: AppData, coopId: string): Set<string
     if (v.cooperativaId !== coopId) continue;
     if (!coopIds.has(v.cooperadoId)) continue;
     if (v.status === "pendente") candidatos.add(v.cooperadoId);
+  }
+  const excluidas = idsNotasPedidoExcluidas(data, coopId);
+  for (const n of data.notasPedido ?? []) {
+    if (n.cooperativaId !== coopId) continue;
+    if (n.status !== "conferida") continue;
+    if (excluidas.has(n.id)) continue;
+    if (!coopIds.has(n.cooperadoId)) continue;
+    if (n.valorLiquido <= 0 && (n.itens ?? []).every((i) => i.quantidade <= 0)) continue;
+    candidatos.add(n.cooperadoId);
   }
   return candidatos;
 }
@@ -290,12 +383,16 @@ function buildPainelCache(data: AppData, coopId: string): PainelCache {
   }
   filaNotas.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  const candidatos = candidatosCooperadoPagamento(data, coopId);
+  const dataPagar = appDataParaPagarCooperadosResponsavel(data, coopId);
+  const candidatos = candidatosCooperadoPagamento(dataPagar, coopId);
   const cooperadosPagar: Cooperado[] = [];
   if (candidatos.size > 0) {
-    for (const c of listCooperadosDaCooperativa(data, coopId)) {
+    for (const c of listCooperadosDaCooperativa(dataPagar, coopId)) {
       if (!candidatos.has(c.id)) continue;
-      if (cooperadoPendentePagamentoResponsavel(data, c.id, undefined, coopId)) {
+      if (
+        cooperadoPendentePagamentoResponsavel(dataPagar, c.id, undefined, coopId) ||
+        cooperadoTemNotaConferidaSemPix(dataPagar, c.id, coopId)
+      ) {
         cooperadosPagar.push(c);
       }
     }
@@ -383,6 +480,7 @@ export function countCooperadosLancamentosEmAbertoResponsavel(data: AppData, coo
 /** Invalida cache (testes). */
 export function resetResponsavelPainelIndexCache(): void {
   painelCache = null;
+  pagarProjCache = null;
   relatorioAbertoCache = null;
   relatorioAbertoLatch = null;
   conferirLeituraLatch = null;

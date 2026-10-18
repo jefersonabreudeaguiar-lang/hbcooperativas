@@ -22,8 +22,14 @@ function assert(cond: boolean, msg: string) {
 }
 
 assert(
-  ficha.includes("cooperadoPendentePagamentoResponsavel(data, cooperadoFilter, undefined, coopId)"),
-  "filtro cooperado: motor pendente (backup 404)"
+  ficha.includes("cooperadoPendentePagamentoResponsavel(leitura, cooperadoFilter, undefined, coopId)") &&
+    ficha.includes("cooperadoTemNotaConferidaSemPix(leitura, cooperadoFilter, coopId)"),
+  "filtro cooperado: motor pendente + nota lançada sem PIX"
+);
+assert(
+  ficha.includes("appDataParaPagarCooperadosResponsavel") &&
+    ficha.includes("reconciliarFichaFromNotasConferidas(d)"),
+  "Pagar reconstrói ficha das notas conferidas (lista + PIX)"
 );
 assert(
   ficha.includes("mesReferencia: isCooperado ? mesReferenciaHbCooperado : mesAtivo"),
