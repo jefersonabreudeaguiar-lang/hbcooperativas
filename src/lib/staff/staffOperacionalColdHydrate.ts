@@ -74,6 +74,7 @@ export function staffPrecisaHydrateOperacionalPull(
   data: AppData | null | undefined,
   coopId?: string
 ): boolean {
+  if (staffOperacionalPullJaAplicado()) return false;
   return staffLocalOperacionalVazio(data, coopId);
 }
 
@@ -83,7 +84,7 @@ export function expandStaffTierPlanIfOperacionalVazio(
   data: AppData | null | undefined,
   coopId?: string
 ): SyncTierPlan84 {
-  if (!staffLocalOperacionalVazio(data, coopId)) return plan;
+  if (!staffPrecisaHydrateOperacionalPull(data, coopId)) return plan;
   return {
     ...plan,
     bidirectionalFull: false,

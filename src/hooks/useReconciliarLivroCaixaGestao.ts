@@ -1,11 +1,40 @@
 "use client";
 
 import { useEffect } from "react";
-import { getData, isAppDataWarm, subscribe, updateData } from "@/services/dataStore";
+import { getData, isAppDataWarm, refreshData, subscribe, updateData } from "@/services/dataStore";
+import {
+  medirRiquezaStaffGestao,
+  staffGestaoRiquezaTotal,
+  staffGestaoSnapshotPoorer,
+} from "@/lib/staff/staffGestaoSnapshotGuard";
+
+/** Sem cadastro/ficha/PIX não grava — o mount do Início não pode persistir AppData vazio. */
+export function devePersistirReconciliacaoLivroCaixaGestao(data: ReturnType<typeof getData>): boolean {
+  return staffGestaoRiquezaTotal(medirRiquezaStaffGestao(data)) > 0;
+}
+
+function temPagamentoParaLivroCaixa(data: ReturnType<typeof getData>): boolean {
+  return (data.pagamentosCooperado ?? []).some(
+    (p) => p.status === "confirmado" || p.status === "aguardando_confirmacao"
+  );
+}
+
+function dadosGestaoOuRelerStorage() {
+  let data = getData();
+  if (devePersistirReconciliacaoLivroCaixaGestao(data)) return data;
+  if (typeof window === "undefined") return data;
+  try {
+    const raw = window.localStorage.getItem("coopeagriplla_data");
+    if (raw && raw.length > 10_000) data = refreshData();
+  } catch {
+    /* storage */
+  }
+  return data;
+}
 
 /**
  * PIX confirmado: ficha vira paga, sai de Em aberto e entra no Livro Caixa.
- * Reavalia quando o AppData muda — um sync tardio não pode deixar pagamento de fora.
+ * Só persiste quando já há pagamento — o toque em Início não rebaixa ficha nem zera o painel.
  */
 export function useReconciliarLivroCaixaGestao(
   coopId: string | undefined,
@@ -25,9 +54,14 @@ export function useReconciliarLivroCaixaGestao(
       ])
         .then(([integridade, caixa]) => {
           if (cancelled || !isAppDataWarm()) return;
-          const data = getData();
+          const data = dadosGestaoOuRelerStorage();
+          if (!devePersistirReconciliacaoLivroCaixaGestao(data)) return;
+          if (!temPagamentoParaLivroCaixa(data)) return;
           const aligned = integridade.posProcessarIntegridadePagamentosCooperativa(data);
           if (aligned !== data) {
+            if (staffGestaoSnapshotPoorer(medirRiquezaStaffGestao(aligned), medirRiquezaStaffGestao(data))) {
+              return;
+            }
             updateData(() => aligned);
             return;
           }
@@ -40,7 +74,12 @@ export function useReconciliarLivroCaixaGestao(
             audit.mensalidadesPagasSemCreditoCaixa.length;
           if (falta === 0) return;
           const next = caixa.reconciliarLivroCaixaContabilCooperativa(data, coopId);
-          if (next !== data) updateData(() => next);
+          if (next !== data) {
+            if (staffGestaoSnapshotPoorer(medirRiquezaStaffGestao(next), medirRiquezaStaffGestao(data))) {
+              return;
+            }
+            updateData(() => next);
+          }
         })
         .catch(() => {
           /* Início permanece visível se o caixa falhar */

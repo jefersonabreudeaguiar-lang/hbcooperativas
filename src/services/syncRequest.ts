@@ -28,7 +28,7 @@ import {
   cooperadoGaValorReceberExibicaoResolvida,
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { getData, getSession, isAppDataWarm } from "@/services/dataStore";
-import { staffLocalOperacionalVazio } from "@/lib/staff/staffOperacionalColdHydrate";
+import { staffPrecisaHydrateOperacionalPull } from "@/lib/staff/staffOperacionalColdHydrate";
 import {
   capStaffConferenciaSyncTierRequest,
   shouldBlockStaffAutoSyncDuringConferencia,
@@ -288,7 +288,7 @@ export function requestAppSyncLight(): void {
     session?.role === "responsavel" ||
     session?.role === "tesoureiro" ||
     session?.role === "admin";
-  if (staffRole && staffLocalOperacionalVazio(isAppDataWarm() ? getData() : null)) {
+  if (staffRole && staffPrecisaHydrateOperacionalPull(isAppDataWarm() ? getData() : null)) {
     requestSyncTier("financeiro_delta", { force: true, immediate: true });
     return;
   }

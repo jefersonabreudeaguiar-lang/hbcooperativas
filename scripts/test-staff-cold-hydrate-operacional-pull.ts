@@ -104,7 +104,7 @@ assert.ok(provider.includes("expandStaffTierPlanIfOperacionalVazio"), "runSync n
 assert.ok(provider.includes("staffResponsavelOpeningSyncRequest("), "abertura passa snapshot");
 
 const light = readFileSync(join(ROOT, "src/services/syncRequest.ts"), "utf8");
-assert.ok(light.includes("staffLocalOperacionalVazio"), "light sobe para financeiro a frio");
+assert.ok(light.includes("staffPrecisaHydrateOperacionalPull"), "light só sobe a frio antes do 1º pull");
 
 const projetar = readFileSync(
   join(ROOT, "src/modules/hb-credit/engine/projetarAppDataFinanceiroParaCreditoBase.ts"),
@@ -125,7 +125,17 @@ assert.ok(
 );
 
 const lifeFrio = staffResponsavelLifecycleSyncRequest(emptyInitialData);
-assert.equal(lifeFrio?.tier, "financeiro_delta");
-assert.equal(lifeFrio?.force, true);
+assert.equal(lifeFrio?.tier, "pulse", "idle/Início não puxa operacional — abertura hidrata");
+assert.notEqual(lifeFrio?.force, true);
+
+markStaffOperacionalPullAplicado();
+assert.equal(staffPrecisaHydrateOperacionalPull(emptyInitialData), false, "após pull, não reexpande");
+const notasAposPull = expandStaffTierPlanIfOperacionalVazio(
+  resolveSyncTierPlan84("notas_delta", "staff"),
+  emptyInitialData,
+  "coop1"
+);
+assert.equal(notasAposPull.pullOperacional, false, "Conferir/idle não reaplica operacional vazio");
+resetStaffOperacionalColdHydrateForTests();
 
 console.log("OK — test-staff-cold-hydrate-operacional-pull");

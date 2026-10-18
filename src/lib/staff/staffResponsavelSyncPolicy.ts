@@ -29,17 +29,15 @@ export function staffResponsavelOpeningSyncRequest(data?: AppData | null): SyncR
 }
 
 /**
- * Voltar à aba / idle / online.
- * A frio: mesmo hydrate (não ficar em notas_delta no Conferir).
- * Quente: notas-pedido = notas_delta; demais = financeiro_delta.
+ * Voltar à aba / idle / online — nunca puxa operacional.
+ * O toque em Início acorda o idle (pointerdown) e, com financeiro_delta,
+ * reaplicava operacional vazio da nuvem e zerava o responsável.
+ * Hydrate frio fica só na abertura (staffResponsavelOpeningSyncRequest).
  */
-export function staffResponsavelLifecycleSyncRequest(data?: AppData | null): SyncRunOptions | undefined {
-  if (staffPrecisaHydrateOperacionalPull(data)) {
-    return { silent: true, force: true, tier: "financeiro_delta" };
-  }
+export function staffResponsavelLifecycleSyncRequest(_data?: AppData | null): SyncRunOptions | undefined {
   const path = typeof window !== "undefined" ? window.location.pathname : "";
   if (path === "/notas-pedido" || path.startsWith("/notas-pedido/")) {
     return { silent: true, tier: "notas_delta" };
   }
-  return { silent: true, tier: "financeiro_delta" };
+  return { silent: true, tier: "pulse" };
 }
