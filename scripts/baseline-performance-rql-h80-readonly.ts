@@ -2,7 +2,7 @@
  * HX 8.0 — baseline read-only (Node). Não escreve disco nem Supabase.
  * npx tsx scripts/baseline-performance-rql-h80-readonly.ts
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { emptyInitialData } from "../src/mock/data.ts";
@@ -61,7 +61,22 @@ function countHookUsage(): { useAppData: number; useAppDataSelector: number } {
   return { useAppData, useAppDataSelector };
 }
 
+function lockManifestHookCounts(hooks: { useAppData: number; useAppDataSelector: number }) {
+  const manifestPath = join(ROOT, "docs/baselines/melhor-performance-manifest.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+    rqlBaselineReadonly?: { reactSubscriptionCounts?: Record<string, number> };
+  };
+  if (!manifest.rqlBaselineReadonly) manifest.rqlBaselineReadonly = {};
+  manifest.rqlBaselineReadonly.reactSubscriptionCounts = {
+    useAppData: hooks.useAppData,
+    useAppDataSelector: hooks.useAppDataSelector,
+  };
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  console.log(`\nManifesto atualizado: ${manifestPath}`);
+}
+
 function main() {
+  const lockManifest = process.argv.includes("--lock-manifest");
   console.log("=== HX 8.0 RQL baseline (read-only) ===\n");
 
   const persist = bench(
@@ -113,6 +128,7 @@ function main() {
     "\nNo browser: performance.getEntriesByType('mark') filtrando 'rql:route:' após trocar abas."
   );
   console.log("\nBaseline 8.0 concluído (sem mutação).");
+  if (lockManifest) lockManifestHookCounts(hooks);
 }
 
 main();

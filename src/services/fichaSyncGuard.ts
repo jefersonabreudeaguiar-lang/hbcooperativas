@@ -15,6 +15,7 @@ import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { getCurrentMesReferencia } from "@/utils/format";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
+import { cooperadoCleonesIgnoraGateFichaDesalinhada } from "@/lib/cooperado/cooperadoCasosIsolados";
 import { readCooperadoLastOperacionalSyncAt } from "@/lib/performance/cooperadoOperacionalSyncAtStorage";
 import {
   fichaPreservarSemNotaLocal,
@@ -305,6 +306,9 @@ export function cooperadoFichaValoresDesalinhados(
   cooperativaId: string,
   opts?: { fichaOperacionalNaNuvem?: boolean }
 ): boolean {
+  if (cooperadoCleonesIgnoraGateFichaDesalinhada(data, cooperadoId, cooperativaId)) {
+    return false;
+  }
   const ignorarDeltaReconciliar = opts?.fichaOperacionalNaNuvem === true;
   const ignorarConferidasSemFicha = opts?.fichaOperacionalNaNuvem === true;
   return (

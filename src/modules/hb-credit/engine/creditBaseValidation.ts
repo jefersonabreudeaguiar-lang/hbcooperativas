@@ -104,8 +104,8 @@ export type CreditBaseClientDivergence = {
 };
 
 /**
- * Fase 1 — limite HB: crédito-base vem exclusivamente do snapshot servidor (operacional + notas).
- * O mapa do cliente, se enviado, serve só para auditoria de divergência.
+ * Limite HB: prioriza crédito-base do snapshot servidor (operacional + notas, paridade BIC).
+ * Se a nuvem ainda retorna 0, usa o mapa BIC do responsável (validado) para liberar/sync.
  */
 export function pickCreditosBaseForLimitSync(opts: {
   authoritative: Record<string, number>;
@@ -123,10 +123,15 @@ export function pickCreditosBaseForLimitSync(opts: {
 
   for (const cooperadoId of opts.cooperadoIds) {
     const authoritativeCents = Math.max(0, Math.round(Number(opts.authoritative[cooperadoId] ?? 0)));
-    creditosBaseCents[cooperadoId] = authoritativeCents;
+    const clientCents =
+      preview[cooperadoId] === undefined
+        ? 0
+        : Math.max(0, Math.round(Number(preview[cooperadoId])));
+    /** Paridade BIC: se a nuvem ainda zera a base, usa a ficha real enviada pelo responsável (validada). */
+    creditosBaseCents[cooperadoId] =
+      authoritativeCents > 0 ? authoritativeCents : clientCents > 0 ? clientCents : 0;
 
     if (preview[cooperadoId] === undefined) continue;
-    const clientCents = Math.max(0, Math.round(Number(preview[cooperadoId])));
     if (clientCents === authoritativeCents) continue;
 
     divergences.push({

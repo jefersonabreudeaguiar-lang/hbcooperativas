@@ -55,13 +55,19 @@ export function cooperadoTemEntregasConferidasParaHb(
  * Zera crédito-base HB quando não há entregas conferidas reais ou a ficha está desalinhada.
  * Fail-closed — vale para todas as cooperativas.
  */
+export type BlindarCreditoBaseHbOpts = {
+  /** Snapshot operacional na nuvem — paridade BIC/ficha sem exigir reconciliação local. */
+  fichaOperacionalNaNuvem?: boolean;
+};
+
 export function blindarCreditoBaseCentsHb(
   data: AppData,
   cooperadoId: string,
   cooperativaId: string | undefined,
   creditoBaseCents: number,
   /** AppData já passado por prepararAppDataParaCreditoBaseHb — evita reconciliar ficha N vezes. */
-  prepared?: AppData
+  prepared?: AppData,
+  blindarOpts?: BlindarCreditoBaseHbOpts
 ): number {
   const cents = Math.max(0, Math.round(Number(creditoBaseCents) || 0));
   if (cents <= 0) return 0;
@@ -72,7 +78,12 @@ export function blindarCreditoBaseCentsHb(
   if (!cooperadoTemEntregasConferidasParaHb(sane, cooperadoId, coopId)) {
     return 0;
   }
-  if (coopId && cooperadoFichaValoresDesalinhados(sane, cooperadoId, coopId)) {
+  if (
+    coopId &&
+    cooperadoFichaValoresDesalinhados(sane, cooperadoId, coopId, {
+      fichaOperacionalNaNuvem: blindarOpts?.fichaOperacionalNaNuvem === true,
+    })
+  ) {
     return 0;
   }
 
@@ -184,12 +195,20 @@ export function projetarLimitesListaCooperados(
 export function blindarMapaCreditoBaseCentsHb(
   data: AppData,
   cooperativaId: string | undefined,
-  creditosBaseCents: Record<string, number>
+  creditosBaseCents: Record<string, number>,
+  blindarOpts?: BlindarCreditoBaseHbOpts
 ): Record<string, number> {
   const sane = prepararAppDataParaCreditoBaseHb(data);
   const out: Record<string, number> = {};
   for (const [cooperadoId, value] of Object.entries(creditosBaseCents)) {
-    out[cooperadoId] = blindarCreditoBaseCentsHb(sane, cooperadoId, cooperativaId, value, sane);
+    out[cooperadoId] = blindarCreditoBaseCentsHb(
+      sane,
+      cooperadoId,
+      cooperativaId,
+      value,
+      sane,
+      blindarOpts
+    );
   }
   return out;
 }

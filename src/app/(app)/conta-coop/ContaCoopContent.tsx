@@ -541,7 +541,14 @@ function ContaCoopContent() {
       startTransition(() => {
         setLimites(merged);
       });
-      gravarHbCreditLimitesPersistidos(cnpj, merged, full.creditosBaseAuthoritativeCents);
+      const basesParaPersistir =
+        full.creditosBaseAuthoritativeCents &&
+        Object.keys(full.creditosBaseAuthoritativeCents).length
+          ? full.creditosBaseAuthoritativeCents
+          : Object.keys(creditosBaseRef.current).length
+            ? creditosBaseRef.current
+            : lerHbCreditLimitesPersistidos(cnpj)?.creditosBaseCents;
+      gravarHbCreditLimitesPersistidos(cnpj, merged, basesParaPersistir);
       limitesListaFetchedAtRef.current = Date.now();
     },
     [cnpj, applyCreditosBaseFromServer]
@@ -647,6 +654,20 @@ function ContaCoopContent() {
 
   const valoresLimiteExibidos = useCallback(
     (limite: ContaCoopLimiteCooperado, creditoBaseCents: number) => {
+      const liberadoGravado = Math.max(0, limite.limiteLiberadoCents ?? 0);
+      const usadoGravado = Math.max(0, limite.valorUsadoCents ?? 0);
+      /** Lista do responsável: espelha o limite já liberado na nuvem/cache (não zera só porque o crédito-base local ainda não carregou). */
+      if (liberadoGravado > 0 || usadoGravado > 0) {
+        const disponivelGravado = Math.max(
+          0,
+          limite.valorDisponivelCents ?? computeDisponivel(liberadoGravado, usadoGravado)
+        );
+        return {
+          liberado: liberadoGravado,
+          usado: usadoGravado,
+          disponivel: disponivelGravado,
+        };
+      }
       const tetoPct = dashboard?.teto.tetoGlobalPercent ?? 100;
       const libPct = Math.min(tetoPct, percentualCapTabelaLimites);
       const eff = resolveLimiteHbCooperadoEfetivo(limite, creditoBaseCents, tetoPct, libPct);
