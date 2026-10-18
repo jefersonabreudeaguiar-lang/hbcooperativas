@@ -2863,6 +2863,13 @@ export function pagamentoCobreMesReferenciaComEscopo(
     const n = data.notasPedido.find((x) => x.id === nid);
     if (n?.mesReferencia === mesReferencia) return true;
   }
+  const coopId = pagamento.cooperativaId;
+  for (const a of data.arquivosMensais ?? []) {
+    if (a.mesReferencia !== mesReferencia) continue;
+    if (coopId && a.cooperativaId && a.cooperativaId !== coopId) continue;
+    if (a.cooperadoId !== pagamento.cooperadoId) continue;
+    if ((a.pagamentoIds ?? []).includes(pagamento.id)) return true;
+  }
   return false;
 }
 

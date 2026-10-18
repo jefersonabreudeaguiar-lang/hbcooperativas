@@ -15,6 +15,7 @@ import { listarMesesFichaEmAbertoCooperado } from "@/lib/hb-credit/hbCreditCredi
 import { alinharFichaComPagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
 import {
   idsNotasPedidoExcluidas,
+  listarFichasEmAbertoPagamento,
   listarPagamentosConfirmadosQueCobremMes,
   notaQuitadaPorPagamentoCooperativaRegistrado,
   reconciliarFichaFromNotasConferidas,
@@ -345,6 +346,31 @@ function linhaEmAbertoSoFichaSemPix(
   };
 }
 
+/** Mês com PIX confirmado sai do Em aberto, salvo entrega com data depois do pagamento. */
+function mesPagoDeveSairDoEmAberto(
+  data: AppData,
+  cooperadoId: string,
+  mes: string,
+  coopId: string
+): boolean {
+  const pixes = listarPagamentosConfirmadosQueCobremMes(data, cooperadoId, mes, coopId);
+  if (!pixes.length) return false;
+  const pagoTs = Math.max(
+    ...pixes.map((p) => Date.parse(p.pagoEm ?? p.createdAt ?? "")).filter((n) => Number.isFinite(n)),
+    0
+  );
+  const leftover = listarFichasEmAbertoPagamento(data, cooperadoId, mes, coopId);
+  if (!leftover.length) return true;
+  return leftover.every((f) => {
+    const nota = data.notasPedido.find((n) => n.id === f.notaPedidoId);
+    if (!nota?.dataEntrega) return true;
+    const raw =
+      nota.dataEntrega.length === 10 ? `${nota.dataEntrega}T00:00:00.000Z` : nota.dataEntrega;
+    const ts = Date.parse(raw);
+    return Number.isNaN(ts) || ts <= pagoTs;
+  });
+}
+
 /** Lastro sem valor já coberto por PIX — mês pago some; só fica o que ainda não foi pago. */
 function linhaEmAbertoSemValoresPagos(
   base: LinhaPagarCooperadoEmAberto,
@@ -352,30 +378,24 @@ function linhaEmAbertoSemValoresPagos(
   coopId: string
 ): LinhaPagarCooperadoEmAberto | null {
   const vivo = linhaEmAbertoSoFichaSemPix(base, data, coopId);
-  if (vivo) return vivo;
-
-  const meses = (base.meses ?? []).filter(Boolean);
-  const mesesSemPix = meses.filter(
-    (mes) => listarPagamentosConfirmadosQueCobremMes(data, base.cooperadoId, mes, coopId).length === 0
-  );
-  if (meses.length > 0 && mesesSemPix.length === 0) return null;
-
-  if (mesesSemPix.length > 0 && mesesSemPix.length < meses.length) {
-    const porMes = (base.porMes ?? []).filter((m) => mesesSemPix.includes(m.mes));
-    const total = round2(porMes.reduce((s, m) => s + m.total, 0));
-    if (porMes.length === 0 || total <= 0.005) return null;
-    return {
-      ...base,
-      meses: mesesSemPix,
-      mesesLabel: formatMesesReferenciaRotulo(mesesSemPix),
-      entregas: porMes.reduce((s, m) => s + m.entregas, 0),
-      total,
-      porMes,
-    };
-  }
-
-  if (cooperadoLinhaCobrePorPixConfirmado(data, base.cooperadoId, coopId, meses)) return null;
-  return meses.length > 0 && mesesSemPix.length === 0 ? null : base;
+  const fonte = vivo ?? base;
+  const porMes = (fonte.porMes ?? []).filter((m) => {
+    if (!m.mes || m.total <= 0.005) return false;
+    return !mesPagoDeveSairDoEmAberto(data, fonte.cooperadoId, m.mes, coopId);
+  });
+  if (porMes.length === 0) return null;
+  if (vivo && porMes.length === (fonte.porMes?.length ?? 0)) return vivo;
+  const meses = porMes.map((m) => m.mes);
+  const total = round2(porMes.reduce((s, m) => s + m.total, 0));
+  if (total <= 0.005) return null;
+  return {
+    ...fonte,
+    meses,
+    mesesLabel: formatMesesReferenciaRotulo(meses),
+    entregas: porMes.reduce((s, m) => s + m.entregas, 0),
+    total,
+    porMes,
+  };
 }
 
 /** Lastro só contra lista vazia. Valor já pago não volta; total vem só da ficha sem PIX. */
