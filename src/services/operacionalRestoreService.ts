@@ -2,10 +2,6 @@ import type { AppData } from "@/types";
 import type { OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
 import { findCooperativaByCnpj, normalizeCnpj } from "@/utils/cooperativa";
 import { secureApiFetch } from "@/lib/security/clientSession";
-import {
-  clearOperacionalFinanceiroForCooperativa,
-  resetCloudSyncMarkersForRestore,
-} from "@/services/operationalReset";
 import { syncNotasPedidoFromCloud } from "@/services/notaPedidoCloudService";
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { beginCloudSync, endCloudSync } from "@/services/cloudSyncProgress";
@@ -77,6 +73,26 @@ export function medirOperacionalLocalVsNuvem(
   };
 }
 
+function contarFatiaOperacionalLocal(data: AppData, coopId: string) {
+  const s = medirOperacionalLocalVsNuvem(data, coopId, null);
+  return {
+    pagamentos: s.localPagamentos,
+    aguardando: s.localAguardandoAssinatura,
+    fichas: s.localFichas,
+  };
+}
+
+/** Restore da nuvem não pode apagar pagamento/ficha/assinatura que já estava no aparelho. */
+export function operacionalRestoreRetrocedeu(
+  before: AppData,
+  after: AppData,
+  coopId: string
+): boolean {
+  const b = contarFatiaOperacionalLocal(before, coopId);
+  const a = contarFatiaOperacionalLocal(after, coopId);
+  return a.pagamentos < b.pagamentos || a.fichas < b.fichas || a.aguardando < b.aguardando;
+}
+
 export type ForceRestoreOperacionalResult = {
   ok: boolean;
   message: string;
@@ -108,7 +124,7 @@ export async function ensureOperacionalAlinhadoComNuvem(
   };
 }
 
-/** Limpa financeiro local da cooperativa e baixa operacional + notas da nuvem (backup publicado). */
+/** Puxa o backup da nuvem sem zerar o aparelho antes — se a aplicação apagar lastro, desfaz. */
 export async function forceRestoreOperacionalFromCloud(
   cnpj: string,
   coopId?: string
@@ -122,50 +138,56 @@ export async function forceRestoreOperacionalFromCloud(
     };
   }
 
-  resetCloudSyncMarkersForRestore(digits);
+  const before = getData();
+  const cid = coopId ?? resolveCoopId(before, digits);
+  if (!cid) {
+    return {
+      ok: false,
+      message: "Cooperativa não encontrada. Saia e entre de novo.",
+      stats: medirOperacionalLocalVsNuvem(before, "", null),
+    };
+  }
+
+  const cloudHint = await fetchOperacionalFromApi(digits);
+  if (!cloudOperacionalRestoreAtivo(cloudHint)) {
+    return {
+      ok: false,
+      message: "A nuvem não está em modo restore. Avise o suporte antes da apresentação.",
+      stats: medirOperacionalLocalVsNuvem(before, cid, cloudHint),
+    };
+  }
+
   forceNextFullNotasSync(digits);
 
   beginCloudSync();
   try {
-    let data = getData();
-    const cid = coopId ?? resolveCoopId(data, digits);
-    if (!cid) {
-      return {
-        ok: false,
-        message: "Cooperativa não encontrada. Saia e entre de novo.",
-        stats: medirOperacionalLocalVsNuvem(data, "", null),
-      };
-    }
-
-    // Mantém notasPedido (fila Conferir) — só alinha ficha/pagamentos com o backup operacional.
-    data = clearOperacionalFinanceiroForCooperativa(data, cid);
-    saveDataSafe(data);
-
     await syncAllCooperativaFromCloud(digits, cid);
     await syncNotasPedidoFromCloud(digits, { retryFull: true });
 
+    const after = getData();
     const operacional = await fetchOperacionalFromApi(digits);
-    const stats = medirOperacionalLocalVsNuvem(getData(), cid, operacional);
 
-    if (!cloudOperacionalRestoreAtivo(operacional)) {
+    if (operacionalRestoreRetrocedeu(before, after, cid)) {
+      saveDataSafe(before);
       return {
         ok: false,
-        message: "A nuvem não está em modo restore. Avise o suporte antes da apresentação.",
-        stats,
+        message: "A nuvem não foi aplicada porque apagaria o que já está neste aparelho.",
+        stats: medirOperacionalLocalVsNuvem(before, cid, operacional),
       };
     }
 
+    const stats = medirOperacionalLocalVsNuvem(getData(), cid, operacional);
     if (stats.desalinhado) {
       return {
         ok: false,
-        message: `Ainda diferente da nuvem (pagamentos ${stats.localPagamentos}/${stats.cloudPagamentos}, assinaturas ${stats.localAguardandoAssinatura}/${stats.cloudAguardandoAssinatura}). Limpe dados do site e toque de novo.`,
+        message: `Ainda diferente da nuvem (pagamentos ${stats.localPagamentos}/${stats.cloudPagamentos}, assinaturas ${stats.localAguardandoAssinatura}/${stats.cloudAguardandoAssinatura}).`,
         stats,
       };
     }
 
     return {
       ok: true,
-      message: `Restaurado da nuvem: ${stats.localAguardandoAssinatura} pagamento(s) aguardando assinatura, ${stats.localFichas} lançamentos de ficha.`,
+      message: `Restaurado da nuvem: ${stats.localPagamentos} pagamento(s), ${stats.localFichas} lançamentos de ficha.`,
       stats,
     };
   } finally {

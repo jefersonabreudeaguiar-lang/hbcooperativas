@@ -104,6 +104,7 @@ import {
   shouldSkipCooperadoSecondaryMountSync,
 } from "@/lib/performance/cooperadoColdStart";
 import { warmupCooperadoFinanceiroTabChunk } from "@/lib/performance/cooperadoFinanceiroTabWarmup";
+import { RestoreOperacionalPanel } from "@/components/sync/RestoreOperacionalPanel";
 import { CooperadoInicioValorReceberCard } from "@/components/cooperado/CooperadoInicioValorReceberCard";
 import {
   COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
@@ -708,6 +709,10 @@ function AdminDashboard() {
           <p className="text-xs text-gray-500 mt-1">Atualizando totais…</p>
         )}
       </div>
+
+      {cnpj.length === 14 && coopId && (
+        <RestoreOperacionalPanel cnpj={cnpj} coopId={coopId} />
+      )}
 
       {instalacao && instalacao.semApp > 0 && (
         <Link
