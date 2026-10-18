@@ -2842,17 +2842,19 @@ export async function syncStaffTieredPullFromCloud(
     return;
   }
 
-  await ensureCloudOperationalResetApplied(digits, coopId);
+  const resetAplicado = await ensureCloudOperationalResetApplied(digits, coopId);
+  const pullOperacional = plan.pullOperacional || resetAplicado;
 
   await runWithBatchedSaveAsync(async () => {
     if (plan.pullProfile) await syncCooperativaProfileFromCloud(digits);
     const cid = coopId ?? resolveCoopId(getData(), digits);
     if (plan.pullCooperados && cid) await syncCooperadosFromCloud(digits, cid);
     // Operacional antes das notas — evita fabricar ficha pendente sem PIX/livro.
-    if (plan.pullOperacional) await syncOperacionalFromCloud(digits);
+    // Se o reset da nuvem limpou o aparelho, o pull operacional é obrigatório (F5).
+    if (pullOperacional) await syncOperacionalFromCloud(digits);
     if (plan.pullContratos) await syncContratosFromCloud(digits);
     if (plan.pullNotas) await syncNotasPedidoFromCloudStaffCoalesced(digits);
-    if (plan.pullOperacional || plan.pullNotas) {
+    if (pullOperacional || plan.pullNotas) {
       const operacionalCloud = (await fetchSyncBundle(digits))?.operacional ?? null;
       saveDataSafe(finalizeOperacionalPullLocalState(getData(), operacionalCloud, digits));
     }

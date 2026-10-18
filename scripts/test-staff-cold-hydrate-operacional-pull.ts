@@ -37,8 +37,8 @@ const soNotas = {
 assert.equal(staffLocalOperacionalVazio(soNotas, "coop1"), true, "fichas pendente sem PIX = frio");
 assert.equal(
   staffPrecisaHydrateOperacionalPull(soNotas, "coop1"),
-  false,
-  "com ficha/nota local o F5 não puxa operacional vazio"
+  true,
+  "F5 com ficha/nota e sem PIX puxa o operacional da nuvem"
 );
 
 const comPix = {
@@ -73,7 +73,7 @@ const fullPlan = resolveSyncTierPlan84("operacional_full", "staff");
 assert.equal(fullPlan.bidirectionalFull, true);
 const fullFrio = expandStaffTierPlanIfOperacionalVazio(fullPlan, soNotas, "coop1");
 assert.equal(fullFrio.bidirectionalFull, false, "full a frio não empurra snapshot pobre");
-assert.equal(fullFrio.pullOperacional, false, "ficha local: não reaplica operacional no F5");
+assert.equal(fullFrio.pullOperacional, true, "ficha sem PIX: F5 puxa o backup da nuvem");
 
 const vazioTotal = expandStaffTierPlanIfOperacionalVazio(fullPlan, emptyInitialData, "coop1");
 assert.equal(vazioTotal.pullOperacional, true, "aparelho vazio ainda hidrata uma vez");
@@ -104,8 +104,13 @@ assert.ok(syncSvc.includes("staffLocalOperacionalVazio"), "bidirecional não dá
 assert.ok(syncSvc.includes("markStaffOperacionalPullAplicado"), "marca pull aplicado");
 assert.match(
   syncSvc,
-  /if \(plan\.pullOperacional\) await syncOperacionalFromCloud/,
+  /if \(pullOperacional\) await syncOperacionalFromCloud/,
   "operacional entra no pull tiered"
+);
+assert.match(
+  syncSvc,
+  /resetAplicado = await ensureCloudOperationalResetApplied/,
+  "reset da nuvem no F5 não fica sem merge"
 );
 
 const provider = readFileSync(join(ROOT, "src/components/sync/CooperativaSyncProvider.tsx"), "utf8");
@@ -139,13 +144,23 @@ assert.equal(lifeFrio?.tier, "pulse", "idle/Início não puxa operacional — ab
 assert.notEqual(lifeFrio?.force, true);
 
 markStaffOperacionalPullAplicado();
-assert.equal(staffPrecisaHydrateOperacionalPull(emptyInitialData), false, "após pull, não reexpande");
+assert.equal(
+  staffPrecisaHydrateOperacionalPull(emptyInitialData),
+  true,
+  "F5 com PIX/livro vazios puxa de novo — sessionStorage não bloqueia"
+);
 const notasAposPull = expandStaffTierPlanIfOperacionalVazio(
   resolveSyncTierPlan84("notas_delta", "staff"),
   emptyInitialData,
   "coop1"
 );
-assert.equal(notasAposPull.pullOperacional, false, "Conferir/idle não reaplica operacional vazio");
+assert.equal(notasAposPull.pullOperacional, true, "abertura notas_delta a frio hidrata operacional");
+const pulseAposPull = expandStaffTierPlanIfOperacionalVazio(
+  resolveSyncTierPlan84("pulse", "staff"),
+  emptyInitialData,
+  "coop1"
+);
+assert.equal(pulseAposPull.pullOperacional, false, "idle/Início pulse não puxa operacional");
 resetStaffOperacionalColdHydrateForTests();
 
 console.log("OK — test-staff-cold-hydrate-operacional-pull");

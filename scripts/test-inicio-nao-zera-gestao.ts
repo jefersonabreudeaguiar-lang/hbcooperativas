@@ -38,12 +38,12 @@ assert.equal(life?.tier, "pulse");
 assert.notEqual(life?.force, true);
 
 markStaffOperacionalPullAplicado();
-const notas = expandStaffTierPlanIfOperacionalVazio(
-  resolveSyncTierPlan84("notas_delta", "staff"),
+const pulse = expandStaffTierPlanIfOperacionalVazio(
+  resolveSyncTierPlan84("pulse", "staff"),
   emptyInitialData,
   "coop1"
 );
-assert.equal(notas.pullOperacional, false, "depois do 1º pull, aba não reaplica operacional vazio");
+assert.equal(pulse.pullOperacional, false, "toque no Início (pulse) não puxa operacional");
 resetStaffOperacionalColdHydrateForTests();
 
 const policy = readFileSync(join(ROOT, "src/lib/staff/staffResponsavelSyncPolicy.ts"), "utf8");

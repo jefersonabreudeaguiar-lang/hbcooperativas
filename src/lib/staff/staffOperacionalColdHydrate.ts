@@ -70,7 +70,7 @@ export function staffLocalOperacionalVazio(
   return pagamentos.length === 0 && livro.length === 0;
 }
 
-/** Já há ficha/notas no aparelho — Ctrl+F5 não pode reaplicar operacional vazio da nuvem. */
+/** Já há ficha/notas no aparelho (abertura ainda puxa PIX se o financeiro estiver vazio). */
 export function staffGestaoTemFichaOuNotaLocal(
   data: AppData | null | undefined,
   coopId?: string
@@ -85,10 +85,7 @@ export function staffPrecisaHydrateOperacionalPull(
   data: AppData | null | undefined,
   coopId?: string
 ): boolean {
-  if (staffOperacionalPullJaAplicado()) return false;
-  if (!staffLocalOperacionalVazio(data, coopId)) return false;
-  if (staffGestaoTemFichaOuNotaLocal(data, coopId)) return false;
-  return true;
+  return staffLocalOperacionalVazio(data, coopId);
 }
 
 /** Expande o plano HX 8.4: puxa tudo e desliga push bidirecional. */
@@ -98,8 +95,9 @@ export function expandStaffTierPlanIfOperacionalVazio(
   coopId?: string
 ): SyncTierPlan84 {
   if (!staffLocalOperacionalVazio(data, coopId)) return plan;
-  if (staffOperacionalPullJaAplicado() || staffGestaoTemFichaOuNotaLocal(data, coopId)) {
-    return { ...plan, bidirectionalFull: false, pullOperacional: false };
+  // idle/Início (pulse) não puxa operacional — evita zerar no toque da aba.
+  if (plan.tier === "pulse") {
+    return { ...plan, bidirectionalFull: false };
   }
   return {
     ...plan,

@@ -16,10 +16,9 @@ export function isStaffGestaoRole(role: UserRole | string | undefined | null): b
 }
 
 /**
- * Abertura pós-login.
- * Cache limpo / PIX+livro vazios: financeiro_delta forçado (o pull staff
- * expande para operacional+notas+contratos, sem push).
- * Aparelho já hidratado: notas_delta (baseline 283).
+ * Abertura / F5.
+ * PIX+livro vazios: financeiro_delta (puxa o backup da nuvem, sem push).
+ * Aparelho já hidratado: notas_delta.
  */
 export function staffResponsavelOpeningSyncRequest(data?: AppData | null): SyncRunOptions {
   if (staffPrecisaHydrateOperacionalPull(data)) {

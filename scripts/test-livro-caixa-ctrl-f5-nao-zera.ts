@@ -24,15 +24,15 @@ const comFichaSemPix = {
   fichaCorrida: [{ id: "f1", cooperativaId: "coop1", status: "pendente" } as never],
 };
 
-assert.equal(staffPrecisaHydrateOperacionalPull(comFichaSemPix, "coop1"), false);
-assert.equal(staffResponsavelOpeningSyncRequest(comFichaSemPix).tier, "notas_delta");
+assert.equal(staffPrecisaHydrateOperacionalPull(comFichaSemPix, "coop1"), true);
+assert.equal(staffResponsavelOpeningSyncRequest(comFichaSemPix).tier, "financeiro_delta");
 
 const fin = expandStaffTierPlanIfOperacionalVazio(
   resolveSyncTierPlan84("financeiro_delta", "staff"),
   comFichaSemPix,
   "coop1"
 );
-assert.equal(fin.pullOperacional, false, "F5 com ficha local não puxa operacional");
+assert.equal(fin.pullOperacional, true, "F5 com ficha e sem PIX puxa o backup da nuvem");
 assert.equal(fin.bidirectionalFull, false);
 
 const caixa = readFileSync(join(ROOT, "src/app/(app)/livro-caixa/LivroCaixaContent.tsx"), "utf8");
