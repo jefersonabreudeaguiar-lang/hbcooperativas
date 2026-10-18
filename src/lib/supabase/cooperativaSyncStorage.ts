@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PagamentoDowngradeBloqueado } from "@/services/pagamentoRegistroMerge";
 import { aplicarPreservacaoPagamentosConfirmadosNoOperacionalComAudit } from "@/services/pagamentoIntegridadeService";
 import { aplicarPreservacaoFichasReferenciadasPorPagamentosNoOperacional } from "@/services/fichaCorridaPagamentoGuard";
+import { aplicarPreservacaoLivroCaixaPagamentosConfirmadosNoOperacional } from "@/services/livroCaixaPagamentoGuard";
 import type {
   Instituicao,
   ProdutoInstituicao,
@@ -189,6 +190,10 @@ export async function uploadOperacionalSync(
       toUpload
     );
     toUpload = fichaPreserved.payload;
+    toUpload = aplicarPreservacaoLivroCaixaPagamentosConfirmadosNoOperacional(
+      existing,
+      toUpload
+    ).payload;
   }
 
   const uploaded = await uploadJson(supabase, cnpj, "operacional.json", toUpload);

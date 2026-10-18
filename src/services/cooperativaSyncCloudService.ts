@@ -24,6 +24,7 @@ import { clearNotasSyncMeta, forceNextFullNotasSync } from "@/services/syncMetaS
 import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, normalizarMensalidadeCooperadoLocal, mesclarMensalidadesPayloadNuvem, prepararMensalidadesCloud, prepararMensalidadeCloud, reconciliarMensalidadesComCooperadosCloud, mensalidadeCloudEntraNoDispositivo, enriquecerMensalidadeCooperadoSnapshot } from "@/services/mensalidadeService";
 import { aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { mergeLivroCaixaControleAnualFromCloud } from "@/services/livroCaixaService";
+import { preservarLivroCaixaDePagamentosConfirmados } from "@/services/livroCaixaPagamentoGuard";
 import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
 import { isConferenciaOperacionalPushScopeActive } from "@/services/conferenciaOperacionalPushScope";
 import type { SyncTier } from "@/lib/performance/syncTier";
@@ -438,11 +439,16 @@ function mergeLivroCaixaFromCloud(
   localCoop: LivroCaixaLancamento[],
   cloudItems: LivroCaixaLancamento[],
   cloudSyncTime: string | undefined,
-  excluidosIds: Set<string>
+  excluidosIds: Set<string>,
+  pagamentosCooperado: PagamentoCooperadoRegistro[] = []
 ): LivroCaixaLancamento[] {
   const cloudFiltered = cloudItems.filter((l) => !excluidosIds.has(l.id));
   const localFiltered = localCoop.filter((l) => !excluidosIds.has(l.id));
-  return mergeOperacionalArrayFromCloud(localFiltered, cloudFiltered, cloudSyncTime);
+  const merged = mergeOperacionalArrayFromCloud(localFiltered, cloudFiltered, cloudSyncTime);
+  return preservarLivroCaixaDePagamentosConfirmados(
+    { livroCaixa: localFiltered, pagamentosCooperado },
+    { livroCaixa: merged, pagamentosCooperado }
+  ).payload.livroCaixa ?? merged;
 }
 
 /** Comunicado desativado localmente (ex.: após assinar recibo) permanece oculto. */
@@ -1734,16 +1740,26 @@ export function mergeOperacionalIntoData(
     ],
     livroCaixa: [
       ...filterCoop(data.livroCaixa ?? [], (l) => l.cooperativaId === coopId),
-      ...(replaceLivro
-        ? cloudLivro.filter((l) => !livroCaixaExcluidosSet.has(l.id))
-        : !dominioFornecido("livroCaixa")
-          ? (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId)
-          : mergeLivroCaixaFromCloud(
-              (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
-              cloudLivro,
-              cloudSyncTime,
-              livroCaixaExcluidosSet
-            )),
+      ...preservarLivroCaixaDePagamentosConfirmados(
+        {
+          livroCaixa: (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
+          pagamentosCooperado: mergedPagamentosCoop,
+        },
+        {
+          livroCaixa: replaceLivro
+            ? cloudLivro.filter((l) => !livroCaixaExcluidosSet.has(l.id))
+            : !dominioFornecido("livroCaixa")
+              ? (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId)
+              : mergeLivroCaixaFromCloud(
+                  (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
+                  cloudLivro,
+                  cloudSyncTime,
+                  livroCaixaExcluidosSet,
+                  mergedPagamentosCoop
+                ),
+          pagamentosCooperado: mergedPagamentosCoop,
+        }
+      ).payload.livroCaixa ?? [],
     ],
     livroCaixaControleAnual: [
       ...(data.livroCaixaControleAnual ?? []).filter((c) => c.cooperativaId !== coopId),

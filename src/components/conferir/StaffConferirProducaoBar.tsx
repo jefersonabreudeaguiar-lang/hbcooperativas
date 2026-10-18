@@ -5,18 +5,21 @@ import { RefreshCw } from "lucide-react";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import {
   fetchOfficialClientRelease,
-  requestManualCooperadoReleaseUpgrade,
+  requestManualStaffReleaseUpgrade,
 } from "@/lib/pwa/fetchOfficialClientRelease";
 import { resetResponsavelPainelIndexCache } from "@/services/responsavelPainelIndex";
 import { requestAppSyncImmediate } from "@/services/syncRequest";
 import { cn } from "@/utils/format";
 
+type CloudRelease = { build: number; sha: string; dpl: string };
+
 /**
- * Prova na tela do Conferir: este aparelho vs produção real + recarregar.
- * Sem isso o responsável fica numa aba Chrome antiga e acha que o deploy não entrou.
+ * Prova na tela do Conferir (contrato v461): este aparelho vs produção real.
+ * Chrome do responsável NÃO dá hard-reload sozinho — sem o clique a aba antiga
+ * fica e parece que o deploy não entrou.
  */
 export function StaffConferirProducaoBar() {
-  const [cloudBuild, setCloudBuild] = useState<number | null>(null);
+  const [cloud, setCloud] = useState<CloudRelease | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -24,7 +27,11 @@ export function StaffConferirProducaoBar() {
     const pull = async () => {
       const official = await fetchOfficialClientRelease({ bypassCache: true });
       if (cancelled || !official) return;
-      setCloudBuild(official.build);
+      setCloud({
+        build: official.build,
+        sha: (official.gitCommitSha ?? "").slice(0, 7),
+        dpl: (official.deploymentId ?? "").slice(0, 18),
+      });
     };
     void pull();
     const onFocus = () => void pull();
@@ -37,8 +44,8 @@ export function StaffConferirProducaoBar() {
     };
   }, []);
 
-  const behind = cloudBuild != null && cloudBuild > APP_BUILD_VERSION;
-  const aligned = cloudBuild != null && cloudBuild === APP_BUILD_VERSION;
+  const behind = cloud != null && cloud.build > APP_BUILD_VERSION;
+  const aligned = cloud != null && cloud.build === APP_BUILD_VERSION;
 
   const atualizarAgora = async () => {
     if (busy) return;
@@ -46,11 +53,15 @@ export function StaffConferirProducaoBar() {
     resetResponsavelPainelIndexCache();
     requestAppSyncImmediate();
     try {
-      await requestManualCooperadoReleaseUpgrade();
+      await requestManualStaffReleaseUpgrade();
     } finally {
       window.setTimeout(() => setBusy(false), 8_000);
     }
   };
+
+  const cloudTag = cloud
+    ? `v${cloud.build}${cloud.sha ? ` · ${cloud.sha}` : ""}${cloud.dpl ? ` · ${cloud.dpl}` : ""}`
+    : "";
 
   return (
     <div
@@ -68,9 +79,9 @@ export function StaffConferirProducaoBar() {
     >
       <p className="min-w-0 flex-1 font-medium">
         {behind
-          ? `Esta tela está em v${APP_BUILD_VERSION}. Produção real é v${cloudBuild}.`
+          ? `Chrome do responsável está em v${APP_BUILD_VERSION}. Produção real é ${cloudTag}. Esta aba não atualiza sozinha — clique para entrar.`
           : aligned
-            ? `Ao vivo produção v${APP_BUILD_VERSION} — o que você vê é o build publicado.`
+            ? `Ao vivo produção ${cloudTag} — o que você vê é o build publicado.`
             : `App v${APP_BUILD_VERSION} · conferindo produção…`}
       </p>
       <button

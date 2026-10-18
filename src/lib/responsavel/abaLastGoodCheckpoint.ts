@@ -156,6 +156,7 @@ export function applyPagarSlice(data: AppData, coopId: string, slice: PagarLastG
   ).map((f) => {
     const saved = slice.fichaCorrida.find((s) => s.id === f.id);
     if (saved?.status === "pago" && f.status !== "pago") return saved;
+    if (f.status === "pago" && saved?.status !== "pago") return f;
     return f;
   });
   return {
@@ -222,6 +223,26 @@ export function reaplicarAbaLastGoodSeRegrediu(
   return applyPagarSlice(data, coopId, lastGood);
 }
 
+function fundirPagarLastGood(prev: PagarLastGoodSlice, next: PagarLastGoodSlice): PagarLastGoodSlice {
+  const pagamentos = mergeById(next.pagamentosCooperado, prev.pagamentosCooperado).map((p) => {
+    const saved = prev.pagamentosCooperado.find((s) => s.id === p.id);
+    if (saved?.status === "confirmado" && p.status !== "confirmado") return saved;
+    return p;
+  });
+  const fichas = mergeById(next.fichaCorrida, prev.fichaCorrida).map((f) => {
+    const saved = prev.fichaCorrida.find((s) => s.id === f.id);
+    if (saved?.status === "pago" && f.status !== "pago") return saved;
+    if (f.status === "pago") return f;
+    return f;
+  });
+  return {
+    pagamentosCooperado: pagamentos,
+    fichaCorrida: fichas,
+    livroCaixa: mergeById(next.livroCaixa, prev.livroCaixa),
+    arquivosMensais: mergeById(next.arquivosMensais, prev.arquivosMensais),
+  };
+}
+
 export function saveAbaLastGoodFromData(data: AppData, coopId: string, aba: AbaLastGoodNome): boolean {
   if (!coopId) return false;
   if (aba === "contratos") {
@@ -231,7 +252,9 @@ export function saveAbaLastGoodFromData(data: AppData, coopId: string, aba: AbaL
   }
   const slice = extractPagarSlice(data, coopId);
   if (!pagarSliceValido(slice)) return false;
-  return writeSlice(coopId, aba, slice);
+  const prev = readPagarSlice(coopId);
+  if (prev && pagarRegrediu(slice, prev)) return false;
+  return writeSlice(coopId, aba, prev ? fundirPagarLastGood(prev, slice) : slice);
 }
 
 export function hasAbaLastGood(coopId: string, aba: AbaLastGoodNome): boolean {

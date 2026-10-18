@@ -201,12 +201,7 @@ export async function runClientReleaseAlignment(
   return applyOfficialReleaseIfNeeded();
 }
 
-/** Botão «Atualizar app» — ignora cooldown/rajada e força hard align com a nuvem. */
-export async function requestManualCooperadoReleaseUpgrade(): Promise<boolean> {
-  if (typeof window === "undefined") return false;
-  const canonical = await fetchOfficialClientRelease({ bypassCache: true });
-  if (!canonical) return false;
-
+function clearManualReleaseGuards(): void {
   clearUrgentReleaseAlignDedup();
   clearReloadBurstCounter();
   try {
@@ -215,7 +210,27 @@ export async function requestManualCooperadoReleaseUpgrade(): Promise<boolean> {
   } catch {
     /* ignore */
   }
+}
 
+function replaceWithPublishedRelease(canonical: { build: number; deploymentId: string } | null): void {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("_hbRelease");
+  url.searchParams.delete("_hbTargetDpl");
+  url.searchParams.set("_hbRelease", String(Date.now()));
+  if (canonical?.build) url.searchParams.set("hb-pwa", String(canonical.build));
+  if (canonical?.deploymentId) {
+    url.searchParams.set("_hbTargetDpl", canonical.deploymentId.slice(4, 20));
+  }
+  window.location.replace(url.toString());
+}
+
+/** Botão «Atualizar app» — ignora cooldown/rajada e força hard align com a nuvem. */
+export async function requestManualCooperadoReleaseUpgrade(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  const canonical = await fetchOfficialClientRelease({ bypassCache: true });
+  if (!canonical) return false;
+
+  clearManualReleaseGuards();
   persistReleaseShieldExpected(canonical);
   return alignClientRuntimeToRelease("manual_cooperado", canonical.deploymentId, {
     hard: true,
@@ -223,4 +238,28 @@ export async function requestManualCooperadoReleaseUpgrade(): Promise<boolean> {
     urgentUpgrade: true,
     targetFingerprint: releaseFingerprint(canonical),
   });
+}
+
+/**
+ * Faixa do Conferir (v461): Chrome do responsável não alinha sozinho.
+ * O clique sempre navega — se o align for bloqueado por dedup/rajada, faz replace com hb-pwa.
+ */
+export async function requestManualStaffReleaseUpgrade(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  const canonical = await fetchOfficialClientRelease({ bypassCache: true });
+  clearManualReleaseGuards();
+  if (!canonical) {
+    replaceWithPublishedRelease(null);
+    return true;
+  }
+  persistReleaseShieldExpected(canonical);
+  const aligned = await alignClientRuntimeToRelease("manual_staff", canonical.deploymentId, {
+    hard: true,
+    targetBuild: canonical.build,
+    urgentUpgrade: true,
+    targetFingerprint: `${releaseFingerprint(canonical)}:staff:${Date.now()}`,
+  });
+  if (aligned) return true;
+  replaceWithPublishedRelease(canonical);
+  return true;
 }

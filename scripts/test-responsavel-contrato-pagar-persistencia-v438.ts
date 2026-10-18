@@ -246,6 +246,22 @@ const prodCloudVelho: ProdutoInstituicao = {
   ];
   const abertosNovo = listarMesesEmAbertoPagamentoResponsavel(comNovo, "coop-member-1", COOP);
   assert.equal(abertosNovo.includes(mesNovo), true, "lançamento recente sem PIX permanece em aberto");
+
+  const lastGoodPago = extractPagarSlice(data, COOP);
+  const fichaRebaixada: AppData = {
+    ...data,
+    fichaCorrida: data.fichaCorrida.map((f) => ({
+      ...f,
+      status: "pendente" as const,
+      updatedAt: "2026-10-18T08:00:00.000Z",
+    })),
+  };
+  const naoRebaixa = applyPagarSlice(fichaRebaixada, COOP, lastGoodPago);
+  assert.equal(
+    naoRebaixa.fichaCorrida.find((f) => f.id === "f-pago")?.status,
+    "pago",
+    "checkpoint pendente mais novo não devolve o pago para em aberto"
+  );
 }
 
 console.log("test-responsavel-contrato-pagar-persistencia-v438: OK");

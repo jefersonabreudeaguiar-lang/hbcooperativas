@@ -10,6 +10,7 @@ export type StaffGestaoRiqueza = {
   fichas: number;
   pix: number;
   livro: number;
+  pixLivro: number;
 };
 
 let lastGood: AppData | null = null;
@@ -22,7 +23,13 @@ export function medirRiquezaStaffGestao(
   data: AppData | null | undefined,
   coopId?: string
 ): StaffGestaoRiqueza {
-  if (!data) return { cooperados: 0, notas: 0, fichas: 0, pix: 0, livro: 0 };
+  if (!data) return { cooperados: 0, notas: 0, fichas: 0, pix: 0, livro: 0, pixLivro: 0 };
+  const pixIds = new Set(
+    (data.pagamentosCooperado ?? [])
+      .filter((p) => pertenceCoop(p, coopId) && p.status === "confirmado")
+      .map((p) => p.id)
+  );
+  const livroCoop = (data.livroCaixa ?? []).filter((l) => pertenceCoop(l, coopId));
   return {
     cooperados: (data.cooperados ?? []).filter((c) => pertenceCoop(c, coopId)).length,
     notas: (data.notasPedido ?? []).filter((n) => pertenceCoop(n, coopId)).length,
@@ -32,7 +39,11 @@ export function medirRiquezaStaffGestao(
         pertenceCoop(p, coopId) &&
         (p.status === "confirmado" || p.status === "aguardando_confirmacao")
     ).length,
-    livro: (data.livroCaixa ?? []).filter((l) => pertenceCoop(l, coopId)).length,
+    livro: livroCoop.length,
+    pixLivro: livroCoop.filter((l) => {
+      const origem = l.origemId ?? "";
+      return origem.startsWith("pg_caixa_") && pixIds.has(origem.slice("pg_caixa_".length));
+    }).length,
   };
 }
 
@@ -50,6 +61,7 @@ export function staffGestaoSnapshotPoorer(
   if (prev.fichas > 0 && next.fichas === 0) return true;
   if (prev.pix > 0 && next.pix === 0) return true;
   if (prev.livro > 0 && next.livro === 0 && next.pix <= prev.pix) return true;
+  if (prev.pixLivro > 0 && next.pixLivro < prev.pixLivro && next.pix <= prev.pix) return true;
   if (prev.fichas >= 10 && next.fichas < Math.floor(prev.fichas / 2) && next.pix <= prev.pix) {
     return true;
   }
