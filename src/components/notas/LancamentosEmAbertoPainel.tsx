@@ -1,14 +1,14 @@
 "use client";
 
-import { memo, useMemo, useRef } from "react";
-import { StatCard } from "@/components/ui/Card";
-import { DataTable } from "@/components/ui/Table";
-import { AlertBanner } from "@/components/ui/AlertBanner";
+import { memo, useRef } from "react";
 import { useAppDataSelector } from "@/hooks/useAppData";
-import { getRelatorioLancamentosEmAbertoResponsavel } from "@/services/responsavelPainelIndex";
-import { flattenLinhasPagarCooperadoEmAberto } from "@/services/relatorioService";
-import { formatCurrency } from "@/utils/format";
-import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import {
+  montarRelatorioEmAbertoConferir,
+  origemLinhaEmAbertoConferir,
+} from "@/components/notas/montarRelatorioEmAbertoConferir";
+import { LancamentosEmAbertoPainelView } from "@/components/notas/LancamentosEmAbertoPainelView";
+
+export { origemLinhaEmAbertoConferir };
 
 type LancamentosEmAbertoPainelProps = {
   coopId: string;
@@ -18,13 +18,7 @@ type LancamentosEmAbertoPainelProps = {
 /** Relatório fixo: entregas já lançadas (conferidas) com pagamento ainda em aberto por cooperado/mês. */
 function LancamentosEmAbertoPainelInner({ coopId, cooperadoId }: LancamentosEmAbertoPainelProps) {
   const relatorio = useAppDataSelector(
-    (d) => {
-      const porCooperado = getRelatorioLancamentosEmAbertoResponsavel(d, coopId, cooperadoId);
-      const linhasTabela = flattenLinhasPagarCooperadoEmAberto(porCooperado);
-      const detalharPorMes = porCooperado.some((r) => r.porMes.length > 1);
-      const totalGeral = porCooperado.reduce((s, r) => s + r.total, 0);
-      return { porCooperado, linhasTabela, detalharPorMes, totalGeral };
-    },
+    (d) => montarRelatorioEmAbertoConferir(d, coopId, cooperadoId),
     [coopId, cooperadoId]
   );
 
@@ -39,43 +33,13 @@ function LancamentosEmAbertoPainelInner({ coopId, cooperadoId }: LancamentosEmAb
       totalGeral: 0,
     };
 
-  const columns = useMemo(
-    () => [
-      { key: "cooperado", label: "Cooperado" },
-      {
-        key: "mesesLabel",
-        label: detalharPorMes ? "Mês" : "Meses em aberto",
-      },
-      { key: "entregas", label: "Entregas lançadas" },
-      { key: "total", label: "Valor total", render: (r: { total: number }) => formatCurrency(r.total) },
-    ],
-    [detalharPorMes]
-  );
-
   return (
-    <div className="space-y-4">
-      <AlertBanner variant="info" title="Lançamentos em aberto">
-        Só entram ficha ainda sem PIX. Valor já pago some daqui e fica no Livro Caixa; um lançamento
-        depois do PIX no mesmo mês volta a somar sozinho. v{APP_BUILD_VERSION}
-      </AlertBanner>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <StatCard title="Cooperados com valor em aberto" value={String(porCooperado.length)} />
-        <StatCard title="Total geral a pagar" value={formatCurrency(totalGeral)} variant="warning" />
-      </div>
-
-      <DataTable
-        data={linhasTabela}
-        keyField="id"
-        columns={columns}
-        emptyMessage="Nenhum lançamento em aberto — todos os meses conferidos já foram pagos ou quitados."
-      />
-
-      <p className="text-xs text-gray-500">
-        Mesma base dos relatórios «A pagar cooperado» e da ficha corrida. Atualiza ao conferir, registrar pagamento
-        ou confirmar PIX.
-      </p>
-    </div>
+    <LancamentosEmAbertoPainelView
+      linhasTabela={linhasTabela}
+      totalGeral={totalGeral}
+      detalharPorMes={detalharPorMes}
+      cooperadosCount={porCooperado.length}
+    />
   );
 }
 

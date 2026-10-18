@@ -56,7 +56,7 @@ import {
   beginConferenciaModalSaveBatch,
   endConferenciaModalSaveBatch,
 } from "@/services/dataStore";
-import { requestAppSync, requestAppSyncImmediate, requestAppSyncLight } from "@/services/syncRequest";
+import { requestAppSync, requestAppSyncLight } from "@/services/syncRequest";
 import {
   isCooperadoManualOperacionalSync,
   scheduleCooperadoPostInteractiveTask,
@@ -2028,7 +2028,6 @@ export default function NotasPedidoStaffMain() {
   const abrirLancamentosAbertoResponsavel = () => {
     prefetchStaffNotasLancamentosAbertoChunk();
     resetResponsavelPainelIndexCache();
-    requestAppSyncImmediate();
     startVistaTransition(() => {
       setVistaResponsavel("aberto");
       setAbaConferenciaKey("");
@@ -2053,12 +2052,6 @@ export default function NotasPedidoStaffMain() {
   const mostrarPainelLancamentosAberto = !isCooperado && vistaConteudo === "aberto";
   const mostrarFilaResponsavelConteudo =
     !isCooperado && (vistaConteudo === "fila" || vistaConteudo === "cooperado");
-
-  useEffect(() => {
-    if (!mostrarPainelLancamentosAberto || !coopId) return;
-    resetResponsavelPainelIndexCache();
-    requestAppSyncImmediate();
-  }, [mostrarPainelLancamentosAberto, coopId]);
 
   const dadosCarregandoFilaConferencia =
     mostrarFilaResponsavelConteudo && (data === null || !isAppDataWarm());
