@@ -211,7 +211,6 @@ import {
   countNotasFilaConferenciaResponsavel,
   resetResponsavelPainelIndexCache,
 } from "@/services/responsavelPainelIndex";
-import { StaffConferirProducaoBar } from "@/components/conferir/StaffConferirProducaoBar";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, filtrarResumosMesesNaoQuitados } from "@/services/cooperadoEntregasService";
 import {
   staffListarResumosFichaEmAberto,
@@ -4468,8 +4467,6 @@ export default function NotasPedidoStaffMain() {
           </div>
         ) : undefined}
       />
-
-      {!isCooperado && <StaffConferirProducaoBar />}
 
       {!isCooperado && (
         <nav

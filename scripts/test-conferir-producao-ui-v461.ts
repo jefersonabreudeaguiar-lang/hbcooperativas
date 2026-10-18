@@ -27,17 +27,12 @@ const chunkGuard = read("src/lib/pwa/chunkDplAlignGuard.ts");
 assert.match(chunkGuard, /if\(!standalone\(\)\)return/, "chunk dpl não manda o browser para pwa-launch");
 
 const staffApp = read("src/app/(app)/notas-pedido/staff/NotasPedidoStaffResponsavelApp.tsx");
-assert.match(staffApp, /StaffConferirProducaoBar/, "faixa ao vivo no Conferir — v461");
+assert.doesNotMatch(staffApp, /StaffConferirProducaoBar/, "faixa Ao vivo produção saiu do Conferir");
 assert.match(
   staffApp,
   /resetResponsavelPainelIndexCache\(\);\s*requestAppSyncImmediate\(\);/,
   "abrir Em aberto zera lastro e puxa PIX da nuvem — v461"
 );
-
-const bar = read("src/components/conferir/StaffConferirProducaoBar.tsx");
-assert.match(bar, /Ao vivo produção/, "texto de prova na UI — v461");
-assert.match(bar, /requestManualStaffReleaseUpgrade/, "botão do responsável sempre navega — v477");
-assert.match(bar, /Esta aba não atualiza sozinha/, "explica por que a atualização não entra sozinha");
 
 const staffUpgrade = read("src/lib/pwa/fetchOfficialClientRelease.ts");
 assert.match(staffUpgrade, /export async function requestManualStaffReleaseUpgrade/, "upgrade dedicado do responsável");

@@ -2005,7 +2005,9 @@ function FichaCorridaPageInner() {
   const verResumoCooperado = !secaoCooperadoAberta || abaSecaoCooperado === "resumo";
   const verFichaCooperado = !secaoCooperadoAberta || abaSecaoCooperado === "ficha";
   const verCreditosCooperado = secaoCooperadoAberta && abaSecaoCooperado === "creditos";
-  const verFotosCooperado = secaoCooperadoAberta && abaSecaoCooperado === "fotos";
+  const verFotosCooperado =
+    secaoCooperadoAberta && (abaSecaoCooperado === "resumo" || abaSecaoCooperado === "fotos");
+  const verEntregasCooperado = verResumoCooperado || verFichaCooperado;
 
   if (!data) {
     if (isCooperado) return <FinanceiroTabSkeleton />;
@@ -2379,7 +2381,7 @@ function FichaCorridaPageInner() {
         </div>
       )}
 
-      {verFichaCooperado && cooperadoSelecionadoId && !cooperadoVistaMesHistorico && (
+      {verEntregasCooperado && cooperadoSelecionadoId && !cooperadoVistaMesHistorico && (
         <ValoresAvulsosReceberPanel
           cooperadoId={cooperadoSelecionadoId}
           cooperativaId={coopId}
@@ -2713,7 +2715,7 @@ function FichaCorridaPageInner() {
             )}
           </Card>}
 
-          {verFichaCooperado && <Card
+          {verEntregasCooperado && <Card
             title={`Resumo das entregas · ${
               isCooperado && !visualizandoHistorico && mesesFinanceiroCooperado.length > 1
                 ? formatMesesReferenciaRotulo(mesesFinanceiroCooperado)
