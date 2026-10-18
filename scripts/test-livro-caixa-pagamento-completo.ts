@@ -86,7 +86,7 @@ function emptyData(): AppData {
   data.pagamentosCooperado = [pix];
   const next = lancarPagamentoCooperadoNoCaixa(data, pix);
   const livro = next.livroCaixa ?? [];
-  assert.ok(livro.some((l) => l.origemId === "pg_caixa_pg-1" && l.tipo === "debito" && l.valor === 82));
+  assert.ok(livro.some((l) => l.origemId === "pg_caixa_pg-1" && l.tipo === "debito" && l.valor === 100));
   assert.ok(livro.some((l) => l.origemId === "pg_taxa_pg-1" && l.tipo === "credito" && l.valor === 10));
   assert.ok(livro.some((l) => l.origem === "mensalidade_ficha" && l.tipo === "credito" && l.valor === 5));
   assert.ok(livro.some((l) => l.origem === "desconto_ficha" && l.historico.includes("HB Créditos") && l.valor === 3));
@@ -103,7 +103,7 @@ function emptyData(): AppData {
   assert.equal(resumo[0]?.creditoTaxa, 10);
   assert.equal(resumo[0]?.creditoMensalidade, 5);
   assert.equal(resumo[0]?.creditoOutros, 3);
-  assert.equal(resumo[0]?.debitoPagamento, 82);
+  assert.equal(resumo[0]?.debitoPagamento, 100);
 }
 
 {
@@ -128,8 +128,49 @@ function emptyData(): AppData {
   ];
   const rec = reconciliarLivroCaixaContabilCooperativa(data, COOP);
   const livro = rec.livroCaixa ?? [];
-  assert.ok(livro.some((l) => l.origemId === "pg_caixa_pg-2" && l.valor === 45));
+  assert.ok(livro.some((l) => l.origemId === "pg_caixa_pg-2" && l.valor === 50));
   assert.ok(livro.some((l) => l.origemId === "pg_taxa_pg-2" && l.valor === 5));
+}
+
+{
+  const data = emptyData();
+  data.pagamentosCooperado = [
+    {
+      id: "pg-3",
+      cooperativaId: COOP,
+      cooperadoId: CID,
+      mesReferencia: "2026-08",
+      status: "confirmado",
+      valorLiquido: 90,
+      valorBruto: 100,
+      descontoCooperativa: 10,
+      descontosExtras: [],
+      fichaIds: [],
+      notaPedidoIds: [],
+      pagoPor: "resp",
+      pagoEm: "2026-08-20T12:00:00.000Z",
+      createdAt: "2026-08-20T12:00:00.000Z",
+    } as PagamentoCooperadoRegistro,
+  ];
+  data.livroCaixa = [
+    {
+      id: "lc-old",
+      cooperativaId: COOP,
+      data: "2026-08-20",
+      mesReferencia: "2026-08",
+      tipo: "debito",
+      valor: 90,
+      historico: "Pagamento antigo no líquido",
+      origem: "pagamento_cooperado",
+      origemId: "pg_caixa_pg-3",
+      createdAt: "2026-08-20T12:00:00.000Z",
+      updatedAt: "2026-08-20T12:00:00.000Z",
+    },
+  ] as AppData["livroCaixa"];
+  const rec = reconciliarLivroCaixaContabilCooperativa(data, COOP);
+  const debito = (rec.livroCaixa ?? []).find((l) => l.origemId === "pg_caixa_pg-3");
+  assert.equal(debito?.valor, 100, "débito antigo no líquido passa a bruto");
+  assert.ok((rec.livroCaixa ?? []).some((l) => l.origemId === "pg_taxa_pg-3" && l.valor === 10));
 }
 
 console.log("ok: livro caixa — PIX pago entra com bruto, taxa, mensalidade e outros descontos");

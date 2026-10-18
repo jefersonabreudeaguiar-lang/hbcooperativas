@@ -112,17 +112,32 @@ const next = posProcessarIntegridadePagamentosCooperativa(soProjecao);
 assert.equal(next.fichaCorrida.find((f) => f.id === "f-1")?.status, "pago");
 assert.equal(next.fichaCorrida.find((f) => f.id === "f-2")?.status, "pago");
 assert.equal(next.fichaCorrida.find((f) => f.id === "f-3")?.status, "pendente");
+assert.equal(next.notasPedido.find((n) => n.id === "n-1")?.status, "pago");
+assert.equal(next.notasPedido.find((n) => n.id === "n-2")?.status, "pago");
+assert.equal(next.notasPedido.find((n) => n.id === "n-3")?.status, "conferida");
+
+const trava = posProcessarIntegridadePagamentosCooperativa({
+  ...next,
+  fichaCorrida: next.fichaCorrida.map((f) =>
+    f.id === "f-1" ? { ...f, status: "pendente" as const } : f
+  ),
+  notasPedido: next.notasPedido.map((n) =>
+    n.id === "n-1" ? { ...n, status: "conferida" as const } : n
+  ),
+});
+assert.equal(trava.fichaCorrida.find((f) => f.id === "f-1")?.status, "pago", "PIX confirmado não volta a receber");
+assert.equal(trava.notasPedido.find((n) => n.id === "n-1")?.status, "pago", "nota coberta pelo PIX fica paga");
 
 const livro = next.livroCaixa ?? [];
-assert.ok(livro.some((l) => l.origemId === "pg_caixa_pg-1" && l.tipo === "debito" && l.valor === 82));
-assert.ok(livro.some((l) => l.origemId === "pg_caixa_pg-2" && l.tipo === "debito" && l.valor === 82));
+assert.ok(livro.some((l) => l.origemId === "pg_caixa_pg-1" && l.tipo === "debito" && l.valor === 100));
+assert.ok(livro.some((l) => l.origemId === "pg_caixa_pg-2" && l.tipo === "debito" && l.valor === 100));
 assert.ok(livro.some((l) => l.origemId === "pg_taxa_pg-1" && l.tipo === "credito" && l.valor === 10));
 assert.ok(livro.some((l) => l.origem === "mensalidade_ficha" && l.valor === 5));
 assert.ok(!livro.some((l) => String(l.origemId ?? "").includes("pg-3")));
 
 const resumo = calcularResumoPorCooperadoLivroCaixaCompleto(next, livro, COOP);
 assert.equal(resumo.find((r) => r.cooperadoId === "c-1")?.totalBruto, 100);
-assert.equal(resumo.find((r) => r.cooperadoId === "c-2")?.debitoPagamento, 82);
+assert.equal(resumo.find((r) => r.cooperadoId === "c-2")?.debitoPagamento, 100);
 assert.equal(resumo.find((r) => r.cooperadoId === "c-3"), undefined);
 
 resetResponsavelPainelIndexCache();

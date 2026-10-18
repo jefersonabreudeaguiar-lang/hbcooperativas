@@ -616,6 +616,24 @@ export function hidratarPagamentoParaLivroCaixa(
   };
 }
 
+function alinharDebitoPagamentoBrutoNoCaixa(
+  data: AppData,
+  pagamento: PagamentoCooperadoRegistro
+): AppData {
+  const origemId = `pg_caixa_${pagamento.id}`;
+  const valorBruto = round2(Math.max(0, Number(pagamento.valorBruto) || 0));
+  if (valorBruto <= 0.005) return data;
+  const idx = (data.livroCaixa ?? []).findIndex(
+    (l) => l.origemId === origemId && l.tipo === "debito"
+  );
+  if (idx < 0) return data;
+  const atual = data.livroCaixa![idx];
+  if (Math.abs(atual.valor - valorBruto) <= 0.005) return data;
+  const livroCaixa = [...(data.livroCaixa ?? [])];
+  livroCaixa[idx] = { ...atual, valor: valorBruto, updatedAt: new Date().toISOString() };
+  return { ...data, livroCaixa };
+}
+
 export function lancarPagamentoCooperadoNoCaixa(data: AppData, pagamento: PagamentoCooperadoRegistro): AppData {
   if (pagamento.status !== "confirmado") return data;
   pagamento = hidratarPagamentoParaLivroCaixa(data, pagamento);
@@ -623,8 +641,10 @@ export function lancarPagamentoCooperadoNoCaixa(data: AppData, pagamento: Pagame
   const existenteCtx = ctxFromPagamentoExistente(data, pagamento.id);
   let next = data;
   let ctx = existenteCtx;
+  const origemDebito = `pg_caixa_${pagamento.id}`;
+  const valorDebito = round2(Math.max(0, Number(pagamento.valorBruto) || 0));
 
-  if (!jaExistePorOrigem(data, `pg_caixa_${pagamento.id}`)) {
+  if (!jaExistePorOrigem(data, origemDebito)) {
     if (!ctx) {
       const aloc = alocarSequenciaEvento(next, pagamento.cooperativaId, dataLanc);
       next = aloc.data;
@@ -637,17 +657,18 @@ export function lancarPagamentoCooperadoNoCaixa(data: AppData, pagamento: Pagame
         data: dataLanc,
         mesReferencia: pagamento.mesReferencia,
         tipo: "debito",
-        valor: pagamento.valorLiquido,
+        valor: valorDebito,
         historico: montarHistoricoPagamentoCooperadoCaixa(next, pagamento),
         origem: "pagamento_cooperado",
-        origemId: `pg_caixa_${pagamento.id}`,
+        origemId: origemDebito,
         responsavel: pagamento.pagoPor,
         grupoEventoId: ctx?.grupoEventoId,
       },
       ctx
     );
-  } else if (!ctx) {
-    ctx = ctxFromPagamentoExistente(next, pagamento.id);
+  } else {
+    next = alinharDebitoPagamentoBrutoNoCaixa(next, pagamento);
+    if (!ctx) ctx = ctxFromPagamentoExistente(next, pagamento.id);
   }
 
   next = lancarRetencoesPagamentoNoCaixa(next, pagamento, ctx);
@@ -789,7 +810,7 @@ export function auditarLivroCaixaContabilCooperativa(data: AppData, cooperativaI
 
   for (const raw of pagamentos) {
     const p = hidratarPagamentoParaLivroCaixa(data, raw);
-    debitosPagamentoEsperados += p.valorLiquido;
+    debitosPagamentoEsperados += p.valorBruto;
     if (!livro.some((l) => l.origemId === `pg_caixa_${p.id}` && l.tipo === "debito")) {
       pagamentosSemDebitoCaixa.push(p.id);
     }

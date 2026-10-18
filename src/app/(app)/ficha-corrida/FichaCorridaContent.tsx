@@ -762,7 +762,7 @@ function FichaCorridaPageInner() {
   }, [isCooperado, mesesFinanceiroCooperado, mesAtivo]);
 
   const mesesPendentesPagamento = useMemo(() => {
-    if (!data || !cooperadoSelecionadoId || isCooperado) return [];
+    if (!data || !cooperadoSelecionadoId || isCooperado || !coopId) return [];
     const leitura = dataPagar ?? data;
     const meses = listarMesesEmAbertoPagamentoResponsavel(leitura, cooperadoSelecionadoId, coopId);
     if (meses.length) return meses;

@@ -131,7 +131,7 @@ function pix(partial: Partial<PagamentoCooperadoRegistro> = {}): PagamentoCooper
   assert.equal(fichaPaga?.status, "pago", "ficha coberta pelo PIX vira paga");
 
   const livro = next.livroCaixa ?? [];
-  assert.ok(livro.some((l) => l.origemId === "pg_caixa_pg-1" && l.tipo === "debito" && l.valor === 82));
+  assert.ok(livro.some((l) => l.origemId === "pg_caixa_pg-1" && l.tipo === "debito" && l.valor === 100));
   assert.ok(livro.some((l) => l.origemId === "pg_taxa_pg-1" && l.tipo === "credito" && l.valor === 10));
   assert.ok(livro.some((l) => l.origem === "mensalidade_ficha" && l.valor === 5));
   assert.ok(livro.some((l) => l.origem === "desconto_ficha" && l.valor === 3));
@@ -141,7 +141,7 @@ function pix(partial: Partial<PagamentoCooperadoRegistro> = {}): PagamentoCooper
   assert.equal(resumo[0]?.creditoTaxa, 10);
   assert.equal(resumo[0]?.creditoMensalidade, 5);
   assert.equal(resumo[0]?.creditoOutros, 3);
-  assert.equal(resumo[0]?.debitoPagamento, 82);
+  assert.equal(resumo[0]?.debitoPagamento, 100);
 
   resetResponsavelPainelIndexCache();
   assert.equal(getRelatorioLancamentosEmAbertoResponsavel(next, COOP).length, 0);

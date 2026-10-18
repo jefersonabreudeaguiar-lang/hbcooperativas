@@ -1876,7 +1876,7 @@ function notaReferenciaTemporalEscopoPagamento(nota: NotaPedido): number {
   return Number.isFinite(created) ? created : Number.NaN;
 }
 
-function notaQuitadaPorPagamentoCooperativaRegistrado(
+export function notaQuitadaPorPagamentoCooperativaRegistrado(
   data: AppData,
   nota: NotaPedido,
   cooperadoId?: string

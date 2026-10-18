@@ -15,6 +15,7 @@ import { listarMesesFichaEmAbertoCooperado } from "@/lib/hb-credit/hbCreditCredi
 import {
   idsNotasPedidoExcluidas,
   listarPagamentosConfirmadosQueCobremMes,
+  notaQuitadaPorPagamentoCooperativaRegistrado,
   reconciliarFichaFromNotasConferidas,
 } from "@/services/notaPedidoService";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
@@ -67,29 +68,32 @@ function cooperadoIdsDaCooperativa(data: AppData, coopId: string): Set<string> {
   return ids;
 }
 
-function notaLancadaCobrePorPix(data: AppData, nota: NotaPedido): boolean {
-  for (const p of data.pagamentosCooperado ?? []) {
-    if (p.status !== "confirmado" && p.status !== "aguardando_confirmacao") continue;
-    if (p.cooperativaId && p.cooperativaId !== nota.cooperativaId) continue;
-    if (p.notaPedidoIds?.includes(nota.id)) return true;
-    const fichaIds = new Set(p.fichaIds ?? []);
-    if (fichaIds.size === 0) continue;
-    if (
-      (data.fichaCorrida ?? []).some(
-        (f) => fichaIds.has(f.id) && f.notaPedidoId === nota.id
-      )
-    ) {
-      return true;
-    }
-  }
-  return false;
+function cooperadoLinhaCobrePorPixConfirmado(
+  data: AppData,
+  cooperadoId: string,
+  coopId: string,
+  mesesLinha?: string[]
+): boolean {
+  const confirmados = (data.pagamentosCooperado ?? []).filter((p) => {
+    if (p.status !== "confirmado") return false;
+    if (p.cooperativaId && p.cooperativaId !== coopId) return false;
+    const canon = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+    const pCanon = resolverCooperadoIdCanonico(data, p.cooperadoId, p.cooperativaId ?? coopId);
+    return p.cooperadoId === cooperadoId || p.cooperadoId === canon || pCanon === canon;
+  });
+  if (!confirmados.length) return false;
+  const meses = (mesesLinha ?? []).filter(Boolean);
+  if (!meses.length) return true;
+  return meses.every(
+    (mes) => listarPagamentosConfirmadosQueCobremMes(data, cooperadoId, mes, coopId).length > 0
+  );
 }
 
 /** Nota conferida ainda sem PIX — entra na aba Pagar mesmo sem ficha persistida. */
 export function cooperadoTemNotaConferidaSemPix(
   data: AppData,
   cooperadoId: string,
-  coopId: string
+  coopId?: string
 ): boolean {
   return listarNotasConferidasSemPixCooperado(data, cooperadoId, coopId).length > 0;
 }
@@ -97,7 +101,7 @@ export function cooperadoTemNotaConferidaSemPix(
 export function listarMesesNotaConferidaSemPix(
   data: AppData,
   cooperadoId: string,
-  coopId: string
+  coopId?: string
 ): string[] {
   const meses = new Set<string>();
   for (const n of listarNotasConferidasSemPixCooperado(data, cooperadoId, coopId)) {
@@ -109,7 +113,7 @@ export function listarMesesNotaConferidaSemPix(
 function listarNotasConferidasSemPixCooperado(
   data: AppData,
   cooperadoId: string,
-  coopId: string
+  coopId?: string
 ): NotaPedido[] {
   if (!cooperadoId || !coopId) return [];
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
@@ -124,7 +128,7 @@ function listarNotasConferidasSemPixCooperado(
     if (n.cooperadoId !== cooperadoId && n.cooperadoId !== canonico && nCanon !== canonico) {
       continue;
     }
-    if (notaLancadaCobrePorPix(data, n)) continue;
+    if (notaQuitadaPorPagamentoCooperativaRegistrado(data, n, n.cooperadoId)) continue;
     out.push(n);
   }
   return out;
@@ -303,6 +307,7 @@ export function cooperadoEmAbertoPodeSair(
     usarLiquido: true,
   });
   if (aberto.total > 0.005) return false;
+  if (cooperadoLinhaCobrePorPixConfirmado(data, cooperadoId, coopId, mesesLinha)) return true;
   const temFicha = (data.fichaCorrida ?? []).some((f) =>
     fichaPertenceCooperado(data, f, cooperadoId, coopId)
   );
@@ -357,7 +362,9 @@ export function fundirLinhasEmAbertoEstavel(
       if (cooperadoEmAbertoPodeSair(data, old.cooperadoId, coopId, old.meses)) continue;
       const vivo = linhaEmAbertoSoFichaSemPix(old, data, coopId);
       if (vivo) byId.set(old.cooperadoId, vivo);
-      else byId.set(old.cooperadoId, old);
+      else if (!cooperadoLinhaCobrePorPixConfirmado(data, old.cooperadoId, coopId, old.meses)) {
+        byId.set(old.cooperadoId, old);
+      }
     }
     return [...byId.values()].sort((a, b) => a.cooperado.localeCompare(b.cooperado, "pt-BR"));
   }

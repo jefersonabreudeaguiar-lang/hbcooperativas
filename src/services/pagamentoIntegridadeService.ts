@@ -17,6 +17,7 @@ import {
 import {
   fichaCobertaPorPagamentoCooperativa,
   getMesesReferenciaPagamento,
+  notaQuitadaPorPagamentoCooperativaRegistrado,
   pagamentoEscopoIdsResolvemNoAppData,
   promoverPagamentosAguardandoConfirmadosPeloResponsavel,
 } from "@/services/notaPedidoService";
@@ -212,6 +213,12 @@ export function repararIntegridadePagamentosCooperativa(data: AppData): AppData 
     ) {
       return f;
     }
+    const coberto = (data.pagamentosCooperado ?? []).some(
+      (p) =>
+        (p.status === "confirmado" || p.status === "aguardando_confirmacao") &&
+        fichaCobertaPorPagamentoCooperativa(data, f, p)
+    );
+    if (coberto) return f;
     changed = true;
     return { ...f, status: "pendente" as const, updatedAt: now };
   });
@@ -220,6 +227,7 @@ export function repararIntegridadePagamentosCooperativa(data: AppData): AppData 
     if (n.status !== "pago") return n;
     const fichasNota = fichaCorrida.filter((f) => f.notaPedidoId === n.id);
     if (fichasNota.some((f) => f.status === "pago")) return n;
+    if (notaQuitadaPorPagamentoCooperativaRegistrado(data, n, n.cooperadoId)) return n;
     if (
       cooperadoMesTemPagamentoRegistrado(data, n.cooperadoId, n.mesReferencia, n.cooperativaId)
     ) {
@@ -289,8 +297,23 @@ export function alinharFichaComPagamentosCooperativa(data: AppData): AppData {
     }
   }
 
+  const notasPedido = (data.notasPedido ?? []).map((n) => {
+    if (n.status === "pago" || n.status !== "conferida") return n;
+    const leitura = { ...data, fichaCorrida };
+    if (notaQuitadaPorPagamentoCooperativaRegistrado(leitura, n, n.cooperadoId)) {
+      changed = true;
+      return { ...n, status: "pago" as const, updatedAt: now };
+    }
+    const fichasNota = fichaCorrida.filter((f) => f.notaPedidoId === n.id);
+    if (fichasNota.length > 0 && fichasNota.every((f) => f.status === "pago")) {
+      changed = true;
+      return { ...n, status: "pago" as const, updatedAt: now };
+    }
+    return n;
+  });
+
   if (!changed) return data;
-  return { ...data, fichaCorrida };
+  return { ...data, fichaCorrida, notasPedido };
 }
 
 /** Reparo + alinhamento — evita voltar para pendente após PIX/assinatura. */
