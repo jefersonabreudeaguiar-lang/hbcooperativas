@@ -180,4 +180,37 @@ function pix(partial: Partial<PagamentoCooperadoRegistro> = {}): PagamentoCooper
   assert.equal(listarFichasEmAbertoPagamento(next, CID, "2026-10", COOP).map((f) => f.id).join(), "f-nova");
 }
 
+{
+  const data = emptyData();
+  data.notasPedido = [
+    nota({
+      id: "n-sem-entrega",
+      dataEntrega: undefined,
+      createdAt: "2026-10-21T00:00:00.000Z",
+      dataConferencia: "2026-10-21T00:00:00.000Z",
+    }),
+  ];
+  data.fichaCorrida = [
+    ficha({
+      id: "f-sem-entrega",
+      notaPedidoId: "n-sem-entrega",
+      createdAt: "2026-10-21T00:00:00.000Z",
+      dataLancamento: "2026-10-21T00:00:00.000Z",
+    }),
+  ];
+  data.pagamentosCooperado = [pix()];
+
+  assert.equal(
+    listarFichasEmAbertoPagamento(data, CID, "2026-10", COOP).length,
+    0,
+    "sem dataEntrega, createdAt refeito não devolve o mês pago ao Em aberto"
+  );
+  resetResponsavelPainelIndexCache();
+  assert.equal(getRelatorioLancamentosEmAbertoResponsavel(data, COOP).length, 0);
+
+  const next = posProcessarIntegridadePagamentosCooperativa(data);
+  assert.equal(next.fichaCorrida.find((f) => f.id === "f-sem-entrega")?.status, "pago");
+  assert.ok((next.livroCaixa ?? []).some((l) => l.origemId === "pg_caixa_pg-1" && l.tipo === "debito"));
+}
+
 console.log("ok: PIX confirmado sai de Em aberto, fica pago e entra no Livro Caixa");

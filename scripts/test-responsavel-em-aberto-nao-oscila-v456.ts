@@ -233,4 +233,46 @@ assert.equal(
   "Em aberto usa o PIX fundido no lastro e não devolve os 23"
 );
 
+const linhaMista: LinhaPagarCooperadoEmAberto = {
+  cooperadoId: "c-1",
+  cooperado: "Cooperado 01",
+  meses: ["2026-09", MES],
+  mesesLabel: "set e out",
+  entregas: 2,
+  total: 200,
+  porMes: [
+    { mes: "2026-09", mesLabel: "set", entregas: 1, total: 100 },
+    { mes: MES, mesLabel: "out", entregas: 1, total: 100 },
+  ],
+};
+const dataSoPixOutubro = emptyData();
+dataSoPixOutubro.cooperados.push(cooperado(1));
+dataSoPixOutubro.pagamentosCooperado.push(pixConfirmado(1));
+const soNaoPago = fundirLinhasEmAbertoEstavel([linhaMista], [], dataSoPixOutubro, COOP);
+assert.equal(soNaoPago.length, 1, "mês sem PIX permanece");
+assert.deepEqual(soNaoPago[0]?.meses, ["2026-09"]);
+assert.equal(soNaoPago[0]?.total, 100, "valor do mês já pago sai do Em aberto");
+
+const dataMistaViva = dataComNCooperados(1);
+dataMistaViva.notasPedido.push({
+  ...nota(1),
+  id: "n-set",
+  mesReferencia: "2026-09",
+  dataEntrega: "2026-09-10",
+  createdAt: "2026-10-21T00:00:00.000Z",
+});
+dataMistaViva.fichaCorrida.push({
+  ...ficha(1),
+  id: "f-set",
+  notaPedidoId: "n-set",
+  mesReferencia: "2026-09",
+  dataLancamento: "2026-09-10T00:00:00.000Z",
+});
+dataMistaViva.pagamentosCooperado.push(pixConfirmado(1));
+resetResponsavelPainelIndexCache();
+const vivoMisto = getRelatorioLancamentosEmAbertoResponsavel(dataMistaViva, COOP);
+assert.equal(vivoMisto.length, 1);
+assert.deepEqual(vivoMisto[0]?.meses, ["2026-09"]);
+assert.equal(vivoMisto[0]?.total, 100, "ficha viva do mês pago some; setembro fica");
+
 console.log("ok: em aberto estável — 9 cooperados não oscilam sem PIX");

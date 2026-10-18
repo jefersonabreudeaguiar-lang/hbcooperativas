@@ -12,12 +12,14 @@ import {
 import { getDataOperationalTruth, getDataRevision } from "@/services/dataStore";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { listarMesesFichaEmAbertoCooperado } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
+import { alinharFichaComPagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
 import {
   idsNotasPedidoExcluidas,
   listarPagamentosConfirmadosQueCobremMes,
   notaQuitadaPorPagamentoCooperativaRegistrado,
   reconciliarFichaFromNotasConferidas,
 } from "@/services/notaPedidoService";
+import { round2 } from "@/utils/calculations";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { notaElegivelParaFilaConferenciaResponsavel, sanitizarNotaParaFilaConferencia } from "@/utils/notaStatus";
 import {
@@ -343,6 +345,39 @@ function linhaEmAbertoSoFichaSemPix(
   };
 }
 
+/** Lastro sem valor já coberto por PIX — mês pago some; só fica o que ainda não foi pago. */
+function linhaEmAbertoSemValoresPagos(
+  base: LinhaPagarCooperadoEmAberto,
+  data: AppData,
+  coopId: string
+): LinhaPagarCooperadoEmAberto | null {
+  const vivo = linhaEmAbertoSoFichaSemPix(base, data, coopId);
+  if (vivo) return vivo;
+
+  const meses = (base.meses ?? []).filter(Boolean);
+  const mesesSemPix = meses.filter(
+    (mes) => listarPagamentosConfirmadosQueCobremMes(data, base.cooperadoId, mes, coopId).length === 0
+  );
+  if (meses.length > 0 && mesesSemPix.length === 0) return null;
+
+  if (mesesSemPix.length > 0 && mesesSemPix.length < meses.length) {
+    const porMes = (base.porMes ?? []).filter((m) => mesesSemPix.includes(m.mes));
+    const total = round2(porMes.reduce((s, m) => s + m.total, 0));
+    if (porMes.length === 0 || total <= 0.005) return null;
+    return {
+      ...base,
+      meses: mesesSemPix,
+      mesesLabel: formatMesesReferenciaRotulo(mesesSemPix),
+      entregas: porMes.reduce((s, m) => s + m.entregas, 0),
+      total,
+      porMes,
+    };
+  }
+
+  if (cooperadoLinhaCobrePorPixConfirmado(data, base.cooperadoId, coopId, meses)) return null;
+  return meses.length > 0 && mesesSemPix.length === 0 ? null : base;
+}
+
 /** Lastro só contra lista vazia. Valor já pago não volta; total vem só da ficha sem PIX. */
 export function fundirLinhasEmAbertoEstavel(
   anterior: LinhaPagarCooperadoEmAberto[],
@@ -351,28 +386,16 @@ export function fundirLinhasEmAbertoEstavel(
   coopId: string
 ): LinhaPagarCooperadoEmAberto[] {
   const motorLimpo = motor
-    .map((l) => linhaEmAbertoSoFichaSemPix(l, data, coopId))
+    .map((l) => linhaEmAbertoSemValoresPagos(l, data, coopId))
     .filter((l): l is LinhaPagarCooperadoEmAberto => l !== null);
 
   if (anterior.length === 0) return motorLimpo;
 
-  if (motorLimpo.length === 0) {
-    const byId = new Map<string, LinhaPagarCooperadoEmAberto>();
-    for (const old of anterior) {
-      if (cooperadoEmAbertoPodeSair(data, old.cooperadoId, coopId, old.meses)) continue;
-      const vivo = linhaEmAbertoSoFichaSemPix(old, data, coopId);
-      if (vivo) byId.set(old.cooperadoId, vivo);
-      else if (!cooperadoLinhaCobrePorPixConfirmado(data, old.cooperadoId, coopId, old.meses)) {
-        byId.set(old.cooperadoId, old);
-      }
-    }
-    return [...byId.values()].sort((a, b) => a.cooperado.localeCompare(b.cooperado, "pt-BR"));
-  }
-
   const byId = new Map(motorLimpo.map((l) => [l.cooperadoId, l]));
   for (const old of anterior) {
     if (byId.has(old.cooperadoId)) continue;
-    const vivo = linhaEmAbertoSoFichaSemPix(old, data, coopId);
+    if (cooperadoEmAbertoPodeSair(data, old.cooperadoId, coopId, old.meses)) continue;
+    const vivo = linhaEmAbertoSemValoresPagos(old, data, coopId);
     if (vivo) byId.set(old.cooperadoId, vivo);
   }
   return [...byId.values()].sort((a, b) => a.cooperado.localeCompare(b.cooperado, "pt-BR"));
@@ -451,7 +474,7 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
   cooperadoId?: string
 ): LinhaPagarCooperadoEmAberto[] {
   if (!coopId) return [];
-  const dataAberto = appDataParaConferirLeitura(data);
+  const dataAberto = alinharFichaComPagamentosCooperativa(appDataParaConferirLeitura(data));
   if (cooperadoId) {
     return fundirLinhasEmAbertoEstavel(
       [],

@@ -1862,18 +1862,14 @@ function mesComPagamentoCooperativaRegistrado(
   return !!getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia);
 }
 
-/** Nota já incluída em PIX/registro — não recriar ficha pendente após conferência posterior. */
+/** Só data de entrega — createdAt/conferência refeitos no sync não reabrem o pago. */
 function notaReferenciaTemporalEscopoPagamento(nota: NotaPedido): number {
-  // dataEntrega primeiro: createdAt/conferência refeitos no sync inflavam a data e reabriam o pago.
   if (nota.dataEntrega) {
     const raw = nota.dataEntrega.length === 10 ? `${nota.dataEntrega}T00:00:00.000Z` : nota.dataEntrega;
     const dia = Date.parse(raw);
     if (Number.isFinite(dia)) return dia;
   }
-  const conferencia = Date.parse(nota.dataConferencia ?? "");
-  if (Number.isFinite(conferencia)) return conferencia;
-  const created = Date.parse(nota.createdAt ?? "");
-  return Number.isFinite(created) ? created : Number.NaN;
+  return Number.NaN;
 }
 
 export function notaQuitadaPorPagamentoCooperativaRegistrado(
@@ -1908,7 +1904,8 @@ export function notaQuitadaPorPagamentoCooperativaRegistrado(
 
     const notaTs = notaReferenciaTemporalEscopoPagamento(nota);
     const pagoTs = Date.parse(p.pagoEm ?? p.createdAt ?? "");
-    if (!Number.isNaN(notaTs) && !Number.isNaN(pagoTs) && notaTs <= pagoTs) return true;
+    if (!Number.isNaN(notaTs) && !Number.isNaN(pagoTs) && notaTs > pagoTs) continue;
+    return true;
   }
 
   return false;
@@ -2210,14 +2207,12 @@ export function fichaCobertaPorPagamentoCooperativa(
   const meses = getMesesReferenciaPagamento(pagamento);
   const mesFicha = nota?.mesReferencia ?? ficha.mesReferencia;
   if (!meses.includes(mesFicha) && !meses.includes(ficha.mesReferencia)) return false;
-  const notaTs = nota
-    ? notaReferenciaTemporalEscopoPagamento(nota)
-    : Date.parse(ficha.dataLancamento ?? ficha.createdAt ?? "");
+  const notaTs = nota ? notaReferenciaTemporalEscopoPagamento(nota) : Number.NaN;
   const pagoTs = Date.parse(pagamento.pagoEm ?? pagamento.createdAt ?? "");
   if (!Number.isNaN(notaTs) && !Number.isNaN(pagoTs)) {
     return notaTs <= pagoTs;
   }
-  /** Mesmo mês do PIX, sem data confiável — mês já liquidado, não reabre. */
+  /** Mesmo mês do PIX, sem data de entrega — mês já liquidado, não reabre. */
   return true;
 }
 
