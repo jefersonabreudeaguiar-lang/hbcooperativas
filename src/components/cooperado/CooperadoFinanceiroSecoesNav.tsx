@@ -5,7 +5,7 @@ import { Camera, CreditCard, Receipt, Wallet } from "lucide-react";
 export type CooperadoFinanceiroSecao = "resumo" | "ficha" | "creditos" | "fotos";
 
 const SECOES: { id: CooperadoFinanceiroSecao; label: string; Icon: typeof Wallet }[] = [
-  { id: "resumo", label: "A receber", Icon: Wallet },
+  { id: "resumo", label: "Resumo", Icon: Wallet },
   { id: "ficha", label: "Ficha", Icon: Receipt },
   { id: "creditos", label: "HB Créditos", Icon: CreditCard },
   { id: "fotos", label: "Fotos", Icon: Camera },

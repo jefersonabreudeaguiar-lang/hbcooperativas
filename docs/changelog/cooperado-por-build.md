@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v494
+
+- **Financeiro:** o card «A receber» sai desta aba — ele continua só no Início.
+- **Resumo:** a ficha em aberto aparece com bruto, desconto da cooperativa, Desconto HB e o total líquido.
+- **Entregas:** lista por item (quantidade, preço e valor) e o **Total em aberto** da ficha no rodapé.
+
 ## v493
 
 - **A receber:** cada atualização do app busca a ficha na nuvem para todos os cooperados. Enquanto não chega, mostra «Atualizando» — não pinta R$ 0,00 à toa.

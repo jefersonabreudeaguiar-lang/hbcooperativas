@@ -10,8 +10,8 @@ import { APP_BUILD_VERSION } from "../src/lib/appBuildVersion.ts";
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.equal(APP_BUILD_VERSION, 493, "build 493");
-assert.match(read("public/sw.js"), /hb-coop-build-493/);
+assert.ok(APP_BUILD_VERSION >= 493, "build 493+");
+assert.match(read("public/sw.js"), /hb-coop-build-49/);
 
 const postDeploy = read("src/lib/cooperado/cooperadoPostDeployBackground.ts");
 assert.match(
@@ -34,7 +34,7 @@ assert.match(
 );
 
 const ficha = read("src/app/(app)/ficha-corrida/FichaCorridaContent.tsx");
-assert.match(ficha, /Buscando o valor a receber da cooperativa/, "Financeiro não fica em branco");
+assert.match(ficha, /Buscando a ficha em aberto da cooperativa/, "Financeiro não fica em branco");
 assert.doesNotMatch(
   ficha,
   /if \(isCooperado\) return <FinanceiroTabSkeleton \/>/,

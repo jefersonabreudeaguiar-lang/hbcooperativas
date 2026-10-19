@@ -28,7 +28,7 @@ assert.match(hook, /visibilitychange/, "grava ao ir para segundo plano");
 assert.match(persist, /cooperativaId\?\.trim\(\) \|\| "pending"/, "grava sem cooperativaId");
 assert.doesNotMatch(auth, /purgarInicioCardValorReceberCooperado\(safeUser\)/, "login frio não apaga cache");
 assert.match(ficha, /CooperadoFinanceiroSecoesNav/, "Financeiro com seções");
-assert.match(nav, /A receber/, "aba a receber");
+assert.match(nav, /Resumo/, "aba resumo");
 assert.match(nav, /Ficha/, "aba ficha");
 assert.match(nav, /HB Créditos/, "aba créditos");
 assert.match(nav, /Fotos/, "aba fotos");

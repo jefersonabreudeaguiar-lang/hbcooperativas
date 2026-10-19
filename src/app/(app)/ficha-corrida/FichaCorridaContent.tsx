@@ -97,10 +97,8 @@ import {
   bicCentralListarMesesPendentesQuantoVouReceber,
   bicCentralMesPrincipalQuantoVouReceber,
   bicCentralQuantoVouReceberParaExibicao,
-  bicCentralResolvePainelParaExibicao,
 } from "@/services/bicLeituraCentralCooperado";
 import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
-import { leituraFinanceiraParidadeCooperadoMesReferencia } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
@@ -147,7 +145,6 @@ import { ReciboResumoView } from "@/components/ficha/ReciboResumoView";
 import { HistoricoHbCreditosResumo } from "@/components/ficha/HistoricoHbCreditosResumo";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
 import { CooperadoHistoricoPagamentoMes } from "@/components/cooperado/CooperadoHistoricoPagamentoMes";
-import { CooperadoQuantoVouReceberPainel } from "@/components/cooperado/CooperadoQuantoVouReceberPainel";
 import {
   CooperadoFinanceiroSecoesNav,
   type CooperadoFinanceiroSecao,
@@ -181,7 +178,6 @@ import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooper
 import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExibirAguardandoAssinatura";
 import { materializarCooperadoPwaAposAssinaturaReciboLocal } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { useCooperadoApresentacaoFinanceiraConsolidada } from "@/hooks/useCooperadoApresentacaoFinanceiraConsolidada";
-import { cooperadoFluxoPainelProjecaoOpts } from "@/lib/cooperadoFluxoFinanceiroGlobal";
 import { cooperadoBicAutorizaZerarCardInicio } from "@/lib/cooperadoInicioCardPolicy";
 import { formatCurrency, formatDate, formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia, cn } from "@/utils/format";
 import type { PagamentoCooperadoRegistro, FichaCorrida, NotaPedido } from "@/types";
@@ -1419,93 +1415,6 @@ function FichaCorridaPageInner() {
       ? pagamentoConfirmadoMes.valorLiquido
       : totalPendente;
 
-  const resumoQuantoVouReceber = useMemo(() => {
-    if (!isCooperado) return null;
-    const painelAtualizando = {
-      estado: "carregando" as const,
-      mesLabel: paridadeCooperadoMobile?.mesLabel?.trim() || "—",
-      valorDestaque: 0,
-      valorRecibo: 0,
-      aguardandoAssinatura: false,
-      valorAberto: 0,
-      tituloValor: "Atualizando",
-      subtitulo: "Buscando o valor a receber da cooperativa…",
-      acaoRotulo: null,
-    };
-    if (paridadeCooperadoMobile && paridadeCooperadoMobile.valorLiquido > 0.005) {
-      const mesLabel =
-        paridadeCooperadoMobile.mesLabel?.trim() ||
-        (paridadeCooperadoMobile.mesesResumo[0]
-          ? formatMesReferencia(paridadeCooperadoMobile.mesesResumo[0]!)
-          : "—");
-      return {
-        estado: "a_receber" as const,
-        mesLabel,
-        valorDestaque: paridadeCooperadoMobile.valorLiquido,
-        valorRecibo: 0,
-        aguardandoAssinatura: false,
-        valorAberto: paridadeCooperadoMobile.valorLiquido,
-        tituloValor: "Total a receber",
-        subtitulo:
-          "Valor líquido das entregas conferidas (mesma base do responsável após sincronizar).",
-        acaoRotulo: null,
-      };
-    }
-    const store = (isAppDataWarm() ? getData() : data) ?? data;
-    const liquidadoPeloResponsavel = Boolean(
-      store &&
-        cooperadoId &&
-        coopId &&
-        cooperadoBicAutorizaZerarCardInicio(store, cooperadoId, coopId)
-    );
-    if (financeiroUiSnapshot?.painelParaExibicao) {
-      const p = financeiroUiSnapshot.painelParaExibicao;
-      const painelTemValor =
-        (p.valorDestaque ?? 0) > 0.005 || p.estado === "aguardando_assinatura";
-      if (painelTemValor || liquidadoPeloResponsavel) {
-        const mesLabel =
-          paridadeCooperadoMobile?.mesLabel?.trim() || financeiroUiSnapshot.mesLabel || p.mesLabel;
-        return { ...p, mesLabel };
-      }
-    }
-    if (!liquidadoPeloResponsavel && (paridadeCooperadoMobile?.valorLiquido ?? 0) <= 0.005) {
-      return painelAtualizando;
-    }
-    if (financeiroUiSnapshot?.status === "AGUARDANDO_BIC") {
-      return painelAtualizando;
-    }
-    if (!data || !cooperadoId) return painelAtualizando;
-    const readinessPainel = apresentacaoFinanceiroUi
-      ? {
-          role: user?.role,
-          syncing: false,
-          cooperadoPagamentosHydrated: true,
-          conferindoPagamentoNuvem,
-        }
-      : {
-          role: user?.role,
-          syncing: syncCooperadoFinanceiro,
-          cooperadoPagamentosHydrated,
-          conferindoPagamentoNuvem,
-        };
-    return bicCentralResolvePainelParaExibicao(data, cooperadoId, coopId, {
-      ...cooperadoFluxoPainelProjecaoOpts(readinessPainel),
-      apresentacaoConsolidada: apresentacaoFinanceiroUi,
-    });
-  }, [
-    financeiroUiSnapshot,
-    isCooperado,
-    paridadeCooperadoMobile,
-    data,
-    cooperadoId,
-    coopId,
-    conferindoPagamentoNuvem,
-    syncCooperadoFinanceiro,
-    cooperadoPagamentosHydrated,
-    user?.role,
-    apresentacaoFinanceiroUi,
-  ]);
-
   const pendentePagamentoResponsavel = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return false;
     const leitura = dataPagar ?? data;
@@ -1524,11 +1433,23 @@ function FichaCorridaPageInner() {
       vivo.itens.length === 0 && cacheEntregas ? cacheEntregas : vivo;
     if (!data || !cooperadoSelecionadoId) return comCache(resumoItensMes);
     if (!isCooperado && aba === "pagar") return resumoItensPagamento;
+    if (isCooperado && !visualizandoHistorico) {
+      if (mesesFinanceiroCooperado.length > 1) {
+        return comCache(
+          agregarItensFichaMeses(data, cooperadoSelecionadoId, mesesFinanceiroCooperado, coopId, {
+            apenasPendentes: true,
+          })
+        );
+      }
+      return comCache(
+        agregarItensFichaMes(data, cooperadoSelecionadoId, mesAtivo, coopId, {
+          apenasPendentes: true,
+        })
+      );
+    }
     if (
       !visualizandoHistorico &&
-      (pendentePagamentoResponsavel ||
-        (isCooperado ? pagamentoAguardandoExibicao : pagamentoAguardando) ||
-        (isCooperado && (paridadeCooperadoMobile?.valorLiquido ?? 0) > 0))
+      (pendentePagamentoResponsavel || pagamentoAguardando)
     ) {
       if (isCooperado && mesesFinanceiroCooperado.length > 1) {
         return comCache(
@@ -2050,8 +1971,7 @@ function FichaCorridaPageInner() {
   const verResumoCooperado = !secaoCooperadoAberta || abaSecaoCooperado === "resumo";
   const verFichaCooperado = !secaoCooperadoAberta || abaSecaoCooperado === "ficha";
   const verCreditosCooperado = secaoCooperadoAberta && abaSecaoCooperado === "creditos";
-  const verFotosCooperado =
-    secaoCooperadoAberta && (abaSecaoCooperado === "resumo" || abaSecaoCooperado === "fotos");
+  const verFotosCooperado = secaoCooperadoAberta && abaSecaoCooperado === "fotos";
   const verEntregasCooperado = verResumoCooperado || verFichaCooperado;
 
   if (!data) {
@@ -2062,20 +1982,22 @@ function FichaCorridaPageInner() {
             title="Financeiro"
             subtitle="Mês em aberto com valores pendentes — meses pagos ficam nas abas ao lado"
           />
-          <CooperadoQuantoVouReceberPainel
-            estado="carregando"
-            mesLabel="—"
-            valorDestaque={0}
-            tituloValor="Atualizando"
-            subtitulo="Buscando o valor a receber da cooperativa…"
-            acaoRotulo={null}
-          />
+          <p className="text-sm text-gray-600 bg-white border border-gray-200 rounded-2xl px-4 py-6">
+            Buscando a ficha em aberto da cooperativa…
+          </p>
         </div>
       );
     }
     if (!ready && !cooperadoInstant && !isAppDataWarm()) return <FinanceiroTabSkeleton />;
     return <PageSkeleton compact />;
   }
+
+  const resumoFichaAberto = paridadeCooperadoMobile?.resumo ?? resumoExibicao;
+  const descontosFichaAberto = paridadeCooperadoMobile?.descontosExtras ?? descontosExtrasResumo;
+  const totalEmAbertoFicha =
+    (paridadeCooperadoMobile?.valorLiquido ?? 0) > 0.005
+      ? paridadeCooperadoMobile!.valorLiquido
+      : (valorReceberConsolidado?.valor ?? resumoFichaAberto?.valorLiquido ?? 0);
 
   const pixOk = cooperadoSelecionado && !cooperadoPrecisaCadastrarPix(cooperadoSelecionado.chavePix, cooperadoSelecionado.pixValido);
   const mostrarPagar = isCooperado || aba === "pagar";
@@ -2228,36 +2150,12 @@ function FichaCorridaPageInner() {
       {verResumoCooperado &&
         isCooperado &&
         !visualizandoHistorico &&
-        resumoQuantoVouReceber?.estado === "carregando" &&
         !mesQuitadoCooperado &&
-        !exibirPagamento && (
-          <CooperadoQuantoVouReceberPainel
-            estado={resumoQuantoVouReceber.estado}
-            mesLabel={resumoQuantoVouReceber.mesLabel}
-            valorDestaque={0}
-            tituloValor={resumoQuantoVouReceber.tituloValor}
-            subtitulo={resumoQuantoVouReceber.subtitulo}
-            acaoRotulo={null}
-          />
-        )}
-
-      {verResumoCooperado &&
-        isCooperado &&
-        !visualizandoHistorico &&
-        !exibirQuantoVouReceber &&
-        !mesQuitadoCooperado &&
-        resumoQuantoVouReceber?.estado !== "carregando" && (
-        <div className="text-center py-14 px-6 bg-white rounded-2xl border border-dashed border-gray-300 mb-6">
-          <Wallet size={48} className="mx-auto text-gray-300 mb-4" />
-          <h2 className="text-lg font-semibold text-gray-800">Nada a receber agora</h2>
-          <p className="text-sm text-gray-500 mt-2">
-            Quando a cooperativa aprovar suas entregas, os valores aparecem aqui automaticamente.
+        !resumoFichaAberto && (
+          <p className="text-sm text-gray-600 bg-white border border-gray-200 rounded-2xl px-4 py-6 mb-6">
+            Buscando a ficha em aberto da cooperativa…
           </p>
-          <Link href="/notas-pedido" className="inline-block mt-4">
-            <Button variant="secondary">Ver entregas</Button>
-          </Link>
-        </div>
-      )}
+        )}
 
       {verCreditosCooperado && cooperadoSelecionadoId && coopCnpjResumo && !exibirPagamento && (
         <Card title="Compras no HB Créditos" className="mb-6">
@@ -2544,14 +2442,14 @@ function FichaCorridaPageInner() {
         />
       )}
 
-      {exibirRelatorioMes && !cooperadoVistaMesHistorico && (
+      {(isCooperado
+        ? !visualizandoHistorico && !!resumoFichaAberto
+        : exibirRelatorioMes) && !cooperadoVistaMesHistorico && (
         <>
           {verResumoCooperado && <Card
             title={
               isCooperado
-                ? visualizandoHistorico
-                  ? `Resumo · ${formatMesReferencia(mesAtivo)}`
-                  : `Resumo · ${paridadeCooperadoMobile?.mesLabel ?? valorReceberConsolidado?.mesLabel ?? formatMesReferencia(mesAtivo)}`
+                ? "Resumo financeiro"
                 : `Ficha — ${nomeCooperado}`
             }
             className="mb-6"
@@ -2587,85 +2485,23 @@ function FichaCorridaPageInner() {
                 rotuloTotal="Total recebido"
               />
             )}
-            {isCooperado &&
-              resumoExibicao &&
-              !visualizandoHistorico &&
-              cooperadoSelecionadoId && (
-                <div className="space-y-6 mb-4">
-                  {resumosMesEmAbertoCooperado.length > 0
-                    ? resumosMesEmAbertoCooperado.map((r) => {
-                        const part = leituraFinanceiraParidadeCooperadoMesReferencia(
-                          data,
-                          cooperadoSelecionadoId,
-                          coopId,
-                          r.mesReferencia
-                        );
-                        const resumoMes = part.resumo;
-                        const liquido = part.valorLiquido > 0.005 ? part.valorLiquido : r.valorAReceber;
-                        if (liquido <= 0.005 && resumoMes.valorEntregas <= 0.005) return null;
-                        return (
-                          <div key={r.mesReferencia} className="rounded-xl border border-green-100 bg-green-50/30 p-4">
-                            <p className="text-sm font-bold text-green-900 mb-3">
-                              {formatMesReferencia(r.mesReferencia)}
-                              {liquido > 0.005 && (
-                                <span className="ml-2 font-semibold text-green-700">
-                                  · {formatCurrency(liquido)}
-                                </span>
-                              )}
-                            </p>
-                            <ResumoDescontosMes
-                              valorBruto={resumoMes.valorBruto}
-                              descontoCooperativa={resumoMes.descontoCooperativa}
-                              descontoPadraoPct={data.config.descontoPadraoCooperativa}
-                              valorEntregas={resumoMes.valorEntregas}
-                              descontosExtras={part.descontosExtras}
-                              totalLiquido={liquido}
-                              rotuloTotal="A receber"
-                            />
-                            {coopCnpjResumo &&
-                              !secaoCooperadoAberta &&
-                              part.descontosExtras.some((d) => d.tipo === "conta_coop") && (
-                                <HistoricoHbCreditosResumo
-                                  cnpj={coopCnpjResumo}
-                                  cooperadoId={cooperadoSelecionadoId}
-                                  mesReferencia={r.mesReferencia}
-                                  valorEntregas={resumoMes.valorEntregas}
-                                  descontosExtras={part.descontosExtras}
-                                  variant="cooperado"
-                                />
-                              )}
-                          </div>
-                        );
-                      })
-                    : (
-                      <>
-                        <ResumoDescontosMes
-                          valorBruto={resumoExibicao.valorBruto}
-                          descontoCooperativa={resumoExibicao.descontoCooperativa}
-                          descontoPadraoPct={data.config.descontoPadraoCooperativa}
-                          valorEntregas={resumoExibicao.valorEntregas}
-                          descontosExtras={descontosExtrasResumo}
-                          totalLiquido={
-                            paridadeCooperadoMobile?.valorLiquido ??
-                            valorReceberConsolidado?.valor ??
-                            resumoExibicao.valorLiquido
-                          }
-                          rotuloTotal="A receber"
-                        />
-                        {coopCnpjResumo &&
-                          !secaoCooperadoAberta &&
-                          descontosExtrasResumo.some((d) => d.tipo === "conta_coop") && (
-                            <HistoricoHbCreditosResumo
-                              cnpj={coopCnpjResumo}
-                              cooperadoId={cooperadoSelecionadoId}
-                              mesReferencia={mesReferenciaHbCooperado}
-                              valorEntregas={resumoExibicao.valorEntregas}
-                              descontosExtras={descontosExtrasResumo}
-                              variant="cooperado"
-                            />
-                          )}
-                      </>
-                    )}
+            {isCooperado && resumoFichaAberto && !visualizandoHistorico && (
+                <div className="mb-4">
+                  <p className="text-sm text-gray-600 mb-3">
+                    {paridadeCooperadoMobile?.mesLabel ??
+                      valorReceberConsolidado?.mesLabel ??
+                      formatMesReferencia(mesAtivo)}
+                    {" · ficha em aberto"}
+                  </p>
+                  <ResumoDescontosMes
+                    valorBruto={resumoFichaAberto.valorBruto}
+                    descontoCooperativa={resumoFichaAberto.descontoCooperativa}
+                    descontoPadraoPct={data.config.descontoPadraoCooperativa}
+                    valorEntregas={resumoFichaAberto.valorEntregas}
+                    descontosExtras={descontosFichaAberto}
+                    totalLiquido={totalEmAbertoFicha}
+                    rotuloTotal="Total em aberto"
+                  />
                 </div>
               )}
             {visualizandoHistorico &&
@@ -2778,13 +2614,15 @@ function FichaCorridaPageInner() {
           </Card>}
 
           {verEntregasCooperado && <Card
-            title={`Resumo das entregas · ${
-              isCooperado && !visualizandoHistorico && mesesFinanceiroCooperado.length > 1
-                ? formatMesesReferenciaRotulo(mesesFinanceiroCooperado)
-                : !isCooperado && mesesPendentesPagamento.length > 1
-                  ? formatMesesReferenciaRotulo(mesesPendentesPagamento)
-                  : formatMesReferencia(mesAtivo)
-            }`}
+            title={
+              isCooperado
+                ? "Resumo de entregas por itens"
+                : `Resumo das entregas · ${
+                    mesesPendentesPagamento.length > 1
+                      ? formatMesesReferenciaRotulo(mesesPendentesPagamento)
+                      : formatMesReferencia(mesAtivo)
+                  }`
+            }
             className="mb-6"
           >
             <TabelaResumoItens itens={resumoItensExibicao.itens} entregas={resumoItensExibicao.entregas} />
@@ -2805,51 +2643,19 @@ function FichaCorridaPageInner() {
               </div>
             )}
           </Card>}
+          {isCooperado && verResumoCooperado && (
+            <div className="rounded-2xl bg-green-700 text-white px-5 py-4 mb-6 flex items-center justify-between gap-3">
+              <span className="font-semibold">Total em aberto</span>
+              <span className="text-2xl font-bold tabular-nums">{formatCurrency(totalEmAbertoFicha)}</span>
+            </div>
+          )}
         </>
       )}
 
       {cooperadoSelecionadoId && exibirPagamento && (
         <>
-          {isCooperado && resumoQuantoVouReceber ? (
+          {isCooperado ? (
             <>
-              {verResumoCooperado && <CooperadoQuantoVouReceberPainel
-                estado={resumoQuantoVouReceber.estado}
-                mesLabel={paridadeCooperadoMobile?.mesLabel ?? resumoQuantoVouReceber.mesLabel}
-                valorDestaque={
-                  resumoQuantoVouReceber.estado === "carregando"
-                    ? 0
-                    : !fluxoReciboAssinatura || resumoQuantoVouReceber.estado !== "aguardando_assinatura"
-                      ? totalExibido
-                      : resumoQuantoVouReceber.valorDestaque
-                }
-                valorAbertoEntregas={resumoQuantoVouReceber.valorAberto}
-                tituloValor={resumoQuantoVouReceber.tituloValor}
-                subtitulo={resumoQuantoVouReceber.subtitulo}
-                acaoRotulo={fluxoReciboAssinatura ? resumoQuantoVouReceber.acaoRotulo : null}
-                onAcao={
-                  fluxoReciboAssinatura && resumoQuantoVouReceber.acaoRotulo
-                    ? () => setAssinaturaModal(true)
-                    : undefined
-                }
-                mostrarDetalheCalculo={Boolean(
-                  resumoExibicao &&
-                    (resumoExibicao.valorBruto > 0 ||
-                      totalPendente > 0 ||
-                      descontosExtrasResumo.length > 0)
-                )}
-                detalheCalculo={
-                  resumoExibicao
-                    ? {
-                        valorBruto: resumoExibicao.valorBruto,
-                        descontoCooperativa: resumoExibicao.descontoCooperativa,
-                        descontoPadraoPct: data.config.descontoPadraoCooperativa,
-                        valorEntregas: resumoExibicao.valorEntregas,
-                        descontosExtras: descontosExtrasResumo,
-                        totalLiquido: totalExibido,
-                      }
-                    : undefined
-                }
-              />}
               {verCreditosCooperado && cooperadoSelecionadoId && coopCnpjResumo && (
                 <Card title="Compras no HB Créditos" className="mb-6">
                   <HistoricoHbCreditosResumo
