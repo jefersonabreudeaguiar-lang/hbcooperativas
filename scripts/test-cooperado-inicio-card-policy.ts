@@ -178,6 +178,7 @@ function main() {
         cooperadoId: COOPERADO,
         mesReferencia: "2026-10",
         status: "confirmado",
+        pagoPor: "Resp",
         valorLiquido: 180,
         valorBruto: 180,
         fichaIds: ["f1"],

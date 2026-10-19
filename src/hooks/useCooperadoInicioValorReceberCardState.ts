@@ -306,10 +306,9 @@ export function useCooperadoInicioValorReceberCardState(input: {
         Boolean(fromMotor) &&
         !cooperadoMotorTemObrigacaoReceber(fromMotor!.display) &&
         financeiroCompleto &&
-        (reciboAssinadoLocal ||
-          cooperadoBicAutorizaZerarCardInicio(data!, input.cooperadoId!, cooperativaIdCard!, {
-            tinhaValorExibido: persistidoComObrigacao,
-          }));
+        cooperadoBicAutorizaZerarCardInicio(data!, input.cooperadoId!, cooperativaIdCard!, {
+          tinhaValorExibido: persistidoComObrigacao,
+        });
 
       const displayEstavel = cooperadoInicioCardEscolherDisplayEstavel({
         persistido: persistidoMesmoBuild?.display,
@@ -433,7 +432,12 @@ export function useCooperadoInicioValorReceberCardState(input: {
         };
       }
 
-      if (reciboAssinadoLocal) {
+      if (
+        reciboAssinadoLocal &&
+        dataLatch &&
+        input.cooperadoId &&
+        cooperadoBicAutorizaZerarCardInicio(dataLatch, input.cooperadoId, cooperativaIdLatch)
+      ) {
         return {
           display: SNAPSHOT_VAZIO,
           latch: {

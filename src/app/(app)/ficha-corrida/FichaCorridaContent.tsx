@@ -182,6 +182,7 @@ import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExib
 import { materializarCooperadoPwaAposAssinaturaReciboLocal } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { useCooperadoApresentacaoFinanceiraConsolidada } from "@/hooks/useCooperadoApresentacaoFinanceiraConsolidada";
 import { cooperadoFluxoPainelProjecaoOpts } from "@/lib/cooperadoFluxoFinanceiroGlobal";
+import { cooperadoBicAutorizaZerarCardInicio } from "@/lib/cooperadoInicioCardPolicy";
 import { formatCurrency, formatDate, formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia, cn } from "@/utils/format";
 import type { PagamentoCooperadoRegistro, FichaCorrida, NotaPedido } from "@/types";
 
@@ -211,6 +212,7 @@ function TabelaResumoItens({
             <tr>
               <th className="text-left px-4 py-2.5 font-semibold">Item</th>
               <th className="text-right px-4 py-2.5 font-semibold w-28">Quantidade</th>
+              <th className="text-right px-4 py-2.5 font-semibold w-36">Preço</th>
               <th className="text-right px-4 py-2.5 font-semibold w-32">Valor</th>
             </tr>
           </thead>
@@ -219,7 +221,10 @@ function TabelaResumoItens({
               <tr key={i.produtoInstituicaoId || `${i.produtoNome}-${i.unidade}`} className="hover:bg-green-50/40">
                 <td className="px-4 py-2.5 font-medium text-gray-900">{i.produtoNome}</td>
                 <td className="px-4 py-2.5 text-right text-gray-700">
-                  {i.quantidade} {i.unidade}
+                  {i.quantidade} {i.unidade || "un"}
+                </td>
+                <td className="px-4 py-2.5 text-right text-gray-700">
+                  {formatCurrency(i.precoUnitario)}/{i.unidade || "un"}
                 </td>
                 <td className="px-4 py-2.5 text-right font-medium">{formatCurrency(i.valorBruto)}</td>
               </tr>
@@ -227,8 +232,8 @@ function TabelaResumoItens({
           </tbody>
           <tfoot className="bg-gray-50 border-t border-gray-200">
             <tr>
-              <td className="px-4 py-2.5 font-semibold text-gray-800" colSpan={2}>
-                Total bruto dos itens
+              <td className="px-4 py-2.5 font-semibold text-gray-800" colSpan={3}>
+                Total
               </td>
               <td className="px-4 py-2.5 text-right font-bold text-gray-900">
                 {formatCurrency(itens.reduce((s, i) => s + i.valorBruto, 0))}
@@ -494,6 +499,19 @@ function FichaCorridaPageInner() {
         apresentacaoConsolidada: apresentacaoFinanceiroUi,
       });
     const live = data && coopId ? readParidade(data) : null;
+    const fromSnapGuard = fichaResumoSnap
+      ? resolveParidadeFromFichaResumoSnapshot(fichaResumoSnap)
+      : null;
+    const liveValor = live?.valorLiquido ?? 0;
+    const snapValor = fromSnapGuard?.valorLiquido ?? 0;
+    const liquidadoPeloResponsavel = Boolean(
+      data &&
+        coopId &&
+        cooperadoBicAutorizaZerarCardInicio(data, cooperadoId, coopId)
+    );
+    if (fromSnapGuard && snapValor > 0.005 && liveValor <= 0.005 && !liquidadoPeloResponsavel) {
+      return fromSnapGuard;
+    }
     if (isCooperadoFinanceiroAppDataLiveRead()) {
       if (!data) return null;
       return live ?? readParidade(data);
@@ -1316,7 +1334,9 @@ function FichaCorridaPageInner() {
     visualizandoHistoricoPagamentoResponsavel,
   ]);
 
-  const resumoExibicao = resumo;
+  const resumoExibicao =
+    resumo ??
+    (isCooperado && paridadeCooperadoMobile?.resumo ? paridadeCooperadoMobile.resumo : null);
 
   const mesesResumoHbFicha = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return [];
@@ -1363,6 +1383,9 @@ function FichaCorridaPageInner() {
         : (financeiroAberto?.valorLiquido ?? 0);
 
   const descontosExtrasResumo = useMemo(() => {
+    if (isCooperado && paridadeCooperadoMobile) {
+      return paridadeCooperadoMobile.descontosExtras;
+    }
     if (!data || !cooperadoSelecionadoId) return [];
     if (visualizandoHistorico && resumoExibicao) {
       return resumoExibicao.descontosExtras;
@@ -1482,7 +1505,13 @@ function FichaCorridaPageInner() {
   }, [data, dataPagar, cooperadoSelecionadoId, coopId, isCooperado]);
 
   const resumoItensExibicao = useMemo(() => {
-    if (!data || !cooperadoSelecionadoId) return resumoItensMes;
+    const cacheEntregas =
+      isCooperado && (fichaResumoSnap?.itensEntregas?.itens.length ?? 0) > 0
+        ? fichaResumoSnap!.itensEntregas!
+        : null;
+    const comCache = (vivo: ReturnType<typeof agregarItensFichaMes>) =>
+      vivo.itens.length === 0 && cacheEntregas ? cacheEntregas : vivo;
+    if (!data || !cooperadoSelecionadoId) return comCache(resumoItensMes);
     if (!isCooperado && aba === "pagar") return resumoItensPagamento;
     if (
       !visualizandoHistorico &&
@@ -1491,9 +1520,11 @@ function FichaCorridaPageInner() {
         (isCooperado && (paridadeCooperadoMobile?.valorLiquido ?? 0) > 0))
     ) {
       if (isCooperado && mesesFinanceiroCooperado.length > 1) {
-        return agregarItensFichaMeses(data, cooperadoSelecionadoId, mesesFinanceiroCooperado, coopId, {
-          apenasPendentes: true,
-        });
+        return comCache(
+          agregarItensFichaMeses(data, cooperadoSelecionadoId, mesesFinanceiroCooperado, coopId, {
+            apenasPendentes: true,
+          })
+        );
       }
       if (!isCooperado && mesesPendentesPagamento.length > 1) {
         return agregarItensFichaMeses(
@@ -1506,11 +1537,13 @@ function FichaCorridaPageInner() {
           }
         );
       }
-      return agregarItensFichaMes(dataPagar ?? data, cooperadoSelecionadoId, mesAtivo, coopId, {
-        apenasPendentes: true,
-      });
+      return comCache(
+        agregarItensFichaMes(dataPagar ?? data, cooperadoSelecionadoId, mesAtivo, coopId, {
+          apenasPendentes: true,
+        })
+      );
     }
-    return resumoItensMes;
+    return comCache(resumoItensMes);
   }, [
     aba,
     coopId,
@@ -1526,6 +1559,7 @@ function FichaCorridaPageInner() {
     pendentePagamentoResponsavel,
     paridadeCooperadoMobile,
     resumoItensMes,
+    fichaResumoSnap,
     resumoItensPagamento,
     visualizandoHistorico,
   ]);

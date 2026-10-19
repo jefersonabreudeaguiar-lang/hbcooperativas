@@ -14,7 +14,6 @@ import {
 import { reconcileCooperadoAmountUsedCents } from "@/lib/supabase/creditAmountUsedReconcile";
 import {
   getLimiteCooperado,
-  healHbCreditNovoCicloQuandoBaseZero,
   resolveTetoGlobal,
   syncLimitesCooperadosFromCreditoBase,
 } from "@/lib/supabase/contaCoopStorage";
@@ -71,6 +70,8 @@ export async function syncHbLimitAfterCooperadoPayment(
     actorUserId: string;
     /** Snapshot opcional do crédito-base antes da confirmação (mesmo authoritative). */
     creditoBaseBeforeCents?: number | null;
+    /** Verdadeiro só em registrar-pagamento (responsável). Assinatura do cooperado não zera. */
+    liquidacaoConfirmadaPeloResponsavel?: boolean;
   }
 ): Promise<PostPaymentHbSyncResult> {
   const digits = normalizeCnpj(opts.cnpj);
@@ -95,9 +96,8 @@ export async function syncHbLimitAfterCooperadoPayment(
     };
   }
 
-  /** Operacional já persistido — compras HB quitadas na ficha saem do “utilizado” (novo ciclo). */
+  /** Operacional já persistido. O ciclo HB só zera se o responsável confirmou a liquidação. */
   await reconcileCooperadoAmountUsedCents(supabase, digits, cooperadoId, opts.actorUserId).catch(() => {});
-  await healHbCreditNovoCicloQuandoBaseZero(supabase, digits, cooperadoId, opts.actorUserId).catch(() => {});
 
   const limiteBefore = await getLimiteCooperado(supabase, digits, cooperadoId, {
     skipAmountUsedReconcile: true,
@@ -137,7 +137,14 @@ export async function syncHbLimitAfterCooperadoPayment(
     digits,
     [cooperadoId],
     picked.creditosBaseCents,
-    opts.actorUserId
+    opts.actorUserId,
+    opts.liquidacaoConfirmadaPeloResponsavel
+      ? {
+          liquidacaoConfirmadaPeloResponsavel: true,
+          pagamentoId: opts.paymentId,
+          cooperadoIdLiquidado: cooperadoId,
+        }
+      : undefined
   );
 
   if (!sync.ok) {

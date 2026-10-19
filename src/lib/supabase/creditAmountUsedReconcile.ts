@@ -5,8 +5,6 @@ import {
   type PaymentRowForUsedWithMeta,
 } from "@/lib/hb-credit/creditAmountUsedFichaQuitada";
 import { titularCooperadoIds } from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
-import { resolveAuthoritativeCreditBase } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
-import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { fetchOperacionalSync } from "@/lib/supabase/cooperativaSyncStorage";
 import { fetchAllCooperadosFromStorage } from "@/lib/supabase/cooperadosStorage";
 import { normalizeCnpj } from "@/utils/cooperativa";
@@ -155,21 +153,6 @@ export async function resolveExpectedAmountUsedCentsForCooperado(
 ): Promise<number> {
   const digits = normalizeCnpj(cnpj);
   if (!cooperadoId) return 0;
-
-  const authoritative = await resolveAuthoritativeCreditBase(supabase, digits, [cooperadoId]);
-  if (authoritative.ok) {
-    const canon = resolverCooperadoIdCanonico(
-      authoritative.creditoBaseAppData,
-      cooperadoId,
-      authoritative.cooperativaId
-    );
-    const base = Math.max(
-      authoritative.creditosBaseCents[cooperadoId] ?? 0,
-      authoritative.creditosBaseCents[canon] ?? 0
-    );
-    /** Sem a receber em aberto — HB “utilizado” reinicia (compras já abatidas no PIX). */
-    if (base === 0) return 0;
-  }
 
   const ctxLoad = await loadFichaQuitadaContext(supabase, digits, cooperadoId);
   if (!ctxLoad.ok) return 0;

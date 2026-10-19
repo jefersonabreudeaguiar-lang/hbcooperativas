@@ -107,6 +107,7 @@ export async function POST(request: Request) {
     paymentId: pagamento.id,
     actorUserId: actorId,
     creditoBaseBeforeCents,
+    liquidacaoConfirmadaPeloResponsavel: true,
   });
 
   return NextResponse.json(

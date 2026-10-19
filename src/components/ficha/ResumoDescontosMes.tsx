@@ -47,6 +47,10 @@ export function ResumoDescontosMes({
   tema = "claro",
 }: ResumoDescontosMesProps) {
   const escuro = tema === "escuro";
+  const descontoHb = descontosExtras
+    .filter((d) => d.tipo === "conta_coop")
+    .reduce((s, d) => s + (Number(d.valor) || 0), 0);
+  const extrasSemHb = descontosExtras.filter((d) => d.tipo !== "conta_coop");
 
   return (
     <div
@@ -73,7 +77,11 @@ export function ResumoDescontosMes({
         <span>Entregas líquidas</span>
         <span>{formatCurrency(valorEntregas)}</span>
       </div>
-      {descontosExtras.map((d, i) => (
+      <div className={`flex justify-between ${escuro ? "" : "text-red-600"}`}>
+        <span>Desconto {HB_CREDIT_PRODUCT_NAME}</span>
+        <span>- {formatCurrency(descontoHb)}</span>
+      </div>
+      {extrasSemHb.map((d, i) => (
         <div
           key={i}
           className={`flex justify-between ${

@@ -9,7 +9,9 @@ import { cooperadoAppReleaseNeedsOperacionalSync } from "@/lib/performance/coope
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import type { LeituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { cooperadoBicAutorizaZerarCardInicio } from "@/lib/cooperadoInicioCardPolicy";
 import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
+import { agregarItensFichaMeses } from "@/services/notaPedidoService";
 import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
@@ -25,6 +27,8 @@ export type CooperadoPwaFichaResumoSnapshot = {
   consolidado: LeituraFinanceiraParidadeCooperado["consolidado"];
   /** Paridade Financeiro (v2+) — leitura somente nas abas. */
   paridade?: LeituraFinanceiraParidadeCooperado;
+  /** Itens das entregas em aberto — o Financeiro reabre com a mesma tabela. */
+  itensEntregas?: ReturnType<typeof agregarItensFichaMeses>;
 };
 
 function storageKeyForVersion(
@@ -76,6 +80,10 @@ export function buildCooperadoPwaFichaResumoSnapshot(
       apresentacaoConsolidada,
     });
   const consolidado = paridade.consolidado;
+  const mesesItens = paridade.mesesResumo.length > 0 ? paridade.mesesResumo : [mesPrincipal];
+  const itensEntregas = agregarItensFichaMeses(data, canon, mesesItens, cooperativaId, {
+    apenasPendentes: true,
+  });
   return {
     v: COOPERADO_PWA_FICHA_RESUMO_SNAPSHOT_VERSION,
     appBuild: APP_BUILD_VERSION,
@@ -84,6 +92,7 @@ export function buildCooperadoPwaFichaResumoSnapshot(
     mesPrincipal,
     consolidado,
     paridade,
+    itensEntregas,
   };
 }
 
@@ -140,11 +149,17 @@ export function persistirCooperadoPwaFichaResumoSnapshotFromUser(
   if (!coopId) return null;
   const canon = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
   const built = buildCooperadoPwaFichaResumoSnapshot(data, canon, coopId, apresentacaoConsolidada);
+  const previous = lerCooperadoPwaFichaResumoSnapshot(canon, coopId);
+  const prevValor = previous?.paridade?.valorLiquido ?? previous?.consolidado?.valorLiquido ?? 0;
+  const nextValor = built.paridade?.valorLiquido ?? 0;
+  if (prevValor > 0.005 && nextValor <= 0.005 && !cooperadoBicAutorizaZerarCardInicio(data, canon, coopId)) {
+    return previous;
+  }
   if (
     cooperadoAppReleaseNeedsOperacionalSync() &&
-    (built.paridade?.valorLiquido ?? 0) <= 0.005
+    nextValor <= 0.005
   ) {
-    return null;
+    return previous;
   }
   gravarCooperadoPwaFichaResumoSnapshot(canon, coopId, built);
   return built;

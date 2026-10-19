@@ -120,14 +120,14 @@ export function cooperadoMotorTemObrigacaoReceber(motor: InicioCardMotorSnapshot
 }
 
 /**
- * Autoriza R$ 0 no Início só com obrigação atual liquidada.
- * PIX antigo, wipe de ficha ou sync incompleto não apagam o lastro.
+ * Autoriza R$ 0 no Início só com liquidação confirmada pelo responsável.
+ * Snapshot vazio, PIX antigo ou sync incompleto não apagam o lastro.
  */
 export function cooperadoBicAutorizaZerarCardInicio(
   data: AppData,
   cooperadoId: string,
   cooperativaId: string | undefined,
-  opts?: { tinhaValorExibido?: boolean }
+  _opts?: { tinhaValorExibido?: boolean }
 ): boolean {
   const paridadeValor = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId).valorLiquido;
   if (paridadeValor > 0) return false;
@@ -137,15 +137,15 @@ export function cooperadoBicAutorizaZerarCardInicio(
   const temFicha = (data.fichaCorrida ?? []).some((f) =>
     fichaPertenceCooperado(data, f, cooperadoId, cooperativaId)
   );
-  const temPixConfirmado = (data.pagamentosCooperado ?? []).some(
+  const temLiquidacaoResponsavel = (data.pagamentosCooperado ?? []).some(
     (p) =>
       pagamentoCooperadoPertenceCooperado(data, p, cooperadoId, cooperativaId) &&
-      p.status === "confirmado"
+      p.status === "confirmado" &&
+      Boolean(p.pagoPor?.trim())
   );
 
-  if (!opts?.tinhaValorExibido) return true;
-  if (!temFicha) return false;
-  return temPixConfirmado;
+  if (!temLiquidacaoResponsavel || !temFicha) return false;
+  return true;
 }
 
 /** Mantém valor exibido se motor veio zerado sem prova de pagamento BIC. */

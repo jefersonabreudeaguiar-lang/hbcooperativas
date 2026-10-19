@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v489
+
+- **A receber:** ao sair do app o valor fica gravado. Ele só muda com desconto ou acréscimo, e só some se o responsável confirmou a liquidação.
+- **Financeiro:** o resumo principal mostra entregas, descontos e sempre a linha Desconto HB Créditos. Outro resumo lista cada item com quantidade, preço por kg ou dúzia e o total.
+- **HB Créditos:** a conta não zera quando o snapshot da ficha vem vazio. O zero entra só na liquidação registrada pelo responsável.
+
 ## v361 (atual)
 
 - **Performance:** Início com folha L1 (`CooperadoInicioCooperadoLiveRoot`) — um subscribe de cooperado para saudação/assinatura; abas mobile com política `361-inicio-live-l1` (financeiro dormant + gate financeiro na casca).

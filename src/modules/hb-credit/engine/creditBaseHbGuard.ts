@@ -92,7 +92,7 @@ export function blindarCreditoBaseCentsHb(
 
 /**
  * Limite HB efetivo para UI/API — percentual sobre o bruto da ficha em aberto.
- * Sem base em aberto (mês liquidado), liberado exibido = no máximo o já utilizado (compras HB).
+ * Base 0 não esconde o limite gravado: zerar a conta só na liquidação confirmada pelo responsável.
  */
 export function resolveLimiteHbCooperadoEfetivo(
   limite: ContaCoopLimiteCooperado,
@@ -107,7 +107,7 @@ export function resolveLimiteHbCooperadoEfetivo(
   let effectiveReleased = released;
 
   if (base === 0) {
-    effectiveReleased = Math.min(released, usado);
+    effectiveReleased = released;
   } else {
     const tetoPct =
       Number.isFinite(tetoPercent) && tetoPercent > 0 && tetoPercent <= 100 ? tetoPercent : 100;

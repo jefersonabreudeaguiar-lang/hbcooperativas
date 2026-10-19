@@ -1,5 +1,5 @@
 /**
- * HB Créditos — syncLimiteCooperadoFromCreditoBase com base M6 zero reduz liberado (quitação).
+ * HB Créditos — base M6 zero não apaga o limite sem liquidação do responsável.
  * npx tsx scripts/test-hb-credit-sync-limite-base-zero.ts
  */
 import assert from "node:assert/strict";
@@ -67,6 +67,10 @@ function createMockSupabase(state: MockState): SupabaseClient {
       },
       eq(col: string, val: unknown) {
         filters.push([col, val]);
+        return api;
+      },
+      in(col: string, vals: unknown[]) {
+        if (Array.isArray(vals) && vals.length === 1) filters.push([col, vals[0]]);
         return api;
       },
       upsert(row: unknown) {
@@ -202,7 +206,7 @@ function readLimit(state: MockState, cooperadoId: string): number {
 }
 
 async function main() {
-// TESTE 1 — limite 500 + usado 0 + base 0 → limite zera
+// TESTE 1 — limite 500 + usado 0 + base 0 sem liquidação → limite permanece
 {
   const state: MockState = {
     accounts: new Map(),
@@ -216,12 +220,12 @@ async function main() {
   const r = await syncLimiteCooperadoFromCreditoBase(supabase, CNPJ, COOP_ID, 0, ACTOR);
   assert.equal(r.ok, true);
   if (!r.ok) throw new Error("unexpected");
-  assert.equal(r.action, "tightened");
-  assert.equal(r.limite.limiteLiberadoCents, 0);
-  assert.equal(readLimit(state, COOP_ID), 0);
+  assert.equal(r.action, "unchanged");
+  assert.equal(r.limite.limiteLiberadoCents, 50_000);
+  assert.equal(readLimit(state, COOP_ID), 50_000);
 }
 
-// TESTE 2 — limite 500 + usado 100 + base 0 → limite aperta para usado
+// TESTE 2 — limite 500 + usado 100 + base 0 sem liquidação → não aperta
 {
   const state: MockState = {
     accounts: new Map(),
@@ -235,11 +239,11 @@ async function main() {
   const r = await syncLimiteCooperadoFromCreditoBase(supabase, CNPJ, COOP_ID, 0, ACTOR);
   assert.equal(r.ok, true);
   if (!r.ok) throw new Error("unexpected");
-  assert.equal(r.action, "tightened");
-  assert.equal(r.limite.limiteLiberadoCents, 10_000);
+  assert.equal(r.action, "unchanged");
+  assert.equal(r.limite.limiteLiberadoCents, 50_000);
   assert.equal(r.limite.valorUsadoCents, 10_000);
-  assert.equal(r.limite.valorDisponivelCents, computeDisponivel(10_000, 10_000));
-  assert.equal(readLimit(state, COOP_ID), 10_000);
+  assert.equal(r.limite.valorDisponivelCents, computeDisponivel(50_000, 10_000));
+  assert.equal(readLimit(state, COOP_ID), 50_000);
 }
 
 // TESTE 3 — sem conta + base 0 → não cria limite
@@ -280,7 +284,7 @@ async function main() {
   assert.equal(manual.limite.limiteLiberadoCents, 30_000);
 }
 
-// TESTE 5 — estorno: sync base 0 com usado ainda registrado aperta para usado
+// TESTE 5 — estorno com base 0 não reduz o limite gravado
 {
   const state: MockState = {
     accounts: new Map(),
@@ -302,11 +306,11 @@ async function main() {
   const r = await syncLimiteCooperadoFromCreditoBase(supabase, CNPJ, COOP_ID, 0, ACTOR);
   assert.equal(r.ok, true);
   if (!r.ok) throw new Error("unexpected");
-  assert.equal(readLimit(state, COOP_ID), 10_000);
-  assert.equal(r.limite.limiteLiberadoCents, 10_000);
+  assert.equal(readLimit(state, COOP_ID), 50_000);
+  assert.equal(r.limite.limiteLiberadoCents, 50_000);
 }
 
-console.log("OK — syncLimiteCooperadoFromCreditoBase base M6 zero (5 cenários)");
+console.log("OK — syncLimiteCooperadoFromCreditoBase base M6 zero não apaga limite (5 cenários)");
 }
 
 main().catch((err) => {

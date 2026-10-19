@@ -137,8 +137,8 @@ function miniData(overrides: Partial<AppData> = {}): AppData {
   const baseReais = hbCreditCreditoBaseReais(data, COOPERADO, COOP);
   assert.equal(baseReais, 0, "crédito-base HB = bruto da ficha em meses em aberto (mês quitado zera)");
   const eff = resolveLimiteHbCooperadoEfetivo(limiteRow(50_000, 0), 0, 100);
-  assert.equal(eff.limiteLiberadoCents, 0);
-  assert.equal(eff.valorDisponivelCents, 0);
+  assert.equal(eff.limiteLiberadoCents, 50_000, "base 0 no snapshot não esconde o limite gravado");
+  assert.equal(eff.valorDisponivelCents, 50_000);
 }
 
 // CENÁRIO 3 — compra
