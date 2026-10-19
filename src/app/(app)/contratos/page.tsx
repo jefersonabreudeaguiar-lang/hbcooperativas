@@ -16,9 +16,13 @@ import { Input, Select, FormField } from "@/components/ui/Form";
 import { updateData, generateId, addAuditEntry, getData, isAppDataWarm } from "@/services/dataStore";
 import {
   isStaffPrimeiroDiaContratosVazio,
+  shouldShowStaffPrimeiroDiaConviteCooperado,
   shouldShowStaffPrimeiroDiaSenhaCadastro,
   STAFF_PRIMEIRO_DIA_CONTRATOS_TEXTO,
   STAFF_PRIMEIRO_DIA_CONTRATOS_TITULO,
+  STAFF_PRIMEIRO_DIA_CONVITE_HREF,
+  STAFF_PRIMEIRO_DIA_CONVITE_TEXTO,
+  STAFF_PRIMEIRO_DIA_CONVITE_TITULO,
   STAFF_PRIMEIRO_DIA_SENHA_HREF,
   STAFF_PRIMEIRO_DIA_SENHA_TEXTO,
   STAFF_PRIMEIRO_DIA_SENHA_TITULO,
@@ -272,6 +276,12 @@ function ContratosPageInner() {
     data,
     warm: isAppDataWarm(),
   });
+  const mostrarConviteCooperado = shouldShowStaffPrimeiroDiaConviteCooperado({
+    role: user?.role,
+    coopId,
+    data,
+    warm: isAppDataWarm(),
+  });
   const semItens = instituicoes.filter((i) => (produtosPorInst.get(i.id)?.length ?? 0) === 0);
 
   return (
@@ -301,6 +311,15 @@ function ContratosPageInner() {
           {STAFF_PRIMEIRO_DIA_SENHA_TEXTO}{" "}
           <Link href={STAFF_PRIMEIRO_DIA_SENHA_HREF} className="font-semibold underline">
             Abrir Meu perfil
+          </Link>
+        </AlertBanner>
+      )}
+
+      {mostrarConviteCooperado && (
+        <AlertBanner variant="info" title={STAFF_PRIMEIRO_DIA_CONVITE_TITULO} className="mb-4">
+          {STAFF_PRIMEIRO_DIA_CONVITE_TEXTO}{" "}
+          <Link href={STAFF_PRIMEIRO_DIA_CONVITE_HREF} className="font-semibold underline">
+            Abrir Cadastro
           </Link>
         </AlertBanner>
       )}

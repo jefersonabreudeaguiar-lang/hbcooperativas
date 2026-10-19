@@ -13,6 +13,10 @@ export const STAFF_PRIMEIRO_DIA_SENHA_TITULO = "Defina a senha de cadastro dos c
 export const STAFF_PRIMEIRO_DIA_SENHA_TEXTO =
   "Passe essa senha junto com o CNPJ. Sem ela, o cooperado não sabe o que informar no cadastro.";
 export const STAFF_PRIMEIRO_DIA_SENHA_HREF = "/meu-perfil#senha-cadastro";
+export const STAFF_PRIMEIRO_DIA_CONVITE_TITULO = "Chame o primeiro cooperado";
+export const STAFF_PRIMEIRO_DIA_CONVITE_TEXTO =
+  "Passe o CNPJ e a senha de cadastro. Ele entra em Cadastro, cria a conta e já pode entregar.";
+export const STAFF_PRIMEIRO_DIA_CONVITE_HREF = "/cadastro";
 
 export function isStaffPrimeiroDiaContratosVazio(opts: {
   role?: string;
@@ -36,6 +40,19 @@ export function shouldShowStaffPrimeiroDiaSenhaCadastro(opts: {
   const coop = opts.data.cooperativas.find((c) => c.id === opts.coopId);
   if (!coop) return false;
   return !exigeSenhaCadastroCooperado(coop, coop.mensalidadeConfig);
+}
+
+export function shouldShowStaffPrimeiroDiaConviteCooperado(opts: {
+  role?: string;
+  coopId?: string | null;
+  data: AppData | null;
+  warm: boolean;
+}): boolean {
+  if (!opts.warm || !opts.data || !opts.coopId) return false;
+  if (!isStaffGestaoRole(opts.role)) return false;
+  const coop = opts.data.cooperativas.find((c) => c.id === opts.coopId);
+  if (!coop) return false;
+  return (opts.data.cooperados ?? []).filter((c) => c.cooperativaId === opts.coopId).length === 0;
 }
 
 export function shouldRedirectStaffPrimeiroDiaContratos(opts: {

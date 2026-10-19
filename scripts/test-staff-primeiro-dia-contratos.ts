@@ -9,8 +9,10 @@ import { emptyInitialData } from "../src/mock/data.ts";
 import {
   isStaffPrimeiroDiaContratosVazio,
   shouldRedirectStaffPrimeiroDiaContratos,
+  shouldShowStaffPrimeiroDiaConviteCooperado,
   shouldShowStaffPrimeiroDiaSenhaCadastro,
   STAFF_PRIMEIRO_DIA_CONTRATOS_TITULO,
+  STAFF_PRIMEIRO_DIA_CONVITE_HREF,
   STAFF_PRIMEIRO_DIA_SENHA_HREF,
 } from "../src/lib/staff/staffPrimeiroDiaContratos.ts";
 
@@ -125,8 +127,10 @@ const contratosPage = readFileSync(
 assert.match(contratosPage, /isStaffPrimeiroDiaContratosVazio/);
 assert.match(contratosPage, /STAFF_PRIMEIRO_DIA_CONTRATOS_TITULO/);
 assert.match(contratosPage, /shouldShowStaffPrimeiroDiaSenhaCadastro/);
+assert.match(contratosPage, /shouldShowStaffPrimeiroDiaConviteCooperado/);
 assert.match(STAFF_PRIMEIRO_DIA_CONTRATOS_TITULO, /Primeiro dia/);
 assert.equal(STAFF_PRIMEIRO_DIA_SENHA_HREF, "/meu-perfil#senha-cadastro");
+assert.equal(STAFF_PRIMEIRO_DIA_CONVITE_HREF, "/cadastro");
 
 const semSenha = {
   ...emptyInitialData,
@@ -166,6 +170,40 @@ assert.equal(
 );
 assert.equal(
   shouldShowStaffPrimeiroDiaSenhaCadastro({
+    role: "cooperado",
+    coopId: "coop1",
+    data: semSenha,
+    warm: true,
+  }),
+  false
+);
+
+const comCooperado = {
+  ...comSenha,
+  cooperados: [{ id: "c1", cooperativaId: "coop1", nomeCompleto: "Orlando", status: "ativo" } as never],
+};
+
+assert.equal(
+  shouldShowStaffPrimeiroDiaConviteCooperado({
+    role: "responsavel",
+    coopId: "coop1",
+    data: semSenha,
+    warm: true,
+  }),
+  true
+);
+assert.equal(
+  shouldShowStaffPrimeiroDiaConviteCooperado({
+    role: "responsavel",
+    coopId: "coop1",
+    data: comCooperado,
+    warm: true,
+  }),
+  false,
+  "casa com cooperado não vê o convite"
+);
+assert.equal(
+  shouldShowStaffPrimeiroDiaConviteCooperado({
     role: "cooperado",
     coopId: "coop1",
     data: semSenha,
