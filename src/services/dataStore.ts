@@ -17,6 +17,13 @@ import {
   primaryStaffGestaoCnpjFromData,
   staffGestaoRiquezaTotal,
 } from "@/lib/staff/staffGestaoSnapshotGuard";
+import {
+  APP_DATA_STORAGE_KEY,
+  isAppDataPersistStorageKey,
+  readAppDataPersistRaw,
+  removeAppDataPersistRaw,
+  writeAppDataPersistRaw,
+} from "@/lib/staff/staffGestaoPersistKey";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
 import { normalizeCreatorEmail, normalizeAuthEmail } from "@/lib/security/appCreator";
 import {
@@ -75,7 +82,7 @@ import { takeInlineParsedAppData } from "@/lib/performance/cooperadoAppDataInlin
 
 export { generateId };
 
-const STORAGE_KEY = "coopeagriplla_data";
+const STORAGE_KEY = APP_DATA_STORAGE_KEY;
 const SESSION_KEY = "coopeagriplla_session";
 const DEMO_PURGED_KEY = "coopeagriplla_demo_purged";
 
@@ -109,7 +116,7 @@ export function isAppDataWarm(): boolean {
 export function persistedAppDataBlobLooksHydrated(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = readAppDataPersistRaw();
     return !!raw && raw.length > 10_000;
   } catch {
     return false;
@@ -171,7 +178,7 @@ function attachStorageListener(): void {
   if (typeof window === "undefined" || storageListenerAttached) return;
   storageListenerAttached = true;
   window.addEventListener("storage", (event) => {
-    if (event.key === STORAGE_KEY || event.key === DEMO_PURGED_KEY) {
+    if (isAppDataPersistStorageKey(event.key) || event.key === DEMO_PURGED_KEY) {
       invalidateCache();
       notify();
     }
@@ -404,7 +411,7 @@ function pruneAuxiliaryLocalStorage(): void {
   const keys: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
-    if (key && !LOCAL_KEYS_PRESERVE.has(key)) keys.push(key);
+    if (key && !LOCAL_KEYS_PRESERVE.has(key) && !isAppDataPersistStorageKey(key)) keys.push(key);
   }
   for (const key of keys) {
     try {
@@ -416,24 +423,17 @@ function pruneAuxiliaryLocalStorage(): void {
 }
 
 function writeStoragePayload(serialized: string): boolean {
+  if (writeAppDataPersistRaw(serialized)) return true;
   try {
-    localStorage.setItem(STORAGE_KEY, serialized);
-    return true;
-  } catch (e) {
-    if (!isStorageQuotaError(e)) return false;
-  }
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.setItem(STORAGE_KEY, serialized);
-    return true;
+    removeAppDataPersistRaw();
+    if (writeAppDataPersistRaw(serialized)) return true;
   } catch (e) {
     if (!isStorageQuotaError(e)) return false;
   }
   pruneAuxiliaryLocalStorage();
   try {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.setItem(STORAGE_KEY, serialized);
-    return true;
+    removeAppDataPersistRaw();
+    return writeAppDataPersistRaw(serialized);
   } catch {
     return false;
   }
@@ -826,7 +826,7 @@ function loadData(forceReload = false): AppData {
   }
 
   const inlineRaw = !forceReload ? takeInlineParsedAppData() : null;
-  const stored = inlineRaw == null ? localStorage.getItem(STORAGE_KEY) : null;
+  const stored = inlineRaw == null ? readAppDataPersistRaw() : null;
   if (!stored && inlineRaw == null) {
     const lkg = sessionRoleLooksStaffGestao() ? peekStaffGestaoLastGood() : null;
     if (lkg && staffGestaoRiquezaTotal(medirRiquezaStaffGestao(lkg)) > 0) {
@@ -839,7 +839,7 @@ function loadData(forceReload = false): AppData {
     data = ensured.data;
     memoryCache = data;
     const serialized = JSON.stringify(data);
-    localStorage.setItem(STORAGE_KEY, serialized);
+    writeAppDataPersistRaw(serialized);
     lastPersistedSerialized = serialized;
     return memoryCache;
   }
@@ -978,7 +978,7 @@ export function getData(): AppData {
 export function resetData(): void {
   if (typeof window === "undefined") return;
   memoryCache = emptyInitialData;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(emptyInitialData));
+  writeAppDataPersistRaw(JSON.stringify(emptyInitialData));
   notify();
 }
 
@@ -988,7 +988,7 @@ export function resetOperationalData(): void {
   const current = loadData();
   const cleared = clearOperationalData(current);
   memoryCache = cleared;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(cleared));
+  writeAppDataPersistRaw(JSON.stringify(cleared));
   notify();
 }
 

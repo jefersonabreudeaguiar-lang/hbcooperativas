@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { getData, isAppDataWarm, refreshData, subscribe, updateData } from "@/services/dataStore";
+import { readAppDataPersistRaw } from "@/lib/staff/staffGestaoPersistKey";
 import {
   medirRiquezaStaffGestao,
   staffGestaoRiquezaTotal,
@@ -24,7 +25,7 @@ function dadosGestaoOuRelerStorage() {
   if (devePersistirReconciliacaoLivroCaixaGestao(data)) return data;
   if (typeof window === "undefined") return data;
   try {
-    const raw = window.localStorage.getItem("coopeagriplla_data");
+    const raw = readAppDataPersistRaw();
     if (raw && raw.length > 10_000) data = refreshData();
   } catch {
     /* storage */

@@ -82,6 +82,7 @@ import {
   updateDataSafe,
   waitForAppDataWarm,
 } from "@/services/dataStore";
+import { readAppDataPersistRaw } from "@/lib/staff/staffGestaoPersistKey";
 import {
   ensureCloudSessionReady,
   getLastCloudSyncError,
@@ -636,7 +637,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       (data.fichaCorrida?.length ?? 0) === 0
     ) {
       try {
-        const raw = window.localStorage.getItem("coopeagriplla_data");
+        const raw = readAppDataPersistRaw();
         if (raw && raw.length > 10_000) {
           data = refreshData();
         }
