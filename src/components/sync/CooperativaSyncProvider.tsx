@@ -592,6 +592,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     if (syncingRef.current) {
       if (userInitiatedRun && currentUser.role === "cooperado") {
         cooperadoUserRefreshQueuedRef.current = true;
+        markCooperadoUserSyncVisible();
+        setSyncing(true);
       }
       return;
     }
@@ -1003,13 +1005,15 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         }
       }
       bindCooperadoRunSyncSessionLease(null);
-      syncingRef.current = false;
-      setSyncing(false);
-      if (userRef.current?.role === "cooperado") {
-        resetCooperadoUserSyncVisible();
-      }
       const queuedCooperadoRefresh = cooperadoUserRefreshQueuedRef.current;
       cooperadoUserRefreshQueuedRef.current = false;
+      syncingRef.current = false;
+      if (!(queuedCooperadoRefresh && userRef.current?.role === "cooperado")) {
+        setSyncing(false);
+        if (userRef.current?.role === "cooperado") {
+          resetCooperadoUserSyncVisible();
+        }
+      }
       const syncedAt = Date.now();
       setLastSyncedAt(syncedAt);
       if (userRef.current?.role === "cooperado" && completed) {

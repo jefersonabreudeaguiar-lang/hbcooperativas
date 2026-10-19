@@ -1,25 +1,42 @@
 /**
- * Depois que o responsável aprova, o pull leve de notas não pode gravar
- * A receber/HB com ficha velha — tem que puxar o operacional.
+ * Depois que o responsável aprova: notas leves NÃO esperam operacional (trava o Atualizar).
+ * A ficha entra no pull operacional; notas só marcam a revisão de notas.
  * npx tsx scripts/test-cooperado-notas-light-puxa-ficha-apos-aprovacao.ts
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import type { AppData, NotaPedido } from "../src/types/index.ts";
-import { cooperativaTemNotasConferidasSemFichaLocal } from "../src/services/fichaSyncGuard.ts";
+import { cooperadoTemConferidaAguardandoFicha } from "../src/services/fichaSyncGuard.ts";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const src = readFileSync(join(ROOT, "src/lib/cooperado/cooperadoNotasContratosLightPull.ts"), "utf8");
-
-assert.match(src, /cooperativaTemNotasConferidasSemFichaLocal/, "detecta nota aprovada sem ficha");
-assert.match(src, /syncCooperadoMessengerOperacionalLightFromCloud/, "puxa operacional (ficha) após notas");
-assert.match(src, /refreshContaCoopDescontosAfterOperacionalSync/, "atualiza HB depois da ficha");
-assert.match(
-  src,
-  /cooperadoPwaMaterializarSnapshotsFinanceirosPosSync\(opts\.user\)/,
-  "grava snapshot só depois da ficha"
+const atualizar = readFileSync(join(ROOT, "src/lib/cooperado/cooperadoAtualizarManual.ts"), "utf8");
+const eventDriven = readFileSync(
+  join(ROOT, "src/lib/performance/cooperadoEventDrivenSync.ts"),
+  "utf8"
 );
+
+assert.match(src, /cooperadoTemConferidaAguardandoFicha/, "detecta nota aprovada deste cooperado sem ficha");
+assert.match(src, /persistAppliedCooperativaNotasRevision/, "não marca operacional como já puxado");
+assert.match(src, /runCooperadoMessengerOperacionalLightPull/, "agenda ficha sem await no caminho de notas");
+assert.doesNotMatch(
+  src,
+  /await syncCooperadoMessengerOperacionalLightFromCloud/,
+  "não espera operacional no pull de notas (trava o app)"
+);
+assert.doesNotMatch(
+  src,
+  /refreshContaCoopDescontosAfterOperacionalSync/,
+  "HB não entra no caminho de notas"
+);
+assert.doesNotMatch(
+  src,
+  /persistAppliedCooperativaCloudRevision/,
+  "não grava fingerprint completo depois só das notas"
+);
+assert.doesNotMatch(atualizar, /waitForAppDataWarm/, "Atualizar não espera 12s de parse");
+assert.match(eventDriven, /persistAppliedCooperativaNotasRevision/, "helper de revisão só de notas");
 
 const COOP = "coop-1";
 function empty(): AppData {
@@ -47,9 +64,22 @@ const nota: NotaPedido = {
 
 const semFicha = { ...empty(), notasPedido: [nota] };
 assert.equal(
-  cooperativaTemNotasConferidasSemFichaLocal(semFicha, COOP),
+  cooperadoTemConferidaAguardandoFicha(semFicha, "c-1", COOP),
   true,
   "aprovada sem ficha = atrasada"
+);
+
+const liteZero: NotaPedido = {
+  ...nota,
+  id: "n-lite",
+  valorLiquido: 0,
+  valorBruto: 0,
+  itens: [],
+};
+assert.equal(
+  cooperadoTemConferidaAguardandoFicha({ ...empty(), notasPedido: [liteZero] }, "c-1", COOP),
+  true,
+  "nota lite conferida sem ficha também puxa operacional"
 );
 
 const comFicha = {
@@ -68,9 +98,9 @@ const comFicha = {
   ],
 } as unknown as AppData;
 assert.equal(
-  cooperativaTemNotasConferidasSemFichaLocal(comFicha, COOP),
+  cooperadoTemConferidaAguardandoFicha(comFicha, "c-1", COOP),
   false,
   "aprovada com ficha = alinhada"
 );
 
-console.log("ok: cooperado notas light puxa ficha/HB após aprovação");
+console.log("ok: cooperado notas light não trava; ficha vem no operacional");

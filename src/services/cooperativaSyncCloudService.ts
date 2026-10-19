@@ -62,6 +62,7 @@ import {
 import {
   acquireCooperativaSyncSessionLease,
   acquireOperacionalPullLease,
+  getCooperadoRunSyncSessionLease,
   saveAppDataIfSyncLeaseCurrent,
   type CooperativaSyncSessionLease,
 } from "@/services/operacionalPullLease";
@@ -2690,7 +2691,8 @@ export async function syncCooperadoMessengerOperacionalLightFromCloud(
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
 
-  const session = opts?.sessionLease ?? acquireCooperativaSyncSessionLease(digits);
+  const session =
+    opts?.sessionLease ?? getCooperadoRunSyncSessionLease() ?? acquireCooperativaSyncSessionLease(digits);
 
   beginCloudSync();
   try {

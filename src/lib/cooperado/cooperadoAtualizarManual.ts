@@ -6,14 +6,14 @@ import {
   requestAppSyncImmediate,
   requestCooperadoManualRefreshSync,
 } from "@/services/syncRequest";
-import { preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
+import { preloadAppData } from "@/services/dataStore";
 import { runClientReleaseShield } from "@/lib/pwa/clientReleaseShield";
 
 /** Mensagem de conforto enquanto o cooperado aguarda a nuvem (piloto / PWA mobile). */
 export const COOPERADO_ATUALIZAR_MENSAGEM_AMOR = "Jesus te ama";
 
 /**
- * Botão Atualizar — garante AppData warm antes do sync e marca UI visível.
+ * Botão Atualizar — dispara o sync na hora (sem esperar 12s de parse).
  * Retorna false se offline (sync não será enfileirado).
  */
 export async function executarCooperadoAtualizarManual(): Promise<boolean> {
@@ -22,7 +22,6 @@ export async function executarCooperadoAtualizarManual(): Promise<boolean> {
   if (release === "aligning") return true;
   grantCooperadoEventDrivenSync();
   preloadAppData();
-  await waitForAppDataWarm(12_000);
   if (isCooperadoEventDrivenSync()) {
     requestCooperadoManualRefreshSync();
   } else {

@@ -39,6 +39,7 @@ import type { CooperativaCloudRevision } from "@/lib/performance/cooperadoEventD
 import { resolveCooperadoForegroundStaleMs } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { cooperadoGaDeferForegroundRevisionChecks } from "@/lib/cooperado/cooperadoGaSyncPolicy";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { cooperadoTemConferidaAguardandoFicha } from "@/services/fichaSyncGuard";
 import { getData, getSession, isAppDataWarm } from "@/services/dataStore";
 
 export type CooperadoForegroundPullReason =
@@ -106,6 +107,16 @@ export async function evaluateCooperadoForegroundOperacionalPull(
         : "never_applied_revision",
       remote,
     };
+  }
+
+  if (
+    isCooperadoPwaMessengerMode() &&
+    opts?.cooperadoId &&
+    opts?.cooperativaId &&
+    isAppDataWarm() &&
+    cooperadoTemConferidaAguardandoFicha(getData(), opts.cooperadoId, opts.cooperativaId)
+  ) {
+    return { reason: "revision_changed", remote };
   }
 
   if (!isCooperadoPwaMessengerMode()) {

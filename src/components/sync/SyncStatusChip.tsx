@@ -156,9 +156,8 @@ export function CooperadoAtualizarButton({
   showLoveMessage?: boolean;
 }) {
   const { user } = useAuth();
-  const { lastSyncedAt, syncing, syncingForUi } = useSyncStatus();
+  const { syncingForUi } = useSyncStatus();
   const [busy, setBusy] = useState(false);
-  const startedAtRef = useRef(0);
   const sawSyncUiRef = useRef(false);
   const spinning = busy || syncingForUi;
   const header = variant === "header";
@@ -175,15 +174,9 @@ export function CooperadoAtualizarButton({
       sawSyncUiRef.current = false;
       return;
     }
-    if (!syncingForUi && lastSyncedAt != null && lastSyncedAt >= startedAtRef.current) {
-      cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user);
-      setBusy(false);
-      sawSyncUiRef.current = false;
-      return;
-    }
     const id = window.setTimeout(() => setBusy(false), 90_000);
     return () => window.clearTimeout(id);
-  }, [busy, lastSyncedAt, syncingForUi, user]);
+  }, [busy, syncingForUi, user]);
 
   const loveVisible = showLoveMessage && spinning;
 
@@ -193,7 +186,6 @@ export function CooperadoAtualizarButton({
       type="button"
       onClick={() => {
         if (busy || syncingForUi) return;
-        startedAtRef.current = Date.now();
         sawSyncUiRef.current = false;
         setBusy(true);
         void executarCooperadoAtualizarManual().then((ok) => {

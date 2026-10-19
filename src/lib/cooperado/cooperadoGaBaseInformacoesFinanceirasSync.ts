@@ -25,7 +25,6 @@ import {
   persistAppliedCooperativaCloudRevision,
 } from "@/lib/performance/cooperadoEventDrivenSync";
 import { isCooperadoBicHybridLightEnabled } from "@/lib/cooperado/cooperadoBicHybridLight";
-import { runCooperadoNotasContratosLightPull } from "@/lib/cooperado/cooperadoNotasContratosLightPull";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { syncOperacionalFromCloud } from "@/services/cooperativaSyncCloudService";
 import { getData, isAppDataWarm, preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
@@ -171,7 +170,6 @@ export async function runCooperadoGaSyncBaseInformacoesFinanceiras(
     }
 
     if (remote) {
-      await runCooperadoNotasContratosLightPull({ cnpj: digits, user, remote }).catch(() => false);
       persistAppliedCooperativaCloudRevision(digits, fingerprintCooperativaCloudRevision(remote));
     }
 

@@ -272,6 +272,33 @@ export function cooperativaTemNotasConferidasSemFichaLocal(
   return false;
 }
 
+/** Este cooperado tem nota conferida/paga sem linha na ficha (inclui líquido 0 / nota lite). */
+export function cooperadoTemConferidaAguardandoFicha(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string
+): boolean {
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const conferidas = (data.notasPedido ?? []).filter(
+    (n) =>
+      (n.status === "conferida" || n.status === "pago") &&
+      notaPertenceCooperado(data, n, canonico, cooperativaId) &&
+      !notaExcluidaLocal(data, n.id, cooperativaId)
+  );
+  for (const nota of conferidas) {
+    const fichasCoop = dedupeFichaCorridaPorNota(
+      (data.fichaCorrida ?? []).filter(
+        (f) =>
+          f.notaPedidoId === nota.id &&
+          fichaPertenceCooperado(data, f, canonico, cooperativaId)
+      ),
+      data.notasPedido
+    );
+    if (fichasCoop.length === 0) return true;
+  }
+  return false;
+}
+
 function cooperadoConferidasSemFicha(
   data: AppData,
   cooperadoId: string,

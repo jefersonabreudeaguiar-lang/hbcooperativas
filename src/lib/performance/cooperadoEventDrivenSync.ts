@@ -60,6 +60,19 @@ export function persistAppliedCooperativaCloudRevision(cnpj: string, fingerprint
   localStorage.setItem(`${APPLIED_REV_PREFIX}${digits}`, fingerprint);
 }
 
+/** Marca só as notas como aplicadas — o operacional (ficha / A receber) continua pendente. */
+export function persistAppliedCooperativaNotasRevision(
+  cnpj: string,
+  remote: CooperativaCloudRevision
+): void {
+  const applied = readAppliedCooperativaCloudRevision(cnpj);
+  const parts = (applied ?? "|||").split("|");
+  persistAppliedCooperativaCloudRevision(
+    cnpj,
+    [parts[0] ?? "", parts[1] ?? "0", parts[2] ?? "", remote.notasUpdatedAt ?? ""].join("|")
+  );
+}
+
 export function cloudRevisionChangedSinceApplied(
   cnpj: string,
   remote: CooperativaCloudRevision

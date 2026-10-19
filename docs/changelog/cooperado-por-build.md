@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v503
+
+- **Atualizar:** o botão não trava mais o app — puxa a ficha sem esperar o arquivo inteiro duas vezes.
+- **A receber / Financeiro:** ao reabrir o app, o valor acompanha a nota que o responsável já aprovou.
+- **Entregas:** a lista de aprovadas continua igual; o que mudou é o dinheiro da ficha chegar junto.
+
 ## v502
 
 - **Cooperado:** quando o responsável aprova a entrega, o valor a receber e o HB Créditos atualizam junto — não fica só a lista de entregas.

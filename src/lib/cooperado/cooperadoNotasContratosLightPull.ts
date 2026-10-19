@@ -1,21 +1,17 @@
 /**
  * Cooperado GA/PWA — pull leve de notas quando a revisão na nuvem mudou.
- * Se o responsável já aprovou e a ficha local ainda não entrou, puxa o operacional
- * (A receber + HB) antes de gravar o snapshot — senão Entregas atualiza e o valor fica velho.
+ * Não espera operacional/HB aqui (isso trava o Atualizar). Só marca as notas
+ * como vistas; a ficha (A receber / Financeiro) vem no pull operacional.
  */
 import type { User } from "@/types";
 import type { CooperativaCloudRevision } from "@/lib/performance/cooperadoEventDrivenSync";
 import {
   fingerprintCooperativaCloudRevision,
-  persistAppliedCooperativaCloudRevision,
-  persistCooperadoLastOperacionalSyncAt,
+  persistAppliedCooperativaNotasRevision,
 } from "@/lib/performance/cooperadoEventDrivenSync";
-import { cooperadoPwaMaterializarSnapshotsFinanceirosPosSync } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
-import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
-import { refreshContaCoopDescontosAfterOperacionalSync } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
-import { shouldSyncHbFichaBaseDescontos } from "@/lib/hb-credit/hbFichaBaseOperacional";
-import { cooperativaTemNotasConferidasSemFichaLocal } from "@/services/fichaSyncGuard";
-import { syncCooperadoMessengerOperacionalLightFromCloud } from "@/services/cooperativaSyncCloudService";
+import { runCooperadoMessengerOperacionalLightPull } from "@/lib/cooperado/cooperadoMessengerOperacionalLightPull";
+import { cooperadoTemConferidaAguardandoFicha } from "@/services/fichaSyncGuard";
+import { getCooperadoRunSyncSessionLease } from "@/services/operacionalPullLease";
 import { syncNotasPedidoFromCloud } from "@/services/notaPedidoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
@@ -37,32 +33,27 @@ export function runCooperadoNotasContratosLightPull(opts: {
   inflight = (async () => {
     try {
       await syncNotasPedidoFromCloud(digits, { retryFull: false });
+      persistAppliedCooperativaNotasRevision(digits, opts.remote);
+
       const data = isAppDataWarm() ? getData() : null;
       const coopId = data
         ? getUserCooperativaId(opts.user, data) ?? opts.user.cooperativaId
         : opts.user.cooperativaId;
-      const fichaAtrasada = Boolean(
-        data && coopId && cooperativaTemNotasConferidasSemFichaLocal(data, coopId)
+      const cooperadoId = opts.user.cooperadoId;
+      const precisaFicha = Boolean(
+        data &&
+          coopId &&
+          cooperadoId &&
+          cooperadoTemConferidaAguardandoFicha(data, cooperadoId, coopId)
       );
-      if (fichaAtrasada && coopId) {
-        await syncCooperadoMessengerOperacionalLightFromCloud(digits, coopId);
-        persistCooperadoLastOperacionalSyncAt();
-        if (shouldSyncHbFichaBaseDescontos()) {
-          await refreshContaCoopDescontosAfterOperacionalSync({
-            cnpj: digits,
-            cooperativaId: coopId,
-            user: opts.user,
-          });
-        }
-        cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(opts.user);
-      } else {
-        cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(opts.user, { light: true });
+      if (precisaFicha && coopId && !getCooperadoRunSyncSessionLease()) {
+        void runCooperadoMessengerOperacionalLightPull({
+          cnpj: digits,
+          cooperativaId: coopId,
+          user: opts.user,
+          remote: opts.remote,
+        });
       }
-      persistAppliedCooperativaCloudRevision(
-        digits,
-        fingerprintCooperativaCloudRevision(opts.remote)
-      );
-      clearCooperadoPwaDadosDesatualizados();
       return true;
     } catch {
       return false;
