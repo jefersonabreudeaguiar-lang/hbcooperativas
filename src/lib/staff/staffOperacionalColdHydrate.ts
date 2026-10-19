@@ -93,8 +93,20 @@ export function expandStaffTierPlanIfOperacionalVazio(
   plan: SyncTierPlan84,
   data: AppData | null | undefined,
   coopId?: string,
-  opts?: { staffLiveBackground?: boolean }
+  opts?: { staffLiveBackground?: boolean; staffUserInitiated?: boolean }
 ): SyncTierPlan84 {
+  // Toque em Atualizar: puxa notas/ficha/PIX/contratos, nunca empurra o aparelho.
+  if (opts?.staffUserInitiated) {
+    return {
+      ...plan,
+      bidirectionalFull: false,
+      pullProfile: true,
+      pullCooperados: true,
+      pullNotas: true,
+      pullOperacional: true,
+      pullContratos: true,
+    };
+  }
   if (!staffLocalOperacionalVazio(data, coopId)) return plan;
   if (opts?.staffLiveBackground) {
     return { ...plan, bidirectionalFull: false, pullOperacional: false };

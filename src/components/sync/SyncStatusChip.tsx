@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw, Check } from "lucide-react";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
-import { requestAppSyncImmediate } from "@/services/syncRequest";
+import { requestStaffGestaoAtualizar } from "@/services/syncRequest";
 import { requestManualCooperadoReleaseUpgrade } from "@/lib/pwa/fetchOfficialClientRelease";
 import {
   COOPERADO_ATUALIZAR_MENSAGEM_AMOR,
@@ -101,7 +101,7 @@ export function SyncStatusChip({
   );
 }
 
-/** Responsável / staff — sync completo ao toque. */
+/** Responsável / staff — pull da nuvem ao toque (sem push que zera o painel). */
 export function StaffAtualizarButton({ className }: { className?: string }) {
   const { lastSyncedAt, syncing } = useSyncStatus();
   const [busy, setBusy] = useState(false);
@@ -125,7 +125,7 @@ export function StaffAtualizarButton({ className }: { className?: string }) {
         if (busy || syncing) return;
         startedAtRef.current = Date.now();
         setBusy(true);
-        requestAppSyncImmediate();
+        requestStaffGestaoAtualizar();
         void requestManualCooperadoReleaseUpgrade();
       }}
       disabled={spinning}

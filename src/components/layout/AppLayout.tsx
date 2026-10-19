@@ -23,6 +23,7 @@ import { AppIcon } from "@/components/ui/AppIcon";
 import {
   SyncStatusChip,
   SyncStatusChipLight,
+  StaffAtualizarButton,
   StaffSidebarSyncVersionLine,
 } from "@/components/sync/SyncStatusChip";
 import { CooperadoSubtleUpdateNotice } from "@/components/cooperado/CooperadoSubtleUpdateNotice";
@@ -607,8 +608,9 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         >
           {navUser && !isCooperadoAppUser(navUser) && (
             <div className="flex justify-end mb-2 lg:mb-3">
-              <div className="hidden lg:flex">
+              <div className="hidden lg:flex items-center gap-2">
                 <SyncStatusChipLight />
+                <StaffAtualizarButton className="border border-gray-200 bg-white text-gray-800 hover:bg-gray-50" />
               </div>
             </div>
           )}

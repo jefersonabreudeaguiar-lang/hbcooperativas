@@ -810,17 +810,22 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
             const pushCatalog = isDiretoriaRole(currentUser.role as UserRole);
             const pushMensalidades = isDiretoriaRole(currentUser.role as UserRole);
             const tier = opts?.tier ?? "operacional_full";
+            const staffUserInitiated = opts?.userInitiated === true;
             const plan = expandStaffTierPlanIfOperacionalVazio(
               resolveSyncTierPlan84(tier, "staff"),
               getData(),
               currentCoopId,
-              { staffLiveBackground: opts?.staffLiveBackground }
+              {
+                staffLiveBackground: opts?.staffLiveBackground,
+                staffUserInitiated,
+              }
             );
             if (plan.bidirectionalFull) {
               await syncCooperativaBidirectional(cnpj, currentCoopId, { pushCatalog, pushMensalidades });
             } else {
               await syncStaffTieredPullFromCloud(cnpj, currentCoopId, tier, {
                 staffLiveBackground: opts?.staffLiveBackground,
+                staffUserInitiated,
               });
             }
           }
@@ -1138,6 +1143,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         userInitiated: runOpts.userInitiated === true,
         eventDriven: runOpts.eventDriven === true,
         tier: runOpts.tier,
+        staffLiveBackground: runOpts.staffLiveBackground === true,
       });
     });
 

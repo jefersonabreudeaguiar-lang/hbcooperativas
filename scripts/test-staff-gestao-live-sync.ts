@@ -48,6 +48,7 @@ assert(expanded.pullOperacional === false, "tick não expande operacional");
 assert(provider.includes("scheduleStaffGestaoLiveSyncLoop"), "provider agenda loop");
 assert(provider.includes("staffResponsavelLifecycleSyncRequestLive"), "lifecycle usa notas_delta leve");
 assert(provider.includes("staffLiveBackground"), "pull staff respeita tick leve");
+assert(provider.includes("staffUserInitiated"), "Atualizar do responsável não usa bidirecional");
 
 const pull = readFileSync(join(ROOT, "src/services/cooperativaSyncCloudService.ts"), "utf8");
 assert(pull.includes("staffLiveBackground?: boolean"), "tiered pull aceita tick leve");

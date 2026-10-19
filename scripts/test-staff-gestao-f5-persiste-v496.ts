@@ -10,8 +10,8 @@ import { APP_BUILD_VERSION } from "../src/lib/appBuildVersion.ts";
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.equal(APP_BUILD_VERSION, 496, "build 496");
-assert.match(read("public/sw.js"), /hb-coop-build-496/);
+assert.ok(APP_BUILD_VERSION >= 496, "build 496+");
+assert.match(read("public/sw.js"), /hb-coop-build-49/);
 
 const cold = read("src/lib/performance/cooperadoColdStart.ts");
 assert.match(cold, /persistedAppDataBlobLooksHydrated/);

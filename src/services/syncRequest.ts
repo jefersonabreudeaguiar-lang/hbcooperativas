@@ -320,6 +320,11 @@ export function requestAppSyncImmediate(): void {
   requestSyncTier("operacional_full", { force: true, immediate: true, userInitiated: true });
 }
 
+/** Responsável — Atualizar: puxa a nuvem sem sync bidirecional (não zera o painel). */
+export function requestStaffGestaoAtualizar(): void {
+  requestSyncTier("operacional_full", { force: true, immediate: true, userInitiated: true });
+}
+
 /** @internal — compat com testes que importavam debounce constante */
 export const SYNC_REQUEST_DEBOUNCE_MS = SYNC_DEBOUNCE_MS;
 

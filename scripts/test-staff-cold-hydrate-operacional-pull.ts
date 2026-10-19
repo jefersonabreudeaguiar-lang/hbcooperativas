@@ -83,6 +83,14 @@ const quente = expandStaffTierPlanIfOperacionalVazio(notasPlan, comPix, "coop1")
 assert.equal(quente.pullOperacional, false);
 assert.equal(quente.bidirectionalFull, false);
 
+const atualizarQuente = expandStaffTierPlanIfOperacionalVazio(fullPlan, comPix, "coop1", {
+  staffUserInitiated: true,
+});
+assert.equal(atualizarQuente.bidirectionalFull, false, "Atualizar nunca empurra o aparelho");
+assert.equal(atualizarQuente.pullOperacional, true, "Atualizar puxa PIX/ficha");
+assert.equal(atualizarQuente.pullNotas, true, "Atualizar puxa notas");
+assert.equal(atualizarQuente.pullContratos, true, "Atualizar puxa contratos");
+
 assert.equal(deveAdiarReconciliarFichaAposLimpezaCacheStaff(emptyInitialData), false, "sem window = servidor");
 assert.equal(
   deveAdiarReconciliarFichaAposLimpezaCacheStaff(soNotas as never, "coop1"),

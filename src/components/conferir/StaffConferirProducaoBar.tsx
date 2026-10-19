@@ -8,7 +8,7 @@ import {
   requestManualStaffReleaseUpgrade,
 } from "@/lib/pwa/fetchOfficialClientRelease";
 import { resetResponsavelPainelIndexCache } from "@/services/responsavelPainelIndex";
-import { requestAppSyncImmediate } from "@/services/syncRequest";
+import { requestStaffGestaoAtualizar } from "@/services/syncRequest";
 import { cn } from "@/utils/format";
 
 type CloudRelease = { build: number; sha: string; dpl: string };
@@ -51,7 +51,7 @@ export function StaffConferirProducaoBar() {
     if (busy) return;
     setBusy(true);
     resetResponsavelPainelIndexCache();
-    requestAppSyncImmediate();
+    requestStaffGestaoAtualizar();
     try {
       await requestManualStaffReleaseUpgrade();
     } finally {

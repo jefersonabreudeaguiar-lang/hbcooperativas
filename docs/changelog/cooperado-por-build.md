@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v497
+
+- **Responsável:** o botão Atualizar puxa notas, ficha e PIX da nuvem — não empurra o aparelho nem apaga o painel.
+- **Atualização:** se a nuvem trouxer dado novo, entra; se vier vazio, o que já estava na tela permanece.
+- **Cooperado:** Início, Financeiro e Entregas iguais ao v496.
+
 ## v496
 
 - **Responsável:** ao resetar a página, o que já estava no aparelho permanece — o painel não some nem zera.
