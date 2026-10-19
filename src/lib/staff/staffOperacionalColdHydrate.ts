@@ -95,15 +95,16 @@ export function expandStaffTierPlanIfOperacionalVazio(
   coopId?: string,
   opts?: { staffLiveBackground?: boolean; staffUserInitiated?: boolean }
 ): SyncTierPlan84 {
-  // Toque em Atualizar: puxa notas/ficha/PIX/contratos, nunca empurra o aparelho.
+  // Toque em Atualizar: puxa notas (e operacional só se o aparelho estiver vazio).
   if (opts?.staffUserInitiated) {
+    const frio = staffLocalOperacionalVazio(data, coopId);
     return {
       ...plan,
       bidirectionalFull: false,
       pullProfile: true,
       pullCooperados: true,
       pullNotas: true,
-      pullOperacional: true,
+      pullOperacional: frio,
       pullContratos: true,
     };
   }

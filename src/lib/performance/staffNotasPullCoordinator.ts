@@ -15,15 +15,22 @@ export function syncNotasPedidoFromCloudStaffCoalesced(
   if (digits.length !== 14) return Promise.resolve(0);
 
   const existing = inflightByCnpj.get(digits);
-  if (existing) return existing;
+  const start = () => {
+    const run = syncNotasPedidoFromCloud(digits, options).finally(() => {
+      if (inflightByCnpj.get(digits) === run) {
+        inflightByCnpj.delete(digits);
+      }
+    });
+    inflightByCnpj.set(digits, run);
+    return run;
+  };
 
-  const run = syncNotasPedidoFromCloud(digits, options).finally(() => {
-    if (inflightByCnpj.get(digits) === run) {
-      inflightByCnpj.delete(digits);
-    }
-  });
-  inflightByCnpj.set(digits, run);
-  return run;
+  // Delta em voo não pode engolir um full — senão a fila Conferir fica vazia.
+  if (existing && !options?.retryFull) return existing;
+  if (existing && options?.retryFull) {
+    return existing.then(() => start());
+  }
+  return start();
 }
 
 /** Somente testes. */

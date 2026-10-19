@@ -7,7 +7,6 @@ import {
   fetchOfficialClientRelease,
   requestManualStaffReleaseUpgrade,
 } from "@/lib/pwa/fetchOfficialClientRelease";
-import { resetResponsavelPainelIndexCache } from "@/services/responsavelPainelIndex";
 import { requestStaffGestaoAtualizar } from "@/services/syncRequest";
 import { cn } from "@/utils/format";
 
@@ -50,7 +49,6 @@ export function StaffConferirProducaoBar() {
   const atualizarAgora = async () => {
     if (busy) return;
     setBusy(true);
-    resetResponsavelPainelIndexCache();
     requestStaffGestaoAtualizar();
     try {
       await requestManualStaffReleaseUpgrade();

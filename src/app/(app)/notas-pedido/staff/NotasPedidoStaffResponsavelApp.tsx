@@ -51,6 +51,7 @@ import {
   getDataOperationalTruth,
   getDataRevision,
   isAppDataWarm,
+  saveDataSafe,
   beginConferenciaDeferLocalPersist,
   endConferenciaDeferLocalPersist,
   beginConferenciaModalSaveBatch,
@@ -107,6 +108,10 @@ import {
   type CooperadoEntregaRemovidaDetail,
 } from "@/lib/cooperadoEntregaRemovidaNotify";
 import { forceNextFullNotasSync, shouldResponsavelForceFullNotasOnEntry } from "@/services/syncMetaService";
+import {
+  peekStaffGestaoLastGood,
+  preservarStaffGestaoContraWipe,
+} from "@/lib/staff/staffGestaoSnapshotGuard";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
   responsavelBloquearNavegacaoConferencia,
@@ -2205,15 +2210,23 @@ export default function NotasPedidoStaffMain() {
     responsavelPrimeiroPullAgendadoRef.current = true;
     scheduleStaffPostInteractiveTask(() => {
       const d = getData();
-      const cnpj = d && coopId ? getCooperativaCnpj(d, coopId) : undefined;
       const filaLocalQuente =
         Boolean(d && coopId && countNotasFilaConferenciaResponsavel(d, coopId) > 0);
-      const forceFull =
-        Boolean(cnpj && shouldResponsavelForceFullNotasOnEntry(cnpj) && !filaLocalQuente);
-      puxarNotasResponsavelDaNuvem({ forceFull });
+      if (!filaLocalQuente) {
+        const lastro = peekStaffGestaoLastGood();
+        if (lastro) {
+          const kept = preservarStaffGestaoContraWipe(lastro, getData());
+          if (kept !== getData()) saveDataSafe(kept);
+        }
+        recuperarFilaConferencia();
+      } else {
+        const cnpj = d && coopId ? getCooperativaCnpj(d, coopId) : undefined;
+        const forceFull = Boolean(cnpj && shouldResponsavelForceFullNotasOnEntry(cnpj));
+        puxarNotasResponsavelDaNuvem({ forceFull });
+      }
       responsavelPrimeiroPullAgendadoRef.current = false;
     });
-  }, [isCooperado, data, coopId, puxarNotasResponsavelDaNuvem]);
+  }, [isCooperado, data, coopId, puxarNotasResponsavelDaNuvem, recuperarFilaConferencia]);
 
   const filaRecuperacaoAutoRef = useRef(false);
   useEffect(() => {
@@ -2227,6 +2240,11 @@ export default function NotasPedidoStaffMain() {
     if (filaRecuperacaoAutoRef.current) return;
     filaRecuperacaoAutoRef.current = true;
     const t = window.setTimeout(() => {
+      const lastro = peekStaffGestaoLastGood();
+      if (lastro) {
+        const kept = preservarStaffGestaoContraWipe(lastro, getData());
+        if (kept !== getData()) saveDataSafe(kept);
+      }
       recuperarFilaConferencia();
       window.setTimeout(() => {
         filaRecuperacaoAutoRef.current = false;

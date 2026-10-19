@@ -87,7 +87,7 @@ const atualizarQuente = expandStaffTierPlanIfOperacionalVazio(fullPlan, comPix, 
   staffUserInitiated: true,
 });
 assert.equal(atualizarQuente.bidirectionalFull, false, "Atualizar nunca empurra o aparelho");
-assert.equal(atualizarQuente.pullOperacional, true, "Atualizar puxa PIX/ficha");
+assert.equal(atualizarQuente.pullOperacional, false, "painel quente: Atualizar não puxa operacional (não zera ficha)");
 assert.equal(atualizarQuente.pullNotas, true, "Atualizar puxa notas");
 assert.equal(atualizarQuente.pullContratos, true, "Atualizar puxa contratos");
 
@@ -112,7 +112,7 @@ assert.ok(syncSvc.includes("staffLocalOperacionalVazio"), "bidirecional não dá
 assert.ok(syncSvc.includes("markStaffOperacionalPullAplicado"), "marca pull aplicado");
 assert.match(
   syncSvc,
-  /if \(pullOperacional\) await syncOperacionalFromCloud/,
+  /if \(pullOperacional\) \{[\s\S]*syncOperacionalFromCloud/,
   "operacional entra no pull tiered"
 );
 assert.match(

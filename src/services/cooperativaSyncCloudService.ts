@@ -2336,7 +2336,7 @@ export function detectCooperadoPagamentosNaoMaterializados(
 
 export async function syncOperacionalFromCloud(
   cnpj: string,
-  opts?: { sessionLease?: CooperativaSyncSessionLease }
+  opts?: { sessionLease?: CooperativaSyncSessionLease; skipDestructiveReset?: boolean }
 ): Promise<SyncOperacionalFromCloudResult> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) {
@@ -2367,7 +2367,7 @@ export async function syncOperacionalFromCloud(
   const pagamentosBaseline = current.pagamentosCooperado.filter((p) => p.cooperativaId === coopId);
   saveAbaLastGoodFromData(current, coopId, "pagar");
 
-  if (pullSeguro.permitirAplicarResetLegado) {
+  if (!opts?.skipDestructiveReset && pullSeguro.permitirAplicarResetLegado) {
     const permitirPreemptiveClear = operacionalRestorePreemptiveClearPermitido(
       current,
       bundle.operacional,
@@ -2397,6 +2397,7 @@ export async function syncOperacionalFromCloud(
   const cloudAuthoritativePull =
     bundle.operacional.fullReset === true && pullSeguro.permitirMergeAutoritativo;
   if (
+    !opts?.skipDestructiveReset &&
     pullSeguro.permitirClearFinanceiro &&
     cloudOperacionalRestoreAtivo(bundle.operacional) &&
     operacionalColecoesReplaceAutoritativo(
@@ -2867,9 +2868,18 @@ export async function syncStaffTieredPullFromCloud(
     if (plan.pullCooperados && cid) await syncCooperadosFromCloud(digits, cid);
     // Operacional antes das notas — evita fabricar ficha pendente sem PIX/livro.
     // Se o reset da nuvem limpou o aparelho, o pull operacional é obrigatório (F5).
-    if (pullOperacional) await syncOperacionalFromCloud(digits);
+    if (pullOperacional) {
+      await syncOperacionalFromCloud(digits, {
+        skipDestructiveReset: opts?.staffUserInitiated === true,
+      });
+    }
     if (plan.pullContratos) await syncContratosFromCloud(digits);
-    if (plan.pullNotas) await syncNotasPedidoFromCloudStaffCoalesced(digits);
+    if (plan.pullNotas) {
+      if (opts?.staffUserInitiated) forceNextFullNotasSync(digits);
+      await syncNotasPedidoFromCloudStaffCoalesced(digits, {
+        retryFull: opts?.staffUserInitiated === true,
+      });
+    }
     if (pullOperacional || plan.pullNotas) {
       const operacionalCloud = (await fetchSyncBundle(digits))?.operacional ?? null;
       saveDataSafe(finalizeOperacionalPullLocalState(getData(), operacionalCloud, digits));

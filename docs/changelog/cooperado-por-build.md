@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v498
+
+- **Conferir entregas:** as notas que o cooperado enviou voltam a aparecer na fila — o app busca a lista completa na nuvem, não só o que mudou por último.
+- **Em aberto:** o valor da ficha não some no Atualizar. O painel guarda o lastro; se a nuvem vier vazia, o que já estava na tela permanece.
+- **Atualizar:** puxa notas novas sem apagar ficha/PIX que já estavam no aparelho.
+
 ## v497
 
 - **Responsável:** o botão Atualizar puxa notas, ficha e PIX da nuvem — não empurra o aparelho nem apaga o painel.
