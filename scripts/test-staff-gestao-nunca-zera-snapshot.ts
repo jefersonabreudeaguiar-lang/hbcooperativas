@@ -67,6 +67,11 @@ assert.equal(
 
 const store = readFileSync(join(ROOT, "src/services/dataStore.ts"), "utf8");
 assert.ok(store.includes("applyStaffGestaoWipeGuard"), "saveDataSafe recusa wipe");
+assert.ok(store.includes("restoreStaffGestaoFromLastGoodIfNeeded"), "F5 reaplica lastro se o blob veio pobre");
+assert.ok(store.includes("persistedAppDataBlobLooksHydrated"), "F5 detecta blob local rico");
+
+const guard = readFileSync(join(ROOT, "src/lib/staff/staffGestaoSnapshotGuard.ts"), "utf8");
+assert.ok(guard.includes("hb-staff-gestao-lkg-v1"), "lastro sobrevive F5 no sessionStorage");
 
 const provider = readFileSync(join(ROOT, "src/components/sync/CooperativaSyncProvider.tsx"), "utf8");
 assert.ok(provider.includes("refreshData()"), "sync staff relê localStorage se a memória veio vazia");

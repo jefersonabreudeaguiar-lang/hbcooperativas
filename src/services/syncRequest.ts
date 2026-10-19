@@ -43,6 +43,8 @@ export type SyncRunOptions = {
   userInitiated?: boolean;
   eventDriven?: boolean;
   tier?: SyncTier;
+  /** Gestão: tick periódico — não expande pull operacional (evita zerar painel). */
+  staffLiveBackground?: boolean;
 };
 
 type SyncHandler = (opts: SyncRunOptions) => void;

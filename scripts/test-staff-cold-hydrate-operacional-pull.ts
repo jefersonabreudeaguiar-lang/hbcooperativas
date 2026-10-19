@@ -109,8 +109,13 @@ assert.match(
 );
 assert.match(
   syncSvc,
-  /resetAplicado = await ensureCloudOperationalResetApplied/,
+  /ensureCloudOperationalResetApplied\(digits, coopId\)/,
   "reset da nuvem no F5 não fica sem merge"
+);
+assert.match(
+  syncSvc,
+  /staffLiveBackground[\s\S]*ensureCloudOperationalResetApplied/,
+  "tick leve não aplica reset operacional"
 );
 
 const provider = readFileSync(join(ROOT, "src/components/sync/CooperativaSyncProvider.tsx"), "utf8");

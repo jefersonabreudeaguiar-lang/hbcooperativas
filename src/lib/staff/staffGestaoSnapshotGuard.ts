@@ -15,6 +15,39 @@ export type StaffGestaoRiqueza = {
 
 let lastGood: AppData | null = null;
 
+const STAFF_GESTAO_LKG_SESSION_KEY = "hb-staff-gestao-lkg-v1";
+const STAFF_GESTAO_LKG_MAX_CHARS = 1_800_000;
+let persistLkgTimer: ReturnType<typeof setTimeout> | null = null;
+
+function persistLastGoodToSession(data: AppData): void {
+  if (typeof window === "undefined") return;
+  if (persistLkgTimer) clearTimeout(persistLkgTimer);
+  persistLkgTimer = setTimeout(() => {
+    persistLkgTimer = null;
+    try {
+      const json = JSON.stringify(data);
+      if (json.length > STAFF_GESTAO_LKG_MAX_CHARS) return;
+      sessionStorage.setItem(STAFF_GESTAO_LKG_SESSION_KEY, json);
+    } catch {
+      /* quota / private */
+    }
+  }, 250);
+}
+
+function readLastGoodFromSession(): AppData | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(STAFF_GESTAO_LKG_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AppData;
+    if (!parsed || typeof parsed !== "object") return null;
+    if (staffGestaoRiquezaTotal(medirRiquezaStaffGestao(parsed)) <= 0) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 function pertenceCoop<T extends { cooperativaId?: string }>(item: T, coopId?: string): boolean {
   return !coopId || item.cooperativaId === coopId;
 }
@@ -75,15 +108,29 @@ export function noteStaffGestaoLastGood(data: AppData | null | undefined): void 
   if (staffGestaoRiquezaTotal(next) <= 0) return;
   if (lastGood && staffGestaoSnapshotPoorer(next, medirRiquezaStaffGestao(lastGood))) return;
   lastGood = data;
+  persistLastGoodToSession(data);
 }
 
 export function peekStaffGestaoLastGood(): AppData | null {
+  if (lastGood) return lastGood;
+  const stored = readLastGoodFromSession();
+  if (stored) lastGood = stored;
   return lastGood;
 }
 
 /** Somente testes. */
 export function resetStaffGestaoSnapshotGuardForTests(): void {
   lastGood = null;
+  if (persistLkgTimer) {
+    clearTimeout(persistLkgTimer);
+    persistLkgTimer = null;
+  }
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem(STAFF_GESTAO_LKG_SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 function uniaoPorId<T extends { id: string }>(prefer: T[], extra: T[]): T[] {

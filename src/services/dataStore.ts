@@ -10,8 +10,11 @@ import { compactarFotosNoArmazenamento, liberarEspacoArmazenamento, stripBinaryF
 import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, sincronizarMensalidadeCooperativa } from "@/services/mensalidadeService";
 import { applyOperationalResetIfNeeded, clearOperationalData } from "@/services/operationalReset";
 import {
+  medirRiquezaStaffGestao,
   noteStaffGestaoLastGood,
+  peekStaffGestaoLastGood,
   preservarStaffGestaoContraWipe,
+  staffGestaoRiquezaTotal,
 } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
 import { normalizeCreatorEmail, normalizeAuthEmail } from "@/lib/security/appCreator";
@@ -99,6 +102,34 @@ export function getDataRevision(): number {
 /** true após localStorage ter sido lido (evita UI/sync com shell vazio). */
 export function isAppDataWarm(): boolean {
   return memoryCache !== null;
+}
+
+/** F5 da gestão: há blob local rico — hidratar na hora, não pintar vazio. */
+export function persistedAppDataBlobLooksHydrated(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return !!raw && raw.length > 10_000;
+  } catch {
+    return false;
+  }
+}
+
+function sessionRoleLooksStaffGestao(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = localStorage.getItem("coopeagriplla_session");
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as { role?: string };
+    return parsed.role === "responsavel" || parsed.role === "tesoureiro" || parsed.role === "admin";
+  } catch {
+    return false;
+  }
+}
+
+function restoreStaffGestaoFromLastGoodIfNeeded(data: AppData): AppData {
+  if (!sessionRoleLooksStaffGestao()) return data;
+  return preservarStaffGestaoContraWipe(peekStaffGestaoLastGood(), data);
 }
 
 function bumpRevision(): void {
@@ -794,6 +825,12 @@ function loadData(forceReload = false): AppData {
   const inlineRaw = !forceReload ? takeInlineParsedAppData() : null;
   const stored = inlineRaw == null ? localStorage.getItem(STORAGE_KEY) : null;
   if (!stored && inlineRaw == null) {
+    const lkg = sessionRoleLooksStaffGestao() ? peekStaffGestaoLastGood() : null;
+    if (lkg && staffGestaoRiquezaTotal(medirRiquezaStaffGestao(lkg)) > 0) {
+      memoryCache = lkg;
+      noteStaffGestaoLastGood(lkg);
+      return memoryCache;
+    }
     let data = emptyInitialData;
     const ensured = ensureCreatorAdminAccount(data);
     data = ensured.data;
@@ -812,6 +849,7 @@ function loadData(forceReload = false): AppData {
     data = ensured.data;
     const reset = applyOperationalResetIfNeeded(data);
     data = reset.data;
+    data = restoreStaffGestaoFromLastGoodIfNeeded(data);
 
     if (ensured.changed) {
       const saved = saveDataSafe(data);

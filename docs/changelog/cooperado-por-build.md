@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v496
+
+- **Responsável:** ao resetar a página, o que já estava no aparelho permanece — o painel não some nem zera.
+- **Atualização:** se a nuvem trouxer dado novo, entra; se vier vazio, o lastro local fica.
+- **Leve:** nas abas da gestão o sync é discreto (notas), sem puxar o operacional a cada passagem.
+
 ## v495
 
 - **Pagar cooperados:** o valor a pagar volta a ser o da ficha em aberto, como no backup 404 — não usa um consolidado zerado.

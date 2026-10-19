@@ -133,10 +133,16 @@ import { scheduleCooperadoPostShellSync } from "@/lib/performance/cooperadoPostS
 import { fetchCooperativaCloudRevision } from "@/services/cooperativaSyncRevisionService";
 import { notifyAppSubtleUpdate } from "@/lib/cooperadoSubtleUpdate";
 import { requestCooperadoAppReleaseSync, type SyncRunOptions } from "@/services/syncRequest";
+import { staffResponsavelOpeningSyncRequest } from "@/lib/staff/staffResponsavelSyncPolicy";
 import {
-  staffResponsavelLifecycleSyncRequest,
-  staffResponsavelOpeningSyncRequest,
-} from "@/lib/staff/staffResponsavelSyncPolicy";
+  isStaffGestaoLiveSyncEnabled,
+  resolveStaffGestaoLiveSyncIntervalMs,
+  staffResponsavelLiveSyncTickRequest,
+  staffResponsavelLifecycleSyncRequestLive,
+} from "@/lib/staff/staffResponsavelLiveSyncPolicy";
+import { scheduleStaffGestaoLiveSyncLoop } from "@/lib/performance/staffGestaoLiveSyncLoop";
+import { shouldBlockStaffAutoSyncDuringConferencia } from "@/lib/performance/staffConferenciaSyncTier";
+import { usePathname } from "next/navigation";
 import { expandStaffTierPlanIfOperacionalVazio } from "@/lib/staff/staffOperacionalColdHydrate";
 import { purgarInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { scheduleCooperadoPwaOperacionalParidadePull } from "@/lib/cooperado/cooperadoPwaFinanceiroParidadeRefresh";
@@ -342,14 +348,12 @@ export function useSyncStatus(): SyncStatusValue {
 }
 
 /**
- * Sync sob demanda (pacote economia Edge Requests):
- * — ao abrir o app / voltar para a aba
- * — ao acordar da ociosidade (usuário mexeu de novo)
- * — após ações (requestAppSync)
- * Sem intervalo periódico enquanto o app fica aberto.
+ * Sync sob demanda + gestão: loop leve (notas_delta silencioso) nas rotas do responsável.
+ * Cooperado: sem intervalo periódico (event-driven / manual).
  */
 export function CooperativaSyncProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!user || !isCooperadoInstantResumeEnabled()) return;
@@ -809,12 +813,15 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
             const plan = expandStaffTierPlanIfOperacionalVazio(
               resolveSyncTierPlan84(tier, "staff"),
               getData(),
-              currentCoopId
+              currentCoopId,
+              { staffLiveBackground: opts?.staffLiveBackground }
             );
             if (plan.bidirectionalFull) {
               await syncCooperativaBidirectional(cnpj, currentCoopId, { pushCatalog, pushMensalidades });
             } else {
-              await syncStaffTieredPullFromCloud(cnpj, currentCoopId, tier);
+              await syncStaffTieredPullFromCloud(cnpj, currentCoopId, tier, {
+                staffLiveBackground: opts?.staffLiveBackground,
+              });
             }
           }
 
@@ -1231,7 +1238,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         return;
       }
       const staffOpts = staff
-        ? staffResponsavelLifecycleSyncRequest(isAppDataWarm() ? getData() : null)
+        ? staffResponsavelLifecycleSyncRequestLive(isAppDataWarm() ? getData() : null)
         : undefined;
       void runSync(staffOpts);
     });
@@ -1251,7 +1258,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         return;
       }
       const staffOpts = staff
-        ? staffResponsavelLifecycleSyncRequest(isAppDataWarm() ? getData() : null)
+        ? staffResponsavelLifecycleSyncRequestLive(isAppDataWarm() ? getData() : null)
         : undefined;
       void runSync(staffOpts);
     };
@@ -1269,7 +1276,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       markUserActivity();
       if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
       const staffOpts = staff
-        ? staffResponsavelLifecycleSyncRequest(isAppDataWarm() ? getData() : null)
+        ? staffResponsavelLifecycleSyncRequestLive(isAppDataWarm() ? getData() : null)
         : undefined;
       void runSync(staffOpts);
     };
@@ -1285,6 +1292,28 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       window.removeEventListener("online", onOnline);
     };
   }, [coopId, user?.id, user?.role, runSync, pullVotacaoOperacionalCooperado, hydrateCooperadoPagamentosFromCloud]);
+
+  const staffGestaoLive =
+    user?.role === "responsavel" || user?.role === "tesoureiro" || user?.role === "admin";
+
+  useEffect(() => {
+    if (!staffGestaoLive || !coopId) return;
+    if (!isStaffGestaoLiveSyncEnabled()) return;
+    const intervalMs = resolveStaffGestaoLiveSyncIntervalMs(pathname ?? "");
+    if (intervalMs <= 0) return;
+
+    const tick = () => {
+      if (document.hidden) return;
+      if (shouldBlockStaffAutoSyncDuringConferencia()) return;
+      void runSync(staffResponsavelLiveSyncTickRequest(pathname ?? "", getData()));
+    };
+
+    return scheduleStaffGestaoLiveSyncLoop({
+      pollIntervalMs: intervalMs,
+      onPoll: tick,
+      onVisible: () => undefined,
+    });
+  }, [staffGestaoLive, coopId, pathname, runSync]);
 
   useEffect(() => {
     if (!user?.id || user.role !== "cooperado") return;

@@ -9,7 +9,13 @@ import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import {
   cooperadoFinanceiroBloqueiaEntradaApp,
 } from "@/services/fichaSyncGuard";
-import { getData, getSession, isAppDataWarm, preloadAppData } from "@/services/dataStore";
+import {
+  getData,
+  getSession,
+  isAppDataWarm,
+  persistedAppDataBlobLooksHydrated,
+  preloadAppData,
+} from "@/services/dataStore";
 import {
   inicioCardCacheProntoParaAbertura,
   lerInicioCardPersistidoFlex,
@@ -119,6 +125,8 @@ function shouldDeferAppDataEagerWarmForSession(session: ReturnType<typeof getSes
     return true;
   }
   if (isStaffDeferAppDataEagerWarmEnabled() && isStaffGestaoRole(session.role)) {
+    // F5 com dados no aparelho: hidrata na hora para o painel não sumir.
+    if (persistedAppDataBlobLooksHydrated()) return false;
     return true;
   }
   return false;

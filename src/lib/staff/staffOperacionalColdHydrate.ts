@@ -92,9 +92,13 @@ export function staffPrecisaHydrateOperacionalPull(
 export function expandStaffTierPlanIfOperacionalVazio(
   plan: SyncTierPlan84,
   data: AppData | null | undefined,
-  coopId?: string
+  coopId?: string,
+  opts?: { staffLiveBackground?: boolean }
 ): SyncTierPlan84 {
   if (!staffLocalOperacionalVazio(data, coopId)) return plan;
+  if (opts?.staffLiveBackground) {
+    return { ...plan, bidirectionalFull: false, pullOperacional: false };
+  }
   // idle/Início (pulse) não puxa operacional — evita zerar no toque da aba.
   if (plan.tier === "pulse") {
     return { ...plan, bidirectionalFull: false };

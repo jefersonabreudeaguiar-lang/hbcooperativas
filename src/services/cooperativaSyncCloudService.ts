@@ -2834,7 +2834,8 @@ export async function syncAllCooperativaFromCloud(cnpj: string, preferredCoopId?
 export async function syncStaffTieredPullFromCloud(
   cnpj: string,
   coopId: string | undefined,
-  tier: SyncTier
+  tier: SyncTier,
+  opts?: { staffLiveBackground?: boolean }
 ): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
@@ -2842,14 +2843,17 @@ export async function syncStaffTieredPullFromCloud(
   const plan = expandStaffTierPlanIfOperacionalVazio(
     resolveSyncTierPlan84(tier, "staff"),
     getData(),
-    cidHint
+    cidHint,
+    { staffLiveBackground: opts?.staffLiveBackground }
   );
   if (plan.bidirectionalFull) {
     await syncCooperativaBidirectionalInternal(cnpj, coopId);
     return;
   }
 
-  const resetAplicado = await ensureCloudOperationalResetApplied(digits, coopId);
+  const resetAplicado = opts?.staffLiveBackground
+    ? false
+    : await ensureCloudOperationalResetApplied(digits, coopId);
   const pullOperacional = plan.pullOperacional || resetAplicado;
 
   await runWithBatchedSaveAsync(async () => {

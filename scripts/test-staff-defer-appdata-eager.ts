@@ -13,5 +13,6 @@ const cold = readFileSync(
 assert.ok(cold.includes("NEXT_PUBLIC_STAFF_DEFER_APPDATA_EAGER"));
 assert.ok(cold.includes("isStaffGestaoRole(session.role)"));
 assert.ok(cold.includes("scheduleDeferredAppDataEagerWarm"));
+assert.ok(cold.includes("persistedAppDataBlobLooksHydrated"), "F5 com blob local hidrata na hora");
 
 console.log("OK test-staff-defer-appdata-eager");
