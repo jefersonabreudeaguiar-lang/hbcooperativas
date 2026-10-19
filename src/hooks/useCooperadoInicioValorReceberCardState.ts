@@ -7,6 +7,7 @@ import {
   cooperadoMotorTemObrigacaoReceber,
   resolverCardInicioEndurecido,
   sanitizeInicioCardSnapshotParaPersistenciaBic,
+  cooperadoInicioCardAlinharValorFicha,
   cooperadoInicioCardEscolherDisplayEstavel,
   type InicioCardLatchState,
   type InicioCardMotorSnapshot,
@@ -532,12 +533,37 @@ export function useCooperadoInicioValorReceberCardState(input: {
   latchRef.current = resolved.latch;
 
   const snapshotExibido = useMemo(() => {
-    if (cooperadoMotorTemObrigacaoReceber(resolved.display)) return resolved.display;
-    if (persistido?.display && cooperadoMotorTemObrigacaoReceber(persistido.display)) {
-      return persistido.display;
+    let base = resolved.display;
+    if (
+      !cooperadoMotorTemObrigacaoReceber(base) &&
+      persistido?.display &&
+      cooperadoMotorTemObrigacaoReceber(persistido.display)
+    ) {
+      base = persistido.display;
     }
-    return resolved.display;
-  }, [resolved.display, persistido]);
+    if (!input.cooperadoId) return base;
+    const coopId = input.cooperativaId;
+    const fichaSnap = coopId
+      ? lerCooperadoPwaFichaResumoSnapshot(input.cooperadoId, coopId)
+      : null;
+    let fichaValor = fichaSnap?.paridade?.valorLiquido ?? fichaSnap?.consolidado?.valorLiquido ?? 0;
+    let fichaMes = fichaSnap?.paridade?.mesLabel ?? fichaSnap?.consolidado?.mesLabel;
+    if (isAppDataWarm() && coopId) {
+      const live = cooperadoLeituraFinanceiraExibicao(getData(), input.cooperadoId, coopId);
+      if (live.valorLiquido > fichaValor) {
+        fichaValor = live.valorLiquido;
+        fichaMes = live.mesLabel;
+      }
+    }
+    return cooperadoInicioCardAlinharValorFicha(base, fichaValor, fichaMes) ?? base;
+  }, [
+    resolved.display,
+    persistido,
+    input.cooperadoId,
+    input.cooperativaId,
+    persistidoTick,
+    appDataWarmKey,
+  ]);
 
   useEffect(() => {
     if (!input.cooperadoId) return;

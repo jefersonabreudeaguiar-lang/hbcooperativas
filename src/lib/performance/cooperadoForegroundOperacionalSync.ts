@@ -41,6 +41,7 @@ import { cooperadoGaDeferForegroundRevisionChecks } from "@/lib/cooperado/cooper
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoTemConferidaAguardandoFicha } from "@/services/fichaSyncGuard";
 import { getData, getSession, isAppDataWarm } from "@/services/dataStore";
+import { getUserCooperativaId } from "@/utils/cooperativa";
 
 export type CooperadoForegroundPullReason =
   | "revision_changed"
@@ -139,18 +140,41 @@ export async function runCooperadoForegroundOperacionalCheck(
   }
 ): Promise<boolean> {
   const session = getSession();
-  if (cooperadoGaDeferForegroundRevisionChecks(session)) return false;
   if (isCooperadoPwaMessengerMode() && cooperadoPwaSuppressForegroundStaleCheck()) {
     return false;
   }
 
-  const evaluation = await evaluateCooperadoForegroundOperacionalPull(cnpj, opts);
+  const data = isAppDataWarm() ? getData() : null;
+  const cooperativaId =
+    opts?.cooperativaId ??
+    (session && data ? getUserCooperativaId(session, data) : undefined) ??
+    session?.cooperativaId;
+  const cooperadoId = opts?.cooperadoId ?? session?.cooperadoId;
+  const evaluation = await evaluateCooperadoForegroundOperacionalPull(cnpj, {
+    ...opts,
+    cooperadoId,
+    cooperativaId,
+  });
   if (!evaluation) return false;
 
   const digits = normalizeCnpj(cnpj ?? "");
   const { reason, remote } = evaluation;
+  const deferFull = cooperadoGaDeferForegroundRevisionChecks(session);
 
   if (reason === "financeiro_desatualizado") {
+    if (session?.role === "cooperado" && cooperativaId && isCooperadoPwaMessengerMode()) {
+      const rev = remote ?? (await watchBicCooperativaCloudRevision(digits));
+      if (rev) {
+        void runCooperadoMessengerOperacionalLightPull({
+          cnpj: digits,
+          cooperativaId,
+          user: session,
+          remote: rev,
+        });
+        return true;
+      }
+    }
+    if (deferFull) return false;
     if (session && isCooperadoMobileGaPromoted(session)) {
       requestCooperadoGaFinanceiroExibicaoRecoverySync({ garantia: true });
       cooperadoGaDispatchPrimeiraCargaSilenciosa(session, { allowRepeat: true });
@@ -165,24 +189,22 @@ export async function runCooperadoForegroundOperacionalCheck(
     reason === "snapshots_ausentes" &&
     isAppDataWarm()
   ) {
-    const session = getSession();
     if (session?.role === "cooperado") {
       persistirCooperadoPwaMessengerCaches(session, { light: true });
       if (rematerializarCooperadoPwaSnapshotsSeNecessario(session)) {
         clearCooperadoPwaDadosDesatualizados();
         return true;
       }
-      const coopId = opts?.cooperativaId;
-      const cooperadoId = opts?.cooperadoId;
       if (
-        coopId &&
+        cooperativaId &&
         cooperadoId &&
-        !cooperadoPwaFinanceiroSnapshotsAusentes(cooperadoId, coopId)
+        !cooperadoPwaFinanceiroSnapshotsAusentes(cooperadoId, cooperativaId)
       ) {
         clearCooperadoPwaDadosDesatualizados();
         return true;
       }
-      if (session && isCooperadoMobileGaPromoted(session) && cooperadoGaExibicaoFinanceiraAindaZerada(session)) {
+      if (deferFull) return false;
+      if (isCooperadoMobileGaPromoted(session) && cooperadoGaExibicaoFinanceiraAindaZerada(session)) {
         requestCooperadoGaFinanceiroExibicaoRecoverySync({ garantia: true });
         cooperadoGaDispatchPrimeiraCargaSilenciosa(session, { allowRepeat: true });
         return true;
@@ -194,14 +216,13 @@ export async function runCooperadoForegroundOperacionalCheck(
     isCooperadoPwaMessengerMode() &&
     reason === "revision_changed" &&
     remote &&
-    opts?.cooperativaId &&
+    cooperativaId &&
     cooperadoCloudRevisionNotasInSyncWithApplied(digits, remote)
   ) {
-    const session = getSession();
     if (session?.role === "cooperado") {
       void runCooperadoMessengerOperacionalLightPull({
         cnpj: digits,
-        cooperativaId: opts.cooperativaId,
+        cooperativaId,
         user: session,
         remote,
       });
@@ -224,6 +245,8 @@ export async function runCooperadoForegroundOperacionalCheck(
     }
     return true;
   }
+
+  if (deferFull) return false;
 
   if (
     notasAlteradasNaNuvem ||

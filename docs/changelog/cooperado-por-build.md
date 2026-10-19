@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v504
+
+- **A receber:** o card continua na tela ao fechar o app; quando a ficha sobe, o valor do card sobe junto.
+- **Abertura:** o celular puxa a ficha nova na hora, sem esperar dois minutos.
+- **Financeiro / Entregas:** iguais ao v503.
+
 ## v503
 
 - **Atualizar:** o botão não trava mais o app — puxa a ficha sem esperar o arquivo inteiro duas vezes.

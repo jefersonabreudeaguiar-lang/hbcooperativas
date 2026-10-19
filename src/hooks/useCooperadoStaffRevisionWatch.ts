@@ -5,8 +5,6 @@ import { isCooperadoEventDrivenSync } from "@/lib/performance/cooperadoEventDriv
 import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { cooperadoPwaSuppressForegroundStaleCheck } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
-import { cooperadoGaDeferForegroundRevisionChecks } from "@/lib/cooperado/cooperadoGaSyncPolicy";
-import { getSession } from "@/services/dataStore";
 
 /** Consulta leve na nuvem enquanto o app está em uso. */
 const REVISION_POLL_MS = 2 * 60_000;
@@ -55,7 +53,6 @@ export function useCooperadoStaffRevisionWatch({
 
     const check = async (foreground: boolean) => {
       if (cancelled || syncingRef.current) return;
-      if (cooperadoGaDeferForegroundRevisionChecks(getSession())) return;
       if (messenger && cooperadoPwaSuppressForegroundStaleCheck()) return;
       if (typeof navigator !== "undefined" && !navigator.onLine) return;
       if (typeof document !== "undefined" && document.hidden) return;

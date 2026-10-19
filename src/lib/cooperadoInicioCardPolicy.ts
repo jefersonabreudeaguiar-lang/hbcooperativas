@@ -90,6 +90,32 @@ export function cooperadoInicioCardEscolherDisplayEstavel(opts: {
   return opts.motor ?? vazio;
 }
 
+/**
+ * Card A receber permanece visível; se a ficha tiver valor maior, o card sobe para esse valor.
+ * Não zera o lastro quando a ficha ainda não chegou.
+ */
+export function cooperadoInicioCardAlinharValorFicha(
+  persistido: InicioCardMotorSnapshot | null | undefined,
+  fichaValor: number,
+  fichaMesLabel?: string
+): InicioCardMotorSnapshot | null {
+  const prev =
+    persistido && cooperadoMotorTemObrigacaoReceber(persistido) ? persistido : null;
+  const ficha = Number.isFinite(fichaValor) ? fichaValor : 0;
+  if (ficha > 0.005 && (!prev || ficha > prev.valor + 0.005)) {
+    return {
+      mesLabel:
+        fichaMesLabel?.trim() && fichaMesLabel !== "—"
+          ? fichaMesLabel
+          : prev?.mesLabel ?? "—",
+      valor: ficha,
+      valorRecibo: prev?.valorRecibo ?? 0,
+      aguardandoAssinatura: false,
+    };
+  }
+  return prev ?? persistido ?? null;
+}
+
 export type { InicioCardMotorSnapshot } from "@/lib/cooperado/cooperadoInicioCardMotorTypes";
 import type { InicioCardMotorSnapshot } from "@/lib/cooperado/cooperadoInicioCardMotorTypes";
 

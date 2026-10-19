@@ -2,6 +2,7 @@
  * Grava cache do card “A receber” após login, sync ou AppData local — sem abrir o dashboard.
  */
 import {
+  cooperadoInicioCardAlinharValorFicha,
   cooperadoMotorRevisionOperacional,
   cooperadoMotorTemObrigacaoReceber,
   filtrarInicioCardPersistidoLeituraBic,
@@ -24,6 +25,7 @@ import { getUserCooperativaId } from "@/utils/cooperativa";
 import type { User } from "@/types";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
+import { lerCooperadoPwaFichaResumoSnapshot } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 
 export type CooperadoInicioCardPersistUser = Omit<User, "password">;
 
@@ -84,6 +86,16 @@ export function persistirInicioCardValorReceberCooperado(
       aguardandoAssinatura: false,
     };
   }
+
+  const paridadeFicha = resolverMotorCardInicioParidadeFinanceiro(data, cooperadoId, cooperativaId);
+  const fichaSnap = lerCooperadoPwaFichaResumoSnapshot(cooperadoId, cooperativaId);
+  const valorFicha = Math.max(
+    paridadeFicha.motor.valor,
+    fichaSnap?.paridade?.valorLiquido ?? 0,
+    fichaSnap?.consolidado?.valorLiquido ?? 0
+  );
+  display =
+    cooperadoInicioCardAlinharValorFicha(display, valorFicha, paridadeFicha.motor.mesLabel) ?? display;
 
   if (!cooperadoMotorTemObrigacaoReceber(display)) {
     return false;
