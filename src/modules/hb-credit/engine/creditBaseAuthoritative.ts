@@ -73,7 +73,7 @@ export function buildCreditosBaseAuthoritativeFromCloud(
     notasPedido,
   });
   const cloudBlindar = { fichaOperacionalNaNuvem: true };
-  const map = buildCreditosBaseMap(data, cooperadoIds, cooperativaId, { blindar: cloudBlindar });
+  const map = buildCreditosBaseMap(data, cooperadoIds, cooperativaId);
   const blinded = blindarMapaCreditoBaseCentsHb(data, cooperativaId, map, cloudBlindar);
   return expandCreditosBaseMapCooperadoIds(data, cooperativaId, blinded);
 }

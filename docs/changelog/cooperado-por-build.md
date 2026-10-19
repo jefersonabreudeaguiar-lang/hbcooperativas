@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v490
+
+- **Deploy:** o 489 não chegou ao ar por um erro de typecheck no crédito-base HB; este build corrige isso e publica o a receber que permanece ao sair.
+- **Financeiro:** resumo com Desconto HB Créditos e entregas com quantidade, preço por kg/dúzia e total.
+- **HB Créditos:** a conta só zera na liquidação confirmada pelo responsável.
+
 ## v489
 
 - **A receber:** ao sair do app o valor fica gravado. Ele só muda com desconto ou acréscimo, e só some se o responsável confirmou a liquidação.
