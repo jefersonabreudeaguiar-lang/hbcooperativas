@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v502
+
+- **Cooperado:** quando o responsável aprova a entrega, o valor a receber e o HB Créditos atualizam junto — não fica só a lista de entregas.
+- **Início / HB:** o celular puxa a ficha depois da nota aprovada, sem precisar ficar no valor antigo.
+- **Responsável:** Conferir e Em aberto iguais ao v501.
+
 ## v501
 
 - **Conferir entregas:** a foto que o cooperado já enviou aparece com o nome certo — não some como «Desconhecido».
