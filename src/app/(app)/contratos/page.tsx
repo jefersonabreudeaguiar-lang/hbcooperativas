@@ -12,7 +12,12 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, FormField } from "@/components/ui/Form";
-import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
+import { updateData, generateId, addAuditEntry, getData, isAppDataWarm } from "@/services/dataStore";
+import {
+  isStaffPrimeiroDiaContratosVazio,
+  STAFF_PRIMEIRO_DIA_CONTRATOS_TEXTO,
+  STAFF_PRIMEIRO_DIA_CONTRATOS_TITULO,
+} from "@/lib/staff/staffPrimeiroDiaContratos";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import {
   pushContratosToCloud,
@@ -250,6 +255,12 @@ function ContratosPageInner() {
 
   if (!data) return <PageSkeleton />;
 
+  const primeiroDia = isStaffPrimeiroDiaContratosVazio({
+    role: user?.role,
+    coopId,
+    data,
+    warm: isAppDataWarm(),
+  });
   const semItens = instituicoes.filter((i) => (produtosPorInst.get(i.id)?.length ?? 0) === 0);
 
   return (
@@ -281,10 +292,23 @@ function ContratosPageInner() {
       )}
 
       {instituicoes.length === 0 ? (
-        <div className="text-center py-16 bg-white border border-dashed border-gray-300 rounded-2xl">
+        <div className="text-center py-16 bg-white border border-dashed border-gray-300 rounded-2xl px-4">
           <Building2 size={40} className="mx-auto text-gray-300 mb-3" />
-          <p className="text-gray-600 font-medium">Nenhuma instituição cadastrada</p>
-          <p className="text-sm text-gray-500 mt-1 mb-4">Comece cadastrando escolas ou compradores do contrato.</p>
+          <p className="text-gray-800 font-semibold">
+            {primeiroDia ? STAFF_PRIMEIRO_DIA_CONTRATOS_TITULO : "Nenhuma instituição cadastrada"}
+          </p>
+          <p className="text-sm text-gray-600 mt-1 mb-4 max-w-md mx-auto">
+            {primeiroDia
+              ? STAFF_PRIMEIRO_DIA_CONTRATOS_TEXTO
+              : "Comece cadastrando escolas ou compradores do contrato."}
+          </p>
+          {primeiroDia && (
+            <ol className="text-sm text-left text-gray-700 max-w-sm mx-auto mb-5 space-y-1 list-decimal list-inside">
+              <li>Toque em Novo contrato</li>
+              <li>Salve a instituição (PNAE ou o nome da escola)</li>
+              <li>Abra o contrato e cadastre produto e preço</li>
+            </ol>
+          )}
           {check("instituicoes", "create") && (
             <Button onClick={() => { setTipoInst("PNAE"); setNomeInst(CONTRATO_PNAE_PADRAO_NOME); setNovaInstModal(true); }}>
               <Plus size={18} /> Novo contrato

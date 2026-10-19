@@ -6,7 +6,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { emptyInitialData } from "../src/mock/data.ts";
-import { shouldRedirectStaffPrimeiroDiaContratos } from "../src/lib/staff/staffPrimeiroDiaContratos.ts";
+import {
+  isStaffPrimeiroDiaContratosVazio,
+  shouldRedirectStaffPrimeiroDiaContratos,
+  STAFF_PRIMEIRO_DIA_CONTRATOS_TITULO,
+} from "../src/lib/staff/staffPrimeiroDiaContratos.ts";
 
 const vazio = {
   ...emptyInitialData,
@@ -81,5 +85,43 @@ assert.match(layout, /useStaffPrimeiroDiaContratos/);
 
 const cadastro = readFileSync(join(import.meta.dirname ?? __dirname, "../src/app/cadastro/page.tsx"), "utf8");
 assert.match(cadastro, /router\.push\("\/contratos"\)/);
+
+assert.equal(
+  isStaffPrimeiroDiaContratosVazio({
+    role: "responsavel",
+    coopId: "coop1",
+    data: vazio,
+    warm: true,
+  }),
+  true
+);
+assert.equal(
+  isStaffPrimeiroDiaContratosVazio({
+    role: "responsavel",
+    coopId: "coop1",
+    data: comContrato,
+    warm: true,
+  }),
+  false,
+  "casa com contrato não vê recado de primeiro dia"
+);
+assert.equal(
+  isStaffPrimeiroDiaContratosVazio({
+    role: "responsavel",
+    coopId: "coop1",
+    data: vazio,
+    warm: false,
+  }),
+  false,
+  "F5 sem dados aquecidos não mostra primeiro dia"
+);
+
+const contratosPage = readFileSync(
+  join(import.meta.dirname ?? __dirname, "../src/app/(app)/contratos/page.tsx"),
+  "utf8"
+);
+assert.match(contratosPage, /isStaffPrimeiroDiaContratosVazio/);
+assert.match(contratosPage, /STAFF_PRIMEIRO_DIA_CONTRATOS_TITULO/);
+assert.match(STAFF_PRIMEIRO_DIA_CONTRATOS_TITULO, /Primeiro dia/);
 
 console.log("ok: primeiro dia do responsável vai a Contratos só se estiver vazio");

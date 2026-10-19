@@ -5,6 +5,21 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 
 const SEEN_PREFIX = "hb-staff-primeiro-dia-contratos:";
 
+export const STAFF_PRIMEIRO_DIA_CONTRATOS_TITULO = "Primeiro dia: cadastre o primeiro contrato";
+export const STAFF_PRIMEIRO_DIA_CONTRATOS_TEXTO =
+  "Sem instituição, o cooperado ainda não consegue entregar. Cadastre a escola ou o comprador e depois os produtos com preço.";
+
+export function isStaffPrimeiroDiaContratosVazio(opts: {
+  role?: string;
+  coopId?: string | null;
+  data: AppData | null;
+  warm: boolean;
+}): boolean {
+  if (!opts.warm || !opts.data || !opts.coopId) return false;
+  if (!isStaffGestaoRole(opts.role)) return false;
+  return getInstituicoesCatalogo(opts.data, opts.coopId).length === 0;
+}
+
 export function shouldRedirectStaffPrimeiroDiaContratos(opts: {
   role?: string;
   coopId?: string | null;
@@ -12,10 +27,8 @@ export function shouldRedirectStaffPrimeiroDiaContratos(opts: {
   data: AppData | null;
   warm: boolean;
 }): boolean {
-  if (!opts.warm || !opts.data || !opts.coopId) return false;
-  if (!isStaffGestaoRole(opts.role)) return false;
   if (opts.pathname.startsWith("/contratos")) return false;
-  return getInstituicoesCatalogo(opts.data, opts.coopId).length === 0;
+  return isStaffPrimeiroDiaContratosVazio(opts);
 }
 
 export function staffPrimeiroDiaContratosSeenKey(cnpj: string): string {
