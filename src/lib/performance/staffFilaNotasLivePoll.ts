@@ -46,4 +46,14 @@ export function resolveStaffFilaUploadProgressPollMs(): number {
   return readEnvMs("NEXT_PUBLIC_STAFF_FILA_UPLOAD_PROGRESS_MS", 2_500);
 }
 
+/**
+ * Catch-up da fila quando o responsável NÃO está em Conferir.
+ * 0 = o poll da própria aba Conferir já cobre.
+ */
+export function resolveStaffFilaBackgroundCatchupMs(conferirPageActive: boolean): number {
+  if (conferirPageActive) return 0;
+  if (!isStaffFilaNotasLivePollEnabled()) return 0;
+  return readEnvMs("NEXT_PUBLIC_STAFF_FILA_BACKGROUND_MS", 8_000);
+}
+
 export const STAFF_FILA_UPLOAD_PROGRESS_MAX_NOTAS = 12;

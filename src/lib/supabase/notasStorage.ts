@@ -535,41 +535,71 @@ export function mergeNotasSources(tableNotas: NotaPedido[], storageNotas: NotaPe
   );
 }
 
+const FILA_CONFERENCIA_SQL_STATUSES = [
+  "aguardando_conferencia",
+  "entregue",
+  "rejeitada",
+  "rascunho",
+] as const;
+
+function mapNotasPedidoTableRows(
+  data: { payload: unknown; status: unknown; updated_at: unknown }[] | null
+): { notas: Array<NotaPedido & { serverUpdatedAt?: string }>; serverWatermark?: string } {
+  let serverWatermark: string | undefined;
+  const notas = (data ?? [])
+    .map((row) => {
+      const payload = row.payload as NotaPedido | null;
+      if (!payload?.id) return null;
+      const sqlStatus = row.status as NotaPedido["status"] | null;
+      const sqlUpdatedAt = typeof row.updated_at === "string" ? row.updated_at : undefined;
+      if (sqlUpdatedAt) {
+        const t = new Date(sqlUpdatedAt).getTime();
+        const prev = serverWatermark ? new Date(serverWatermark).getTime() : 0;
+        if (Number.isFinite(t) && t >= prev) serverWatermark = sqlUpdatedAt;
+      }
+      const status =
+        sqlStatus && sqlStatus !== "rascunho"
+          ? sqlStatus
+          : payload.status;
+      return {
+        ...payload,
+        status,
+        updatedAt: sqlUpdatedAt ?? payload.updatedAt,
+        serverUpdatedAt: sqlUpdatedAt,
+      } as NotaPedido & { serverUpdatedAt?: string };
+    })
+    .filter((n): n is NotaPedido & { serverUpdatedAt?: string } => Boolean(n));
+  return { notas, serverWatermark };
+}
+
+/** Fila do responsável: sem watermark — pega rascunho SQL cujo payload já está em análise. */
+export async function fetchFilaConferenciaFromTable(
+  supabase: SupabaseClient,
+  cnpj: string
+): Promise<{ notas: NotaPedido[]; tableMissing: boolean }> {
+  const { data, error } = await supabase
+    .from("notas_pedido")
+    .select("payload, status, updated_at")
+    .eq("cooperativa_cnpj", cnpj)
+    .in("status", [...FILA_CONFERENCIA_SQL_STATUSES])
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    if (isNotasPedidoTableMissing(error)) {
+      return { notas: [], tableMissing: true };
+    }
+    console.error("[notas-pedido/list-fila-live]", error.message);
+    return { notas: [], tableMissing: false };
+  }
+
+  return { notas: mapNotasPedidoTableRows(data).notas, tableMissing: false };
+}
+
 export async function fetchNotasFromTable(
   supabase: SupabaseClient,
   cnpj: string,
   since?: string
 ): Promise<{ notas: NotaPedido[]; tableMissing: boolean; serverWatermark?: string }> {
-  const mapRows = (
-    data: { payload: unknown; status: unknown; updated_at: unknown }[] | null
-  ): { notas: NotaPedido[]; serverWatermark?: string } => {
-    let serverWatermark: string | undefined;
-    const notas = (data ?? [])
-      .map((row) => {
-        const payload = row.payload as NotaPedido | null;
-        if (!payload?.id) return null;
-        const sqlStatus = row.status as NotaPedido["status"] | null;
-        const sqlUpdatedAt = typeof row.updated_at === "string" ? row.updated_at : undefined;
-        if (sqlUpdatedAt) {
-          const t = new Date(sqlUpdatedAt).getTime();
-          const prev = serverWatermark ? new Date(serverWatermark).getTime() : 0;
-          if (Number.isFinite(t) && t >= prev) serverWatermark = sqlUpdatedAt;
-        }
-        const status =
-          sqlStatus && sqlStatus !== "rascunho"
-            ? sqlStatus
-            : payload.status;
-        return {
-          ...payload,
-          status,
-          updatedAt: sqlUpdatedAt ?? payload.updatedAt,
-          serverUpdatedAt: sqlUpdatedAt,
-        } as NotaPedido & { serverUpdatedAt?: string };
-      })
-      .filter((n): n is NotaPedido & { serverUpdatedAt?: string } => Boolean(n));
-    return { notas, serverWatermark };
-  };
-
   if (since) {
     const [deltaRes, filaRes] = await Promise.all([
       supabase
@@ -582,7 +612,7 @@ export async function fetchNotasFromTable(
         .from("notas_pedido")
         .select("payload, status, updated_at")
         .eq("cooperativa_cnpj", cnpj)
-        .in("status", ["aguardando_conferencia", "entregue", "rejeitada"])
+        .in("status", [...FILA_CONFERENCIA_SQL_STATUSES])
         .order("updated_at", { ascending: false }),
     ]);
 
@@ -598,8 +628,8 @@ export async function fetchNotasFromTable(
     }
 
     const byId = new Map<string, NotaPedido & { serverUpdatedAt?: string }>();
-    for (const n of mapRows(deltaRes.data ?? []).notas) byId.set(n.id, n);
-    for (const n of mapRows(filaRes.error ? [] : (filaRes.data ?? [])).notas) {
+    for (const n of mapNotasPedidoTableRows(deltaRes.data ?? []).notas) byId.set(n.id, n);
+    for (const n of mapNotasPedidoTableRows(filaRes.error ? [] : (filaRes.data ?? [])).notas) {
       if (!byId.has(n.id)) byId.set(n.id, n);
     }
     const merged = [...byId.values()];
@@ -629,7 +659,7 @@ export async function fetchNotasFromTable(
     return { notas: [], tableMissing: false };
   }
 
-  const { notas, serverWatermark } = mapRows(data ?? []);
+  const { notas, serverWatermark } = mapNotasPedidoTableRows(data ?? []);
   return { notas, tableMissing: false, serverWatermark };
 }
 

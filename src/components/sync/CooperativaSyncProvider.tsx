@@ -16,6 +16,7 @@ import { useAppDataSelector } from "@/hooks/useAppData";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import {
   resolveCooperativaCnpj,
+  getCooperativaCnpj,
   pushNotasPedidoToCloud,
   pushNotaComFotosEmStreaming,
   flushPendingNotaDeletes,
@@ -23,6 +24,7 @@ import {
   finalizeNotaEntregaNaNuvem,
   refreshCooperadoNotasEmAnalise,
   republishLocalAguardandoConferencia,
+  syncStaffFilaConferenciaLiveFromCloud,
 } from "@/services/notaPedidoCloudService";
 import { runCooperadoDeliveryQueueMaintenance, ensureCooperadoDeliveryQueueOnlineListener } from "@/services/cooperadoDeliveryQueueCoordinator";
 import {
@@ -142,6 +144,10 @@ import {
 } from "@/lib/staff/staffResponsavelLiveSyncPolicy";
 import { scheduleStaffGestaoLiveSyncLoop } from "@/lib/performance/staffGestaoLiveSyncLoop";
 import { shouldBlockStaffAutoSyncDuringConferencia } from "@/lib/performance/staffConferenciaSyncTier";
+import {
+  isStaffFilaNotasLivePollEnabled,
+  resolveStaffFilaBackgroundCatchupMs,
+} from "@/lib/performance/staffFilaNotasLivePoll";
 import { usePathname } from "next/navigation";
 import { expandStaffTierPlanIfOperacionalVazio } from "@/lib/staff/staffOperacionalColdHydrate";
 import { purgarInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
@@ -1320,6 +1326,36 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       onVisible: () => undefined,
     });
   }, [staffGestaoLive, coopId, pathname, runSync]);
+
+  useEffect(() => {
+    if (!staffGestaoLive || !coopId) return;
+    if (!isStaffFilaNotasLivePollEnabled()) return;
+    const onConferir = (pathname ?? "").startsWith("/notas-pedido");
+    const intervalMs = resolveStaffFilaBackgroundCatchupMs(onConferir);
+    if (intervalMs <= 0) return;
+
+    const tick = () => {
+      if (document.hidden) return;
+      const d = getData();
+      if (!d) return;
+      const cnpj = getCooperativaCnpj(d, coopId);
+      if (!cnpj) return;
+      void syncStaffFilaConferenciaLiveFromCloud(cnpj);
+    };
+
+    const first = window.setTimeout(tick, 1_200);
+    const interval = window.setInterval(tick, intervalMs);
+    const onVisible = () => {
+      if (document.hidden) return;
+      tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [staffGestaoLive, coopId, pathname]);
 
   useEffect(() => {
     if (!user?.id || user.role !== "cooperado") return;

@@ -7,6 +7,7 @@ import { logServerMutationAudit } from "@/lib/security/serverAudit";
 import {
   fetchNotasFromStorage,
   fetchNotasFromTable,
+  fetchFilaConferenciaFromTable,
   mergeNotasSources,
   mergeStorageFilaOrphansIntoTableNotas,
   notaPayloadForTable,
@@ -40,11 +41,39 @@ export async function GET(request: Request) {
   const withPreviews = searchParams.get("previews") === "1";
   const since = searchParams.get("since")?.trim() || undefined;
   const delta = Boolean(since);
-
-  const fromTable = await fetchNotasFromTable(supabase, cnpj, since);
+  const filaOnly = searchParams.get("fila") === "1";
 
   const visiveis = (lista: NotaPedido[]) =>
     lista.filter((n) => n.status !== "rascunho");
+
+  const responderLista = async (lista: NotaPedido[], source: string) => {
+    const merged = visiveis(lista).map(sanitizarNotaParaFilaConferencia);
+    const notas =
+      lite && !withPreviews
+        ? merged
+        : await enrichNotasListWithPreviews(supabase, cnpj, merged);
+    return NextResponse.json({
+      notas,
+      source,
+      serverWatermark: undefined,
+    });
+  };
+
+  if (filaOnly) {
+    const fromTable = await fetchFilaConferenciaFromTable(supabase, cnpj);
+    if (fromTable.tableMissing) {
+      const fromStorage = await fetchNotasFromStorage(supabase, cnpj);
+      return responderLista(fromStorage, "fila-storage");
+    }
+    const tableMerged = await mergeStorageFilaOrphansIntoTableNotas(
+      supabase,
+      cnpj,
+      fromTable.notas
+    );
+    return responderLista(tableMerged, "fila");
+  }
+
+  const fromTable = await fetchNotasFromTable(supabase, cnpj, since);
 
   // Sem tabela SQL: delta vazio escondia entregas publicadas (só storage).
   // Sempre lista o storage completo — nunca retornar [] por causa de `since`.

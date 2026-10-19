@@ -1527,6 +1527,55 @@ export async function refreshCooperadoNotasEmAnalise(
   };
 }
 
+const staffFilaLiveInflight = new Map<string, Promise<number>>();
+
+/**
+ * Responsável: puxa a fila de conferência sem watermark.
+ * Cooperado envia foto → entra no painel em poucos segundos, sem F5/Atualizar.
+ */
+export async function syncStaffFilaConferenciaLiveFromCloud(cnpj: string): Promise<number> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return 0;
+  const existing = staffFilaLiveInflight.get(digits);
+  if (existing) return existing;
+
+  const run = (async () => {
+    try {
+      const res = await secureApiFetch(
+        `/api/notas-pedido?cnpj=${encodeURIComponent(digits)}&lite=1&fila=1`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) return 0;
+      const json = await res.json().catch(() => ({}));
+      const cloudNotas = ((json.notas ?? []) as unknown[])
+        .map(mapRowToNota)
+        .filter((n): n is NotaPedido => Boolean(n));
+      const current = getData();
+      if (!current) return 0;
+      const merged = mergeCloudNotasIntoData(current, cloudNotas, digits);
+      if (merged !== current) {
+        saveDataSafe(merged);
+      }
+      const ids = cloudNotas
+        .filter((n) => n.status === "aguardando_conferencia" || n.status === "entregue")
+        .map((n) => n.id)
+        .filter(Boolean)
+        .slice(0, 12);
+      if (ids.length > 0) {
+        await refreshStaffFilaNotasFromUploadProgress(digits, ids, { onlyIfBehind: true });
+      }
+      return cloudNotas.length;
+    } catch {
+      return 0;
+    } finally {
+      staffFilaLiveInflight.delete(digits);
+    }
+  })();
+
+  staffFilaLiveInflight.set(digits, run);
+  return run;
+}
+
 /**
  * Responsável na fila: meta leve (uploadProgress) para refletir fotos do cooperado sem full sync.
  */

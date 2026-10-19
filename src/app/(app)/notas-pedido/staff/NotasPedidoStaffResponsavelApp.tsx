@@ -180,6 +180,7 @@ import {
   resolveCooperativaCnpj,
   resolveFotosNotaParaExibicao,
   refreshStaffFilaNotasFromUploadProgress,
+  syncStaffFilaConferenciaLiveFromCloud,
 } from "@/services/notaPedidoCloudService";
 import {
   revokePreviewUrl,
@@ -2167,6 +2168,15 @@ export default function NotasPedidoStaffMain() {
     [isCooperado, coopId, mostrarFilaResponsavelConteudo]
   );
 
+  const puxarFilaLiveResponsavel = useCallback(() => {
+    if (isCooperado || !coopId) return;
+    const d = getData();
+    if (!d) return;
+    const cnpj = getCooperativaCnpj(d, coopId);
+    if (!cnpj) return;
+    void syncStaffFilaConferenciaLiveFromCloud(cnpj);
+  }, [isCooperado, coopId]);
+
   const recuperarFilaConferencia = useCallback(() => {
     if (isCooperado || !coopId) return;
     const d = getData();
@@ -2264,24 +2274,19 @@ export default function NotasPedidoStaffMain() {
   ]);
 
   useEffect(() => {
-    if (isCooperado || !coopId || !tabActive || !mostrarFilaResponsavelConteudo) return;
-    const filaLive = isStaffFilaNotasLivePollEnabled();
-    const pollMs = resolveStaffNotasPollIntervalMs(filaLive);
+    if (isCooperado || !coopId || !tabActive) return;
+    if (!isStaffFilaNotasLivePollEnabled()) return;
+    const pollMs = resolveStaffNotasPollIntervalMs(true);
+    puxarFilaLiveResponsavel();
     return scheduleStaffResponsavelNotasPollLoop({
       pollIntervalMs: pollMs,
-      onPoll: () => puxarNotasResponsavelDaNuvem(),
-      onVisible: () => puxarNotasResponsavelDaNuvem({ bypassMinGap: true }),
+      onPoll: () => puxarFilaLiveResponsavel(),
+      onVisible: () => puxarFilaLiveResponsavel(),
     });
-  }, [
-    isCooperado,
-    coopId,
-    tabActive,
-    mostrarFilaResponsavelConteudo,
-    puxarNotasResponsavelDaNuvem,
-  ]);
+  }, [isCooperado, coopId, tabActive, puxarFilaLiveResponsavel]);
 
   useEffect(() => {
-    if (isCooperado || !coopId || !tabActive || !mostrarFilaResponsavelConteudo) return;
+    if (isCooperado || !coopId || !tabActive) return;
     if (!isStaffFilaNotasLivePollEnabled()) return;
     if (conferirModal) return;
 
@@ -2295,7 +2300,7 @@ export default function NotasPedidoStaffMain() {
       const ids = pendentesEstaveis
         .slice(0, STAFF_FILA_UPLOAD_PROGRESS_MAX_NOTAS)
         .map((n) => n.id);
-      puxarNotasResponsavelDaNuvem();
+      puxarFilaLiveResponsavel();
       if (ids.length === 0) return;
       staffFilaUploadProgressInflightRef.current = true;
       void refreshStaffFilaNotasFromUploadProgress(cnpj, ids, { onlyIfBehind: true })
@@ -2314,10 +2319,9 @@ export default function NotasPedidoStaffMain() {
     isCooperado,
     coopId,
     tabActive,
-    mostrarFilaResponsavelConteudo,
     conferirModal,
     pendentesEstaveis,
-    puxarNotasResponsavelDaNuvem,
+    puxarFilaLiveResponsavel,
   ]);
 
   const filaZombieScanActive =

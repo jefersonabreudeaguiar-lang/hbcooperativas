@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v499
+
+- **Conferir entregas:** quando o cooperado envia as fotos, a nota aparece sozinha na fila do responsável — sem F5 e sem apertar Atualizar.
+- **Foto:** o painel busca a entrega nova a cada poucos segundos e já traz a foto junto.
+- **Outras abas:** mesmo se o responsável estiver no Início ou em Pagar, a entrega já chega; ao abrir Conferir, ela já está lá.
+
 ## v498
 
 - **Conferir entregas:** as notas que o cooperado enviou voltam a aparecer na fila — o app busca a lista completa na nuvem, não só o que mudou por último.
