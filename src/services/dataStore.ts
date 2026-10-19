@@ -1990,7 +1990,12 @@ export async function registerCooperativa(input: RegisterCooperativaInput): Prom
   }
 
   const existingCloud = await fetchCooperativaByCnpjFromCloud(cnpj);
-  if (existingCloud) {
+  const sameEmailAsCloud =
+    existingCloud &&
+    normalizeAuthEmail(existingCloud.email ?? "") === email;
+
+  let cooperativaBase = existingCloud;
+  if (existingCloud && !sameEmailAsCloud) {
     return {
       success: false,
       error:
@@ -1998,32 +2003,35 @@ export async function registerCooperativa(input: RegisterCooperativaInput): Prom
     };
   }
 
-  const cloudResult = await registerCooperativaInCloud({
-    nome,
-    cnpj,
-    responsavel,
-    email,
-    telefone: input.telefone,
-    endereco: input.endereco,
-    senhaCadastroCooperado: input.senhaCadastroCooperado?.trim() || undefined,
-  });
+  if (!cooperativaBase) {
+    const cloudResult = await registerCooperativaInCloud({
+      nome,
+      cnpj,
+      responsavel,
+      email,
+      telefone: input.telefone,
+      endereco: input.endereco,
+      senhaCadastroCooperado: input.senhaCadastroCooperado?.trim() || undefined,
+    });
 
-  if (!cloudResult.success) {
-    return {
-      success: false,
-      error: cloudResult.error || "Nuvem indisponível. Verifique o Supabase e tente novamente.",
-    };
+    if (!cloudResult.success) {
+      return {
+        success: false,
+        error: cloudResult.error || "Nuvem indisponível. Verifique o Supabase e tente novamente.",
+      };
+    }
+    cooperativaBase = cloudResult.cooperativa;
   }
 
   const now = new Date().toISOString();
   const senhaCadastroPlain = input.senhaCadastroCooperado?.trim();
   const cooperativa = {
-    ...cloudResult.cooperativa,
+    ...cooperativaBase,
     senhaCadastroCooperado: senhaCadastroPlain || undefined,
     senhaCadastroCooperadoHash: senhaCadastroPlain
       ? hashPasswordSync(senhaCadastroPlain)
-      : cloudResult.cooperativa.senhaCadastroCooperadoHash,
-    cobrancaSaas: defaultCobrancaSaas({
+      : cooperativaBase.senhaCadastroCooperadoHash,
+    cobrancaSaas: cooperativaBase.cobrancaSaas ?? defaultCobrancaSaas({
       termosAceitosEm: now,
       statusMes: "aguardando_primeiro_cooperado",
     }),
@@ -2051,9 +2059,8 @@ export async function registerCooperativa(input: RegisterCooperativaInput): Prom
   };
 
   const { password: __, ...safeUser } = newUser;
-  persistSession(safeUser);
 
-  await registerCloudUser({
+  const cloudUserOk = await registerCloudUser({
     id: userId,
     email,
     password: input.password,
@@ -2062,6 +2069,17 @@ export async function registerCooperativa(input: RegisterCooperativaInput): Prom
     cooperativaId,
     cooperativaCnpj: cnpj,
   });
+  if (!cloudUserOk) {
+    const detalhe = getLastCloudSyncError();
+    return {
+      success: false,
+      error:
+        detalhe ||
+        "A cooperativa foi gravada, mas o login na nuvem não nasceu. Tente cadastrar de novo com o mesmo e-mail e senha, ou entre em Login.",
+    };
+  }
+
+  persistSession(safeUser);
 
   updateData((d) => {
     let updated = {
