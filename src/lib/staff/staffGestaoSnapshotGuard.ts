@@ -1,9 +1,11 @@
 /**
  * O responsável nunca pode persistir um snapshot pior que o lastro já visto
  * (cache limpo / pull operacional / pós-processar).
+ * Lastro é por CNPJ — uma cooperativa não herda o painel de outra no mesmo aparelho.
  */
 import type { AppData } from "@/types";
 import { stripBinaryForPersist } from "@/utils/fotoEntrega";
+import { normalizeCnpj } from "@/utils/cooperativa";
 
 export type StaffGestaoRiqueza = {
   cooperados: number;
@@ -14,32 +16,86 @@ export type StaffGestaoRiqueza = {
   pixLivro: number;
 };
 
-let lastGood: AppData | null = null;
+const lastGoodByCnpj = new Map<string, AppData>();
 
 const STAFF_GESTAO_LKG_SESSION_KEY = "hb-staff-gestao-lkg-v1";
 const STAFF_GESTAO_LKG_MAX_CHARS = 4_500_000;
 let persistLkgTimer: ReturnType<typeof setTimeout> | null = null;
 let pagehideBound = false;
 
-function persistLastGoodToSessionNow(data: AppData): void {
-  if (typeof window === "undefined") return;
+function staffLkgSessionKey(cnpj: string): string {
+  return `${STAFF_GESTAO_LKG_SESSION_KEY}:${cnpj}`;
+}
+
+function readStaffSessionHint(): { role?: string; cnpj: string; cooperativaId?: string } {
+  if (typeof window === "undefined") return { cnpj: "" };
+  try {
+    const raw = localStorage.getItem("coopeagriplla_session");
+    if (!raw) return { cnpj: "" };
+    const parsed = JSON.parse(raw) as {
+      role?: string;
+      cooperativaCnpj?: string;
+      cooperativaId?: string;
+    };
+    return {
+      role: parsed.role,
+      cnpj: normalizeCnpj(parsed.cooperativaCnpj ?? ""),
+      cooperativaId: parsed.cooperativaId,
+    };
+  } catch {
+    return { cnpj: "" };
+  }
+}
+
+function sessionLooksStaffGestao(role?: string): boolean {
+  return role === "responsavel" || role === "tesoureiro" || role === "admin";
+}
+
+export function primaryStaffGestaoCnpjFromData(data: AppData | null | undefined): string {
+  if (!data) return "";
+  const ranked = (data.cooperativas ?? [])
+    .map((c) => {
+      const digits = normalizeCnpj(String(c.cnpj ?? ""));
+      if (digits.length !== 14) return null;
+      const notas = (data.notasPedido ?? []).filter((n) => n.cooperativaId === c.id).length;
+      const fichas = (data.fichaCorrida ?? []).filter((f) => f.cooperativaId === c.id).length;
+      return { digits, score: notas + fichas };
+    })
+    .filter((x): x is { digits: string; score: number } => Boolean(x));
+  if (ranked.length === 0) return "";
+  ranked.sort((a, b) => b.score - a.score);
+  return ranked[0].digits;
+}
+
+function resolveStaffGestaoCnpj(data?: AppData | null, explicit?: string): string {
+  const fromArg = normalizeCnpj(explicit ?? "");
+  if (fromArg.length === 14) return fromArg;
+  const session = readStaffSessionHint();
+  if (session.cnpj.length === 14) return session.cnpj;
+  const fromData = primaryStaffGestaoCnpjFromData(data ?? null);
+  if (fromData.length === 14) return fromData;
+  return "";
+}
+
+function persistLastGoodToSessionNow(cnpj: string, data: AppData): void {
+  if (typeof window === "undefined" || cnpj.length !== 14) return;
   try {
     const slim = stripBinaryForPersist(data, { role: "responsavel" });
     const json = JSON.stringify(slim);
     if (json.length > STAFF_GESTAO_LKG_MAX_CHARS) return;
-    sessionStorage.setItem(STAFF_GESTAO_LKG_SESSION_KEY, json);
+    sessionStorage.setItem(staffLkgSessionKey(cnpj), json);
   } catch {
     /* quota / private */
   }
 }
 
-function persistLastGoodToSession(data: AppData): void {
-  if (typeof window === "undefined") return;
+function persistLastGoodToSession(cnpj: string, data: AppData): void {
+  if (typeof window === "undefined" || cnpj.length !== 14) return;
   bindStaffGestaoLkgPagehide();
   if (persistLkgTimer) clearTimeout(persistLkgTimer);
   persistLkgTimer = setTimeout(() => {
     persistLkgTimer = null;
-    persistLastGoodToSessionNow(data);
+    persistLastGoodToSessionNow(cnpj, data);
   }, 80);
 }
 
@@ -51,20 +107,47 @@ function bindStaffGestaoLkgPagehide(): void {
       clearTimeout(persistLkgTimer);
       persistLkgTimer = null;
     }
-    if (lastGood) persistLastGoodToSessionNow(lastGood);
+    for (const [cnpj, data] of lastGoodByCnpj) {
+      persistLastGoodToSessionNow(cnpj, data);
+    }
   };
   window.addEventListener("pagehide", flush);
   window.addEventListener("beforeunload", flush);
 }
 
-function readLastGoodFromSession(): AppData | null {
-  if (typeof window === "undefined") return null;
+function readLastGoodFromSession(cnpj: string): AppData | null {
+  if (typeof window === "undefined" || cnpj.length !== 14) return null;
+  try {
+    const raw = sessionStorage.getItem(staffLkgSessionKey(cnpj));
+    if (!raw) return migrateLegacyLastGoodIfMatches(cnpj);
+    const parsed = JSON.parse(raw) as AppData;
+    if (!parsed || typeof parsed !== "object") return null;
+    if (staffGestaoRiquezaTotal(medirRiquezaStaffGestao(parsed)) <= 0) return null;
+    const owner = primaryStaffGestaoCnpjFromData(parsed);
+    if (owner && owner !== cnpj) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/** Lastro antigo (sem CNPJ) só vale se for da cooperativa da sessão. */
+function migrateLegacyLastGoodIfMatches(cnpj: string): AppData | null {
+  if (typeof window === "undefined" || cnpj.length !== 14) return null;
   try {
     const raw = sessionStorage.getItem(STAFF_GESTAO_LKG_SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as AppData;
     if (!parsed || typeof parsed !== "object") return null;
+    const owner = primaryStaffGestaoCnpjFromData(parsed);
+    if (owner && owner !== cnpj) return null;
+    if (!owner && staffGestaoRiquezaTotal(medirRiquezaStaffGestao(parsed)) > 0) {
+      /* lastro sem cadastro de CNPJ — não aplicar em tenant novo */
+      return null;
+    }
     if (staffGestaoRiquezaTotal(medirRiquezaStaffGestao(parsed)) <= 0) return null;
+    persistLastGoodToSessionNow(cnpj, parsed);
+    sessionStorage.removeItem(STAFF_GESTAO_LKG_SESSION_KEY);
     return parsed;
   } catch {
     return null;
@@ -125,25 +208,44 @@ export function staffGestaoSnapshotPoorer(
   return false;
 }
 
-export function noteStaffGestaoLastGood(data: AppData | null | undefined): void {
-  if (!data) return;
-  const next = medirRiquezaStaffGestao(data);
-  if (staffGestaoRiquezaTotal(next) <= 0) return;
-  if (lastGood && staffGestaoSnapshotPoorer(next, medirRiquezaStaffGestao(lastGood))) return;
-  lastGood = data;
-  persistLastGoodToSession(data);
+function coopIdForCnpj(data: AppData | null | undefined, cnpj: string): string | undefined {
+  if (!data || cnpj.length !== 14) return undefined;
+  return data.cooperativas.find((c) => normalizeCnpj(String(c.cnpj ?? "")) === cnpj)?.id;
 }
 
-export function peekStaffGestaoLastGood(): AppData | null {
-  if (lastGood) return lastGood;
-  const stored = readLastGoodFromSession();
-  if (stored) lastGood = stored;
-  return lastGood;
+export function noteStaffGestaoLastGood(data: AppData | null | undefined, cnpjHint?: string): void {
+  if (!data) return;
+  const session = readStaffSessionHint();
+  if (session.role && !sessionLooksStaffGestao(session.role)) return;
+  const cnpj = resolveStaffGestaoCnpj(data, cnpjHint);
+  if (cnpj.length !== 14) {
+    /* sem CNPJ não grava lastro global — evita vazar para outra cooperativa */
+    return;
+  }
+  const coopId = coopIdForCnpj(data, cnpj);
+  const next = medirRiquezaStaffGestao(data, coopId);
+  if (staffGestaoRiquezaTotal(next) <= 0) return;
+  const prev = lastGoodByCnpj.get(cnpj);
+  if (prev && staffGestaoSnapshotPoorer(next, medirRiquezaStaffGestao(prev, coopId))) return;
+  lastGoodByCnpj.set(cnpj, data);
+  persistLastGoodToSession(cnpj, data);
+}
+
+export function peekStaffGestaoLastGood(cnpjHint?: string): AppData | null {
+  const session = readStaffSessionHint();
+  if (session.role && !sessionLooksStaffGestao(session.role)) return null;
+  const cnpj = resolveStaffGestaoCnpj(null, cnpjHint);
+  if (cnpj.length !== 14) return null;
+  const mem = lastGoodByCnpj.get(cnpj);
+  if (mem) return mem;
+  const stored = readLastGoodFromSession(cnpj);
+  if (stored) lastGoodByCnpj.set(cnpj, stored);
+  return lastGoodByCnpj.get(cnpj) ?? null;
 }
 
 /** Somente testes. */
 export function resetStaffGestaoSnapshotGuardForTests(): void {
-  lastGood = null;
+  lastGoodByCnpj.clear();
   if (persistLkgTimer) {
     clearTimeout(persistLkgTimer);
     persistLkgTimer = null;
@@ -151,6 +253,12 @@ export function resetStaffGestaoSnapshotGuardForTests(): void {
   if (typeof window === "undefined") return;
   try {
     sessionStorage.removeItem(STAFF_GESTAO_LKG_SESSION_KEY);
+    const toRemove: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (key?.startsWith(`${STAFF_GESTAO_LKG_SESSION_KEY}:`)) toRemove.push(key);
+    }
+    for (const key of toRemove) sessionStorage.removeItem(key);
   } catch {
     /* ignore */
   }
@@ -167,23 +275,41 @@ function uniaoPorId<T extends { id: string }>(prefer: T[], extra: T[]): T[] {
   return [...map.values()];
 }
 
+function lastroMesmoTenant(lastro: AppData, incomingCnpj: string): boolean {
+  if (incomingCnpj.length !== 14) return false;
+  const owner = primaryStaffGestaoCnpjFromData(lastro);
+  if (owner) return owner === incomingCnpj;
+  return Boolean(lastro.cooperativas?.some((c) => normalizeCnpj(String(c.cnpj ?? "")) === incomingCnpj));
+}
+
 /**
  * Se o incoming zera o que o lastro já tinha, mantém o lastro e só acrescenta
  * PIX/livro/fichas novos — nunca grava responsável vazio.
+ * Lastro de outro CNPJ é ignorado.
  */
 export function preservarStaffGestaoContraWipe(
   baseline: AppData | null | undefined,
   incoming: AppData
 ): AppData {
-  const lastro = baseline && staffGestaoRiquezaTotal(medirRiquezaStaffGestao(baseline)) > 0
-    ? baseline
-    : lastGood;
+  const incomingCnpj = resolveStaffGestaoCnpj(incoming);
+  const scopedPeek = incomingCnpj.length === 14 ? lastGoodByCnpj.get(incomingCnpj) : undefined;
+  const baselineOk =
+    baseline &&
+    staffGestaoRiquezaTotal(medirRiquezaStaffGestao(baseline)) > 0 &&
+    (incomingCnpj.length !== 14 || lastroMesmoTenant(baseline, incomingCnpj));
+  const lastro = baselineOk ? baseline : scopedPeek;
   if (!lastro) {
-    noteStaffGestaoLastGood(incoming);
+    noteStaffGestaoLastGood(incoming, incomingCnpj);
     return incoming;
   }
-  if (!staffGestaoSnapshotPoorer(medirRiquezaStaffGestao(incoming), medirRiquezaStaffGestao(lastro))) {
-    noteStaffGestaoLastGood(incoming);
+  if (incomingCnpj.length === 14 && !lastroMesmoTenant(lastro, incomingCnpj)) {
+    noteStaffGestaoLastGood(incoming, incomingCnpj);
+    return incoming;
+  }
+
+  const coopId = incomingCnpj ? coopIdForCnpj(lastro, incomingCnpj) ?? coopIdForCnpj(incoming, incomingCnpj) : undefined;
+  if (!staffGestaoSnapshotPoorer(medirRiquezaStaffGestao(incoming, coopId), medirRiquezaStaffGestao(lastro, coopId))) {
+    noteStaffGestaoLastGood(incoming, incomingCnpj);
     return incoming;
   }
 
@@ -198,6 +324,6 @@ export function preservarStaffGestaoContraWipe(
     ),
     livroCaixa: uniaoPorId(lastro.livroCaixa ?? [], incoming.livroCaixa ?? []),
   };
-  noteStaffGestaoLastGood(kept);
+  noteStaffGestaoLastGood(kept, incomingCnpj);
   return kept;
 }

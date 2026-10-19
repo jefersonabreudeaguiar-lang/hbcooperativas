@@ -14,6 +14,7 @@ import {
   noteStaffGestaoLastGood,
   peekStaffGestaoLastGood,
   preservarStaffGestaoContraWipe,
+  primaryStaffGestaoCnpjFromData,
   staffGestaoRiquezaTotal,
 } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
@@ -129,7 +130,9 @@ function sessionRoleLooksStaffGestao(): boolean {
 
 function restoreStaffGestaoFromLastGoodIfNeeded(data: AppData): AppData {
   if (!sessionRoleLooksStaffGestao()) return data;
-  return preservarStaffGestaoContraWipe(peekStaffGestaoLastGood(), data);
+  const hint =
+    normalizeCnpj(getSession()?.cooperativaCnpj ?? "") || primaryStaffGestaoCnpjFromData(data);
+  return preservarStaffGestaoContraWipe(peekStaffGestaoLastGood(hint || undefined), data);
 }
 
 function bumpRevision(): void {
