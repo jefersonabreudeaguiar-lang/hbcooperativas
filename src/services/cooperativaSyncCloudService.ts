@@ -883,10 +883,13 @@ export function mergeContratosIntoData(data: AppData, cloud: ContratosSyncPayloa
     .filter((c) => !excluidasIds.has(c.instituicaoId));
 
   const localInstIds = new Set(localInstCoop.map((i) => i.id));
-  const cloudInstFiltered = cloudInst.filter((i) => {
-    if (localInstIds.has(i.id)) return true;
-    return cloudProd.some((p) => p.instituicaoId === i.id && p.ativo && p.precoUnitario > 0);
-  });
+  const cloudInstFiltered =
+    localInstCoop.length === 0
+      ? cloudInst
+      : cloudInst.filter((i) => {
+          if (localInstIds.has(i.id)) return true;
+          return cloudProd.some((p) => p.instituicaoId === i.id && p.ativo && p.precoUnitario > 0);
+        });
 
   const mergedInst = mergeArrayByNewer(localInstCoop, cloudInstFiltered);
   const mergedProd =
@@ -2244,7 +2247,10 @@ export async function pushCooperativaProfileToCloud(cooperativa: Cooperativa): P
 
 const contratosFromCloudInflight = new Map<string, Promise<boolean>>();
 
-export async function syncContratosFromCloud(cnpj: string): Promise<boolean> {
+export async function syncContratosFromCloud(
+  cnpj: string,
+  preferredCoopId?: string
+): Promise<boolean> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return false;
   const existing = contratosFromCloudInflight.get(digits);
@@ -2254,7 +2260,7 @@ export async function syncContratosFromCloud(cnpj: string): Promise<boolean> {
     const bundle = await fetchSyncBundle(digits);
     if (!bundle?.contratos) return false;
     const current = getData();
-    const coopId = resolveCoopId(current, digits);
+    const coopId = preferredCoopId || resolveCoopId(current, digits);
     if (!coopId) return false;
     saveAbaLastGoodFromData(current, coopId, "contratos");
     const merged = reaplicarAbaLastGoodSeRegrediu(
@@ -2595,7 +2601,7 @@ export async function syncCooperativaBackground(
           await syncNotasPedidoFromCloud(digits, notasOpts);
           await syncOperacionalFromCloud(digits, { sessionLease: session });
         }
-        await syncContratosFromCloud(digits);
+        await syncContratosFromCloud(digits, coopId);
         const operacionalCloud = (await fetchSyncBundle(digits))?.operacional ?? null;
         if (coopId && !isOperacionalCloudAuthoritative(digits)) {
           await repararIntegridadeFichaNotas(digits, coopId, cooperadoId, { sessionLease: session });
@@ -2618,7 +2624,7 @@ export async function syncCooperativaBackground(
 }
 
 /**
- * Cooperado tocou «Atualizar»: ficha/notas/perfil sem contratos (mais rápido que background completo).
+ * Cooperado tocou «Atualizar»: ficha/notas/perfil + contratos (Entregas precisa do catálogo para enviar foto).
  * Notas: sempre full no toque manual — poda conferidas apagadas na nuvem (delta em background inalterado).
  */
 export async function syncCooperadoAtualizarFromCloud(
@@ -2651,6 +2657,7 @@ export async function syncCooperadoAtualizarFromCloud(
           await syncNotasPedidoFromCloud(digits, notasOpts);
           await syncOperacionalFromCloud(digits, { sessionLease: session });
         }
+        await syncContratosFromCloud(digits, preferredCoopId);
         const operacionalCloud =
           bundleHint?.operacional ?? (await fetchSyncBundle(digits))?.operacional ?? null;
         if (!isOperacionalCloudAuthoritative(digits)) {

@@ -66,7 +66,7 @@ export async function ensureCooperadoNotasFreshForEnvio(
       try {
         await syncNotasPedidoFromCloud(cnpj, { retryFull: false });
         try {
-          await syncContratosFromCloud(cnpj);
+          await syncContratosFromCloud(cnpj, coopId);
         } catch {
           /* contratos locais */
         }
@@ -87,7 +87,7 @@ export async function ensureCooperadoNotasFreshForEnvio(
   try {
     await syncNotasPedidoFromCloud(cnpj, { retryFull });
     try {
-      await syncContratosFromCloud(cnpj);
+      await syncContratosFromCloud(cnpj, coopId);
     } catch {
       /* offline — contratos locais */
     }

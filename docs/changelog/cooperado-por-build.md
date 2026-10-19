@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v491
+
+- **Entregas:** o aviso «Aguardando contrato da cooperativa» não trava mais o envio da foto. Dá para tirar e mandar mesmo se o contrato ainda estiver carregando.
+- **Conferir:** as fotos voltam a chegar na fila do responsável; o contrato é o da última entrega ou o publicado na nuvem.
+- **Atualizar:** o toque em Atualizar também puxa o contrato da cooperativa (antes pulava essa parte).
+
 ## v490
 
 - **Deploy:** o 489 não chegou ao ar por um erro de typecheck no crédito-base HB; este build corrige isso e publica o a receber que permanece ao sair.

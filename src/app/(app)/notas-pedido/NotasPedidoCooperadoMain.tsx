@@ -197,7 +197,7 @@ import {
   scheduleConferenciaAprovacaoNuvemSync,
   scheduleConferenciaRejeicaoNuvemSync,
 } from "@/services/conferenciaDecisaoNuvemSync";
-import { getInstituicoesCatalogo, getProdutosContrato } from "@/services/catalogoContratosService";
+import { getProdutosContrato } from "@/services/catalogoContratosService";
 import { countCooperadosLancamentosEmAbertoResponsavel } from "@/services/responsavelPainelIndex";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, filtrarResumosMesesNaoQuitados } from "@/services/cooperadoEntregasService";
 import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
@@ -288,7 +288,12 @@ const ConferenciaFotoLightbox = dynamic(
   () => import("@/components/ui/FotoLightbox").then((m) => ({ default: m.FotoLightbox })),
   { ssr: false }
 );
-import { getContratoLabel, getContratosEntrega, resolverContratoEntrega } from "@/utils/contratosEntrega";
+import {
+  getContratoLabel,
+  getContratosEntrega,
+  listarContratosParaEnvioCooperado,
+  resolverContratoEntrega,
+} from "@/utils/contratosEntrega";
 import { cn, formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
 import {
@@ -529,6 +534,7 @@ export default function NotasPedidoCooperadoMain() {
     });
   }, []);
   const [contratoInstId, setContratoInstId] = useState("");
+  const [catalogoContratosSyncFeito, setCatalogoContratosSyncFeito] = useState(false);
   const [anexarSucesso, setAnexarSucesso] = useState(false);
   const [ultimaNotaEnviadaIds, setUltimaNotaEnviadaIds] = useState<string[]>([]);
   const [excluirNotaTarget, setExcluirNotaTarget] = useState<NotaPedido | null>(null);
@@ -577,7 +583,11 @@ export default function NotasPedidoCooperadoMain() {
   const [conferenciaFotoAmpliada, setConferenciaFotoAmpliada] = useState(false);
   const [fotosLancadasUi, setFotosLancadasUi] = useState<Set<number>>(() => new Set());
 
-  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+  const coopId = user
+    ? data
+      ? getUserCooperativaId(user, data)
+      : user.cooperativaId
+    : undefined;
   const hbDescontosRevision = useContaCoopDescontosRevision();
   const cooperadoCanonico =
     isCooperado && data && cooperadoId && coopId
@@ -1602,7 +1612,7 @@ export default function NotasPedidoCooperadoMain() {
         currentData,
         coopId,
         notaRejeitada?.instituicaoId,
-        { criarPadraoSeVazio: !isCooperado }
+        { criarPadraoSeVazio: !isCooperado, aceitarPreferenciaSemCatalogo: isCooperado }
       );
       if (resolved.criou) updateData(() => resolved.data);
       setContratoInstId(resolved.instituicaoId);
@@ -1618,13 +1628,14 @@ export default function NotasPedidoCooperadoMain() {
       const cnpj = await resolveCooperativaCnpj(currentData, coopId, user);
       if (cnpj) {
         try {
-          await syncContratosFromCloud(cnpj);
+          await syncContratosFromCloud(cnpj, coopId);
         } catch {
           /* offline — mantém contratos locais */
         }
       }
       currentData = getData();
       if (currentData) aplicarContratoLocal(currentData, notaRejeitada);
+      setCatalogoContratosSyncFeito(true);
     },
     [aplicarContratoLocal, coopId, isCooperado, user]
   );
@@ -2098,15 +2109,15 @@ export default function NotasPedidoCooperadoMain() {
 
   const contratosEntregaRaw = useAppDataSelector(
     (d) => {
-      if (!coopId) return [];
-      const validos = getContratosEntrega(d, coopId);
-      if (validos.length > 0 || !isCooperado) return validos;
-      return getInstituicoesCatalogo(d, coopId);
+      if (!coopId) return null;
+      if (!isCooperado) return getContratosEntrega(d, coopId);
+      return listarContratosParaEnvioCooperado(d, coopId);
     },
     [coopId, isCooperado]
   );
   const contratosEntrega = contratosEntregaRaw ?? [];
-  const catalogoContratosPronto = contratosEntregaRaw !== null;
+  const catalogoContratosPronto =
+    contratosEntrega.length > 0 || catalogoContratosSyncFeito || contratosEntregaRaw !== null;
 
   const instituicoes = contratosEntrega;
 
@@ -2256,19 +2267,22 @@ export default function NotasPedidoCooperadoMain() {
   }, [searchParams, isCooperado, ready, tabActive]);
 
   useEffect(() => {
-    if (!isCooperado || !user || !coopId || !data) return;
+    if (!isCooperado || !user || !coopId) return;
     void sincronizarContratosEmBackground();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCooperado, user?.id, coopId]);
 
   useEffect(() => {
-    if (!anexarModal || !data || !coopId) return;
+    if (!anexarModal || !coopId) return;
+    const live = getData() ?? data;
+    if (!live) return;
     const preferId =
       reenviarNotaId
-        ? data.notasPedido.find((n) => n.id === reenviarNotaId)?.instituicaoId
+        ? live.notasPedido.find((n) => n.id === reenviarNotaId)?.instituicaoId
         : contratoInstId || undefined;
-    const resolved = resolverContratoEntrega(data, coopId, preferId, {
+    const resolved = resolverContratoEntrega(live, coopId, preferId, {
       criarPadraoSeVazio: !isCooperado,
+      aceitarPreferenciaSemCatalogo: isCooperado,
     });
     if (resolved.criou) updateData(() => resolved.data);
     if (resolved.instituicaoId && resolved.instituicaoId !== contratoInstId) {
@@ -2552,7 +2566,7 @@ export default function NotasPedidoCooperadoMain() {
   };
 
   const processarFotoArquivo = async (file: File) => {
-    const shellData = data ?? getData();
+    const shellData = getData() ?? data;
     if (!shellData || !cooperadoId || !ANEXAR_DRAFT_KEY || enviando) return;
 
     const [pipeline, qtdAtualInicial] = await Promise.all([
@@ -2597,6 +2611,7 @@ export default function NotasPedidoCooperadoMain() {
 
       const resolved = resolverContratoEntrega(shellData, coopId!, contratoInstId || undefined, {
         criarPadraoSeVazio: false,
+        aceitarPreferenciaSemCatalogo: true,
       });
       const contratoId = resolved.instituicaoId || contratoInstId;
       const cnpjPromise = resolveCooperativaCnpj(shellData, coopId, user);
@@ -2822,7 +2837,8 @@ export default function NotasPedidoCooperadoMain() {
   };
 
   const handleAnexarEntrega = async () => {
-    if (!data || !user || !coopId || enviando || processandoFoto) return;
+    const live = getData() ?? data;
+    if (!live || !user || !coopId || enviando || processandoFoto) return;
     const cidRaw = cooperadoId ?? user.cooperadoId;
     if (!cidRaw) {
       setErroEnvio("Conta sem vínculo de cooperado. Faça login novamente ou fale com a cooperativa.");
@@ -2830,12 +2846,13 @@ export default function NotasPedidoCooperadoMain() {
     }
 
     const preferId = reenviarNotaId
-      ? data.notasPedido.find((n) => n.id === reenviarNotaId)?.instituicaoId
+      ? live.notasPedido.find((n) => n.id === reenviarNotaId)?.instituicaoId
       : contratoInstId || undefined;
-    const resolved = resolverContratoEntrega(data, coopId, preferId, {
+    const resolved = resolverContratoEntrega(live, coopId, preferId, {
       criarPadraoSeVazio: !isCooperado,
+      aceitarPreferenciaSemCatalogo: isCooperado,
     });
-    let workingData = getData() ?? data;
+    let workingData = getData() ?? live;
     if (resolved.criou) {
       updateData(() => resolved.data);
       workingData = resolved.data;
@@ -2856,7 +2873,9 @@ export default function NotasPedidoCooperadoMain() {
     if (processandoFoto) {
       errors.foto = "Aguarde a compressão da foto atual.";
     }
-    if (!contratoId) errors.contrato = "Contrato da entrega não encontrado. Aguarde a sincronização ou fale com a cooperativa.";
+    if (!contratoId && !isCooperado) {
+      errors.contrato = "Contrato da entrega não encontrado. Cadastre itens com preço em Contratos.";
+    }
     if (Object.keys(errors).length) {
       setFormErrors(errors);
       return;
@@ -4425,11 +4444,10 @@ export default function NotasPedidoCooperadoMain() {
 
       {isCooperado &&
         abaCooperado === "entregas" &&
-        catalogoContratosPronto &&
+        !catalogoContratosPronto &&
         contratosEntrega.length === 0 && (
-        <AlertBanner variant="warning" className="mb-6" title="Aguardando contrato da cooperativa">
-          O responsável ainda não publicou um contrato com itens e preços. Veja o status no topo
-          (“Atualizando…” / “Atualizado”) ou fale com a cooperativa.
+        <AlertBanner variant="info" className="mb-6" title="Carregando contrato da cooperativa">
+          Você já pode tirar e enviar a foto. O contrato entra sozinho quando a sincronização terminar.
         </AlertBanner>
       )}
 
@@ -5196,16 +5214,22 @@ export default function NotasPedidoCooperadoMain() {
             )}
           </FormField>
 
-          <FormField label="Contrato" required error={formErrors.contrato} hint={isCooperado ? "Selecionado automaticamente — altere só se precisar." : "A entrega será conferida e lançada neste contrato."}>
-            {isCooperado && !catalogoContratosPronto ? (
-              <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                Carregando contrato da cooperativa…
+          <FormField label="Contrato" required={!isCooperado} error={formErrors.contrato} hint={isCooperado ? "Selecionado automaticamente — altere só se precisar." : "A entrega será conferida e lançada neste contrato."}>
+            {isCooperado && contratosEntrega.length === 0 ? (
+              <div className="rounded-xl border border-green-300 bg-green-50 px-4 py-3 flex items-start gap-3">
+                <FileSignature size={22} className="text-green-700 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-green-900">Contrato da cooperativa</p>
+                  <p className="text-xs text-green-700 mt-1">
+                    {catalogoContratosPronto
+                      ? "Selecionado automaticamente. Envie a foto — o responsável confirma na conferência."
+                      : "Carregando o contrato. Você já pode tirar e enviar a foto."}
+                  </p>
+                </div>
               </div>
             ) : contratosEntrega.length === 0 ? (
               <AlertBanner variant="warning">
-                Nenhum contrato disponível. {isCooperado
-                  ? "Aguarde a sincronização com a cooperativa."
-                  : "Cadastre itens com preço em Contratos e Preços."}
+                Nenhum contrato disponível. Cadastre itens com preço em Contratos e Preços.
               </AlertBanner>
             ) : contratosEntrega.length <= 1 ? (
               <div className="rounded-xl border border-green-300 bg-green-50 px-4 py-3 flex items-start gap-3">
