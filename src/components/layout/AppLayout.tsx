@@ -64,6 +64,7 @@ import {
 } from "@/lib/performance/rqlMarks";
 import { CooperadoFinanceiroSyncBanner } from "@/components/cooperado/CooperadoFinanceiroShellContext";
 import { useMobileTabScrollRestore } from "@/hooks/useMobileTabScrollRestore";
+import { useStaffPrimeiroDiaContratos } from "@/hooks/useStaffPrimeiroDiaContratos";
 import type { MobileTabScrollMode } from "@/lib/performance/mobileTabScrollMemory";
 import { CooperadoApresentacaoFinanceiraGate } from "@/components/cooperado/CooperadoApresentacaoFinanceiraGate";
 import { applyCooperadoMobilePilotPerfDomFlag } from "@/lib/cooperado/cooperadoMobilePilotPerf";
@@ -486,6 +487,7 @@ export function MobileNav() {
 
 function AppShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  useStaffPrimeiroDiaContratos();
   const mercadoQrImmersive = pathname === "/mercado-parceiro/cobrar";
   const shell = useAppShellNavigationContext();
   const navUser = shell?.navUser ?? null;

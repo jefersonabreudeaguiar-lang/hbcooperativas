@@ -226,7 +226,7 @@ export default function CadastroPage() {
       setSuccess(
         `Cooperativa "${verified.nome}" cadastrada na nuvem! CNPJ ${formatCnpj(normalizeCnpj(cnpjCooperativa))} — os cooperados já podem se cadastrar.`
       );
-      setTimeout(() => router.push("/dashboard"), 2000);
+      setTimeout(() => router.push("/contratos"), 2000);
     } else {
       setError(result.error ?? "Não foi possível cadastrar a cooperativa.");
     }
