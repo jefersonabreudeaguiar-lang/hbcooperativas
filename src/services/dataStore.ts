@@ -24,6 +24,10 @@ import {
   removeAppDataPersistRaw,
   writeAppDataPersistRaw,
 } from "@/lib/staff/staffGestaoPersistKey";
+import {
+  shouldAdoptStaffPersistHint,
+  shouldFlushAppDataMemoryOnTenantChange,
+} from "@/lib/staff/staffGestaoTenantSwitch";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
 import { normalizeCreatorEmail, normalizeAuthEmail } from "@/lib/security/appCreator";
 import {
@@ -1084,13 +1088,39 @@ export function addAuditEntry(
   };
 }
 
+function sessionTenantCnpj(): string {
+  return normalizeCnpj(readStoredSessionRaw()?.cooperativaCnpj ?? "");
+}
+
+function adoptIncomingTenantForLocalLoad(next: Omit<User, "password">): void {
+  if (typeof window === "undefined") return;
+  const nextCnpj = normalizeCnpj(next.cooperativaCnpj ?? "");
+  const prevCnpj = sessionTenantCnpj() || primaryStaffGestaoCnpjFromData(memoryCache);
+  if (shouldFlushAppDataMemoryOnTenantChange(prevCnpj, nextCnpj)) {
+    invalidateCache();
+    saveBatchPending = null;
+  }
+  if (shouldAdoptStaffPersistHint(next.role, nextCnpj) && sessionTenantCnpj() !== nextCnpj) {
+    localStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify({
+        ...next,
+        cooperativaCnpj: nextCnpj,
+        role: normalizeUserRole(next.role),
+      })
+    );
+    sessionStorage.removeItem(SESSION_KEY);
+  }
+}
+
 function persistSession(user: Omit<User, "password">): void {
   if (typeof window === "undefined") return;
+  adoptIncomingTenantForLocalLoad(user);
   const mobileCooperadoId = resolveMobileCooperadoId(user) ?? user.mobileCooperadoId;
   const safeUser = {
     ...user,
     mobileCooperadoId,
-    role: resolveAppUserRole(user, getData()),
+    role: resolveAppUserRole(user, memoryCache ?? emptyInitialData),
   };
   localStorage.setItem(SESSION_KEY, JSON.stringify(safeUser));
   // Migra sessão antiga (sessionStorage) se existir
@@ -1399,6 +1429,16 @@ async function bootstrapLocalUserFromCloudLogin(
 
   const email = normalizeCreatorEmail(profile.email);
   const cnpj = profile.cooperativaCnpj ? normalizeCnpj(profile.cooperativaCnpj) : "";
+  adoptIncomingTenantForLocalLoad({
+    id: profile.id,
+    email,
+    name: profile.name,
+    role: role,
+    cooperativaId: profile.cooperativaId,
+    cooperativaCnpj: cnpj.length === 14 ? cnpj : profile.cooperativaCnpj,
+    cooperadoId: profile.cooperadoId,
+    active: true,
+  });
 
   try {
     if (cnpj.length === 14) {
@@ -1505,6 +1545,8 @@ export async function logoutAndClearSession(): Promise<void> {
   localStorage.removeItem(SESSION_KEY);
   sessionStorage.removeItem(SESSION_KEY);
   clearCloudBootstrapCredentials();
+  invalidateCache();
+  saveBatchPending = null;
   notify();
 }
 
