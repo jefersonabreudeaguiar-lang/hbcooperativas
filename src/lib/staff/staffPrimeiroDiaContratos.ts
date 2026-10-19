@@ -2,12 +2,17 @@ import type { AppData } from "@/types";
 import { getInstituicoesCatalogo } from "@/services/catalogoContratosService";
 import { isStaffGestaoRole } from "@/lib/performance/cooperadoColdStart";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
 
 const SEEN_PREFIX = "hb-staff-primeiro-dia-contratos:";
 
 export const STAFF_PRIMEIRO_DIA_CONTRATOS_TITULO = "Primeiro dia: cadastre o primeiro contrato";
 export const STAFF_PRIMEIRO_DIA_CONTRATOS_TEXTO =
   "Sem instituição, o cooperado ainda não consegue entregar. Cadastre a escola ou o comprador e depois os produtos com preço.";
+export const STAFF_PRIMEIRO_DIA_SENHA_TITULO = "Defina a senha de cadastro dos cooperados";
+export const STAFF_PRIMEIRO_DIA_SENHA_TEXTO =
+  "Passe essa senha junto com o CNPJ. Sem ela, o cooperado não sabe o que informar no cadastro.";
+export const STAFF_PRIMEIRO_DIA_SENHA_HREF = "/meu-perfil#senha-cadastro";
 
 export function isStaffPrimeiroDiaContratosVazio(opts: {
   role?: string;
@@ -18,6 +23,19 @@ export function isStaffPrimeiroDiaContratosVazio(opts: {
   if (!opts.warm || !opts.data || !opts.coopId) return false;
   if (!isStaffGestaoRole(opts.role)) return false;
   return getInstituicoesCatalogo(opts.data, opts.coopId).length === 0;
+}
+
+export function shouldShowStaffPrimeiroDiaSenhaCadastro(opts: {
+  role?: string;
+  coopId?: string | null;
+  data: AppData | null;
+  warm: boolean;
+}): boolean {
+  if (!opts.warm || !opts.data || !opts.coopId) return false;
+  if (!isStaffGestaoRole(opts.role)) return false;
+  const coop = opts.data.cooperativas.find((c) => c.id === opts.coopId);
+  if (!coop) return false;
+  return !exigeSenhaCadastroCooperado(coop, coop.mensalidadeConfig);
 }
 
 export function shouldRedirectStaffPrimeiroDiaContratos(opts: {

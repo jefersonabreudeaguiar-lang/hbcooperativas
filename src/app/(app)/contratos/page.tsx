@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useRef, useEffect } from "react";
+import Link from "next/link";
 import { Plus, ChevronDown, ChevronUp, Package, Building2, Trash2, RefreshCw, CalendarDays } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -15,8 +16,12 @@ import { Input, Select, FormField } from "@/components/ui/Form";
 import { updateData, generateId, addAuditEntry, getData, isAppDataWarm } from "@/services/dataStore";
 import {
   isStaffPrimeiroDiaContratosVazio,
+  shouldShowStaffPrimeiroDiaSenhaCadastro,
   STAFF_PRIMEIRO_DIA_CONTRATOS_TEXTO,
   STAFF_PRIMEIRO_DIA_CONTRATOS_TITULO,
+  STAFF_PRIMEIRO_DIA_SENHA_HREF,
+  STAFF_PRIMEIRO_DIA_SENHA_TEXTO,
+  STAFF_PRIMEIRO_DIA_SENHA_TITULO,
 } from "@/lib/staff/staffPrimeiroDiaContratos";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import {
@@ -261,6 +266,12 @@ function ContratosPageInner() {
     data,
     warm: isAppDataWarm(),
   });
+  const mostrarSenhaCadastro = shouldShowStaffPrimeiroDiaSenhaCadastro({
+    role: user?.role,
+    coopId,
+    data,
+    warm: isAppDataWarm(),
+  });
   const semItens = instituicoes.filter((i) => (produtosPorInst.get(i.id)?.length ?? 0) === 0);
 
   return (
@@ -284,6 +295,15 @@ function ContratosPageInner() {
           )
         }
       />
+
+      {mostrarSenhaCadastro && (
+        <AlertBanner variant="info" title={STAFF_PRIMEIRO_DIA_SENHA_TITULO} className="mb-4">
+          {STAFF_PRIMEIRO_DIA_SENHA_TEXTO}{" "}
+          <Link href={STAFF_PRIMEIRO_DIA_SENHA_HREF} className="font-semibold underline">
+            Abrir Meu perfil
+          </Link>
+        </AlertBanner>
+      )}
 
       {semItens.length > 0 && (
         <AlertBanner variant="warning" title="Contratos incompletos" className="mb-4">
