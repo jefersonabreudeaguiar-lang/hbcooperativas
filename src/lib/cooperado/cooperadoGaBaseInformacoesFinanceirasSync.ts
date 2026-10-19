@@ -10,6 +10,7 @@ import {
 import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoBicMobileAuthority";
 import {
   cooperadoGaExibicaoFinanceiraAindaZerada,
+  cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem,
   cooperadoGaValorReceberExibicaoResolvida,
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { cooperadoPilotForcarRematerializacaoFinanceira } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
@@ -105,8 +106,12 @@ export async function runCooperadoGaSyncBaseInformacoesFinanceiras(
   if (!user || user.role !== "cooperado" || !user.cooperadoId) return false;
   if (!isCooperadoMobileGaPromoted(user) && !isCooperadoMobileBicLeituraAuthority(user)) return false;
   if (cooperadoGaAberturaBloqueiaPullOperacionalNuvem(user, opts)) {
-    rematerializarAberturaSemPullNuvem(user);
-    return false;
+    const recoveryZerado =
+      isAppDataWarm() && cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user);
+    if (!recoveryZerado) {
+      rematerializarAberturaSemPullNuvem(user);
+      return false;
+    }
   }
   if (
     !opts?.force &&

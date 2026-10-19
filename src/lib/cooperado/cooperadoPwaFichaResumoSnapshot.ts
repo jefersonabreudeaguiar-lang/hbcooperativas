@@ -150,9 +150,9 @@ export function persistirCooperadoPwaFichaResumoSnapshotFromUser(
   const canon = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
   const built = buildCooperadoPwaFichaResumoSnapshot(data, canon, coopId, apresentacaoConsolidada);
   const previous = lerCooperadoPwaFichaResumoSnapshot(canon, coopId);
-  const prevValor = previous?.paridade?.valorLiquido ?? previous?.consolidado?.valorLiquido ?? 0;
   const nextValor = built.paridade?.valorLiquido ?? 0;
-  if (prevValor > 0.005 && nextValor <= 0.005 && !cooperadoBicAutorizaZerarCardInicio(data, canon, coopId)) {
+  /** Zero só na liquidação confirmada pelo responsável — snapshot vazio não apaga o valor. */
+  if (nextValor <= 0.005 && !cooperadoBicAutorizaZerarCardInicio(data, canon, coopId)) {
     return previous;
   }
   if (

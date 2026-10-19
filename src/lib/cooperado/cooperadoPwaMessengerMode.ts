@@ -52,6 +52,10 @@ export function persistirCooperadoPwaMessengerCaches(
   persistirCooperadoPwaFichaResumoSnapshotFromUser(user, true);
   persistirInicioCardCooperadoNotificarPwaLeve(user);
   persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, true);
+  dispatchCooperadoPwaLeveUiSnapshotRefresh();
+  void import("@/services/hbCreditAccountPersistenciaService").then(({ persistirHbCreditAccountCooperado }) => {
+    void persistirHbCreditAccountCooperado(user);
+  });
   if (opts?.light) return;
   const runEntregasSnapshotPesado = () => {
     persistirCooperadoPwaEntregasResumosSnapshotFromUser(user);
@@ -62,7 +66,4 @@ export function persistirCooperadoPwaMessengerCaches(
   } else {
     window.setTimeout(runEntregasSnapshotPesado, 2_000);
   }
-  void import("@/services/hbCreditAccountPersistenciaService").then(({ persistirHbCreditAccountCooperado }) => {
-    void persistirHbCreditAccountCooperado(user);
-  });
 }

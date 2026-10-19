@@ -342,18 +342,19 @@ function FichaCorridaPageInner() {
   }, [messenger, pilotFinanceiroLeve, cooperadoId, coopIdEarly, readModelsRevision]);
 
   useEffect(() => {
-    if (!pilotFinanceiroLeve || !cooperadoId || !coopIdEarly) return;
+    if (!(messenger || pilotFinanceiroLeve) || !cooperadoId || !coopIdEarly) return;
     const onRefresh = () => {
       setFichaResumoSnap(lerCooperadoPwaFichaResumoSnapshot(cooperadoId, coopIdEarly));
+      if (isAppDataWarm()) setAppDataWarmTick((n) => n + 1);
     };
     window.addEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
     return () => window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
-  }, [pilotFinanceiroLeve, cooperadoId, coopIdEarly]);
+  }, [messenger, pilotFinanceiroLeve, cooperadoId, coopIdEarly]);
 
   useEffect(() => {
     if (!tabActive || !isCooperado || !user || user.role !== "cooperado") return;
     scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user);
-  }, [tabActive, isCooperado, user?.id]);
+  }, [tabActive, isCooperado, user?.id, appDataWarmTick]);
 
   useEffect(() => {
     if (!tabActive || !(messenger || pilotFinanceiroLeve) || !user || user.role !== "cooperado") {
@@ -498,48 +499,42 @@ function FichaCorridaPageInner() {
       cooperadoLeituraFinanceiraExibicao(d, cooperadoId, coopId, {
         apresentacaoConsolidada: apresentacaoFinanceiroUi,
       });
-    const live = data && coopId ? readParidade(data) : null;
+    const store = (isAppDataWarm() ? getData() : data) ?? data;
+    const live = store && coopId ? readParidade(store) : null;
     const fromSnapGuard = fichaResumoSnap
       ? resolveParidadeFromFichaResumoSnapshot(fichaResumoSnap)
       : null;
     const liveValor = live?.valorLiquido ?? 0;
     const snapValor = fromSnapGuard?.valorLiquido ?? 0;
     const liquidadoPeloResponsavel = Boolean(
-      data &&
+      store &&
         coopId &&
-        cooperadoBicAutorizaZerarCardInicio(data, cooperadoId, coopId)
+        cooperadoBicAutorizaZerarCardInicio(store, cooperadoId, coopId)
     );
     if (fromSnapGuard && snapValor > 0.005 && liveValor <= 0.005 && !liquidadoPeloResponsavel) {
       return fromSnapGuard;
     }
+    if (liveValor > 0.005) return live;
+    if (liquidadoPeloResponsavel) return live ?? fromSnapGuard;
     if (isCooperadoFinanceiroAppDataLiveRead()) {
-      if (!data) return null;
-      return live ?? readParidade(data);
+      if (!store) return fromSnapGuard && snapValor > 0.005 ? fromSnapGuard : null;
+      return live ?? (fromSnapGuard && snapValor > 0.005 ? fromSnapGuard : null);
     }
-    if (financeiroDormant && fichaResumoSnap) {
-      const fromSnap = resolveParidadeFromFichaResumoSnapshot(fichaResumoSnap);
+    if (financeiroDormant && fromSnapGuard && snapValor > 0.005) {
       const bicPadrao = isCooperadoBicExibicaoPadraoAtiva();
       if (bicPadrao && live && isAppDataWarm()) {
-        if (!fromSnap) return live;
-        const drift =
-          Math.abs((fromSnap.valorLiquido ?? 0) - (live.valorLiquido ?? 0)) > 0.02;
+        const drift = Math.abs(snapValor - liveValor) > 0.02;
         if (drift) return live;
-        return fromSnap;
+        return fromSnapGuard;
       }
       if (isBicCentralReadAuthorityEnabled() && live && isAppDataWarm()) {
         return live;
       }
-      if (fromSnap && live) {
-        const drift =
-          Math.abs((fromSnap.valorLiquido ?? 0) - (live.valorLiquido ?? 0)) > 0.02;
-        if (drift) return live;
-      }
-      if (fromSnap && fromSnap.valorLiquido > 0.005) return fromSnap;
-      if (live && live.valorLiquido > 0.005) return live;
-      if (fromSnap) return fromSnap;
+      if (live && Math.abs(snapValor - liveValor) > 0.02) return live;
+      return fromSnapGuard;
     }
-    if (!data) return null;
-    return live ?? readParidade(data);
+    if (!store) return fromSnapGuard && snapValor > 0.005 ? fromSnapGuard : null;
+    return live ?? (fromSnapGuard && snapValor > 0.005 ? fromSnapGuard : null);
   }, [
     tabActive,
     isCooperado,
@@ -550,6 +545,7 @@ function FichaCorridaPageInner() {
     financeiroDormant,
     fichaResumoSnap,
     apresentacaoFinanceiroUi,
+    appDataWarmTick,
   ]);
 
   const mesEmAberto = useMemo(() => {

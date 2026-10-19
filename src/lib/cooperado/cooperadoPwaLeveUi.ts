@@ -37,7 +37,7 @@ export function refreshCooperadoPwaInicioCachesFromMotor(
     persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, apresentacaoConsolidada);
     persistirCooperadoPwaFichaResumoSnapshotFromUser(user, apresentacaoConsolidada);
   }
-  if (ok && isCooperadoPwaMobileLeveUi()) {
+  if (isCooperadoPwaMobileLeveUi()) {
     dispatchCooperadoPwaLeveUiSnapshotRefresh();
   }
   return ok;

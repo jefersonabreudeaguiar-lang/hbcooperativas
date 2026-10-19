@@ -68,6 +68,8 @@ import {
   scheduleCooperadoGaFinanceiroExibicaoRefresh,
 } from "@/lib/cooperado/cooperadoGaFinanceiroExibicaoRefreshSchedule";
 import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
+import { scheduleCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
+import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { cancelCooperadoGarantiaValorReceberSync } from "@/lib/cooperado/cooperadoGaGarantiaValorReceberSync";
 import { cancelCooperadoBicMobileSessionSync } from "@/lib/cooperado/cooperadoBicMobileSessionSync";
 import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoBicMobileAuthority";
@@ -167,6 +169,9 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
       if (isCooperadoPwaMessengerMode() || isCooperadoMobileGaPromoted(user)) {
         cooperadoRematerializarFinanceiroLocalSePossivel(user);
         tryAckCooperadoAppReleaseWhenLocalReady(user);
+        if (isAppDataWarm() && cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
+          scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user);
+        }
         if (
           !cooperadoMobileDeferOperacionalSyncNaAbertura(user) &&
           isCooperadoPwaMessengerMode() &&

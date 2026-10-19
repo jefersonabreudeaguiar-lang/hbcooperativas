@@ -1,6 +1,5 @@
 import type { User } from "@/types";
 import { cooperadoPilotForcarRematerializacaoFinanceira } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
-import { cooperadoPilotAppDataTemFinanceiroLocal } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
 import {
   cooperadoFinanceiroCardCacheTemValor,
   cooperadoFinanceiroDisplayWarmupEligible,
@@ -10,6 +9,8 @@ import { dispatchCooperadoPwaLeveUiSnapshotRefresh } from "@/lib/cooperado/coope
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { tryAckCooperadoAppReleaseWhenLocalReady } from "@/lib/cooperado/cooperadoMobileReleaseLocalAck";
 import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
+import { scheduleCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
+import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
 import { cooperadoBrowserDesktopFinanceiroEstavel } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
 
@@ -76,9 +77,8 @@ export function scheduleCooperadoFinanceiroDisplayWarmup(
       tryAckCooperadoAppReleaseWhenLocalReady(user);
 
       const temCache = cooperadoFinanceiroCardCacheTemValor(user);
-      const temLocal = cooperadoPilotAppDataTemFinanceiroLocal(user);
-      if (!temCache && !temLocal && !isCooperadoPwaMessengerMode()) {
-        scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
+      if (!temCache && cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
+        scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user);
       }
     })().finally(() => {
       warmupInFlight = null;

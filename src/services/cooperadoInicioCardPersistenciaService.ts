@@ -57,6 +57,9 @@ export function persistirInicioCardValorReceberCooperado(
   ) {
     return false;
   }
+  const persistido = filtrarInicioCardPersistidoLeituraBic(
+    lerInicioCardPersistidoFlex(cooperadoId, cooperativaId)
+  );
   const resolved = resolverCardInicioEndurecido({
     data,
     cooperadoId,
@@ -64,7 +67,7 @@ export function persistirInicioCardValorReceberCooperado(
     apresentacaoConsolidada: true,
     carregandoFinanceiro: false,
     prevLatch: null,
-    persistido: null,
+    persistido,
   });
 
   let display = resolved.display;

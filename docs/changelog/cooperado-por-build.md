@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v492
+
+- **A receber / Financeiro:** o valor não some mais quando o celular guarda um resumo zerado. Ele só zera se o responsável confirmou a liquidação.
+- **PWA:** ao abrir o Financeiro com R$ 0,00, o app busca a ficha na nuvem e redesenha o resumo (entregas + Desconto HB).
+- **HB Créditos:** a conta volta a ser gravada junto com o resumo, mesmo na abertura leve — deixa de ficar em branco quando a ficha tem valor.
+
 ## v491
 
 - **Entregas:** o aviso «Aguardando contrato da cooperativa» não trava mais o envio da foto. Dá para tirar e mandar mesmo se o contrato ainda estiver carregando.
