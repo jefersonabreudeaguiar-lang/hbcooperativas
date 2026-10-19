@@ -7,7 +7,10 @@ import {
 } from "../src/utils/notaStatus";
 import { repararNotasPedidoFilaConferencia } from "../src/services/conferenciaFilaRepair";
 import {
+  agruparPendentesPorCooperado,
   getChaveGrupoConferencia,
+  getNomeGrupoConferencia,
+  nomeCooperadoSnapshotUtilizavel,
   resolverCooperadoIdGrupoConferencia,
 } from "../src/utils/fotoEntrega";
 import type { AppData, NotaPedido } from "../src/types";
@@ -110,5 +113,30 @@ const notaNuvem: NotaPedido = {
 
 assert.equal(resolverCooperadoIdGrupoConferencia(data, notaNuvem, coopId), altonId);
 assert.equal(getChaveGrupoConferencia(notaNuvem, data, coopId), `id:${altonId}`);
+
+assert.equal(nomeCooperadoSnapshotUtilizavel("Desconhecido"), undefined);
+assert.equal(nomeCooperadoSnapshotUtilizavel("Alton Silva"), "Alton Silva");
+
+const notaSemNome: NotaPedido = {
+  ...notaNuvem,
+  id: "n-desconhecido",
+  cooperadoId: altonId,
+  cooperadoNomeSnapshot: "Desconhecido",
+  createdAt: "2026-10-19T18:53:30.000Z",
+  updatedAt: "2026-10-19T18:53:30.000Z",
+};
+const notaAntigaAlton: NotaPedido = {
+  ...notaNuvem,
+  id: "n-antiga",
+  cooperadoId: altonId,
+  cooperadoNomeSnapshot: "Alton Silva",
+  createdAt: "2026-10-01T10:00:00.000Z",
+  updatedAt: "2026-10-01T10:00:00.000Z",
+};
+assert.equal(getNomeGrupoConferencia([notaSemNome, notaAntigaAlton], data), "Alton Silva");
+const grupos = agruparPendentesPorCooperado(data, [notaAntigaAlton, notaSemNome], coopId);
+assert.equal(grupos.length, 1);
+assert.equal(grupos[0].nome, "Alton Silva");
+assert.equal(grupos[0].notas.length, 2);
 
 console.log("test-conferencia-fila-filtro: OK");

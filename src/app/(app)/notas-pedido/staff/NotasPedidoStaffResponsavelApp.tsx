@@ -2136,6 +2136,8 @@ export default function NotasPedidoStaffMain() {
   const conferirModalAbertaRef = useRef(false);
   const responsavelPullPendenteAposConferenciaRef = useRef(false);
   const staffVistaResponsavelPrevRef = useRef(vistaResponsavel);
+  const staffVistaAtualRef = useRef(vistaResponsavel);
+  staffVistaAtualRef.current = vistaResponsavel;
   const staffFilaUploadProgressInflightRef = useRef(false);
 
   const puxarNotasResponsavelDaNuvem = useCallback(
@@ -2174,7 +2176,16 @@ export default function NotasPedidoStaffMain() {
     if (!d) return;
     const cnpj = getCooperativaCnpj(d, coopId);
     if (!cnpj) return;
-    void syncStaffFilaConferenciaLiveFromCloud(cnpj);
+    void syncStaffFilaConferenciaLiveFromCloud(cnpj).then((novas) => {
+      if (novas <= 0 || conferirModalAbertaRef.current) return;
+      const vista = staffVistaAtualRef.current;
+      if (vista === "fila" || vista === "cooperado") return;
+      startVistaTransition(() => {
+        setVistaResponsavel("fila");
+        setAbaConferenciaKey("");
+        setFiltroCooperadoId("");
+      });
+    });
   }, [isCooperado, coopId]);
 
   const recuperarFilaConferencia = useCallback(() => {

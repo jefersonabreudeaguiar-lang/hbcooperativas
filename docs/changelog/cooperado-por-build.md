@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v501
+
+- **Conferir entregas:** a foto que o cooperado já enviou aparece com o nome certo — não some como «Desconhecido».
+- **Fila:** a entrega nova sobe para o topo; se o responsável estiver em Em aberto, a Fila abre sozinha.
+- **Cooperado:** Início, Financeiro e Entregas iguais ao v500.
+
 ## v500
 
 - **Responsável:** Pagar, Em aberto e o card «A pagar» do Início passam a mostrar o mesmo valor real da nota conferida — não fica R$ 0 só porque a ficha ainda não gravou.

@@ -296,6 +296,24 @@ export interface GrupoConferenciaEntrega {
   notas: NotaPedido[];
 }
 
+/** Placeholder da nuvem — não é nome de cooperado e não pode virar rótulo da fila. */
+const NOME_COOPERADO_GENERICO = /^(desconhecido|cooperado|sem nome|—|-)$/i;
+
+export function nomeCooperadoSnapshotUtilizavel(nome?: string | null): string | undefined {
+  const t = nome?.trim();
+  if (!t || NOME_COOPERADO_GENERICO.test(t)) return undefined;
+  return t;
+}
+
+function tsMaisRecenteGrupo(notas: NotaPedido[]): number {
+  let max = 0;
+  for (const n of notas) {
+    const t = Date.parse(n.createdAt ?? "") || Date.parse(n.updatedAt ?? "") || 0;
+    if (t > max) max = t;
+  }
+  return max;
+}
+
 /** ID estável do cooperado na fila — une IDs duplicados e snapshot da nuvem. */
 export function resolverCooperadoIdGrupoConferencia(
   data: AppData,
@@ -320,7 +338,7 @@ export function resolverCooperadoIdGrupoConferencia(
   const direct = data.cooperados.find((c) => c.id === nota.cooperadoId && c.cooperativaId === coopId);
   if (direct) return canonizarPorTitular(direct.id);
 
-  const snapshot = nota.cooperadoNomeSnapshot?.trim();
+  const snapshot = nomeCooperadoSnapshotUtilizavel(nota.cooperadoNomeSnapshot);
   if (snapshot) {
     const snapNorm = nomeNormalizadoCooperado(snapshot);
     const byName = data.cooperados.find(
@@ -342,12 +360,13 @@ export function getChaveGrupoConferencia(
 }
 
 export function getNomeGrupoConferencia(notas: NotaPedido[], data: AppData): string {
-  const first = notas[0];
-  if (!first) return "Cooperado";
-  const snapshot = first.cooperadoNomeSnapshot?.trim();
-  if (snapshot) return snapshot;
-  const nome = data.cooperados.find((c) => c.id === first.cooperadoId)?.nomeCompleto;
-  return nome ?? "Cooperado";
+  for (const n of notas) {
+    const snap = nomeCooperadoSnapshotUtilizavel(n.cooperadoNomeSnapshot);
+    if (snap) return snap;
+    const cadastro = data.cooperados.find((c) => c.id === n.cooperadoId)?.nomeCompleto?.trim();
+    if (cadastro) return cadastro;
+  }
+  return "Cooperado";
 }
 
 export function resolverCooperadoIdDoGrupo(
@@ -379,7 +398,12 @@ export function agruparPendentesPorCooperado(
       nome: getNomeGrupoConferencia(notas, data),
       notas,
     }))
-    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    .sort((a, b) => {
+      const tb = tsMaisRecenteGrupo(b.notas);
+      const ta = tsMaisRecenteGrupo(a.notas);
+      if (tb !== ta) return tb - ta;
+      return a.nome.localeCompare(b.nome, "pt-BR");
+    });
 }
 
 /** Resolve a aba ativa da fila (evita grid vazio por chave desatualizada). */

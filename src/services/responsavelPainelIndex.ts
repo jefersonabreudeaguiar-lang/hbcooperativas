@@ -513,7 +513,7 @@ export function fundirLinhasEmAbertoEstavel(
   return [...byId.values()].sort((a, b) => a.cooperado.localeCompare(b.cooperado, "pt-BR"));
 }
 
-function buildPainelCache(data: AppData, coopId: string): PainelCache {
+function coletarFilaNotasConferir(data: AppData, coopId: string): NotaPedido[] {
   const excluidas = idsNotasPedidoExcluidas(data, coopId);
   const filaNotas: NotaPedido[] = [];
   for (const n of data.notasPedido ?? []) {
@@ -524,6 +524,17 @@ function buildPainelCache(data: AppData, coopId: string): PainelCache {
     filaNotas.push(candidata);
   }
   filaNotas.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return filaNotas;
+}
+
+function buildPainelCache(data: AppData, live: AppData, coopId: string): PainelCache {
+  const byId = new Map(coletarFilaNotasConferir(data, coopId).map((n) => [n.id, n]));
+  for (const n of coletarFilaNotasConferir(live, coopId)) {
+    if (!byId.has(n.id)) byId.set(n.id, n);
+  }
+  const filaNotas = [...byId.values()].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
 
   const dataPagar = appDataParaPagarCooperadosResponsavel(data, coopId);
   const candidatos = candidatosCooperadoPagamento(dataPagar, coopId);
@@ -554,7 +565,7 @@ function getPainelCache(data: AppData, coopId: string): PainelCache {
   if (painelCache && painelCache.revision === revision && painelCache.coopId === coopId) {
     return painelCache;
   }
-  painelCache = buildPainelCache(appDataParaConferirLeitura(data), coopId);
+  painelCache = buildPainelCache(appDataParaConferirLeitura(data), data, coopId);
   return painelCache;
 }
 

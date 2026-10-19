@@ -39,6 +39,8 @@ assert(resolveStaffFilaBackgroundCatchupMs(false) >= 1_500, "fora da Conferir h�
 assert(staff.includes("staffFilaNotasLivePoll"), "Staff notas usa política live poll");
 assert(staff.includes("syncStaffFilaConferenciaLiveFromCloud"), "Staff poll usa fila live sem watermark");
 assert(staff.includes("puxarFilaLiveResponsavel"), "Staff dispara fila live ao abrir a aba");
+assert(staff.includes("novas <= 0"), "foto nova na nuvem abre a Fila se o responsável estiver em outra vista");
+assert(cloud.includes("novasNaFila"), "fila live conta nota que acabou de entrar");
 assert(cloud.includes("syncStaffFilaConferenciaLiveFromCloud"), "cloud service exporta fila live");
 assert(cloud.includes("lite=1&fila=1"), "fila live não usa since/watermark");
 assert(api.includes('searchParams.get("fila") === "1"'), "API tem GET ?fila=1");

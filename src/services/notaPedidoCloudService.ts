@@ -2,7 +2,7 @@ import type { AppData, NotaPedido, User } from "@/types";
 import { normalizeCnpj, findCooperativaByCnpj } from "@/utils/cooperativa";
 import { fetchCooperativaByCnpjFromCloud } from "@/services/cooperativaCloudService";
 import { notaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos, contarFotosEnviadasNota, notaTemFotoArmazenadaNaNuvem, FOTOS_UPLOAD_LOTE } from "@/utils/fotoEntrega";
+import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos, contarFotosEnviadasNota, notaTemFotoArmazenadaNaNuvem, nomeCooperadoSnapshotUtilizavel, FOTOS_UPLOAD_LOTE } from "@/utils/fotoEntrega";
 import { getCooperadoNome } from "@/utils/calculations";
 import { getData, saveDataSafe } from "@/services/dataStore";
 import {
@@ -206,12 +206,12 @@ export function normalizeCloudNotaForLocal(
   const localPorId = data.cooperados.find(
     (c) => c.id === cooperadoId && c.cooperativaId === coop.id
   );
-  if (localPorId) {
-    cooperadoNomeSnapshot = cooperadoNomeSnapshot ?? localPorId.nomeCompleto;
+  if (localPorId && !nomeCooperadoSnapshotUtilizavel(cooperadoNomeSnapshot)) {
+    cooperadoNomeSnapshot = localPorId.nomeCompleto;
   }
 
-  if (!existeLocal && nota.cooperadoNomeSnapshot) {
-    const nome = nota.cooperadoNomeSnapshot.trim().toLowerCase();
+  if (!existeLocal && nomeCooperadoSnapshotUtilizavel(nota.cooperadoNomeSnapshot)) {
+    const nome = nota.cooperadoNomeSnapshot!.trim().toLowerCase();
     const match = data.cooperados.find(
       (c) =>
         c.cooperativaId === coop.id &&
@@ -1552,6 +1552,11 @@ export async function syncStaffFilaConferenciaLiveFromCloud(cnpj: string): Promi
         .filter((n): n is NotaPedido => Boolean(n));
       const current = getData();
       if (!current) return 0;
+      const filaAntes = new Set(
+        current.notasPedido
+          .filter((n) => n.status === "aguardando_conferencia" || n.status === "entregue")
+          .map((n) => n.id)
+      );
       const merged = mergeCloudNotasIntoData(current, cloudNotas, digits);
       if (merged !== current) {
         saveDataSafe(merged);
@@ -1564,7 +1569,13 @@ export async function syncStaffFilaConferenciaLiveFromCloud(cnpj: string): Promi
       if (ids.length > 0) {
         await refreshStaffFilaNotasFromUploadProgress(digits, ids, { onlyIfBehind: true });
       }
-      return cloudNotas.length;
+      const depois = getData() ?? merged;
+      let novasNaFila = 0;
+      for (const n of depois.notasPedido) {
+        if (n.status !== "aguardando_conferencia" && n.status !== "entregue") continue;
+        if (!filaAntes.has(n.id)) novasNaFila += 1;
+      }
+      return novasNaFila;
     } catch {
       return 0;
     } finally {

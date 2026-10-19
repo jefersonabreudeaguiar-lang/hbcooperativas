@@ -8,6 +8,7 @@ import type { AppData, FichaCorrida, NotaPedido, PagamentoCooperadoRegistro } fr
 import {
   appDataParaConferirLeitura,
   getRelatorioLancamentosEmAbertoResponsavel,
+  listNotasFilaConferenciaResponsavel,
   resetResponsavelPainelIndexCache,
   snapshotConferirPoorerSemProva,
 } from "../src/services/responsavelPainelIndex.ts";
@@ -215,6 +216,13 @@ assert.equal(leituraNova.fichaCorrida.length, 9, "lastro mantém fichas no sync 
 assert.ok(
   leituraNova.notasPedido.some((n) => n.id === "n-10"),
   "nota nova do cooperado entra mesmo com snapshot pobre de fichas"
+);
+
+resetResponsavelPainelIndexCache();
+const filaNova = listNotasFilaConferenciaResponsavel(comNotaNova, COOP);
+assert.ok(
+  filaNova.some((n) => n.id === "n-10"),
+  "Conferir lista a nota nova mesmo com lastro de fichas"
 );
 
 console.log("ok: conferir leitura contrato v458 — snapshot + lastro + BIC");
