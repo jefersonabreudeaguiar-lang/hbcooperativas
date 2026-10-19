@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v493
+
+- **A receber:** cada atualização do app busca a ficha na nuvem para todos os cooperados. Enquanto não chega, mostra «Atualizando» — não pinta R$ 0,00 à toa.
+- **Financeiro:** a aba abre mesmo sem cache local (não fica em branco). O valor aparece quando a ficha chega; só some na liquidação do responsável.
+- **Todos os cooperados:** o novo build não confirma «ok» no celular até o valor estar na tela (ou o pagamento ter sido confirmado).
+
 ## v492
 
 - **A receber / Financeiro:** o valor não some mais quando o celular guarda um resumo zerado. Ele só zera se o responsável confirmou a liquidação.

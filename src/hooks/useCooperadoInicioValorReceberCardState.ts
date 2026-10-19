@@ -495,7 +495,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
       return {
         display: SNAPSHOT_VAZIO,
         latch: { motorRevision: "", display: SNAPSHOT_VAZIO, hadPendencia: false },
-        atualizando: !input.dataReady,
+        atualizando: true,
         gravarPersistencia: false,
       };
     }

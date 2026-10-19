@@ -170,7 +170,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
         cooperadoRematerializarFinanceiroLocalSePossivel(user);
         tryAckCooperadoAppReleaseWhenLocalReady(user);
         if (isAppDataWarm() && cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
-          scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user);
+          scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user, { silent: true });
         }
         if (
           !cooperadoMobileDeferOperacionalSyncNaAbertura(user) &&

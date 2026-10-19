@@ -353,7 +353,7 @@ function FichaCorridaPageInner() {
 
   useEffect(() => {
     if (!tabActive || !isCooperado || !user || user.role !== "cooperado") return;
-    scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user);
+    scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user, { silent: true });
   }, [tabActive, isCooperado, user?.id, appDataWarmTick]);
 
   useEffect(() => {
@@ -1421,6 +1421,17 @@ function FichaCorridaPageInner() {
 
   const resumoQuantoVouReceber = useMemo(() => {
     if (!isCooperado) return null;
+    const painelAtualizando = {
+      estado: "carregando" as const,
+      mesLabel: paridadeCooperadoMobile?.mesLabel?.trim() || "—",
+      valorDestaque: 0,
+      valorRecibo: 0,
+      aguardandoAssinatura: false,
+      valorAberto: 0,
+      tituloValor: "Atualizando",
+      subtitulo: "Buscando o valor a receber da cooperativa…",
+      acaoRotulo: null,
+    };
     if (paridadeCooperadoMobile && paridadeCooperadoMobile.valorLiquido > 0.005) {
       const mesLabel =
         paridadeCooperadoMobile.mesLabel?.trim() ||
@@ -1440,26 +1451,30 @@ function FichaCorridaPageInner() {
         acaoRotulo: null,
       };
     }
+    const store = (isAppDataWarm() ? getData() : data) ?? data;
+    const liquidadoPeloResponsavel = Boolean(
+      store &&
+        cooperadoId &&
+        coopId &&
+        cooperadoBicAutorizaZerarCardInicio(store, cooperadoId, coopId)
+    );
     if (financeiroUiSnapshot?.painelParaExibicao) {
       const p = financeiroUiSnapshot.painelParaExibicao;
-      const mesLabel =
-        paridadeCooperadoMobile?.mesLabel?.trim() || financeiroUiSnapshot.mesLabel || p.mesLabel;
-      return { ...p, mesLabel };
+      const painelTemValor =
+        (p.valorDestaque ?? 0) > 0.005 || p.estado === "aguardando_assinatura";
+      if (painelTemValor || liquidadoPeloResponsavel) {
+        const mesLabel =
+          paridadeCooperadoMobile?.mesLabel?.trim() || financeiroUiSnapshot.mesLabel || p.mesLabel;
+        return { ...p, mesLabel };
+      }
+    }
+    if (!liquidadoPeloResponsavel && (paridadeCooperadoMobile?.valorLiquido ?? 0) <= 0.005) {
+      return painelAtualizando;
     }
     if (financeiroUiSnapshot?.status === "AGUARDANDO_BIC") {
-      return {
-        estado: "carregando" as const,
-        mesLabel: financeiroUiSnapshot.mesLabel ?? "—",
-        valorDestaque: 0,
-        valorRecibo: 0,
-        aguardandoAssinatura: false,
-        valorAberto: 0,
-        tituloValor: "Atualizando",
-        subtitulo: "Baixando pagamentos e valores da cooperativa…",
-        acaoRotulo: null,
-      };
+      return painelAtualizando;
     }
-    if (!data || !cooperadoId) return null;
+    if (!data || !cooperadoId) return painelAtualizando;
     const readinessPainel = apresentacaoFinanceiroUi
       ? {
           role: user?.role,
@@ -2040,7 +2055,24 @@ function FichaCorridaPageInner() {
   const verEntregasCooperado = verResumoCooperado || verFichaCooperado;
 
   if (!data) {
-    if (isCooperado) return <FinanceiroTabSkeleton />;
+    if (isCooperado) {
+      return (
+        <div>
+          <PageHeader
+            title="Financeiro"
+            subtitle="Mês em aberto com valores pendentes — meses pagos ficam nas abas ao lado"
+          />
+          <CooperadoQuantoVouReceberPainel
+            estado="carregando"
+            mesLabel="—"
+            valorDestaque={0}
+            tituloValor="Atualizando"
+            subtitulo="Buscando o valor a receber da cooperativa…"
+            acaoRotulo={null}
+          />
+        </div>
+      );
+    }
     if (!ready && !cooperadoInstant && !isAppDataWarm()) return <FinanceiroTabSkeleton />;
     return <PageSkeleton compact />;
   }

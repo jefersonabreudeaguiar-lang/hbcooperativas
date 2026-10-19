@@ -78,7 +78,7 @@ export function scheduleCooperadoFinanceiroDisplayWarmup(
 
       const temCache = cooperadoFinanceiroCardCacheTemValor(user);
       if (!temCache && cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
-        scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user);
+        scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user, { silent: true });
       }
     })().finally(() => {
       warmupInFlight = null;

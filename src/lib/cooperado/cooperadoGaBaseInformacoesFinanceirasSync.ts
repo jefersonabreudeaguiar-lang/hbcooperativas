@@ -87,6 +87,8 @@ export type CooperadoGaSyncBaseInformacoesOpts = {
   bicSession?: boolean;
   light?: boolean;
   userInitiated?: boolean;
+  /** Pull automático (pós-deploy / recovery) — não marca sync visível na UI. */
+  silent?: boolean;
 };
 
 function rematerializarAberturaSemPullNuvem(user: Omit<User, "password">): void {
@@ -106,9 +108,9 @@ export async function runCooperadoGaSyncBaseInformacoesFinanceiras(
   if (!user || user.role !== "cooperado" || !user.cooperadoId) return false;
   if (!isCooperadoMobileGaPromoted(user) && !isCooperadoMobileBicLeituraAuthority(user)) return false;
   if (cooperadoGaAberturaBloqueiaPullOperacionalNuvem(user, opts)) {
-    const recoveryZerado =
-      isAppDataWarm() && cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user);
-    if (!recoveryZerado) {
+    const precisaFichaNuvem =
+      Boolean(opts?.force) || cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user);
+    if (!precisaFichaNuvem) {
       rematerializarAberturaSemPullNuvem(user);
       return false;
     }
@@ -124,12 +126,19 @@ export async function runCooperadoGaSyncBaseInformacoesFinanceiras(
     Boolean(opts?.light) &&
     Boolean(opts?.bicSession) &&
     isCooperadoBicHybridLightEnabled();
-  if (!opts?.force && !opts?.bicSession && pullJaRecente(user.id)) return false;
+  if (
+    !opts?.force &&
+    !opts?.bicSession &&
+    pullJaRecente(user.id) &&
+    !cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)
+  ) {
+    return false;
+  }
   if (inflight) return inflight;
 
   inflight = (async () => {
     if (typeof navigator !== "undefined" && !navigator.onLine) return false;
-    if (!lightReconcile) {
+    if (!lightReconcile && !opts?.silent) {
       markCooperadoUserSyncVisible();
     }
     preloadAppData();

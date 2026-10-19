@@ -11,8 +11,8 @@ import { cooperadoInicioCardEscolherDisplayEstavel } from "../src/lib/cooperadoI
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.equal(APP_BUILD_VERSION, 492, "build 492");
-assert.match(read("public/sw.js"), /hb-coop-build-492/);
+assert.ok(APP_BUILD_VERSION >= 492, "build 492+");
+assert.match(read("public/sw.js"), /hb-coop-build-49/);
 
 const fichaPersist = read("src/lib/cooperado/cooperadoPwaFichaResumoSnapshot.ts");
 assert.match(
@@ -47,14 +47,14 @@ assert.match(
 const warmup = read("src/lib/cooperado/cooperadoFinanceiroDisplayWarmup.ts");
 assert.match(
   warmup,
-  /scheduleCooperadoGaSyncBaseInformacoesFinanceiras\(user\)/,
+  /scheduleCooperadoGaSyncBaseInformacoesFinanceiras\(user/,
   "warmup PWA puxa ficha se A receber segue zerado"
 );
 
 const gate = read("src/components/cooperado/CooperadoFinanceiroGate.tsx");
 assert.match(
   gate,
-  /scheduleCooperadoGaSyncBaseInformacoesFinanceiras\(user\)/,
+  /scheduleCooperadoGaSyncBaseInformacoesFinanceiras\(user/,
   "abertura com R$ 0 busca a ficha na nuvem"
 );
 assert.doesNotMatch(
