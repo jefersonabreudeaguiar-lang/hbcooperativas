@@ -889,9 +889,15 @@ function loadData(forceReload = false): AppData {
     if (memoryCache) return memoryCache;
     try {
       const fallback = migrateData(JSON.parse(stored!));
-      memoryCache = fallback;
-      return fallback;
+      memoryCache = restoreStaffGestaoFromLastGoodIfNeeded(fallback);
+      return memoryCache;
     } catch {
+      const lkg = sessionRoleLooksStaffGestao() ? peekStaffGestaoLastGood() : null;
+      if (lkg && staffGestaoRiquezaTotal(medirRiquezaStaffGestao(lkg)) > 0) {
+        memoryCache = lkg;
+        noteStaffGestaoLastGood(lkg);
+        return memoryCache;
+      }
       memoryCache = emptyInitialData;
       return memoryCache;
     }

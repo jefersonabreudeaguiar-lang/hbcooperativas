@@ -10,7 +10,10 @@ import { sumBy } from "@/utils/calculations";
 import { getCurrentMesReferencia } from "@/utils/format";
 import { isNotaNaFilaConferenciaResponsavel } from "@/utils/notaStatus";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
-import { countNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
+import {
+  appDataParaPagarCooperadosResponsavel,
+  countNotasFilaConferenciaResponsavel,
+} from "@/services/responsavelPainelIndex";
 import { getTotalValoresAPagarGestaoCooperativa } from "@/lib/responsavel/responsavelGestaoLeitura";
 
 export interface AdminDashboardStats {
@@ -71,10 +74,16 @@ export function computeAdminStatsPure(
 
   const financeiroMes = d.financeiro.find((f) => f.mesReferencia === mes);
 
-  const pagamentosPendentes = d.fichaCorrida.filter(
-    (f) => f.status === "pendente" && pertenceCoop(f.cooperadoId) && fichaNotaElegivelParaPagamento(d, f)
+  const dataPagar = cooperativaId ? appDataParaPagarCooperadosResponsavel(d, cooperativaId) : d;
+  const pagamentosPendentes = dataPagar.fichaCorrida.filter(
+    (f) =>
+      f.status === "pendente" &&
+      pertenceCoop(f.cooperadoId) &&
+      fichaNotaElegivelParaPagamento(dataPagar, f)
   );
-  const pagamentosPagos = d.fichaCorrida.filter((f) => f.status === "pago" && pertenceCoop(f.cooperadoId));
+  const pagamentosPagos = dataPagar.fichaCorrida.filter(
+    (f) => f.status === "pago" && pertenceCoop(f.cooperadoId)
+  );
   const excluidas = idsNotasPedidoExcluidas(d, cooperativaId);
   const entregasPendentes = cooperativaId
     ? countNotasFilaConferenciaResponsavel(d, cooperativaId)

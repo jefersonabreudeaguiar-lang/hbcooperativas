@@ -11,7 +11,7 @@ const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
 assert.ok(APP_BUILD_VERSION >= 496, "build 496+");
-assert.match(read("public/sw.js"), /hb-coop-build-49/);
+assert.match(read("public/sw.js"), /hb-coop-build-\d+/);
 
 const cold = read("src/lib/performance/cooperadoColdStart.ts");
 assert.match(cold, /persistedAppDataBlobLooksHydrated/);

@@ -22,7 +22,11 @@ import {
 } from "@/services/notaPedidoService";
 import { round2 } from "@/utils/calculations";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
-import { notaElegivelParaFilaConferenciaResponsavel, sanitizarNotaParaFilaConferencia } from "@/utils/notaStatus";
+import {
+  isNotaStatusDowngrade,
+  notaElegivelParaFilaConferenciaResponsavel,
+  sanitizarNotaParaFilaConferencia,
+} from "@/utils/notaStatus";
 import {
   getRelatorioPagarCooperadoEmAberto,
   type LinhaPagarCooperadoEmAberto,
@@ -45,6 +49,7 @@ type RelatorioAbertoCache = {
   coopId: string;
   pix: number;
   fichas: number;
+  notas: number;
   linhas: LinhaPagarCooperadoEmAberto[];
 };
 
@@ -69,6 +74,19 @@ function cooperadoIdsDaCooperativa(data: AppData, coopId: string): Set<string> {
     if (c.cooperativaId === coopId) ids.add(c.id);
   }
   return ids;
+}
+
+/** ID do cadastro na cooperativa — notas/fichas legadas podem apontar para outro cooperado_id. */
+function cooperadoIdListagemPagarNaCooperativa(
+  data: AppData,
+  cooperadoId: string,
+  coopId: string,
+  coopIds: Set<string>
+): string | null {
+  const canon = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  if (coopIds.has(canon)) return canon;
+  if (coopIds.has(cooperadoId)) return cooperadoId;
+  return null;
 }
 
 function cooperadoLinhaCobrePorPixConfirmado(
@@ -149,37 +167,65 @@ export function appDataParaPagarCooperadosResponsavel(data: AppData, coopId?: st
     return pagarProjCache.data;
   }
   const leitura = appDataParaConferirLeitura(data);
-  const next = reconciliarFichaFromNotasConferidas(leitura);
+  const next = completarFichaProjetadaComNota(
+    alinharFichaComPagamentosCooperativa(reconciliarFichaFromNotasConferidas(leitura))
+  );
   pagarProjCache = { revision, coopId: key, data: next };
   return next;
+}
+
+/** Projeção às vezes nasce sem líquido — completa com o valor real da nota conferida. */
+function completarFichaProjetadaComNota(data: AppData): AppData {
+  let changed = false;
+  const fichas = (data.fichaCorrida ?? []).map((f) => {
+    const liq = Number(f.valorLiquido);
+    const bruto = Number(f.valorBruto);
+    if (Number.isFinite(liq) && liq > 0.005) return f;
+    if (Number.isFinite(bruto) && bruto > 0.005) return f;
+    const nota = data.notasPedido.find((n) => n.id === f.notaPedidoId);
+    if (!nota) return f;
+    const nLiq = Number(nota.valorLiquido);
+    const nBruto = Number(nota.valorBruto);
+    if (!(nLiq > 0.005) && !(nBruto > 0.005)) return f;
+    changed = true;
+    return {
+      ...f,
+      valorBruto: nBruto > 0.005 ? nBruto : f.valorBruto,
+      valorLiquido: nLiq > 0.005 ? nLiq : nBruto,
+      descontos: Number.isFinite(Number(nota.valorDesconto)) ? Number(nota.valorDesconto) : f.descontos,
+    };
+  });
+  return changed ? { ...data, fichaCorrida: fichas } : data;
 }
 
 function candidatosCooperadoPagamento(data: AppData, coopId: string): Set<string> {
   const coopIds = cooperadoIdsDaCooperativa(data, coopId);
   const candidatos = new Set<string>();
+  const add = (cooperadoId: string) => {
+    const id = cooperadoIdListagemPagarNaCooperativa(data, cooperadoId, coopId, coopIds);
+    if (id) candidatos.add(id);
+  };
   for (const f of data.fichaCorrida ?? []) {
-    if (!coopIds.has(f.cooperadoId)) continue;
-    if (f.status === "pendente" || f.status === "pago") candidatos.add(f.cooperadoId);
+    if (f.cooperativaId && f.cooperativaId !== coopId) continue;
+    if (f.status === "pendente" || f.status === "pago") add(f.cooperadoId);
   }
   for (const p of data.pagamentosCooperado ?? []) {
     if (p.cooperativaId !== coopId) continue;
     if (p.status === "aguardando_confirmacao" || p.status === "confirmado") {
-      candidatos.add(p.cooperadoId);
+      add(p.cooperadoId);
     }
   }
   for (const v of data.valoresAvulsosReceber ?? []) {
     if (v.cooperativaId !== coopId) continue;
-    if (!coopIds.has(v.cooperadoId)) continue;
-    if (v.status === "pendente") candidatos.add(v.cooperadoId);
+    if (v.status === "pendente") add(v.cooperadoId);
   }
   const excluidas = idsNotasPedidoExcluidas(data, coopId);
   for (const n of data.notasPedido ?? []) {
     if (n.cooperativaId !== coopId) continue;
     if (n.status !== "conferida") continue;
     if (excluidas.has(n.id)) continue;
-    if (!coopIds.has(n.cooperadoId)) continue;
     if (n.valorLiquido <= 0 && (n.itens ?? []).every((i) => i.quantidade <= 0)) continue;
-    candidatos.add(n.cooperadoId);
+    add(n.cooperadoId);
   }
   return candidatos;
 }
@@ -190,6 +236,47 @@ function mergeNotasPedidoParaPainel(truth: NotaPedido[], react: NotaPedido[]): N
   const byId = new Map<string, NotaPedido>();
   for (const n of truth) byId.set(n.id, n);
   for (const n of react) byId.set(n.id, n);
+  return [...byId.values()];
+}
+
+function notaRiquezaAtualizacao(n: NotaPedido): { ts: number; fotos: number } {
+  const ts = Date.parse(n.updatedAt ?? n.createdAt ?? "") || 0;
+  const fotos = Math.max(
+    n.fotosEnviadasCount ?? 0,
+    n.fotosPedido?.length ?? 0,
+    n.fotoPedido ? 1 : 0
+  );
+  return { ts, fotos };
+}
+
+/** Snapshot pobre: entra nota nova e atualiza foto/status sem apagar o lastro. */
+function mergeNotasPreferindoAtualizacao(prev: NotaPedido[], incoming: NotaPedido[]): NotaPedido[] {
+  const byId = new Map(prev.map((n) => [n.id, n]));
+  for (const n of incoming) {
+    const old = byId.get(n.id);
+    if (!old) {
+      byId.set(n.id, n);
+      continue;
+    }
+    const a = notaRiquezaAtualizacao(old);
+    const b = notaRiquezaAtualizacao(n);
+    if (isNotaStatusDowngrade(old.status, n.status)) {
+      if (b.fotos > a.fotos) {
+        byId.set(n.id, {
+          ...n,
+          ...old,
+          fotosPedido:
+            (n.fotosPedido?.length ?? 0) > (old.fotosPedido?.length ?? 0) ? n.fotosPedido : old.fotosPedido,
+          fotoPedido: n.fotoPedido ?? old.fotoPedido,
+          fotosEnviadasCount: Math.max(old.fotosEnviadasCount ?? 0, n.fotosEnviadasCount ?? 0),
+        });
+      }
+      continue;
+    }
+    if (b.ts > a.ts || b.fotos > a.fotos) {
+      byId.set(n.id, { ...old, ...n });
+    }
+  }
   return [...byId.values()];
 }
 
@@ -270,8 +357,6 @@ function aplicarLastroCompletenessConferir(candidato: AppData): AppData {
     conferirLeituraLatch = candidato;
     return candidato;
   }
-  const prevIds = new Set(prev.notasPedido.map((n) => n.id));
-  const novas = candidato.notasPedido.filter((n) => !prevIds.has(n.id));
   const pagamentosCooperado = mergePagamentosCooperadoParaConferir(
     prev.pagamentosCooperado,
     candidato.pagamentosCooperado
@@ -284,7 +369,7 @@ function aplicarLastroCompletenessConferir(candidato: AppData): AppData {
   const fundido = alinharFichaComPagamentosCooperativa({
     ...prev,
     fichaCorrida: [...fichaById.values()],
-    notasPedido: novas.length === 0 ? prev.notasPedido : [...prev.notasPedido, ...novas],
+    notasPedido: mergeNotasPreferindoAtualizacao(prev.notasPedido, candidato.notasPedido),
     pagamentosCooperado,
   });
   conferirLeituraLatch = fundido;
@@ -494,6 +579,68 @@ export function countCooperadosPagamentoPendenteResponsavel(data: AppData, coopI
   return getPainelCache(data, coopId).cooperadosPagarCount;
 }
 
+function linhaEmAbertoDeNotasSemFicha(
+  data: AppData,
+  cooperadoId: string,
+  coopId: string,
+  nome: string
+): LinhaPagarCooperadoEmAberto | null {
+  const notas = listarNotasConferidasSemPixCooperado(data, cooperadoId, coopId);
+  if (!notas.length) return null;
+  const porMesMap = new Map<string, { entregas: number; total: number }>();
+  for (const n of notas) {
+    const mes = n.mesReferencia;
+    if (!mes) continue;
+    const liq = Number(n.valorLiquido);
+    const bruto = Number(n.valorBruto);
+    const valor = liq > 0.005 ? liq : bruto > 0.005 ? bruto : 0;
+    if (valor <= 0.005) continue;
+    const cur = porMesMap.get(mes) ?? { entregas: 0, total: 0 };
+    cur.entregas += 1;
+    cur.total = round2(cur.total + valor);
+    porMesMap.set(mes, cur);
+  }
+  const porMes = [...porMesMap.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([mes, m]) => ({
+      mes,
+      mesLabel: formatMesReferencia(mes),
+      entregas: m.entregas,
+      total: m.total,
+    }));
+  const total = round2(porMes.reduce((s, m) => s + m.total, 0));
+  if (total <= 0.005) return null;
+  const meses = porMes.map((m) => m.mes);
+  return {
+    cooperadoId,
+    cooperado: nome,
+    meses,
+    mesesLabel: formatMesesReferenciaRotulo(meses),
+    entregas: porMes.reduce((s, m) => s + m.entregas, 0),
+    total,
+    porMes,
+  };
+}
+
+function motorEmAbertoComNotasSemFicha(
+  dataAberto: AppData,
+  coopId: string,
+  cooperadoId?: string
+): LinhaPagarCooperadoEmAberto[] {
+  const motor = getRelatorioPagarCooperadoEmAberto(dataAberto, coopId, cooperadoId);
+  const ja = new Set(motor.map((l) => l.cooperadoId));
+  const extras: LinhaPagarCooperadoEmAberto[] = [];
+  for (const c of listCooperadosDaCooperativa(dataAberto, coopId)) {
+    if (cooperadoId && c.id !== cooperadoId) continue;
+    if (ja.has(c.id)) continue;
+    const extra = linhaEmAbertoDeNotasSemFicha(dataAberto, c.id, coopId, c.nomeCompleto);
+    if (extra) extras.push(extra);
+  }
+  return extras.length === 0 ? motor : [...motor, ...extras].sort((a, b) =>
+    a.cooperado.localeCompare(b.cooperado, "pt-BR")
+  );
+}
+
 /** Relatório «Em aberto» cacheado por revisão (evita recomputar a cada clique de aba). */
 export function getRelatorioLancamentosEmAbertoResponsavel(
   data: AppData,
@@ -505,7 +652,7 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
   if (cooperadoId) {
     return fundirLinhasEmAbertoEstavel(
       [],
-      getRelatorioPagarCooperadoEmAberto(dataAberto, coopId, cooperadoId),
+      motorEmAbertoComNotasSemFicha(dataAberto, coopId, cooperadoId),
       dataAberto,
       coopId
     );
@@ -517,16 +664,24 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
     relatorioAbertoCache.revision === revision &&
     relatorioAbertoCache.coopId === coopId &&
     relatorioAbertoCache.pix === lastro.pix &&
-    relatorioAbertoCache.fichas === lastro.fichas
+    relatorioAbertoCache.fichas === lastro.fichas &&
+    relatorioAbertoCache.notas === lastro.notas
   ) {
     return relatorioAbertoCache.linhas;
   }
-  const motor = getRelatorioPagarCooperadoEmAberto(dataAberto, coopId);
+  const motor = motorEmAbertoComNotasSemFicha(dataAberto, coopId);
   const anterior =
     relatorioAbertoLatch && relatorioAbertoLatch.coopId === coopId ? relatorioAbertoLatch.linhas : [];
   const linhas = fundirLinhasEmAbertoEstavel(anterior, motor, dataAberto, coopId);
   relatorioAbertoLatch = { coopId, linhas };
-  relatorioAbertoCache = { revision, coopId, pix: lastro.pix, fichas: lastro.fichas, linhas };
+  relatorioAbertoCache = {
+    revision,
+    coopId,
+    pix: lastro.pix,
+    fichas: lastro.fichas,
+    notas: lastro.notas,
+    linhas,
+  };
   return linhas;
 }
 

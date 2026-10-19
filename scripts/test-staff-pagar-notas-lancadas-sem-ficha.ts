@@ -3,7 +3,7 @@
  * npx tsx scripts/test-staff-pagar-notas-lancadas-sem-ficha.ts
  */
 import assert from "node:assert/strict";
-import type { AppData, NotaPedido, PagamentoCooperadoRegistro } from "../src/types/index.ts";
+import type { AppData, Cooperado, NotaPedido, PagamentoCooperadoRegistro } from "../src/types/index.ts";
 import {
   appDataParaPagarCooperadosResponsavel,
   cooperadoTemNotaConferidaSemPix,
@@ -128,5 +128,33 @@ assert.equal(
   0,
   "com PIX confirmado o select Pagar fica vazio"
 );
+
+resetResponsavelPainelIndexCache();
+const LEGADO = "c-legado-fantasma";
+const CANON = "c-1";
+const notaIdLegado = {
+  ...notaConferida(),
+  id: "n-legado",
+  cooperadoId: LEGADO,
+  cooperadoNomeSnapshot: "Maria Silva",
+};
+const soLegado: AppData = {
+  ...emptyData(),
+  cooperados: [
+    {
+      id: CANON,
+      cooperativaId: COOP,
+      nomeCompleto: "Maria Silva",
+      cpfCnpj: "12345678901",
+      chavePix: "pix@test",
+      ativo: true,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    } as Cooperado,
+  ],
+  notasPedido: [notaIdLegado],
+};
+const listaLegado = listCooperadosPagamentoPendenteResponsavel(soLegado, COOP);
+assert.equal(listaLegado.length, 1, "nota em ID legado lista cooperado canônico");
+assert.equal(listaLegado[0]?.id, CANON, "linha Pagar usa cadastro canônico");
 
 console.log("test-staff-pagar-notas-lancadas-sem-ficha.ts ok");

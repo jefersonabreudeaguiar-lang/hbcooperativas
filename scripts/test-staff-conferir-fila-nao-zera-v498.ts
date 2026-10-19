@@ -14,7 +14,7 @@ const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
 assert.ok(APP_BUILD_VERSION >= 498, "build 498+");
-assert.match(read("public/sw.js"), /hb-coop-build-498/);
+assert.match(read("public/sw.js"), /hb-coop-build-\d+/);
 
 const comPix = {
   ...emptyInitialData,

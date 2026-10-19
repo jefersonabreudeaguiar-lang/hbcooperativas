@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v500
+
+- **Responsável:** Pagar, Em aberto e o card «A pagar» do Início passam a mostrar o mesmo valor real da nota conferida — não fica R$ 0 só porque a ficha ainda não gravou.
+- **F5:** se o arquivo local falhar, o painel recupera o lastro da sessão em vez de zerar.
+- **Cooperado:** Início, Financeiro e Entregas iguais ao v499.
+
 ## v499
 
 - **Conferir entregas:** quando o cooperado envia as fotos, a nota aparece sozinha na fila do responsável — sem F5 e sem apertar Atualizar.

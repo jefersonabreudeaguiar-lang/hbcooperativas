@@ -7,9 +7,9 @@ import type { ConsolidadoFinanceiroCooperado } from "@/services/cooperadoEntrega
 import { mesReferenciaPagamentoResponsavelEmAberto } from "@/services/cooperadoEntregasService";
 import { bicCentralGetResumoPagamentoExibicao } from "@/services/bicLeituraCentralFicha";
 import { staffCooperadoLeituraFinanceiraExibicao } from "@/lib/bic/bicStaffLeituraCooperado";
-import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
 import {
   getResumoPagamentoConsolidadoCooperado,
+  notaQuitadaPorPagamentoCooperativaRegistrado,
   resumoFromPagamento,
   type AjustesResumoPagamento,
   type ResumoPagamentoCooperado,
@@ -34,19 +34,18 @@ export function cooperativaCnpjDigitsFromAppData(
   return digits.length === 14 ? digits : "";
 }
 
-/** Badge Ficha Pagar + fila do dia — mesma regra quando operacional na nuvem é autoritativo. */
+/** Badge Ficha Pagar + fila do dia — mesma conta de quem tem valor real a receber. */
 export function responsavelBadgeFilaPagarCount(opts: {
   cooperadosParaPagarCount: number;
   aguardandoAssinaturaCount: number;
   aguardandoVerificacaoCount: number;
   cnpjDigits: string;
 }): number {
-  const aguard = opts.aguardandoAssinaturaCount;
-  const verif = opts.aguardandoVerificacaoCount;
-  if (opts.cnpjDigits && isOperacionalCloudAuthoritative(opts.cnpjDigits)) {
-    return aguard + verif;
-  }
-  return opts.cooperadosParaPagarCount + aguard + verif;
+  return (
+    opts.cooperadosParaPagarCount +
+    opts.aguardandoAssinaturaCount +
+    opts.aguardandoVerificacaoCount
+  );
 }
 
 export function responsavelInboxCooperadosPagarCount(
@@ -56,9 +55,28 @@ export function responsavelInboxCooperadosPagarCount(
   return cooperadosParaPagarCount;
 }
 
+function somaNotasConferidasSemPix(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string
+): number {
+  let total = 0;
+  for (const n of data.notasPedido ?? []) {
+    if (n.cooperativaId !== cooperativaId) continue;
+    if (n.cooperadoId !== cooperadoId) continue;
+    if (n.status !== "conferida") continue;
+    if (notaQuitadaPorPagamentoCooperativaRegistrado(data, n, cooperadoId)) continue;
+    const liq = Number(n.valorLiquido);
+    const bruto = Number(n.valorBruto);
+    const valor = liq > 0.005 ? liq : bruto > 0.005 ? bruto : 0;
+    if (valor > 0.005) total = round2(total + valor);
+  }
+  return total;
+}
+
 /**
- * Total «a pagar» do Início / relatórios / Em aberto.
- * Só meses ainda em aberto (PIX confirmado + débito no caixa sai da soma).
+ * Total «a pagar» do Início / relatórios.
+ * Ficha em aberto; se a ficha ainda não gravou, usa o líquido da nota conferida sem PIX.
  */
 export function getTotalValoresAPagarGestaoCooperativa(
   data: AppData,
@@ -72,7 +90,10 @@ export function getTotalValoresAPagarGestaoCooperativa(
   return round2(
     cooperados.reduce((s, c) => {
       const coopScope = cooperativaId ?? c.cooperativaId;
-      return s + hbCreditCreditoBaseReais(data, c.id, coopScope);
+      const ficha = hbCreditCreditoBaseReais(data, c.id, coopScope);
+      if (ficha > 0.005) return s + ficha;
+      if (!coopScope) return s;
+      return s + somaNotasConferidasSemPix(data, c.id, coopScope);
     }, 0)
   );
 }
