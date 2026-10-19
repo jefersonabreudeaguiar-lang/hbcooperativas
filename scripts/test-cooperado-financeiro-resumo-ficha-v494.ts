@@ -10,8 +10,8 @@ import { APP_BUILD_VERSION } from "../src/lib/appBuildVersion.ts";
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.equal(APP_BUILD_VERSION, 494, "build 494");
-assert.match(read("public/sw.js"), /hb-coop-build-494/);
+assert.ok(APP_BUILD_VERSION >= 494, "build 494+");
+assert.match(read("public/sw.js"), /hb-coop-build-49/);
 
 const nav = read("src/components/cooperado/CooperadoFinanceiroSecoesNav.tsx");
 assert.match(nav, /label: "Resumo"/);

@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v495
+
+- **Pagar cooperados:** o valor a pagar volta a ser o da ficha em aberto, como no backup 404 — não usa um consolidado zerado.
+- **Lista:** quem tem nota conferida ainda sem PIX continua na fila.
+- **Cooperado:** Início, Financeiro e Entregas iguais ao v494.
+
 ## v494
 
 - **Financeiro:** o card «A receber» sai desta aba — ele continua só no Início.

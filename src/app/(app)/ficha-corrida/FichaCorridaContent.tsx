@@ -1220,6 +1220,12 @@ function FichaCorridaPageInner() {
         fluxoReciboAssinatura,
       });
       if (staffResumo) return staffResumo;
+      if (financeiroAberto && !pagamentoAguardando) {
+        return financeiroAberto.resumo;
+      }
+      if (resumoPagamentoConsolidado) {
+        return resumoPagamentoConsolidado;
+      }
     }
     if (!isCooperado && aba === "ficha" && cooperadoSelecionadoId) {
       const mesAberto = mesReferenciaPagamentoResponsavelEmAberto(
@@ -1368,11 +1374,7 @@ function FichaCorridaPageInner() {
       ? resumoExibicao && exibicaoOpts
         ? bicCentralGetValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
         : 0
-      : aba === "pagar" &&
-          !visualizandoHistoricoPagamentoResponsavel &&
-          resumoPagamentoConsolidado
-        ? resumoPagamentoConsolidado.valorLiquido
-        : (financeiroAberto?.valorLiquido ?? 0);
+      : (financeiroAberto?.valorLiquido ?? 0);
 
   const descontosExtrasResumo = useMemo(() => {
     if (isCooperado && paridadeCooperadoMobile) {
