@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v505
+
+- **Responsável:** F5 não apaga mais o painel — a última tela reaparece na hora, sem precisar trocar de aba.
+- **Cooperado:** quando o responsável lança ou confirma a entrega, só aquele cooperado recebe um aviso e atualiza a ficha na hora.
+- **Início / Financeiro / Entregas:** iguais ao v504; o que mudou é a velocidade da atualização.
+
 ## v504
 
 - **A receber:** o card continua na tela ao fechar o app; quando a ficha sobe, o valor do card sobe junto.

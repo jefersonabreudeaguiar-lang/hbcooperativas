@@ -211,6 +211,10 @@ import {
   scheduleConferenciaAprovacaoNuvemSync,
   scheduleConferenciaRejeicaoNuvemSync,
 } from "@/services/conferenciaDecisaoNuvemSync";
+import {
+  cooperadoIdsAfetadosPelaNota,
+  publishCooperadoLancamentoHint,
+} from "@/lib/cooperado/cooperadoLancamentoHint";
 import { ConferenciaNuvemSyncBanner } from "@/components/notas-pedido/ConferenciaNuvemSyncBanner";
 import { getInstituicoesCatalogo, getProdutosContrato } from "@/services/catalogoContratosService";
 import {
@@ -2059,7 +2063,7 @@ export default function NotasPedidoStaffMain() {
     !isCooperado && (vistaConteudo === "fila" || vistaConteudo === "cooperado");
 
   const dadosCarregandoFilaConferencia =
-    mostrarFilaResponsavelConteudo && (data === null || !isAppDataWarm());
+    mostrarFilaResponsavelConteudo && data === null;
 
   const contratosEntrega =
     useAppDataSelectorForDomainsWhenActive(
@@ -2252,7 +2256,7 @@ export default function NotasPedidoStaffMain() {
   const filaRecuperacaoAutoRef = useRef(false);
   useEffect(() => {
     if (isCooperado || !coopId || !mostrarFilaResponsavelConteudo) return;
-    if (data === null || !isAppDataWarm()) return;
+    if (data === null) return;
     if (pendentesEstaveis.length > 0 || filaNavCount > 0) {
       filaRecuperacaoAutoRef.current = false;
       return;
@@ -2612,6 +2616,13 @@ export default function NotasPedidoStaffMain() {
       const nota = cloudNotaId ? d.notasPedido.find((n) => n.id === cloudNotaId) : undefined;
       if (nota) await pushNotasPedidoToCloud(cnpj, [nota], cloudCooperadoNome);
       await pushOperacionalToCloud(cnpj, d, coopId, STAFF_OPERACIONAL_PUSH);
+      if (nota) {
+        void publishCooperadoLancamentoHint({
+          cnpj,
+          cooperadoIds: cooperadoIdsAfetadosPelaNota(nota),
+          notaId: nota.id,
+        });
+      }
     })();
 
     setAvulsoModal(false);
@@ -4663,7 +4674,7 @@ export default function NotasPedidoStaffMain() {
       )}
 
       {!isCooperado && instituicoes.length === 0 && (
-        !coopId || !isAppDataWarm() ? (
+        !coopId || data === null ? (
           <AlertBanner variant="info" className="mb-6" title="Carregando contratos">
             Atualizando o catálogo da cooperativa neste aparelho.
           </AlertBanner>

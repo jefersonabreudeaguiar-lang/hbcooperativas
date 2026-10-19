@@ -245,3 +245,66 @@ export async function applyNotaPedidoDeletedOnOperacionalSync(
   if (!uploaded.ok) return uploaded;
   return { ok: true };
 }
+
+const LANCAMENTO_HINTS_FILE = "lancamento-hints.json";
+const LANCAMENTO_HINT_MAX_ENTRIES = 200;
+const LANCAMENTO_HINT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+export type CooperadoLancamentoHintEntry = {
+  at: string;
+  notaId: string;
+};
+
+export type CooperadoLancamentoHintsPayload = {
+  updatedAt: string;
+  byCooperado: Record<string, CooperadoLancamentoHintEntry>;
+};
+
+function pruneLancamentoHints(
+  payload: CooperadoLancamentoHintsPayload,
+  nowMs: number
+): CooperadoLancamentoHintsPayload {
+  const entries = Object.entries(payload.byCooperado ?? {}).filter(([id, entry]) => {
+    if (!id || !entry?.at || !entry?.notaId) return false;
+    const at = Date.parse(entry.at);
+    if (!Number.isFinite(at)) return false;
+    return nowMs - at <= LANCAMENTO_HINT_TTL_MS;
+  });
+  entries.sort((a, b) => Date.parse(b[1].at) - Date.parse(a[1].at));
+  const trimmed = entries.slice(0, LANCAMENTO_HINT_MAX_ENTRIES);
+  return {
+    updatedAt: payload.updatedAt,
+    byCooperado: Object.fromEntries(trimmed),
+  };
+}
+
+export async function fetchLancamentoHintsSync(
+  supabase: SupabaseClient,
+  cnpj: string
+): Promise<CooperadoLancamentoHintsPayload | null> {
+  return fetchJson<CooperadoLancamentoHintsPayload>(supabase, cnpj, LANCAMENTO_HINTS_FILE);
+}
+
+export async function mergeLancamentoHintsSync(
+  supabase: SupabaseClient,
+  cnpj: string,
+  hints: { cooperadoId: string; notaId: string }[]
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const now = new Date().toISOString();
+  const nowMs = Date.parse(now);
+  const existing = (await fetchLancamentoHintsSync(supabase, cnpj)) ?? {
+    updatedAt: now,
+    byCooperado: {},
+  };
+  const next: CooperadoLancamentoHintsPayload = {
+    updatedAt: now,
+    byCooperado: { ...existing.byCooperado },
+  };
+  for (const hint of hints) {
+    const id = hint.cooperadoId.trim();
+    const notaId = hint.notaId.trim();
+    if (!id || !notaId) continue;
+    next.byCooperado[id] = { at: now, notaId };
+  }
+  return uploadJson(supabase, cnpj, LANCAMENTO_HINTS_FILE, pruneLancamentoHints(next, nowMs));
+}

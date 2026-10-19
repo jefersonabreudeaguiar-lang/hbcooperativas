@@ -3,6 +3,7 @@
  * (cache limpo / pull operacional / pós-processar).
  */
 import type { AppData } from "@/types";
+import { stripBinaryForPersist } from "@/utils/fotoEntrega";
 
 export type StaffGestaoRiqueza = {
   cooperados: number;
@@ -16,22 +17,44 @@ export type StaffGestaoRiqueza = {
 let lastGood: AppData | null = null;
 
 const STAFF_GESTAO_LKG_SESSION_KEY = "hb-staff-gestao-lkg-v1";
-const STAFF_GESTAO_LKG_MAX_CHARS = 1_800_000;
+const STAFF_GESTAO_LKG_MAX_CHARS = 4_500_000;
 let persistLkgTimer: ReturnType<typeof setTimeout> | null = null;
+let pagehideBound = false;
+
+function persistLastGoodToSessionNow(data: AppData): void {
+  if (typeof window === "undefined") return;
+  try {
+    const slim = stripBinaryForPersist(data, { role: "responsavel" });
+    const json = JSON.stringify(slim);
+    if (json.length > STAFF_GESTAO_LKG_MAX_CHARS) return;
+    sessionStorage.setItem(STAFF_GESTAO_LKG_SESSION_KEY, json);
+  } catch {
+    /* quota / private */
+  }
+}
 
 function persistLastGoodToSession(data: AppData): void {
   if (typeof window === "undefined") return;
+  bindStaffGestaoLkgPagehide();
   if (persistLkgTimer) clearTimeout(persistLkgTimer);
   persistLkgTimer = setTimeout(() => {
     persistLkgTimer = null;
-    try {
-      const json = JSON.stringify(data);
-      if (json.length > STAFF_GESTAO_LKG_MAX_CHARS) return;
-      sessionStorage.setItem(STAFF_GESTAO_LKG_SESSION_KEY, json);
-    } catch {
-      /* quota / private */
+    persistLastGoodToSessionNow(data);
+  }, 80);
+}
+
+function bindStaffGestaoLkgPagehide(): void {
+  if (pagehideBound || typeof window === "undefined") return;
+  pagehideBound = true;
+  const flush = () => {
+    if (persistLkgTimer) {
+      clearTimeout(persistLkgTimer);
+      persistLkgTimer = null;
     }
-  }, 250);
+    if (lastGood) persistLastGoodToSessionNow(lastGood);
+  };
+  window.addEventListener("pagehide", flush);
+  window.addEventListener("beforeunload", flush);
 }
 
 function readLastGoodFromSession(): AppData | null {

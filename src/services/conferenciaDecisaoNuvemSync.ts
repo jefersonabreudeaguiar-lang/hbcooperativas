@@ -20,6 +20,10 @@ import {
 } from "@/services/cooperativaSyncCloudService";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { requestAppSyncLight } from "@/services/syncRequest";
+import {
+  cooperadoIdsAfetadosPelaNota,
+  publishCooperadoLancamentoHint,
+} from "@/lib/cooperado/cooperadoLancamentoHint";
 
 export type ConferenciaNuvemSyncKind = "aprovacao" | "rejeicao";
 export type ConferenciaNuvemSyncStatus = "syncing" | "synced" | "failed";
@@ -97,6 +101,21 @@ async function executarPatchNota(
   }
 }
 
+async function dispararHintCooperadosAfetados(
+  coopId: string,
+  user: ConferenciaPatchCloudUser,
+  nota: NotaPedido
+): Promise<void> {
+  try {
+    const cnpj = await resolveCooperativaCnpj(getDataOperationalTruth(), coopId, user);
+    const cooperadoIds = cooperadoIdsAfetadosPelaNota(nota);
+    if (!cnpj || cooperadoIds.length === 0) return;
+    await publishCooperadoLancamentoHint({ cnpj, cooperadoIds, notaId: nota.id });
+  } catch {
+    /* disparo auxiliar — a ficha já está na nuvem */
+  }
+}
+
 async function executarPushOperacionalAposPatch(
   notaId: string,
   coopId: string,
@@ -129,6 +148,7 @@ async function runConferenciaNuvemSyncWithRetries(pending: PendingRetry): Promis
       await executarPatchNota(coopId, user, nota);
       if (kind === "aprovacao") {
         await executarPushOperacionalAposPatch(notaId, coopId, user, operacionalPush);
+        void dispararHintCooperadosAfetados(coopId, user, nota);
       }
       requestAppSyncLight();
       setSyncRecord(notaId, { kind, status: "synced", updatedAt: Date.now() });

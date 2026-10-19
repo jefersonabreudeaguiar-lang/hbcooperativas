@@ -13,7 +13,6 @@ import {
   getData,
   getSession,
   isAppDataWarm,
-  persistedAppDataBlobLooksHydrated,
   preloadAppData,
 } from "@/services/dataStore";
 import {
@@ -109,24 +108,17 @@ export function shouldSkipCooperadoSecondaryMountSync(): boolean {
   return isCooperadoInstantResumeEnabled() && coldStartSyncScheduled;
 }
 
-function isStaffDeferAppDataEagerWarmEnabled(): boolean {
-  if (typeof process === "undefined") return true;
-  const v = (process.env.NEXT_PUBLIC_STAFF_DEFER_APPDATA_EAGER ?? "true").trim().toLowerCase();
-  return v !== "0" && v !== "false" && v !== "no";
-}
-
 function shouldDeferAppDataEagerWarmForSession(session: ReturnType<typeof getSession>): boolean {
   if (!session) return false;
+  if (isStaffGestaoRole(session.role)) {
+    // F5 do responsável: sempre hidrata na hora — o painel não pode nascer vazio.
+    return false;
+  }
   if (
     isCooperadoPwaMessengerMode() ||
     cooperadoMobilePilotDeferAppDataEagerWarm(session) ||
     shouldDeferAppDataEagerWarmForCooperadoBicHybrid(session)
   ) {
-    return true;
-  }
-  if (isStaffDeferAppDataEagerWarmEnabled() && isStaffGestaoRole(session.role)) {
-    // F5 com dados no aparelho: hidrata na hora para o painel não sumir.
-    if (persistedAppDataBlobLooksHydrated()) return false;
     return true;
   }
   return false;
@@ -143,8 +135,12 @@ function scheduleDeferredAppDataEagerWarm(): void {
 }
 
 export function ensureCooperadoAppDataEagerWarm(): void {
-  if (!isCooperadoInstantResumeEnabled()) return;
   const session = getSession();
+  if (isStaffGestaoRole(session?.role)) {
+    preloadAppData({ eager: true });
+    return;
+  }
+  if (!isCooperadoInstantResumeEnabled()) return;
   if (shouldDeferAppDataEagerWarmForSession(session)) {
     preloadAppData();
     scheduleDeferredAppDataEagerWarm();

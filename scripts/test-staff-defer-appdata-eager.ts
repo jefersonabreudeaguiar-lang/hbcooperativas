@@ -1,5 +1,5 @@
 /**
- * Staff defer eager warm — parse não bloqueia o 1º frame.
+ * Staff F5 — responsável hidrata na hora (v505, sem defer).
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -10,9 +10,9 @@ const cold = readFileSync(
   "utf8"
 );
 
-assert.ok(cold.includes("NEXT_PUBLIC_STAFF_DEFER_APPDATA_EAGER"));
 assert.ok(cold.includes("isStaffGestaoRole(session.role)"));
+assert.ok(cold.includes("sempre hidrata na hora"));
 assert.ok(cold.includes("scheduleDeferredAppDataEagerWarm"));
-assert.ok(cold.includes("persistedAppDataBlobLooksHydrated"), "F5 com blob local hidrata na hora");
+assert.ok(!cold.includes("NEXT_PUBLIC_STAFF_DEFER_APPDATA_EAGER"));
 
 console.log("OK test-staff-defer-appdata-eager");

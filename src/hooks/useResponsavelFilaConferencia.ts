@@ -5,6 +5,7 @@ import type { NotaPedido } from "@/types";
 import { useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { getDataOperationalTruth, isAppDataWarm } from "@/services/dataStore";
+import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
 import {
   isNotaConferenciaDecididaLocalmente,
   reconciliarNotasConferenciaDecididasLocalmente,
@@ -95,7 +96,7 @@ export function useResponsavelFilaConferencia(
   useEffect(() => {
     if (!filaDetalhada) return;
     const sticky = stickyRef.current;
-    const truth = isAppDataWarm() ? getDataOperationalTruth() : null;
+    const truth = isAppDataWarm() ? getDataOperationalTruth() : peekStaffGestaoLastGood();
     for (const n of pendentesTodas) {
       if (!notaElegivelParaFilaConferenciaResponsavel(n)) continue;
       const live = truth?.notasPedido.find((x) => x.id === n.id);
@@ -106,8 +107,9 @@ export function useResponsavelFilaConferencia(
   }, [pendentesTodas, filaDetalhada]);
 
   const pendentesEstaveis = useMemo(() => {
-    if (!filaDetalhada || !isAppDataWarm()) return pendentesTodas;
-    const data = getDataOperationalTruth();
+    if (!filaDetalhada) return pendentesTodas;
+    const data = isAppDataWarm() ? getDataOperationalTruth() : peekStaffGestaoLastGood();
+    if (!data) return pendentesTodas;
     return buildPendentesEstaveisConferencia(
       data,
       pendentesTodas,
@@ -118,8 +120,9 @@ export function useResponsavelFilaConferencia(
   }, [pendentesTodas, pendingDeleteIds, coopId, filaDetalhada]);
 
   const pendentesPorCooperado = useMemo(() => {
-    if (!filaDetalhada || !isAppDataWarm()) return [];
-    const data = getDataOperationalTruth();
+    if (!filaDetalhada) return [];
+    const data = isAppDataWarm() ? getDataOperationalTruth() : peekStaffGestaoLastGood();
+    if (!data) return [];
     return agruparPendentesPorCooperado(data, pendentesEstaveis, coopId);
   }, [pendentesEstaveis, coopId, filaDetalhada]);
 

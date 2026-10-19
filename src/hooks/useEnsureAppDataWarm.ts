@@ -6,6 +6,9 @@ import { useAppDataReady } from "@/hooks/useAppData";
 
 /** 1º frame: lê localStorage de forma síncrona (última sessão na tela). */
 export function useEnsureAppDataWarm(): boolean {
+  if (typeof window !== "undefined") {
+    ensureAppDataEagerWarm();
+  }
   useLayoutEffect(() => {
     ensureAppDataEagerWarm();
   }, []);

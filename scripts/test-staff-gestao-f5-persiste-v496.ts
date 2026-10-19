@@ -14,8 +14,8 @@ assert.ok(APP_BUILD_VERSION >= 496, "build 496+");
 assert.match(read("public/sw.js"), /hb-coop-build-\d+/);
 
 const cold = read("src/lib/performance/cooperadoColdStart.ts");
-assert.match(cold, /persistedAppDataBlobLooksHydrated/);
-assert.match(cold, /F5 com dados no aparelho/);
+assert.match(cold, /isStaffGestaoRole/);
+assert.match(cold, /F5 do responsável: sempre hidrata na hora/);
 
 const store = read("src/services/dataStore.ts");
 assert.match(store, /restoreStaffGestaoFromLastGoodIfNeeded/);

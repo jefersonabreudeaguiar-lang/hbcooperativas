@@ -8,7 +8,13 @@ import {
   type AppDataNotifyDomain,
 } from "@/lib/performance/appDataDomainNotify";
 import { getData, getDataRevision, isAppDataWarm, subscribe } from "@/services/dataStore";
+import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
 import type { AppData } from "@/types";
+
+function staffPanelDataOrNull(): AppData | null {
+  if (isAppDataWarm()) return getData();
+  return peekStaffGestaoLastGood();
+}
 
 const DOMAIN_ORDER: AppDataNotifyDomain[] = ["shell", "notas", "financeiro", "operacional"];
 
@@ -18,7 +24,9 @@ function normalizeDomains(domains: readonly AppDataNotifyDomain[]): AppDataNotif
 }
 
 function getDomainsRevisionSnapshot(domains: readonly AppDataNotifyDomain[]): string {
-  if (!isAppDataWarm()) return "";
+  if (!isAppDataWarm()) {
+    return peekStaffGestaoLastGood() ? "lkg" : "";
+  }
   return normalizeDomains(domains)
     .map((d) => getAppDataDomainRevision(d))
     .join(",");
@@ -63,8 +71,8 @@ export function useAppDataSnapshotForDomainsWhenActive(
     () => (panelActive ? getDomainsRevisionSnapshot(domains) : `paused:${domainKey}`),
     () => ""
   );
-  if (!panelActive || !isAppDataWarm()) return null;
-  return getData();
+  if (!panelActive) return null;
+  return staffPanelDataOrNull();
 }
 
 function getServerSnapshot(): AppData | null {
@@ -79,11 +87,10 @@ function getWarmRevision(): number {
   return isAppDataWarm() ? getDataRevision() : -1;
 }
 
-/** Dados do app — null até localStorage carregar (evita flash de totais zerados). */
+/** Dados do app — lastro do responsável no F5; null só se ainda não há nada para pintar. */
 export function useAppData(): AppData | null {
   useSyncExternalStore(subscribe, getWarmRevision, getServerRevision);
-  if (!isAppDataWarm()) return null;
-  return getData();
+  return staffPanelDataOrNull();
 }
 
 /**
@@ -99,8 +106,8 @@ export function useAppDataSelector<T>(
   selectorRef.current = selector;
 
   return useMemo(() => {
-    if (!isAppDataWarm()) return null;
-    const data = getData();
+    const data = staffPanelDataOrNull();
+    if (!data) return null;
     return selectorRef.current(data);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- revision + deps controlam recálculo
   }, [revision, ...deps]);
@@ -124,15 +131,17 @@ export function useAppDataSelectorWhenActive<T>(
   );
   const revision = useSyncExternalStore(
     subscribeWhenActive,
-    () => (panelActive && isAppDataWarm() ? getDataRevision() : -1),
+    () => (panelActive && isAppDataWarm() ? getDataRevision() : panelActive ? 0 : -1),
     getServerRevision
   );
   const selectorRef = useRef(selector);
   selectorRef.current = selector;
 
   return useMemo(() => {
-    if (!panelActive || !isAppDataWarm()) return null;
-    return selectorRef.current(getData());
+    if (!panelActive) return null;
+    const data = staffPanelDataOrNull();
+    if (!data) return null;
+    return selectorRef.current(data);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- revision + deps
   }, [panelActive, revision, ...deps]);
 }
@@ -181,10 +190,12 @@ export function useAppDataSelectorForDomainsWhenActive<T>(
   selectorRef.current = selector;
 
   return useMemo(() => {
-    if (!isAppDataWarm()) return null;
-    return selectorRef.current(getData());
+    if (!panelActive) return null;
+    const data = staffPanelDataOrNull();
+    if (!data) return null;
+    return selectorRef.current(data);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- domainRevision + deps
-  }, [domainRevision, ...deps]);
+  }, [panelActive, domainRevision, ...deps]);
 }
 
 export function useAppDataSelectorForDomains<T>(
@@ -206,8 +217,9 @@ export function useAppDataSelectorForDomains<T>(
   selectorRef.current = selector;
 
   return useMemo(() => {
-    if (!isAppDataWarm()) return null;
-    return selectorRef.current(getData());
+    const data = staffPanelDataOrNull();
+    if (!data) return null;
+    return selectorRef.current(data);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- domainRevision + deps
   }, [domainRevision, ...deps]);
 }
@@ -219,5 +231,5 @@ export function useDataRefresh(): void {
 /** Indica se os dados locais já foram carregados do disco. */
 export function useAppDataReady(): boolean {
   useSyncExternalStore(subscribe, getWarmRevision, getServerRevision);
-  return isAppDataWarm();
+  return isAppDataWarm() || peekStaffGestaoLastGood() != null;
 }
