@@ -9,6 +9,7 @@ import { emptyInitialData } from "../src/mock/data.ts";
 import {
   isStaffPrimeiroDiaContratosVazio,
   shouldRedirectStaffPrimeiroDiaContratos,
+  shouldShowStaffPrimeiroDiaCobranca,
   shouldShowStaffPrimeiroDiaConviteCooperado,
   shouldShowStaffPrimeiroDiaSenhaCadastro,
   STAFF_PRIMEIRO_DIA_CONTRATOS_TITULO,
@@ -128,6 +129,7 @@ assert.match(contratosPage, /isStaffPrimeiroDiaContratosVazio/);
 assert.match(contratosPage, /STAFF_PRIMEIRO_DIA_CONTRATOS_TITULO/);
 assert.match(contratosPage, /shouldShowStaffPrimeiroDiaSenhaCadastro/);
 assert.match(contratosPage, /shouldShowStaffPrimeiroDiaConviteCooperado/);
+assert.match(contratosPage, /shouldShowStaffPrimeiroDiaCobranca/);
 assert.match(STAFF_PRIMEIRO_DIA_CONTRATOS_TITULO, /Primeiro dia/);
 assert.equal(STAFF_PRIMEIRO_DIA_SENHA_HREF, "/meu-perfil#senha-cadastro");
 assert.equal(STAFF_PRIMEIRO_DIA_CONVITE_HREF, "/cadastro");
@@ -210,6 +212,39 @@ assert.equal(
     warm: true,
   }),
   false
+);
+
+const casaCiclo = {
+  ...comCooperado,
+  cooperativas: [
+    {
+      id: "coop1",
+      nome: "Casa",
+      cnpj: "62351750000165",
+      status: "ativa",
+      cobrancaSaas: { statusMes: "em_dia", cicloInicioEm: "2026-01-15", historico: [] },
+    } as never,
+  ],
+};
+
+assert.equal(
+  shouldShowStaffPrimeiroDiaCobranca({
+    role: "responsavel",
+    coopId: "coop1",
+    data: semSenha,
+    warm: true,
+  }),
+  true
+);
+assert.equal(
+  shouldShowStaffPrimeiroDiaCobranca({
+    role: "responsavel",
+    coopId: "coop1",
+    data: casaCiclo,
+    warm: true,
+  }),
+  false,
+  "casa com ciclo não vê recado de mensalidade"
 );
 
 const perfil = readFileSync(join(import.meta.dirname ?? __dirname, "../src/app/(app)/meu-perfil/page.tsx"), "utf8");

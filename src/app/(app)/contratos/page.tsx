@@ -16,8 +16,11 @@ import { Input, Select, FormField } from "@/components/ui/Form";
 import { updateData, generateId, addAuditEntry, getData, isAppDataWarm } from "@/services/dataStore";
 import {
   isStaffPrimeiroDiaContratosVazio,
+  shouldShowStaffPrimeiroDiaCobranca,
   shouldShowStaffPrimeiroDiaConviteCooperado,
   shouldShowStaffPrimeiroDiaSenhaCadastro,
+  STAFF_PRIMEIRO_DIA_COBRANCA_TEXTO,
+  STAFF_PRIMEIRO_DIA_COBRANCA_TITULO,
   STAFF_PRIMEIRO_DIA_CONTRATOS_TEXTO,
   STAFF_PRIMEIRO_DIA_CONTRATOS_TITULO,
   STAFF_PRIMEIRO_DIA_CONVITE_HREF,
@@ -282,6 +285,12 @@ function ContratosPageInner() {
     data,
     warm: isAppDataWarm(),
   });
+  const mostrarCobranca = shouldShowStaffPrimeiroDiaCobranca({
+    role: user?.role,
+    coopId,
+    data,
+    warm: isAppDataWarm(),
+  });
   const semItens = instituicoes.filter((i) => (produtosPorInst.get(i.id)?.length ?? 0) === 0);
 
   return (
@@ -321,6 +330,12 @@ function ContratosPageInner() {
           <Link href={STAFF_PRIMEIRO_DIA_CONVITE_HREF} className="font-semibold underline">
             Abrir Cadastro
           </Link>
+        </AlertBanner>
+      )}
+
+      {mostrarCobranca && (
+        <AlertBanner variant="info" title={STAFF_PRIMEIRO_DIA_COBRANCA_TITULO} className="mb-4">
+          {STAFF_PRIMEIRO_DIA_COBRANCA_TEXTO}
         </AlertBanner>
       )}
 

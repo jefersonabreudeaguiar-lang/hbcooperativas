@@ -17,6 +17,9 @@ export const STAFF_PRIMEIRO_DIA_CONVITE_TITULO = "Chame o primeiro cooperado";
 export const STAFF_PRIMEIRO_DIA_CONVITE_TEXTO =
   "Passe o CNPJ e a senha de cadastro. Ele entra em Cadastro, cria a conta e já pode entregar.";
 export const STAFF_PRIMEIRO_DIA_CONVITE_HREF = "/cadastro";
+export const STAFF_PRIMEIRO_DIA_COBRANCA_TITULO = "Como funciona a mensalidade do app";
+export const STAFF_PRIMEIRO_DIA_COBRANCA_TEXTO =
+  "O mês começa quando o primeiro cooperado se cadastra. Depois cobra-se por cooperado, com um mínimo por cooperativa. Atraso pode suspender o painel.";
 
 export function isStaffPrimeiroDiaContratosVazio(opts: {
   role?: string;
@@ -52,6 +55,22 @@ export function shouldShowStaffPrimeiroDiaConviteCooperado(opts: {
   if (!isStaffGestaoRole(opts.role)) return false;
   const coop = opts.data.cooperativas.find((c) => c.id === opts.coopId);
   if (!coop) return false;
+  return (opts.data.cooperados ?? []).filter((c) => c.cooperativaId === opts.coopId).length === 0;
+}
+
+export function shouldShowStaffPrimeiroDiaCobranca(opts: {
+  role?: string;
+  coopId?: string | null;
+  data: AppData | null;
+  warm: boolean;
+}): boolean {
+  if (!opts.warm || !opts.data || !opts.coopId) return false;
+  if (!isStaffGestaoRole(opts.role)) return false;
+  const coop = opts.data.cooperativas.find((c) => c.id === opts.coopId);
+  if (!coop) return false;
+  const cob = coop.cobrancaSaas;
+  if (cob?.cicloInicioEm) return false;
+  if (cob?.statusMes && cob.statusMes !== "aguardando_primeiro_cooperado") return false;
   return (opts.data.cooperados ?? []).filter((c) => c.cooperativaId === opts.coopId).length === 0;
 }
 
