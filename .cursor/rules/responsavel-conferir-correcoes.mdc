@@ -1,0 +1,24 @@
+---
+description: Contrato Conferir → Correções — lista de cooperados sem liquidar
+alwaysApply: false
+---
+
+# Responsável — Conferir → Correções
+
+Modelo travado em `src/lib/responsavel/responsavelConferirCorrecoesContrato.ts` (`RESPONSAVEL_CONFERIR_CORRECOES_CONTRATO_VERSION`).
+
+## O que o responsável vê
+
+1. Aba **Correções** lista cooperados com nota ainda sem liquidar (não só um select vazio).
+2. A lista lê o lastro real (`getData()`), não a foto do Conferir que marca nota como paga.
+3. **Relançar** tira da ficha, zera itens e volta à fila com as mesmas fotos.
+4. **Apagar** remove a entrega, a ficha e a nuvem.
+5. Nota já paga / ficha paga / PIX registrado **não** some da ficha nem pode ser alterada aqui.
+
+## Proibido sem bump da versão do contrato + ordem explícita
+
+- Esconder a lista e deixar só o select.
+- Alimentar Correções só com `appDataParaConferirLeitura` (nota conferida vira `pago` e some).
+- Relançar ou apagar nota liquidada.
+
+Teste: `npx tsx scripts/test-responsavel-conferir-correcoes-contrato.ts`

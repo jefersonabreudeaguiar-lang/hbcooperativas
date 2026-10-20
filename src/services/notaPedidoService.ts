@@ -3910,6 +3910,7 @@ export function podeRelancarEntregaNota(
   const nota = data.notasPedido.find((n) => n.id === notaId);
   if (!nota) return { ok: false, reason: "not_found" };
   if (nota.cooperativaId !== cooperativaId) return { ok: false, reason: "wrong_coop" };
+  if (nota.status === "pago") return { ok: false, reason: "pago" };
   if (nota.status !== "conferida" && nota.status !== "rejeitada") {
     return { ok: false, reason: "not_found" };
   }
@@ -4052,6 +4053,20 @@ export function listarEntregasCorrecaoCooperado(
       return statusCorrecaoEntregaCooperado(data, n.id, cooperativaId, acao).visivel;
     })
     .sort((a, b) => new Date(b.dataEntrega).getTime() - new Date(a.dataEntrega).getTime());
+}
+
+/** União das duas ações — lista de quem tem nota ainda sem liquidar. */
+export function listarCooperadosEntregasCorrecaoTodas(
+  data: AppData,
+  cooperativaId: string
+): { id: string; nomeCompleto: string }[] {
+  const byId = new Map<string, { id: string; nomeCompleto: string }>();
+  for (const acao of ["relancar", "apagar"] as const) {
+    for (const c of listarCooperadosEntregasCorrecao(data, cooperativaId, acao)) {
+      byId.set(c.id, c);
+    }
+  }
+  return [...byId.values()].sort((a, b) => a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR"));
 }
 
 /** Cooperados com ao menos uma entrega elegível para apagar ou re-lançar (aba Correções). */

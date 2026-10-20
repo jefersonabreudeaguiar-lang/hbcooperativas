@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v511
+
+- **Responsável:** Conferir → Correções lista os cooperados com nota ainda sem liquidar.
+- **Correção:** Relançar volta a nota à fila com as fotos; Apagar remove a entrega. Nota paga não muda.
+- **Cooperado:** Início, Financeiro e Entregas iguais ao v510.
+
 ## v510
 
 - **Abas:** Início, Entregas, Financeiro e Preços trocam na hora — a aba já visitada reaparece sem travar.

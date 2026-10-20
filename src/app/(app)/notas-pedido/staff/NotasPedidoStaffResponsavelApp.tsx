@@ -4180,9 +4180,10 @@ export default function NotasPedidoStaffMain() {
   };
 
   const executarExclusaoEntregaResponsavel = async (alvo: NotaPedido): Promise<void> => {
-    if (!isDiretoria || !user || !data || !coopId) return;
+    const live = (isAppDataWarm() ? getData() : data) ?? data;
+    if (!isDiretoria || !user || !live || !coopId) return;
     const permanecerEmCorrecoes = vistaResponsavel === "correcoes";
-    const check = podeExcluirEntregaNota(data, alvo.id, coopId);
+    const check = podeExcluirEntregaNota(live, alvo.id, coopId);
     if (!check.ok) {
       setSuccessMsg(mensagemBloqueioExclusaoEntrega(check.reason));
       return;
@@ -4253,7 +4254,8 @@ export default function NotasPedidoStaffMain() {
   };
 
   const executarRelancarEntregaResponsavel = async (alvo: NotaPedido) => {
-    if (!isDiretoria || !user || !data || !coopId) return;
+    const live = (isAppDataWarm() ? getData() : data) ?? data;
+    if (!isDiretoria || !user || !live || !coopId) return;
 
     let notaRelancada: NotaPedido | undefined;
     updateData((d) => {
@@ -4703,12 +4705,14 @@ export default function NotasPedidoStaffMain() {
 
       {!isCooperado && (
         <div className="mb-6 space-y-4">
-          {mostrarCorrecoesResponsavel && coopId && (dataLeitura ?? data) && (
+          {mostrarCorrecoesResponsavel && coopId && (data || (isAppDataWarm() && getData()) || dataLeitura) && (
             <CorrecoesEntregasPanel
-              data={(dataLeitura ?? data) as NonNullable<typeof data>}
+              data={(isAppDataWarm() ? getData() : data ?? dataLeitura) as NonNullable<typeof data>}
               coopId={coopId}
               cooperados={cooperadosCoop}
-              getEscolaLabel={(n) => getEscolaNotaLabel(n, (dataLeitura ?? data)?.instituicoes ?? [])}
+              getEscolaLabel={(n) =>
+                getEscolaNotaLabel(n, (isAppDataWarm() ? getData() : data ?? dataLeitura)?.instituicoes ?? [])
+              }
               onApagar={executarExclusaoEntregaResponsavel}
               onRelancar={executarRelancarEntregaResponsavel}
             />

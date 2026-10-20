@@ -13,6 +13,7 @@ import { NotaFotoImg } from "@/components/ui/NotaFotoImg";
 import { FOTO_ENTREGA_THUMB_IMG } from "@/components/notas/fotoEntregaDisplay";
 import {
   listarCooperadosEntregasCorrecao,
+  listarCooperadosEntregasCorrecaoTodas,
   listarEntregasCorrecaoCooperado,
   mensagemBloqueioExclusaoEntrega,
   statusCorrecaoEntregaCooperado,
@@ -48,10 +49,25 @@ export function CorrecoesEntregasPanel({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [processando, setProcessando] = useState(false);
 
+  const cooperadosLista = useMemo(
+    () => listarCooperadosEntregasCorrecaoTodas(data, coopId),
+    [data, coopId]
+  );
+
   const cooperadosElegiveis = useMemo(
     () => listarCooperadosEntregasCorrecao(data, coopId, acao),
     [data, coopId, acao]
   );
+
+  const resumoPorCooperado = useMemo(() => {
+    const map = new Map<string, { notas: number; valor: number }>();
+    for (const c of cooperadosLista) {
+      const notas = listarEntregasCorrecaoCooperado(data, c.id, coopId, acao);
+      const valor = notas.reduce((s, n) => s + valorLiquidoEntregaCorrecaoExibicao(data, n), 0);
+      map.set(c.id, { notas: notas.length, valor });
+    }
+    return map;
+  }, [cooperadosLista, data, coopId, acao]);
 
   const resumoAuditoria = useMemo(
     () => auditarCorrecoesEntregasCooperativa(data, coopId),
@@ -60,8 +76,8 @@ export function CorrecoesEntregasPanel({
 
   const cooperadoIdAtivo = useMemo(() => {
     if (!cooperadoId) return "";
-    return cooperadosElegiveis.some((c) => c.id === cooperadoId) ? cooperadoId : "";
-  }, [cooperadoId, cooperadosElegiveis]);
+    return cooperadosLista.some((c) => c.id === cooperadoId) ? cooperadoId : "";
+  }, [cooperadoId, cooperadosLista]);
 
   const entregas = useMemo(() => {
     if (!cooperadoIdAtivo) return [];
@@ -106,10 +122,10 @@ export function CorrecoesEntregasPanel({
   return (
     <div className="space-y-4">
       <AlertBanner variant="info" title="Correções de entregas">
-        Use esta aba para <strong>apagar</strong> uma entrega por completo ou{" "}
-        <strong>re-lançar</strong> uma entrega conferida ou devolvida para correção — ela volta
-        para a fila de conferência com as mesmas fotos. Entregas já <strong>pagas</strong> não aparecem.
-        Entregas em <strong>pagamento registrado</strong> aparecem com aviso — resolva em Ficha / Pagar antes de apagar.
+        A lista abaixo mostra cooperados com nota ainda <strong>sem liquidar</strong>. Use{" "}
+        <strong>re-lançar</strong> para voltar à fila com as mesmas fotos, ou <strong>apagar</strong>{" "}
+        para remover de vez. Entregas já <strong>pagas</strong> não aparecem e não podem ser alteradas.
+        Entregas em <strong>pagamento registrado</strong> aparecem com aviso — resolva em Ficha / Pagar antes.
       </AlertBanner>
 
       {resumoAuditoria.entregasBloqueadas > 0 && (
@@ -128,28 +144,58 @@ export function CorrecoesEntregasPanel({
       )}
 
       <Card className="p-4 space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FormField label="Cooperado" required>
-            <Select value={cooperadoIdAtivo} onChange={(e) => handleCooperadoChange(e.target.value)}>
-              <option value="">Selecione o cooperado…</option>
-              {cooperadosElegiveis.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nomeCompleto}
-                </option>
-              ))}
-            </Select>
-          </FormField>
+        <FormField label="O que fazer?" required>
+          <Select
+            value={acao}
+            onChange={(e) => handleAcaoChange(e.target.value as AcaoCorrecaoEntrega)}
+          >
+            <option value="relancar">Re-lançar (voltar para conferir entregas)</option>
+            <option value="apagar">Apagar entrega</option>
+          </Select>
+        </FormField>
 
-          <FormField label="O que fazer?" required>
-            <Select
-              value={acao}
-              onChange={(e) => handleAcaoChange(e.target.value as AcaoCorrecaoEntrega)}
-            >
-              <option value="relancar">Re-lançar (voltar para conferir entregas)</option>
-              <option value="apagar">Apagar entrega</option>
-            </Select>
-          </FormField>
-        </div>
+        {cooperadosLista.length === 0 ? (
+          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-600">
+            Nenhum cooperado com nota ainda sem liquidar. Quem já recebeu PIX some daqui.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-gray-800">
+              Cooperados com nota sem liquidar ({cooperadosLista.length})
+            </p>
+            <ul className="space-y-2 max-h-[min(40vh,360px)] overflow-y-auto">
+              {cooperadosLista.map((c) => {
+                const selected = c.id === cooperadoIdAtivo;
+                const resumo = resumoPorCooperado.get(c.id);
+                const naAcao = cooperadosElegiveis.some((x) => x.id === c.id);
+                return (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => handleCooperadoChange(c.id)}
+                      className={cn(
+                        "w-full text-left rounded-xl border p-3 transition-colors",
+                        selected
+                          ? "border-green-600 bg-green-50 ring-2 ring-green-200"
+                          : "border-gray-200 bg-white hover:border-green-300"
+                      )}
+                    >
+                      <span className="block font-semibold text-gray-900">{c.nomeCompleto}</span>
+                      <span className="block text-xs text-gray-500 mt-0.5">
+                        {naAcao && resumo
+                          ? `${resumo.notas} ${resumo.notas === 1 ? "nota" : "notas"} · ${formatCurrency(resumo.valor)}`
+                          : acao === "relancar"
+                            ? "Sem nota para re-lançar — troque para Apagar"
+                            : "Sem nota para apagar — troque para Re-lançar"}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         {cooperadoIdAtivo && entregas.length === 0 && (
           <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-600">

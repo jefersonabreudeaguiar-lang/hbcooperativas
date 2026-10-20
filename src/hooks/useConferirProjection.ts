@@ -41,7 +41,7 @@ export function useConferirProjection(opts: {
   const dataLeituraRaw = useAppDataSelectorForDomainsWhenActive(
     staffActive,
     ["shell", "notas", "financeiro"],
-    (d) => appDataParaConferirLeitura(d),
+    (d) => appDataParaConferirLeitura(d, coopId),
     [coopId]
   );
   const lastDataRef = useRef<AppData | null>(null);
