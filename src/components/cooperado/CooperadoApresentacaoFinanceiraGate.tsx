@@ -176,12 +176,15 @@ export function CooperadoApresentacaoFinanceiraGate({ children }: { children: Re
   return <CooperadoApresentacaoFinanceiraGateInner>{children}</CooperadoApresentacaoFinanceiraGateInner>;
 }
 
+/** Pagar cooperados (responsável) não passa pelo gate do cooperado — não pode derrubar a aba. */
+export const APRESENTACAO_FINANCEIRA_FORA_DO_GATE: CooperadoApresentacaoFinanceiraValue = {
+  apresentacaoConsolidada: false,
+  carregandoValoresFinanceiros: false,
+  syncing: false,
+  syncingForUi: false,
+  cooperadoPagamentosHydrated: true,
+};
+
 export function useCooperadoApresentacaoFinanceiraConsolidada(): CooperadoApresentacaoFinanceiraValue {
-  const ctx = useContext(CooperadoApresentacaoFinanceiraContext);
-  if (!ctx) {
-    throw new Error(
-      "useCooperadoApresentacaoFinanceiraConsolidada requer CooperadoApresentacaoFinanceiraGate"
-    );
-  }
-  return ctx;
+  return useContext(CooperadoApresentacaoFinanceiraContext) ?? APRESENTACAO_FINANCEIRA_FORA_DO_GATE;
 }

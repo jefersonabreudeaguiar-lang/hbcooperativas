@@ -186,6 +186,7 @@ import { pagamentoIdFromOrigemId } from "@/services/livroCaixaService";
 import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
 import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExibirAguardandoAssinatura";
 import { materializarCooperadoPwaAposAssinaturaReciboLocal } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import { CooperadoApresentacaoFinanceiraGate } from "@/components/cooperado/CooperadoApresentacaoFinanceiraGate";
 import { useCooperadoApresentacaoFinanceiraConsolidada } from "@/hooks/useCooperadoApresentacaoFinanceiraConsolidada";
 import { cooperadoBicAutorizaZerarCardInicio } from "@/lib/cooperadoInicioCardPolicy";
 import { formatCurrency, formatDate, formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia, cn } from "@/utils/format";
@@ -251,12 +252,14 @@ function TabelaResumoItens({
   );
 }
 
-/** Gate financeiro L1 fica no AppLayout (shell); evita provider duplicado no dual-mount de abas. */
+/** Gate no próprio Pagar: o shell do responsável não envolve o cooperado, e a aba não pode cair. */
 export default function FichaCorridaPage() {
   return (
-    <AbaLastGoodSafeRoot aba="pagar">
-      <FichaCorridaPageInner />
-    </AbaLastGoodSafeRoot>
+    <CooperadoApresentacaoFinanceiraGate>
+      <AbaLastGoodSafeRoot aba="pagar">
+        <FichaCorridaPageInner />
+      </AbaLastGoodSafeRoot>
+    </CooperadoApresentacaoFinanceiraGate>
   );
 }
 

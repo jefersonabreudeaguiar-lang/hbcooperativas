@@ -51,6 +51,18 @@ assert.match(
   fichaUi,
   /Pagar cooperados: não puxa operacional ao abrir a aba/
 );
+assert.match(
+  fichaUi,
+  /<CooperadoApresentacaoFinanceiraGate>/,
+  "Pagar envolve o gate — responsável não cai na tela de erro"
+);
+const gate = read("src/components/cooperado/CooperadoApresentacaoFinanceiraGate.tsx");
+assert.match(gate, /APRESENTACAO_FINANCEIRA_FORA_DO_GATE/);
+assert.doesNotMatch(
+  gate,
+  /throw new Error\(\s*"useCooperadoApresentacaoFinanceiraConsolidada requer/,
+  "sem gate o Pagar não derruba a aba"
+);
 
 function emptyData(): AppData {
   return {

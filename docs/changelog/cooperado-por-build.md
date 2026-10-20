@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v515
+
+- **Responsável:** Pagar cooperados abre de verdade — não cai mais na tela «não terminou de carregar».
+- **Pagar:** a fila e o valor da ficha em aberto continuam iguais ao v509.
+- **Cooperado:** Início, Financeiro e Entregas iguais ao v514.
+
 ## v514
 
 - **Responsável:** Conferir entregas abre com a fila salva no aparelho — a nota do cooperado não some até o lançamento na ficha.
