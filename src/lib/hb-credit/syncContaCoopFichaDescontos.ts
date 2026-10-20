@@ -441,18 +441,20 @@ export async function puxarDebitoHbFichaDescontosSilentCooperado(opts: {
   user: Omit<User, "password">;
 }): Promise<boolean> {
   if (!shouldSyncHbFichaBaseDescontos()) return false;
-  if (opts.user.role !== "cooperado" || !opts.user.cooperadoId) return false;
+  if (opts.user.role !== "cooperado") return false;
+  const cooperadoId = opts.user.cooperadoId?.trim() ?? "";
+  if (!cooperadoId) return false;
   if (typeof window === "undefined") return false;
   if (typeof navigator !== "undefined" && !navigator.onLine) return false;
   if (!isAppDataWarm()) return false;
 
   return coalesceContaCoopAuxSync(
-    contaCoopAuxSyncKeyFichaSilent(opts.cnpj, opts.user.cooperadoId),
+    contaCoopAuxSyncKeyFichaSilent(opts.cnpj, cooperadoId),
     async () => {
       const data = getData();
       const canonico = resolverCooperadoIdCanonico(
         data,
-        opts.user.cooperadoId,
+        cooperadoId,
         opts.cooperativaId,
         opts.user.name
       );
