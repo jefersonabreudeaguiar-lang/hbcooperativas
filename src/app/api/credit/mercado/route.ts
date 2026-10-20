@@ -14,6 +14,8 @@ import {
   updatePartnerPix,
 } from "@/lib/supabase/contaCoopStorage";
 import { countPartnerFiscalPending } from "@/lib/supabase/hbCreditFiscalNotesStorage";
+import { promoverRecebiveisParceiroSemNf } from "@/lib/supabase/hbCreditReceivableStorage";
+import { isHbCreditMercadoNfDispensada } from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
 import { getSettlementComprovanteSignedUrl } from "@/lib/supabase/hbCreditSettlementStorage";
 import {
   assertPartnerPixEditable,
@@ -39,6 +41,10 @@ export async function GET(request: Request) {
 
   if (!parceiro) {
     return NextResponse.json({ error: "Mercado não vinculado." }, { status: 404 });
+  }
+
+  if (isHbCreditMercadoNfDispensada()) {
+    await promoverRecebiveisParceiroSemNf(gate.ctx.supabase, parceiro.id);
   }
 
   const intents = await listIntentsParceiro(gate.ctx.supabase, parceiro.id);

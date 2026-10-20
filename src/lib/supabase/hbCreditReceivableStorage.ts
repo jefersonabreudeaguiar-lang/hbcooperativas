@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isHbCreditMercadoNfDispensada } from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
 import { normalizeCnpj } from "@/utils/cooperativa";
 
 function genId(prefix: string): string {
@@ -14,7 +15,7 @@ export async function ensurePartnerReceivableForTransaction(
   transactionId: string,
   options?: { promoteEligible?: boolean }
 ): Promise<ReceivableRow | null> {
-  const promoteEligible = options?.promoteEligible ?? false;
+  const promoteEligible = options?.promoteEligible ?? isHbCreditMercadoNfDispensada();
   const now = new Date().toISOString();
 
   const { data: existing } = await supabase
@@ -102,4 +103,20 @@ export async function ensurePartnerReceivableForTransaction(
   return inserted
     ? { id: String(inserted.id), status: String(inserted.status) }
     : null;
+}
+
+/** Compra HB já liberada: OPEN vira ELIGIBLE sem esperar NF. */
+export async function promoverRecebiveisParceiroSemNf(
+  supabase: SupabaseClient,
+  partnerId: string
+): Promise<number> {
+  if (!isHbCreditMercadoNfDispensada() || !partnerId) return 0;
+  const now = new Date().toISOString();
+  const { data } = await supabase
+    .from("hb_credit_receivables")
+    .update({ status: "ELIGIBLE", updated_at: now })
+    .eq("partner_id", partnerId)
+    .eq("status", "OPEN")
+    .select("id");
+  return data?.length ?? 0;
 }

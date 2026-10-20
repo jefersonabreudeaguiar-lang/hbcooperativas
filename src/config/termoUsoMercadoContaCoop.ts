@@ -57,8 +57,8 @@ export function getClausulasTermoMercadoContaCoop(input: {
       titulo: "5. Cobrança, notas fiscais e liquidação",
       itens: [
         "As vendas são registradas por QR Code gerado no painel do mercado; o pagamento só é válido após confirmação eletrônica do cooperado.",
-        "Para receber o repasse, o mercado deve anexar e manter regularizadas as notas fiscais das vendas, conforme exigido pela cooperativa na conferência fiscal.",
-        "A liquidação mensual é feita pela cooperativa via PIX para a chave cadastrada pelo mercado, após conferência das NFs e fechamento do período.",
+        "A partir de 20 de outubro de 2026, o mercado não precisa enviar notas fiscais em nome do cooperado: a compra com HB Créditos já fica liberada para recebimento.",
+        "A liquidação mensual é feita pela cooperativa via PIX para a chave cadastrada pelo mercado, após o fechamento do período.",
         "Valores em liquidação dependem de assinatura/confirmação do mercado quando aplicável.",
       ],
     },
@@ -75,7 +75,7 @@ export function getClausulasTermoMercadoContaCoop(input: {
       itens: [
         "Manter dados cadastrais, chave PIX e PIN financeiro atualizados e sob sigilo.",
         "Cobrar apenas valores corretos e compatíveis com a venda efetivamente realizada.",
-        "Cumprir prazos de envio e correção de notas fiscais.",
+        "Não é exigido envio de nota fiscal do cooperado para liberar o recebimento das compras com HB Créditos.",
         "Não compartilhar credenciais de acesso ao painel com terceiros não autorizados.",
         "Comunicar à cooperativa irregularidades ou divergências no repasse.",
       ],

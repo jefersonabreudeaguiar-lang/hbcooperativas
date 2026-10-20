@@ -38,6 +38,7 @@ import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/mo
 import { signedLedgerAmountCentsForExtrato } from "@/lib/hb-credit/ledgerLabels";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import { hbCreditCreditoBaseReais } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
+import { isHbCreditMercadoNfDispensada } from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
 import { resolveLeituraFinanceiraCooperadoCore } from "@/lib/bic/bicLeituraPorta";
 import type {
   AuthoritativeCreditBaseErrorPayload,
@@ -2878,6 +2879,13 @@ export async function authorizePayment(
         ensureFiscalNoteForTransaction(supabase, txId, input.cooperadoNome)
       )
       .catch(() => {});
+    if (isHbCreditMercadoNfDispensada()) {
+      void import("@/lib/supabase/hbCreditReceivableStorage")
+        .then(({ ensurePartnerReceivableForTransaction }) =>
+          ensurePartnerReceivableForTransaction(supabase, txId, { promoteEligible: true })
+        )
+        .catch(() => {});
+    }
   }
 
   return {
@@ -4357,16 +4365,19 @@ async function repairReceivablesForPartnerSettlement(
   const digits = normalizeCnpj(cnpj);
   const now = new Date().toISOString();
 
-  const { data: notes } = await supabase
-    .from("hb_credit_fiscal_notes")
-    .select("transaction_id, status")
-    .eq("cooperative_cnpj", digits)
-    .in("transaction_id", paymentTxIds)
-    .neq("status", "CANCELLED");
-
   const nfApproved = new Set<string>();
-  for (const row of notes ?? []) {
-    if (String(row.status) === "APPROVED") nfApproved.add(String(row.transaction_id));
+  if (isHbCreditMercadoNfDispensada()) {
+    for (const txId of paymentTxIds) nfApproved.add(txId);
+  } else {
+    const { data: notes } = await supabase
+      .from("hb_credit_fiscal_notes")
+      .select("transaction_id, status")
+      .eq("cooperative_cnpj", digits)
+      .in("transaction_id", paymentTxIds)
+      .neq("status", "CANCELLED");
+    for (const row of notes ?? []) {
+      if (String(row.status) === "APPROVED") nfApproved.add(String(row.transaction_id));
+    }
   }
   if (!nfApproved.size) return;
 
@@ -4479,16 +4490,19 @@ async function resolveLiquidatableSettlementPayments(
     });
   }
 
-  const { data: notes } = await supabase
-    .from("hb_credit_fiscal_notes")
-    .select("transaction_id, status")
-    .eq("cooperative_cnpj", digits)
-    .in("transaction_id", txIds)
-    .neq("status", "CANCELLED");
-
   const nfApproved = new Set<string>();
-  for (const row of notes ?? []) {
-    if (String(row.status) === "APPROVED") nfApproved.add(String(row.transaction_id));
+  if (isHbCreditMercadoNfDispensada()) {
+    for (const id of txIds) nfApproved.add(id);
+  } else {
+    const { data: notes } = await supabase
+      .from("hb_credit_fiscal_notes")
+      .select("transaction_id, status")
+      .eq("cooperative_cnpj", digits)
+      .in("transaction_id", txIds)
+      .neq("status", "CANCELLED");
+    for (const row of notes ?? []) {
+      if (String(row.status) === "APPROVED") nfApproved.add(String(row.transaction_id));
+    }
   }
 
   const now = new Date().toISOString();
@@ -4624,38 +4638,49 @@ export async function previewPartnerSettlement(
   let fiscalResumo;
   let pagamentoAprovado = false;
   let bloqueioPagamento: string | null = null;
-  try {
-    const { summarizeFiscalNotesForSettlement, evaluatePartnerFiscalSettlementGate } = await import(
-      "@/lib/supabase/hbCreditFiscalNotesStorage"
-    );
-    fiscalResumo = await summarizeFiscalNotesForSettlement(
-      supabase,
-      digits,
-      partnerId,
-      mesNorm,
-      fiscalTxIds
-    );
-    const gate = evaluatePartnerFiscalSettlementGate(fiscalResumo, { minPayableCents: totalCents });
-    pagamentoAprovado = gate.ready && totalCents > 0;
-    bloqueioPagamento = gate.message;
-    if (!bloqueioPagamento && gate.ready && totalCents <= 0 && paymentTxIds.length > 0) {
-      const paymentRows = transacoes.filter((tx) => tx.tipo === "PAYMENT");
-      const allSettled = paymentRows.every((tx) => tx.recebivelStatus === "SETTLED");
-      const anyProcessing = paymentRows.some((tx) => tx.recebivelStatus === "PROCESSING");
-      if (allSettled) {
-        bloqueioPagamento = "Este mês já foi liquidado para o mercado.";
-      } else if (anyProcessing) {
-        bloqueioPagamento =
-          "Liquidação em andamento nos recebíveis — toque em Atualizar resumo. Se travou, confira comprovante na aba Liquidar.";
-      } else {
-        bloqueioPagamento =
-          "NFs conferidas, mas o recebível não está elegível — toque em Atualizar resumo (repara vínculo NF → recebível).";
-      }
-    } else if (!bloqueioPagamento && gate.ready && totalCents <= 0) {
+  const mensagemRecebivelNaoElegivel = () => {
+    const paymentRows = transacoes.filter((tx) => tx.tipo === "PAYMENT");
+    const allSettled = paymentRows.every((tx) => tx.recebivelStatus === "SETTLED");
+    const anyProcessing = paymentRows.some((tx) => tx.recebivelStatus === "PROCESSING");
+    if (allSettled) return "Este mês já foi liquidado para o mercado.";
+    if (anyProcessing) {
+      return "Liquidação em andamento nos recebíveis — toque em Atualizar resumo. Se travou, confira comprovante na aba Liquidar.";
+    }
+    return isHbCreditMercadoNfDispensada()
+      ? "O recebível ainda não está elegível — toque em Atualizar resumo."
+      : "NFs conferidas, mas o recebível não está elegível — toque em Atualizar resumo (repara vínculo NF → recebível).";
+  };
+
+  if (isHbCreditMercadoNfDispensada()) {
+    pagamentoAprovado = totalCents > 0;
+    if (totalCents <= 0 && paymentTxIds.length > 0) {
+      bloqueioPagamento = mensagemRecebivelNaoElegivel();
+    } else if (totalCents <= 0) {
       bloqueioPagamento = "Nenhuma venda HB Créditos neste mês para este mercado.";
     }
-  } catch {
-    bloqueioPagamento = "Módulo fiscal indisponível — aplique a migration de NFs HB Créditos.";
+  } else {
+    try {
+      const { summarizeFiscalNotesForSettlement, evaluatePartnerFiscalSettlementGate } = await import(
+        "@/lib/supabase/hbCreditFiscalNotesStorage"
+      );
+      fiscalResumo = await summarizeFiscalNotesForSettlement(
+        supabase,
+        digits,
+        partnerId,
+        mesNorm,
+        fiscalTxIds
+      );
+      const gate = evaluatePartnerFiscalSettlementGate(fiscalResumo, { minPayableCents: totalCents });
+      pagamentoAprovado = gate.ready && totalCents > 0;
+      bloqueioPagamento = gate.message;
+      if (!bloqueioPagamento && gate.ready && totalCents <= 0 && paymentTxIds.length > 0) {
+        bloqueioPagamento = mensagemRecebivelNaoElegivel();
+      } else if (!bloqueioPagamento && gate.ready && totalCents <= 0) {
+        bloqueioPagamento = "Nenhuma venda HB Créditos neste mês para este mercado.";
+      }
+    } catch {
+      bloqueioPagamento = "Módulo fiscal indisponível — aplique a migration de NFs HB Créditos.";
+    }
   }
 
   let totalExibirCents = totalCents;
@@ -4671,8 +4696,9 @@ export async function previewPartnerSettlement(
   }
 
   if (!pendingSettlement && totalCents <= 0 && paymentTxIds.length > 0 && !bloqueioPagamento) {
-    bloqueioPagamento =
-      "Não há recebíveis elegíveis neste mês — confira NFs na aba Conferir NFs e toque em Atualizar resumo.";
+    bloqueioPagamento = isHbCreditMercadoNfDispensada()
+      ? "Não há recebíveis elegíveis neste mês — toque em Atualizar resumo."
+      : "Não há recebíveis elegíveis neste mês — confira NFs na aba Conferir NFs e toque em Atualizar resumo.";
   }
 
   return {
@@ -4715,7 +4741,11 @@ export async function registerPartnerSettlementPayment(
   if (!preview.pagamentoAprovado) {
     return {
       ok: false,
-      error: preview.bloqueioPagamento ?? "Conferência fiscal incompleta — finalize as NFs antes do pagamento.",
+      error:
+        preview.bloqueioPagamento ??
+        (isHbCreditMercadoNfDispensada()
+          ? "Não foi possível liberar o pagamento deste mês."
+          : "Conferência fiscal incompleta — finalize as NFs antes do pagamento."),
     };
   }
   if (!preview.pixKey?.trim()) return { ok: false, error: "Mercado ainda não cadastrou chave PIX." };

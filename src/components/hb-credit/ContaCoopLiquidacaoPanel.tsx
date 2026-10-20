@@ -13,6 +13,7 @@ import type { ContaCoopLiquidacaoPreview, ContaCoopParceiro } from "@/modules/hb
 import { fetchLiquidacaoPreview, registrarPagamentoMercado } from "@/services/creditApiService";
 import { gerarPixCopiaCola } from "@/utils/pix";
 import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+import { isHbCreditMercadoNfDispensada } from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
 import Link from "next/link";
 import { Copy, Paperclip, QrCode, Smartphone } from "lucide-react";
 
@@ -95,7 +96,7 @@ export function ContaCoopLiquidacaoPanel({
       return "O mercado ainda não cadastrou a chave PIX (aba Mais no app do mercado).";
     }
     if (!preview.pagamentoAprovado) {
-      return preview.bloqueioPagamento ?? "Finalize a conferência fiscal na aba Conferir NFs.";
+      return preview.bloqueioPagamento ?? "O pagamento deste mercado ainda não está liberado.";
     }
     return null;
   }, [preview]);
@@ -267,14 +268,21 @@ export function ContaCoopLiquidacaoPanel({
 
               {preview.pagamentoAprovado ? (
                 <AlertBanner variant="info" title="Pagamento aprovado">
-                  Todas as NFs conferidas. Use o QR Code PIX abaixo, anexe o comprovante e registre o pagamento.
+                  {isHbCreditMercadoNfDispensada()
+                    ? "Compras HB Créditos liberadas para recebimento. Use o QR Code PIX abaixo, anexe o comprovante e registre o pagamento."
+                    : "Todas as NFs conferidas. Use o QR Code PIX abaixo, anexe o comprovante e registre o pagamento."}
                 </AlertBanner>
               ) : (
                 <AlertBanner variant="warning" title="Pagamento bloqueado">
-                  {preview.bloqueioPagamento ?? "Finalize a conferência fiscal antes de pagar."}{" "}
-                  <Link href="/conta-coop?tab=conferir_nf" className="font-semibold underline">
-                    Ir para Conferir NFs
-                  </Link>
+                  {preview.bloqueioPagamento ??
+                    (isHbCreditMercadoNfDispensada()
+                      ? "O pagamento deste mercado ainda não está liberado."
+                      : "Finalize a conferência fiscal antes de pagar.")}{" "}
+                  {!isHbCreditMercadoNfDispensada() && (
+                    <Link href="/conta-coop?tab=conferir_nf" className="font-semibold underline">
+                      Ir para Conferir NFs
+                    </Link>
+                  )}
                 </AlertBanner>
               )}
             </Card>

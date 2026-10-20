@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v518
+
+- **Mercado HB:** compras com crédito não pedem mais nota fiscal do cooperado; o valor já fica liberado para receber.
+- **Mercado:** aviso da Direção no painel (20/10/2026). Início, Financeiro e Entregas do cooperado iguais ao v517.
+- **Cooperado:** Início, Financeiro e Entregas iguais ao v517.
+
 ## v517
 
 - **Responsável:** Em aberto e Pagar voltam a mostrar cooperados e valores da ficha ainda sem PIX.

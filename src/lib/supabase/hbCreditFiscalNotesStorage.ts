@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isHbCreditMercadoNfDispensada } from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { mesReferenciaFromIso, mesReferenciaUtcRange } from "@/utils/format";
 import type { ContaCoopFiscalNote, ContaCoopFiscalNotesResumo, FiscalNoteStatus } from "@/modules/hb-credit/types";
@@ -786,7 +787,7 @@ export async function getFiscalNoteByTransaction(
   return enriched[0] ?? null;
 }
 
-/** Trava de liquidação — só libera PIX quando todas as NFs do lote elegível estiverem conferidas. */
+/** Trava de liquidação — NF dispensada a partir de 20/10/2026. */
 export function evaluatePartnerFiscalSettlementGate(
   resumo: ContaCoopFiscalNotesResumo,
   options?: { minPayableCents?: number }
@@ -794,6 +795,13 @@ export function evaluatePartnerFiscalSettlementGate(
   ready: boolean;
   message: string | null;
 } {
+  if (isHbCreditMercadoNfDispensada()) {
+    if (resumo.totalVendas === 0) {
+      return { ready: false, message: "Nenhuma venda HB Créditos neste mês para liquidar." };
+    }
+    return { ready: true, message: null };
+  }
+
   const minPayableCents = Math.max(0, options?.minPayableCents ?? 0);
 
   if (resumo.totalVendas === 0) {
@@ -843,6 +851,7 @@ export async function countPartnerFiscalPending(
   partnerId: string,
   mesReferencia: string
 ): Promise<number> {
+  if (isHbCreditMercadoNfDispensada()) return 0;
   await syncPartnerFiscalNotesForMonth(supabase, partnerId, mesReferencia);
   const { data: rows } = await supabase
     .from("hb_credit_fiscal_notes")
