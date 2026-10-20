@@ -12,6 +12,7 @@
     "test:perf-fluxos": "npx tsx scripts/run-suite-perf-fluxos.ts",
     "baseline:melhor-performance": "npx tsx scripts/capture-melhor-performance-baseline.ts",
     "gate:melhor-performance": "npm run baseline:melhor-performance",
+    "gate:preservar-app": "npx tsx scripts/test-preservar-app-gate.ts",
     "test:image-pipeline": "npx tsx scripts/test-image-pipeline.ts",
     "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs",
     "probe:pwa-crash": "npx tsx scripts/pwa-crash-forensics-probe-once.ts",

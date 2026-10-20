@@ -1,0 +1,50 @@
+# Trava anti-retrocesso: contratos do campo + isolamento staff por CNPJ.
+# Não altera runtime. Falhou = freeze (docs/OPERACAO-HB-PLATAFORMA.md).
+name: Preservar app gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "scripts/test-preservar-app-gate.ts"
+      - "scripts/test-*-contrato.ts"
+      - "scripts/test-staff-gestao-lkg-por-cnpj.ts"
+      - "scripts/test-staff-gestao-persist-por-cnpj.ts"
+      - "scripts/test-staff-gestao-tenant-switch.ts"
+      - "scripts/test-cooperado-abertura-instantanea.ts"
+      - "scripts/test-cooperado-troca-abas-rapida.ts"
+      - "scripts/test-cooperado-fotos-ficha-contrato.ts"
+      - "src/lib/plataforma/**"
+      - "package.json"
+      - ".github/workflows/preservar-app-gate.yml"
+      - "docs/OPERACAO-HB-PLATAFORMA.md"
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "scripts/test-preservar-app-gate.ts"
+      - "scripts/test-*-contrato.ts"
+      - "scripts/test-staff-gestao-lkg-por-cnpj.ts"
+      - "scripts/test-staff-gestao-persist-por-cnpj.ts"
+      - "scripts/test-staff-gestao-tenant-switch.ts"
+      - "scripts/test-cooperado-abertura-instantanea.ts"
+      - "scripts/test-cooperado-troca-abas-rapida.ts"
+      - "scripts/test-cooperado-fotos-ficha-contrato.ts"
+      - "src/lib/plataforma/**"
+      - "package.json"
+      - ".github/workflows/preservar-app-gate.yml"
+      - "docs/OPERACAO-HB-PLATAFORMA.md"
+
+jobs:
+  preservar-app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npm run gate:preservar-app

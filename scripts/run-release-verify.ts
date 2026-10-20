@@ -44,6 +44,15 @@ type Step = {
   env?: Record<string, string>;
 };
 
+const PHASE_PRESERVAR: Step[] = [
+  {
+    phase: "P",
+    title: "Preservar app (contratos cooperado + responsável + lastro por CNPJ)",
+    cmd: "npm",
+    stepArgs: ["run", "gate:preservar-app"],
+  },
+];
+
 const PHASE_ENV: Step[] = [
   {
     phase: "0",
@@ -162,7 +171,7 @@ function runStep(step: Step): boolean {
   return false;
 }
 
-const steps = [...PHASE_ENV, ...PHASE_BIC, ...PHASE_HB, ...(fast ? [] : PHASE_PERF)];
+const steps = [...PHASE_PRESERVAR, ...PHASE_ENV, ...PHASE_BIC, ...PHASE_HB, ...(fast ? [] : PHASE_PERF)];
 
 console.log("HB Cooperativas — RELEASE VERIFY (marco zero)");
 console.log(`Modo: ${fast ? "rápido (sem perf/build)" : skipBuild ? "perf sem build" : "completo"}`);

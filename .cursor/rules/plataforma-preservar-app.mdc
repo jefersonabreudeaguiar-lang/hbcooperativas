@@ -1,0 +1,24 @@
+---
+description: Trava anti-retrocesso — não quebrar cooperado nem responsável; escala só com isolamento e sim novo
+alwaysApply: true
+---
+
+# Plataforma — preservar o app
+
+Lei: `docs/OPERACAO-HB-PLATAFORMA.md`. Gate: `npm run gate:preservar-app`. Catálogo: `src/lib/plataforma/preservarAppCatalogo.ts`.
+
+## Neste trabalho e em todo passo de escala
+
+1. **Não** editar Início, Financeiro, Entregas, HB, A receber do cooperado para “ficar pronto para N cooperativas”.
+2. **Não** reescrever Conferir, Em aberto, Pagar, Correções ou Ficha do responsável pelo mesmo motivo.
+3. Um commit = um raio de produto (`tenant-gestao` / `responsavel` / `cooperado-GA`). `docs` pode acompanhar. Misturar dois raios de produto é proibido.
+4. Se o gate vermelho: freeze. Nenhuma outra correção entra no ar.
+5. O gate se adapta ao app. Se um `.tsx` de tela precisar mudar para o teste passar: **parar** e reportar.
+
+## Antes de resumir commit que toque `src/`
+
+Rodar `npm run gate:preservar-app`. Sem isso, não pedir commit.
+
+## Passos 1–3
+
+Isolar blob global, saúde por CNPJ e primeiro dia **só** com sim novo do humano. Cooperado GA só com pedido explícito e `npm run gate:melhor-performance`.

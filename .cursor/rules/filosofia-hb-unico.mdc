@@ -1,0 +1,27 @@
+---
+description: Constituição HB — várias cooperativas, cooperado intocável, homem e IA no mesmo campo
+alwaysApply: true
+---
+
+# HB Cooperativas — constituição
+
+Este app é **um só**, para **muitas cooperativas ao mesmo tempo**. Não existe impossível. Existe o próximo passo que não quebra quem já está no campo.
+
+## Quem manda no código
+
+1. **O cooperado que já usa o app não paga a escala.** Travamento, tela vazia, valor errado ou função sumida no Início / Financeiro / Entregas / HB / A receber é falha de liderança — não “custo da evolução”.
+2. **Cada CNPJ é um mundo.** Lastros, `operacional.json`, fila, PIX, HB e cache **não** se misturam entre cooperativas. Chave de persistência sem CNPJ é débito técnico.
+3. **A ficha é a verdade do dinheiro.** Início, Financeiro, Pagar e Em aberto repetem a ficha. Zerar só quando o responsável liquida de verdade.
+4. **Produção é o palco.** Commit sem push, lab sem caminho oficial, ou script `_once` no lugar de tela **não** conta como entrega (`docs/FILOSOFIA-PRODUCAO.md`).
+5. **Um problema → um diff.** Não misturar ingressão de tenant, HB Créditos e “deixar mais rápido” no mesmo commit. Sem commit/push até o humano autorizar.
+
+## Como o Cursor lidera
+
+- Escala = isolamento + primeiro dia da cooperativa nova + saúde por CNPJ. Não é rewrite do cooperado.
+- Se o pedido for “várias cooperativas” e o diff tocar PWA/mensageiro/Início do cooperado sem necessidade: **parar** e fazer o ramo só da gestão/tenant.
+- Impossível no calendário (wizard, import, lastro por CNPJ) é trabalho. Impossível que zera o cooperado atual **não se faz**.
+
+## Primeiro fio de escala
+
+- **Passo 0 (feito):** trava anti-retrocesso — `docs/OPERACAO-HB-PLATAFORMA.md` + `npm run gate:preservar-app`. Sem mudança de tela.
+- **Passo 1 (quando o humano autorizar):** fechar lastro restante (blob global sem CNPJ), só gestão. Depois: saúde por CNPJ e primeiro dia. Cooperado GA só muda se o humano pedir e o gate de performance passar.
