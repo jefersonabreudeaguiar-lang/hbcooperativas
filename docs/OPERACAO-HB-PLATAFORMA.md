@@ -37,8 +37,8 @@ Se `npm run gate:preservar-app` ficar vermelho:
 
 | Passo | O que é | Estado | Precisa de sim novo? |
 |-------|---------|--------|----------------------|
-| **0** | Esta trava (lei + catálogo + gate + CI) | Este trabalho | Não — já autorizado neste plano |
-| **1** | Staff sem blob global (`coopeagriplla_data` sem CNPJ). Só gestão. Cooperado GA fora. | Débito listado | **Sim** |
+| **0** | Esta trava (lei + catálogo + gate + CI) | Feito | — |
+| **1** | Staff sem blob global (`coopeagriplla_data` sem CNPJ). Só gestão. Cooperado GA fora. | Feito | — |
 | **2** | Saúde só-leitura por CNPJ (contrato no ar, cooperado com login, ficha = A receber) | Não iniciado | **Sim** |
 | **3** | Completar primeiro dia no app (`staffPrimeiroDiaContratos`) | Esboço existe | **Sim** |
 
@@ -59,11 +59,11 @@ Versões em `PRESERVAR_APP_CONTRATOS_TRAVADOS`. Subir a versão do contrato exig
 
 ## Débitos conscientes (não corrigir agora)
 
-- Blob global `coopeagriplla_data` (cooperado e staff sem CNPJ na sessão).
+- Blob global `coopeagriplla_data` do **cooperado** (um aparelho, um cooperado) — intocado de propósito.
 - Chaves `hb-coop-*` de release/PWA sem tenant (não são lastro financeiro).
-- Legacy `hb-staff-gestao-lkg-v1` sem sufixo (só migração).
+- `coopeagriplla_pending_nota_deletes` ainda sem CNPJ (fila de apagar nota).
 
-Isso é o passo 1. Mexer agora misturaria raio e arriscaria o aparelho do cooperado.
+Passo 1 fechou: gestão não lê nem grava o blob global. Sem CNPJ na sessão, o responsável não toca o arquivo do cooperado.
 
 ## O que o passo 0 nunca faz
 

@@ -13,6 +13,7 @@ import {
   PRESERVAR_APP_GATE_VERSION,
   PRESERVAR_APP_STAFF_LKG_POR_CNPJ,
   PRESERVAR_APP_STAFF_LKG_PREFIX,
+  PRESERVAR_APP_STAFF_NUNCA_GRAVA_BLOB_GLOBAL,
   PRESERVAR_APP_TESTES_CONTRATO,
   listarDriftContratosTravados,
   misturaRaiosDeProduto,
@@ -24,6 +25,7 @@ const root = resolve(import.meta.dirname ?? __dirname, "..");
 assert.equal(PRESERVAR_APP_GATE_VERSION, 1);
 assert.equal(PRESERVAR_APP_STAFF_LKG_POR_CNPJ, true);
 assert.equal(PRESERVAR_APP_STAFF_LKG_PREFIX, "hb-staff-gestao-lkg-v1");
+assert.equal(PRESERVAR_APP_STAFF_NUNCA_GRAVA_BLOB_GLOBAL, true);
 assert.equal(PRESERVAR_APP_DEBITO_BLOB_GLOBAL, "coopeagriplla_data");
 
 const drifts = listarDriftContratosTravados();
@@ -55,6 +57,8 @@ assert.match(lkg, /\$\{STAFF_GESTAO_LKG_SESSION_KEY\}:\$\{cnpj\}/);
 
 const persist = readFileSync(join(root, "src/lib/staff/staffGestaoPersistKey.ts"), "utf8");
 assert.match(persist, /\$\{APP_DATA_STORAGE_KEY\}:\$\{normalizeCnpj\(cnpj\)\}/);
+assert.match(persist, /staffGestaoNuncaGravaBlobGlobal/);
+assert.match(persist, /staffGestaoSemCnpj/);
 
 const lei = readFileSync(join(root, "docs/OPERACAO-HB-PLATAFORMA.md"), "utf8");
 assert.match(lei, /gate:preservar-app/);

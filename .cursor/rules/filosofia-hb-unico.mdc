@@ -24,4 +24,5 @@ Este app é **um só**, para **muitas cooperativas ao mesmo tempo**. Não existe
 ## Primeiro fio de escala
 
 - **Passo 0 (feito):** trava anti-retrocesso — `docs/OPERACAO-HB-PLATAFORMA.md` + `npm run gate:preservar-app`. Sem mudança de tela.
-- **Passo 1 (quando o humano autorizar):** fechar lastro restante (blob global sem CNPJ), só gestão. Depois: saúde por CNPJ e primeiro dia. Cooperado GA só muda se o humano pedir e o gate de performance passar.
+- **Passo 1 (feito):** gestão não lê nem grava o blob global do cooperado. Sem CNPJ, o responsável não toca `coopeagriplla_data`.
+- **Passo 2 (quando o humano autorizar):** saúde só-leitura por CNPJ. Depois, primeiro dia. Cooperado GA só muda se o humano pedir e o gate de performance passar.

@@ -61,9 +61,10 @@ Sabedoria é a IA não fingir que o rewrite é coragem, e o homem não fingir qu
 ## Estado honesto (outubro 2026)
 
 - **Cooperado em produção (v505):** Início, ficha, A receber, foto e disparo após conferência — preservar.
-- **Várias cooperativas na mesma URL:** o cadastro de CNPJ existe; o convite ao campo ainda não. Três débitos: lastro sem CNPJ, primeiro dia sem caminho, cadastro que pode “dar certo” sem login na nuvem.
-- **Passo 0 (trava, no ar como lei):** `docs/OPERACAO-HB-PLATAFORMA.md` + `npm run gate:preservar-app`. Não muda tela. Impede retrocesso nos contratos do cooperado e do responsável.
-- **Próximo fio de engenharia (quando o humano autorizar o passo 1):** fechar lastro restante (blob global `coopeagriplla_data`). Depois, só gestão: saúde por CNPJ e primeiro dia. Cooperado GA só com pedido explícito e gate de performance.
+- **Várias cooperativas na mesma URL:** o cadastro de CNPJ existe; o convite ao campo ainda não. Débitos restantes: primeiro dia sem caminho fechado, cadastro que pode “dar certo” sem login na nuvem, saúde por CNPJ.
+- **Passo 0 (trava):** `docs/OPERACAO-HB-PLATAFORMA.md` + `npm run gate:preservar-app`.
+- **Passo 1 (feito):** gestão não lê nem grava o blob global `coopeagriplla_data`. Cooperado continua no arquivo de sempre.
+- **Próximo fio (quando o humano autorizar o passo 2):** saúde só-leitura por CNPJ. Depois, primeiro dia no app. Cooperado GA só com pedido explícito e gate de performance.
 
 ## Frase que fecha cada decisão
 

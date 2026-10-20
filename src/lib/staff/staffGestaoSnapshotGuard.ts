@@ -157,10 +157,9 @@ function readLastGoodFromSession(cnpj: string): AppData | null {
 }
 
 /** Lastro antigo (sem CNPJ) só vale se for da cooperativa da sessão. */
-function migrateLegacyLastGoodIfMatches(cnpj: string): AppData | null {
-  if (typeof window === "undefined" || cnpj.length !== 14) return null;
+function adoptLegacyLastGoodFromStore(store: Storage, cnpj: string): AppData | null {
   try {
-    const raw = sessionStorage.getItem(STAFF_GESTAO_LKG_SESSION_KEY);
+    const raw = store.getItem(STAFF_GESTAO_LKG_SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as AppData;
     if (!parsed || typeof parsed !== "object") return null;
@@ -172,8 +171,19 @@ function migrateLegacyLastGoodIfMatches(cnpj: string): AppData | null {
     }
     if (staffGestaoRiquezaTotal(medirRiquezaStaffGestao(parsed)) <= 0) return null;
     persistLastGoodToSessionNow(cnpj, parsed);
-    sessionStorage.removeItem(STAFF_GESTAO_LKG_SESSION_KEY);
+    store.removeItem(STAFF_GESTAO_LKG_SESSION_KEY);
     return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function migrateLegacyLastGoodIfMatches(cnpj: string): AppData | null {
+  if (typeof window === "undefined" || cnpj.length !== 14) return null;
+  const fromSession = adoptLegacyLastGoodFromStore(sessionStorage, cnpj);
+  if (fromSession) return fromSession;
+  try {
+    return adoptLegacyLastGoodFromStore(localStorage, cnpj);
   } catch {
     return null;
   }

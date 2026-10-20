@@ -28,8 +28,9 @@ export const PRESERVAR_APP_CONTRATOS_TRAVADOS = {
 
 export const PRESERVAR_APP_STAFF_LKG_PREFIX = "hb-staff-gestao-lkg-v1";
 export const PRESERVAR_APP_STAFF_LKG_POR_CNPJ = true;
+export const PRESERVAR_APP_STAFF_NUNCA_GRAVA_BLOB_GLOBAL = true;
 
-/** Blob global — débito do passo 1. Não corrigir no passo 0. */
+/** Cooperado continua neste arquivo. Gestão não grava nele (passo 1). */
 export const PRESERVAR_APP_DEBITO_BLOB_GLOBAL = "coopeagriplla_data";
 
 export const PRESERVAR_APP_TESTES_CONTRATO = [

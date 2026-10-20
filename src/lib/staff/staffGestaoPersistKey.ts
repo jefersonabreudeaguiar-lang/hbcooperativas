@@ -69,7 +69,16 @@ export function isAppDataPersistStorageKey(key: string | null | undefined): bool
   return key === APP_DATA_STORAGE_KEY || key.startsWith(`${APP_DATA_STORAGE_KEY}:`);
 }
 
-/** Cooperado e sessão sem CNPJ ficam no arquivo legado. Responsável com CNPJ usa chave isolada. */
+/** Passo 1: gestão nunca usa o blob global do cooperado. */
+export function staffGestaoNuncaGravaBlobGlobal(): true {
+  return true;
+}
+
+function staffGestaoSemCnpj(hint: { role?: string; cnpj: string }): boolean {
+  return sessionLooksStaffGestao(hint.role) && hint.cnpj.length !== 14;
+}
+
+/** Cooperado fica no arquivo legado. Responsável só grava com CNPJ isolado. */
 export function resolveAppDataStorageKey(opts?: AppDataPersistHint): string {
   const hint = resolveHint(opts);
   if (sessionLooksStaffGestao(hint.role) && hint.cnpj.length === 14) {
@@ -104,6 +113,7 @@ export function migrateLegacyAppDataIfMatches(
 export function readAppDataPersistRaw(opts?: AppDataPersistHint): string | null {
   const hint = resolveHint(opts);
   if (!hint.storage) return null;
+  if (staffGestaoSemCnpj(hint)) return null;
   const key = resolveAppDataStorageKey({ role: hint.role, cnpj: hint.cnpj, storage: hint.storage });
   if (key === APP_DATA_STORAGE_KEY) {
     return hint.storage.getItem(APP_DATA_STORAGE_KEY);
@@ -116,7 +126,9 @@ export function readAppDataPersistRaw(opts?: AppDataPersistHint): string | null 
 export function writeAppDataPersistRaw(serialized: string, opts?: AppDataPersistHint): boolean {
   const hint = resolveHint(opts);
   if (!hint.storage) return false;
+  if (staffGestaoSemCnpj(hint)) return false;
   const key = resolveAppDataStorageKey({ role: hint.role, cnpj: hint.cnpj, storage: hint.storage });
+  if (sessionLooksStaffGestao(hint.role) && key === APP_DATA_STORAGE_KEY) return false;
   try {
     hint.storage.setItem(key, serialized);
     return true;
@@ -128,7 +140,9 @@ export function writeAppDataPersistRaw(serialized: string, opts?: AppDataPersist
 export function removeAppDataPersistRaw(opts?: AppDataPersistHint): void {
   const hint = resolveHint(opts);
   if (!hint.storage) return;
+  if (staffGestaoSemCnpj(hint)) return;
   const key = resolveAppDataStorageKey({ role: hint.role, cnpj: hint.cnpj, storage: hint.storage });
+  if (sessionLooksStaffGestao(hint.role) && key === APP_DATA_STORAGE_KEY) return;
   try {
     hint.storage.removeItem(key);
   } catch {
