@@ -8,13 +8,13 @@ import {
   PWA_REPAIR_SESSION_VERSION,
 } from "@/lib/pwa/clientRelease";
 import { cooperadoMobilePilotInlineSessionHelperJs } from "@/lib/cooperado/cooperadoMobilePilotInlineSession";
-import { INICIO_CARD_STORAGE_VERSION } from "@/lib/cooperadoInicioCardPersistencia";
+import { COOPERADO_INICIO_CARD_STORAGE_VERSION } from "@/lib/cooperado/cooperadoAberturaInstantanea";
 
 const SESSION_KEY = "coopeagriplla_session";
 
 export function buildInlineCooperadoBootShellScript(): string {
   const directKey = PWA_DIRECT_ENTRY_SESSION_KEY;
-  const cardPrefix = `hb.coop.inicioCard.v${INICIO_CARD_STORAGE_VERSION}:`;
+  const cardPrefix = `hb.coop.inicioCard.v${COOPERADO_INICIO_CARD_STORAGE_VERSION}:`;
   const pilotFn = cooperadoMobilePilotInlineSessionHelperJs();
   return `(function(){try{${pilotFn}
 if(typeof document==="undefined")return;

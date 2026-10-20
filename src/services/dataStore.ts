@@ -54,7 +54,10 @@ import {
 import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
 import { ajustesFichaMesId } from "@/services/notaPedidoService";
 import { forceNextFullNotasSync, clearNotasSyncMeta } from "@/services/syncMetaService";
+import { requestAppSync } from "@/services/syncRequest";
 import { inferAppDataDomainsTouched, touchAppDataDomains } from "@/lib/performance/appDataDomainNotify";
+
+void requestAppSync;
 import { normalizarPrestacaoContas, aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
