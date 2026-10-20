@@ -13,7 +13,10 @@ import { getDataOperationalTruth, getDataRevision } from "@/services/dataStore";
 import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { listarMesesFichaEmAbertoCooperado } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
-import { alinharFichaComPagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
+import {
+  alinharFichaComPagamentosCooperativa,
+  repararIntegridadePagamentosCooperativa,
+} from "@/services/pagamentoIntegridadeService";
 import {
   idsNotasPedidoExcluidas,
   listarFichasEmAbertoPagamento,
@@ -157,6 +160,19 @@ function listarNotasConferidasSemPixCooperado(
 }
 
 /**
+ * Leitura da ficha ainda sem PIX — Conferir pode marcar nota/ficha como paga e esvaziar Pagar/Em aberto.
+ * Só leitura; não persiste.
+ */
+function appDataParaLeituraFichaEmAbertoResponsavel(data: AppData, coopId?: string): AppData {
+  const leituraConferir = appDataParaConferirLeitura(data, coopId);
+  return completarFichaProjetadaComNota(
+    alinharFichaComPagamentosCooperativa(
+      repararIntegridadePagamentosCooperativa(leituraConferir, { forcar: true })
+    )
+  );
+}
+
+/**
  * Foto da aba Pagar: lastro do Conferir + ficha reconstruída das notas conferidas.
  * Só leitura — não persiste.
  */
@@ -167,7 +183,7 @@ export function appDataParaPagarCooperadosResponsavel(data: AppData, coopId?: st
   if (pagarProjCache && pagarProjCache.revision === revision && pagarProjCache.coopId === key) {
     return pagarProjCache.data;
   }
-  const leitura = appDataParaConferirLeitura(data, coopId);
+  const leitura = appDataParaLeituraFichaEmAbertoResponsavel(data, coopId);
   const next = completarFichaProjetadaComNota(
     alinharFichaComPagamentosCooperativa(reconciliarFichaFromNotasConferidas(leitura))
   );
@@ -551,7 +567,7 @@ function buildPainelCache(data: AppData, live: AppData, coopId: string): PainelC
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
-  const dataPagar = appDataParaPagarCooperadosResponsavel(data, coopId);
+  const dataPagar = appDataParaLeituraFichaEmAbertoResponsavel(live, coopId);
   const candidatos = candidatosCooperadoPagamento(dataPagar, coopId);
   const cooperadosPagar: Cooperado[] = [];
   if (candidatos.size > 0) {
@@ -597,12 +613,32 @@ export function countNotasFilaConferenciaResponsavel(data: AppData, coopId: stri
 
 export function listCooperadosPagamentoPendenteResponsavel(data: AppData, coopId: string): Cooperado[] {
   if (!coopId) return [];
+  const linhas = getRelatorioLancamentosEmAbertoResponsavel(data, coopId);
+  const byId = new Map(listCooperadosDaCooperativa(data, coopId).map((c) => [c.id, c]));
+  const out: Cooperado[] = [];
+  const seen = new Set<string>();
+  for (const l of linhas) {
+    if (seen.has(l.cooperadoId)) continue;
+    seen.add(l.cooperadoId);
+    const c = byId.get(l.cooperadoId);
+    if (c) {
+      out.push(c);
+      continue;
+    }
+    out.push({
+      id: l.cooperadoId,
+      nomeCompleto: l.cooperado,
+      cooperativaId: coopId,
+      status: "ativo",
+    } as Cooperado);
+  }
+  if (out.length > 0) return out;
   return getPainelCache(data, coopId).cooperadosPagar;
 }
 
 export function countCooperadosPagamentoPendenteResponsavel(data: AppData, coopId: string): number {
   if (!coopId) return 0;
-  return getPainelCache(data, coopId).cooperadosPagarCount;
+  return listCooperadosPagamentoPendenteResponsavel(data, coopId).length;
 }
 
 function linhaEmAbertoDeNotasSemFicha(
@@ -674,7 +710,7 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
   cooperadoId?: string
 ): LinhaPagarCooperadoEmAberto[] {
   if (!coopId) return [];
-  const dataAberto = alinharFichaComPagamentosCooperativa(appDataParaConferirLeitura(data, coopId));
+  const dataAberto = appDataParaLeituraFichaEmAbertoResponsavel(data, coopId);
   if (cooperadoId) {
     return fundirLinhasEmAbertoEstavel(
       [],

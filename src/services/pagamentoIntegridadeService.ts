@@ -199,9 +199,13 @@ export function cooperadoMesComFichaPagaSemPagamentoCooperativa(
 
 /**
  * Ficha/nota marcada como paga sem registro em pagamentosCooperado (ex.: sync incompleto) volta a pendente/conferida.
+ * `forcar`: leitura (Em aberto) ignora a preservação do operacional — não persiste.
  */
-export function repararIntegridadePagamentosCooperativa(data: AppData): AppData {
-  if (staffPreservaFichaPagaOperacionalAutoritativo(data)) return data;
+export function repararIntegridadePagamentosCooperativa(
+  data: AppData,
+  opts?: { forcar?: boolean }
+): AppData {
+  if (!opts?.forcar && staffPreservaFichaPagaOperacionalAutoritativo(data)) return data;
 
   const now = new Date().toISOString();
   let changed = false;

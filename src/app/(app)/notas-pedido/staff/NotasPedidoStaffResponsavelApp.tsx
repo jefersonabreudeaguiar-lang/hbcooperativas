@@ -1752,7 +1752,7 @@ export default function NotasPedidoStaffMain() {
     iniciarModalAnexar(notaRejeitada, options);
   };
 
-  const cooperadosCoop =
+  const cooperadosCoopRaw =
     useAppDataSelectorForDomainsWhenActive(
       tabActive && !isCooperado,
       ["shell", "operacional"],
@@ -1762,6 +1762,18 @@ export default function NotasPedidoStaffMain() {
       },
       [coopId]
     ) ?? [];
+  const lastCooperadosCoopRef = useRef<{ coopId?: string; list: typeof cooperadosCoopRaw }>({
+    list: [],
+  });
+  if (coopId && cooperadosCoopRaw.length > 0) {
+    lastCooperadosCoopRef.current = { coopId, list: cooperadosCoopRaw };
+  }
+  const cooperadosCoop =
+    cooperadosCoopRaw.length > 0
+      ? cooperadosCoopRaw
+      : lastCooperadosCoopRef.current.coopId === coopId
+        ? lastCooperadosCoopRef.current.list
+        : [];
 
   useEffect(() => {
     if (!isCooperado && !filtroResponsavelIniciado.current) {
@@ -2034,6 +2046,7 @@ export default function NotasPedidoStaffMain() {
     startVistaTransition(() => {
       setVistaResponsavel("aberto");
       setAbaConferenciaKey("");
+      setFiltroCooperadoId("");
       setStatusFilter("");
     });
   };
@@ -2064,7 +2077,8 @@ export default function NotasPedidoStaffMain() {
 
   const relatorioEmAbertoConferir = useMemo(() => {
     if (!mostrarPainelLancamentosAberto || !coopId) return null;
-    const fonte = dataLeitura ?? (isAppDataWarm() ? getData() : peekStaffGestaoLastGood());
+    const fonte =
+      (isAppDataWarm() ? getData() : null) ?? dataLeitura ?? peekStaffGestaoLastGood();
     if (!fonte) return null;
     return montarRelatorioEmAbertoConferir(fonte, coopId, filtroCooperadoId || undefined);
   }, [mostrarPainelLancamentosAberto, coopId, dataLeitura, filtroCooperadoId]);

@@ -744,6 +744,7 @@ function FichaCorridaPageInner() {
 
   useEffect(() => {
     if (isCooperado || aba !== "pagar" || !cooperadoFilter || !data || !coopId) return;
+    if (cooperadosParaPagar.some((c) => c.id === cooperadoFilter)) return;
     const leitura = dataPagar ?? data;
     if (
       !cooperadoPendentePagamentoResponsavel(leitura, cooperadoFilter, undefined, coopId) &&
@@ -751,7 +752,7 @@ function FichaCorridaPageInner() {
     ) {
       setCooperadoFilter("");
     }
-  }, [isCooperado, aba, cooperadoFilter, data, dataPagar, coopId, mesAtivo]);
+  }, [isCooperado, aba, cooperadoFilter, data, dataPagar, coopId, mesAtivo, cooperadosParaPagar]);
 
   useEffect(() => {
     setAbaMesPagamentoResponsavel("pendente");

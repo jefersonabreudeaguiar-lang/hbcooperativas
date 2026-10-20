@@ -165,6 +165,18 @@ assert.equal(
 resetResponsavelPainelIndexCache();
 assert.equal(listCooperadosPagamentoPendenteResponsavel(restaurado, COOP).length, 1);
 
+const fotoConferirMarcouPago = {
+  ...comFila,
+  notasPedido: comFila.notasPedido.map((n) => ({ ...n, status: "pago" as const })),
+  fichaCorrida: comFila.fichaCorrida.map((f) => ({ ...f, status: "pago" as const })),
+};
+resetResponsavelPainelIndexCache();
+assert.equal(
+  listCooperadosPagamentoPendenteResponsavel(fotoConferirMarcouPago, COOP).length,
+  1,
+  "Pagar lista quem tem valor em aberto mesmo se o Conferir marcou a ficha como paga"
+);
+
 const pix: PagamentoCooperadoRegistro = {
   id: "pix-ok",
   cooperativaId: COOP,

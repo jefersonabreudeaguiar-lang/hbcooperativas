@@ -14,8 +14,14 @@ import {
   staffConferirFilaNaoSomeSemLancamento,
   staffConferirPintaLastroNaHora,
   staffEmAbertoNaoResetaCacheAoAbrir,
+  staffEmAbertoUsaFichaDoPagarNaoFotoConferir,
   staffGestaoLastroPersisteNoAparelho,
 } from "../src/lib/responsavel/responsavelConferirEntregasContrato.ts";
+import {
+  getRelatorioLancamentosEmAbertoResponsavel,
+  resetResponsavelPainelIndexCache,
+} from "../src/services/responsavelPainelIndex.ts";
+import type { FichaCorrida } from "../src/types/index.ts";
 import {
   buildPendentesEstaveisConferencia,
   fundirFilaConferirComLastro,
@@ -26,13 +32,14 @@ function read(rel: string): string {
   return readFileSync(join(ROOT, rel), "utf8");
 }
 
-assert.equal(RESPONSAVEL_CONFERIR_ENTREGAS_CONTRATO_VERSION, 1);
+assert.equal(RESPONSAVEL_CONFERIR_ENTREGAS_CONTRATO_VERSION, 2);
 assert.equal(RESPONSAVEL_CONFERIR_ENTREGAS_TITULO, "Conferir entregas");
 assert.equal(RESPONSAVEL_CONFERIR_EM_ABERTO_TITULO, "Em aberto");
 assert.equal(staffConferirPintaLastroNaHora(), true);
 assert.equal(staffConferirFilaNaoSomeSemLancamento(), true);
 assert.equal(staffEmAbertoNaoResetaCacheAoAbrir(), true);
 assert.equal(staffGestaoLastroPersisteNoAparelho(), true);
+assert.equal(staffEmAbertoUsaFichaDoPagarNaoFotoConferir(), true);
 
 const COOP = "coop-conferir-lock";
 const nota: NotaPedido = {
@@ -95,6 +102,12 @@ assert.doesNotMatch(
   /resetResponsavelPainelIndexCache/,
   "abrir Em aberto não zera o lastro"
 );
+assert.match(handler, /setFiltroCooperadoId\(""\)/, "Em aberto abre com todos os cooperados");
+assert.match(
+  staff,
+  /isAppDataWarm\(\) \? getData\(\)/,
+  "Em aberto lê o lastro real, não só a foto do Conferir"
+);
 assert.match(staff, /scheduleStaffConferirFilaPrimeiroPull/, "primeiro pull pinta e busca no primeiro frame");
 assert.match(staff, /LancamentosEmAbertoPainelView/, "Em aberto pinta a View do lastro na hora");
 assert.match(
@@ -115,5 +128,55 @@ assert.match(poll, /export function scheduleStaffConferirFilaPrimeiroPull/);
 
 const regra = read(".cursor/rules/responsavel-conferir-entregas.mdc");
 assert.match(regra, /RESPONSAVEL_CONFERIR_ENTREGAS_CONTRATO_VERSION/);
+assert.match(regra, /appDataParaConferirLeitura/, "contrato trava não usar só a foto do Conferir");
+
+const fichaAberta = {
+  id: "f-aberto",
+  cooperadoId: "c-1",
+  cooperativaId: COOP,
+  mesReferencia: "2026-10",
+  notaPedidoId: "n-pendente",
+  status: "pendente",
+  valorBruto: 110,
+  valorLiquido: 100,
+  descontos: 10,
+  descricao: "aberto",
+  dataLancamento: "2026-10-02T00:00:00.000Z",
+  createdAt: "2026-10-02T00:00:00.000Z",
+  updatedAt: "2026-10-02T00:00:00.000Z",
+} as FichaCorrida;
+const dataComFicha = {
+  ...dataCheia,
+  cooperados: [
+    {
+      id: "c-1",
+      nomeCompleto: "Maria Entrega",
+      cooperativaId: COOP,
+      status: "ativo",
+      chavePix: "maria@pix",
+    },
+  ],
+  notasPedido: [
+    {
+      ...nota,
+      cooperadoId: "c-1",
+      mesReferencia: "2026-10",
+      status: "conferida",
+      valorLiquido: 100,
+      valorBruto: 110,
+    } as NotaPedido,
+  ],
+  fichaCorrida: [fichaAberta],
+} as AppData;
+const fotoConferirMarcouPago = {
+  ...dataComFicha,
+  notasPedido: dataComFicha.notasPedido.map((n) => ({ ...n, status: "pago" as const })),
+  fichaCorrida: dataComFicha.fichaCorrida.map((f) => ({ ...f, status: "pago" as const })),
+} as AppData;
+resetResponsavelPainelIndexCache();
+const emAbertoAposFoto = getRelatorioLancamentosEmAbertoResponsavel(fotoConferirMarcouPago, COOP);
+assert.equal(emAbertoAposFoto.length, 1, "Em aberto lista o cooperado mesmo se o Conferir marcou pago");
+assert.equal(emAbertoAposFoto[0]?.cooperado, "Maria Entrega");
+assert.equal(emAbertoAposFoto[0]?.total, 100, "Em aberto mostra o valor da ficha sem PIX");
 
 console.log("ok: contrato Conferir entregas + Em aberto — lastro na hora, nota só sai no lançamento");

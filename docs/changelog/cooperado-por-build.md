@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v517
+
+- **Responsável:** Em aberto e Pagar voltam a mostrar cooperados e valores da ficha ainda sem PIX.
+- **Pagar:** deixa de aparecer «nenhum pagamento pendente» quando ainda há valor em aberto.
+- **Cooperado:** Início, Financeiro e Entregas iguais ao v516.
+
 ## v516
 
 - **Responsável:** depois que o admin confirma o pagamento da mensalidade do app, a cobrança some neste ciclo.

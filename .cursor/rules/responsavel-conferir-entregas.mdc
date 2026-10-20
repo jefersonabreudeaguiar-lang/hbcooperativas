@@ -13,6 +13,7 @@ Modelo travado em `src/lib/responsavel/responsavelConferirEntregasContrato.ts` (
 2. A nota **não some** só porque o sync veio vazio. Só sai da fila quando o responsável **lança na ficha**, rejeita, cancela ou apaga.
 3. **Em aberto** abre com o lastro já calculado. Abrir a aba **não** zera o cache.
 4. Lastro do painel fica no aparelho (sobrevive fechar o PWA). Novas notas entram em segundo plano.
+5. **Em aberto** mostra cooperados e valores da ficha ainda sem PIX — a mesma base do **Pagar**. Não some porque o Conferir marcou a nota como paga.
 
 ## Proibido sem bump da versão do contrato + ordem explícita
 
@@ -20,5 +21,6 @@ Modelo travado em `src/lib/responsavel/responsavelConferirEntregasContrato.ts` (
 - Chamar `resetResponsavelPainelIndexCache` ao abrir Em aberto.
 - Esperar tarefa pós-interativa longa para o primeiro pull da fila.
 - Guardar lastro só em sessionStorage (fecha o app e a tela zera).
+- Alimentar Em aberto só com `appDataParaConferirLeitura` (nota conferida vira `pago` e some valor/cooperado).
 
 Teste: `npx tsx scripts/test-responsavel-conferir-entregas-contrato.ts`
