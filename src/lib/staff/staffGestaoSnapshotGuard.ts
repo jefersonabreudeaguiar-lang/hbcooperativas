@@ -234,7 +234,7 @@ export function staffGestaoSnapshotPoorer(
   if (prev.notas > 0 && next.notas === 0) return true;
   if (prev.fichas > 0 && next.fichas === 0) return true;
   if (prev.pix > 0 && next.pix === 0) return true;
-  if (prev.livro > 0 && next.livro === 0 && next.pix <= prev.pix) return true;
+  if (prev.livro > 0 && next.livro < prev.livro) return true;
   if (prev.pixLivro > 0 && next.pixLivro < prev.pixLivro && next.pix <= prev.pix) return true;
   if (prev.fichas >= 10 && next.fichas < Math.floor(prev.fichas / 2) && next.pix <= prev.pix) {
     return true;
@@ -352,13 +352,29 @@ export function preservarStaffGestaoContraWipe(
   }
 
   const coopId = incomingCnpj ? coopIdForCnpj(lastro, incomingCnpj) ?? coopIdForCnpj(incoming, incomingCnpj) : undefined;
+  const excluidosLivro = new Set(
+    [...(lastro.livroCaixaExcluidos ?? []), ...(incoming.livroCaixaExcluidos ?? [])].map((e) => e.id)
+  );
+  const livroUnido = uniaoPorId(lastro.livroCaixa ?? [], incoming.livroCaixa ?? []).filter(
+    (l) => !excluidosLivro.has(l.id)
+  );
+  const origensUnidas = uniaoPorId(
+    lastro.livroCaixaOrigensCadastro ?? [],
+    incoming.livroCaixaOrigensCadastro ?? []
+  );
+  const comLivroLastro: AppData = {
+    ...incoming,
+    livroCaixa: livroUnido,
+    livroCaixaOrigensCadastro: origensUnidas,
+  };
+
   if (!staffGestaoSnapshotPoorer(medirRiquezaStaffGestao(incoming, coopId), medirRiquezaStaffGestao(lastro, coopId))) {
-    noteStaffGestaoLastGood(incoming, incomingCnpj);
-    return incoming;
+    noteStaffGestaoLastGood(comLivroLastro, incomingCnpj);
+    return comLivroLastro;
   }
 
   const kept: AppData = {
-    ...incoming,
+    ...comLivroLastro,
     cooperados: uniaoPorId(lastro.cooperados ?? [], incoming.cooperados ?? []),
     notasPedido: uniaoPorId(lastro.notasPedido ?? [], incoming.notasPedido ?? []),
     fichaCorrida: uniaoPorId(lastro.fichaCorrida ?? [], incoming.fichaCorrida ?? []),
@@ -366,7 +382,6 @@ export function preservarStaffGestaoContraWipe(
       lastro.pagamentosCooperado ?? [],
       incoming.pagamentosCooperado ?? []
     ),
-    livroCaixa: uniaoPorId(lastro.livroCaixa ?? [], incoming.livroCaixa ?? []),
   };
   noteStaffGestaoLastGood(kept, incomingCnpj);
   return kept;

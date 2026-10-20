@@ -1,4 +1,4 @@
-import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, NotaPedidoExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, ComunicadoExcluidoRef, LivroCaixaExcluidoRef, LivroCaixaLancamento, FichaCorrida, NotaPedido, VotacaoPauta, VotacaoVoto, ParecerContabilMensal, FechamentoSnapshot, ArquivoMensalCooperado, AjustesFichaMesCooperativa, ValorAvulsoReceber } from "@/types";
+import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, NotaPedidoExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, ComunicadoExcluidoRef, LivroCaixaExcluidoRef, LivroCaixaLancamento, LivroCaixaOrigemCadastro, FichaCorrida, NotaPedido, VotacaoPauta, VotacaoVoto, ParecerContabilMensal, FechamentoSnapshot, ArquivoMensalCooperado, AjustesFichaMesCooperativa, ValorAvulsoReceber } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import {
   expandStaffTierPlanIfOperacionalVazio,
@@ -24,6 +24,7 @@ import { clearNotasSyncMeta, forceNextFullNotasSync } from "@/services/syncMetaS
 import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, normalizarMensalidadeCooperadoLocal, mesclarMensalidadesPayloadNuvem, prepararMensalidadesCloud, prepararMensalidadeCloud, reconciliarMensalidadesComCooperadosCloud, mensalidadeCloudEntraNoDispositivo, enriquecerMensalidadeCooperadoSnapshot } from "@/services/mensalidadeService";
 import { aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { mergeLivroCaixaControleAnualFromCloud } from "@/services/livroCaixaService";
+import { mergeLivroCaixaOrigensCadastroFromCloud } from "@/lib/livro-caixa/livroCaixaOrigemPastas";
 import { preservarLivroCaixaDePagamentosConfirmados } from "@/services/livroCaixaPagamentoGuard";
 import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
 import { isConferenciaOperacionalPushScopeActive } from "@/services/conferenciaOperacionalPushScope";
@@ -649,6 +650,9 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
     ),
     livroCaixaControleAnual: (sanitized.livroCaixaControleAnual ?? []).filter((c) => c.cooperativaId === coopId),
     livroCaixaExcluidos: livroCaixaExcluidosCoop,
+    livroCaixaOrigensCadastro: (sanitized.livroCaixaOrigensCadastro ?? []).filter(
+      (o) => o.cooperativaId === coopId
+    ),
     prestacoesContas: (sanitized.prestacoesContas ?? []).filter(
       (p) => p.cooperativaId === coopId && !excluidasIds.has(p.id)
     ),
@@ -1409,6 +1413,12 @@ export function mergeOperacionalIntoData(
     cloud,
     legacyIgnorarDominios
   ).map((l) => ({ ...l, cooperativaId: coopId }));
+  const cloudOrigensCadastro = operacionalSliceArray<LivroCaixaOrigemCadastro>(
+    rawCloud,
+    "livroCaixaOrigensCadastro",
+    cloud,
+    legacyIgnorarDominios
+  ).map((o) => ({ ...o, cooperativaId: o.cooperativaId || coopId }));
   const cloudLivroControle = (cloud.livroCaixaControleAnual ?? []).find((c) => c.cooperativaId === coopId);
   const localLivroControle = (data.livroCaixaControleAnual ?? []).find((c) => c.cooperativaId === coopId);
   const mergedLivroControle = mergeLivroCaixaControleAnualFromCloud(localLivroControle, cloudLivroControle);
@@ -1754,9 +1764,8 @@ export function mergeOperacionalIntoData(
           pagamentosCooperado: mergedPagamentosCoop,
         },
         {
-          livroCaixa: replaceLivro
-            ? cloudLivro.filter((l) => !livroCaixaExcluidosSet.has(l.id))
-            : !dominioFornecido("livroCaixa")
+          livroCaixa:
+            !dominioFornecido("livroCaixa") && !replaceLivro
               ? (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId)
               : mergeLivroCaixaFromCloud(
                   (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
@@ -1776,6 +1785,15 @@ export function mergeOperacionalIntoData(
     livroCaixaExcluidos: [
       ...(data.livroCaixaExcluidos ?? []).filter((e) => e.cooperativaId && e.cooperativaId !== coopId),
       ...mergedLivroCaixaExcluidosCoop,
+    ],
+    livroCaixaOrigensCadastro: [
+      ...filterCoop(data.livroCaixaOrigensCadastro ?? [], (o) => o.cooperativaId === coopId),
+      ...(!dominioFornecido("livroCaixaOrigensCadastro")
+        ? (data.livroCaixaOrigensCadastro ?? []).filter((o) => o.cooperativaId === coopId)
+        : mergeLivroCaixaOrigensCadastroFromCloud(
+            (data.livroCaixaOrigensCadastro ?? []).filter((o) => o.cooperativaId === coopId),
+            cloudOrigensCadastro
+          )),
     ],
     prestacoesContas: [
       ...filterCoop(data.prestacoesContas ?? [], (p) => p.cooperativaId === coopId),

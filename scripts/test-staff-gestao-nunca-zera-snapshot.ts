@@ -58,6 +58,51 @@ const fundido = preservarStaffGestaoContraWipe(rico, comPixNovo);
 assert.ok(fundido.fichaCorrida.length >= 20);
 assert.ok(fundido.pagamentosCooperado.some((p) => p.id === "p2"));
 
+const lastroComManual = {
+  ...emptyInitialData,
+  cooperativas: [{ id: "coop1", cnpj: "62351750000165", nome: "Coop" } as never],
+  cooperados: rico.cooperados,
+  notasPedido: rico.notasPedido,
+  fichaCorrida: rico.fichaCorrida,
+  pagamentosCooperado: rico.pagamentosCooperado,
+  livroCaixa: [
+    { id: "pix1", cooperativaId: "coop1", origem: "pagamento_cooperado" } as never,
+    { id: "man1", cooperativaId: "coop1", origem: "manual" } as never,
+  ],
+  livroCaixaOrigensCadastro: [
+    { id: "cad1", cooperativaId: "coop1", nome: "Feira", createdAt: "2026-10-20T00:00:00.000Z" },
+  ],
+};
+const pullSemManual = {
+  ...lastroComManual,
+  livroCaixa: [{ id: "pix1", cooperativaId: "coop1", origem: "pagamento_cooperado" } as never],
+  livroCaixaOrigensCadastro: [],
+};
+assert.equal(
+  staffGestaoSnapshotPoorer(medirRiquezaStaffGestao(pullSemManual), medirRiquezaStaffGestao(lastroComManual)),
+  true,
+  "nuvem sem o lançamento manual é snapshot pobre"
+);
+const aposF5 = preservarStaffGestaoContraWipe(lastroComManual, pullSemManual);
+assert.ok(
+  aposF5.livroCaixa.some((l) => l.id === "man1"),
+  "F5/pull não apaga lançamento manual que já estava no aparelho"
+);
+assert.ok(
+  (aposF5.livroCaixaOrigensCadastro ?? []).some((o) => o.id === "cad1"),
+  "F5/pull não apaga origem cadastrada"
+);
+const pullComExclusao = {
+  ...pullSemManual,
+  livroCaixaExcluidos: [{ id: "man1", cooperativaId: "coop1", excluidoEm: "2026-10-20T00:00:00.000Z" }],
+};
+const aposExcluir = preservarStaffGestaoContraWipe(lastroComManual, pullComExclusao);
+assert.equal(
+  aposExcluir.livroCaixa.some((l) => l.id === "man1"),
+  false,
+  "exclusão publicada continua valendo"
+);
+
 resetStaffOperacionalColdHydrateForTests();
 assert.equal(
   deveAdiarReconciliarFichaAposLimpezaCacheStaff(rico as never, "coop1"),

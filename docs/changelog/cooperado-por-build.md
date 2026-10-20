@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v527
+
+- **Responsável:** lançamento do Livro caixa não some no F5 — o que já estava no aparelho fica, e o salvar já manda para a nuvem.
+- **Livro caixa:** origem cadastrada também sobrevive ao refresh; exclusão publicada continua valendo.
+- **Cooperado:** Início, Entregas, Ficha, Financeiro e A receber iguais ao v526.
+
 ## v526
 
 - **Responsável:** Livro caixa ganha pastas por origem — cadastra a origem, lança e o valor fica no livro e na pasta.

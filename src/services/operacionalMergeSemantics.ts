@@ -12,6 +12,7 @@ export const OPERACIONAL_DOMINIOS_COLECAO = [
   "valoresAvulsosReceber",
   "livroCaixa",
   "livroCaixaExcluidos",
+  "livroCaixaOrigensCadastro",
   "prestacoesContas",
   "prestacoesContasExcluidas",
   "notasPedidoExcluidas",

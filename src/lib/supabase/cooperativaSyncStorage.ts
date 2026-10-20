@@ -17,6 +17,7 @@ import type {
   LivroCaixaLancamento,
   LivroCaixaControleAnual,
   LivroCaixaExcluidoRef,
+  LivroCaixaOrigemCadastro,
   PrestacaoContas,
   PrestacaoContasExcluida,
   NotaPedidoExcluida,
@@ -58,6 +59,7 @@ export interface OperacionalSyncPayload {
   livroCaixa?: LivroCaixaLancamento[];
   livroCaixaControleAnual?: LivroCaixaControleAnual[];
   livroCaixaExcluidos?: LivroCaixaExcluidoRef[];
+  livroCaixaOrigensCadastro?: LivroCaixaOrigemCadastro[];
   prestacoesContas?: PrestacaoContas[];
   prestacoesContasExcluidas?: PrestacaoContasExcluida[];
   notasPedidoExcluidas?: NotaPedidoExcluida[];

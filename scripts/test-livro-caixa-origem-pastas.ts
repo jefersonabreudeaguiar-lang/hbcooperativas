@@ -10,6 +10,7 @@ import {
   cadastrarOrigemLivroCaixa,
   filtrarLancamentosPorPasta,
   listarPastasLivroCaixa,
+  mergeLivroCaixaOrigensCadastroFromCloud,
   pastaKeyDeLancamento,
   rotuloOrigemLancamento,
 } from "../src/lib/livro-caixa/livroCaixaOrigemPastas.ts";
@@ -62,14 +63,34 @@ const pastas = listarPastasLivroCaixa(comOrigem, "coop-1", [pnae, comb]);
 assert.ok(pastas.some((p) => p.key === "cad:orig-comb" && p.quantidade === 1));
 assert.ok(pastas.some((p) => p.key === "sys:pnae" && p.quantidade === 1));
 
+const mergedOrigens = mergeLivroCaixaOrigensCadastroFromCloud(
+  comOrigem.livroCaixaOrigensCadastro ?? [],
+  []
+);
+assert.equal(mergedOrigens.length, 1, "pull sem cadastro não apaga origem local");
+
 const ui = readFileSync(join(root, "src/app/(app)/livro-caixa/LivroCaixaContent.tsx"), "utf8");
 assert.match(ui, /Cadastrar origem do lançamento/);
 assert.match(ui, /Emitir relatório desta origem/);
 assert.match(ui, /pastasOrigem\.map/);
 assert.match(ui, /pastaOrigem: pastaAtiva/);
+assert.match(
+  ui,
+  /resetForm\(\);\s*void publicar\(\{ force: true \}\);/,
+  "salvar lançamento publica na nuvem — F5 não depende só do aparelho"
+);
 
 const rel = readFileSync(join(root, "src/utils/livroCaixaRelatorioHtml.ts"), "utf8");
 assert.match(rel, /pastaOrigem/);
 assert.match(rel, /filtrarLancamentosPorPasta/);
+
+const sync = readFileSync(join(root, "src/services/cooperativaSyncCloudService.ts"), "utf8");
+assert.match(sync, /livroCaixaOrigensCadastro:/);
+assert.match(sync, /mergeLivroCaixaOrigensCadastroFromCloud/);
+assert.match(
+  sync,
+  /!dominioFornecido\("livroCaixa"\) && !replaceLivro/,
+  "pull autoritativo não substitui o livro inteiro — mantém lançamento local"
+);
 
 console.log("ok: pastas do livro caixa por origem + relatório");

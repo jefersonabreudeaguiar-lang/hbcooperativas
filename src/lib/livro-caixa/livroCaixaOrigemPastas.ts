@@ -39,6 +39,21 @@ export function listarOrigensCadastroCooperativa(
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 }
 
+/** Local vence no mesmo id — origem cadastrada no aparelho não some no pull. */
+export function mergeLivroCaixaOrigensCadastroFromCloud(
+  local: readonly LivroCaixaOrigemCadastro[],
+  cloud: readonly LivroCaixaOrigemCadastro[]
+): LivroCaixaOrigemCadastro[] {
+  const map = new Map<string, LivroCaixaOrigemCadastro>();
+  for (const item of cloud) {
+    if (item?.id) map.set(item.id, item);
+  }
+  for (const item of local) {
+    if (item?.id) map.set(item.id, item);
+  }
+  return [...map.values()];
+}
+
 export function cadastrarOrigemLivroCaixa(
   data: AppData,
   input: { id: string; cooperativaId: string; nome: string }

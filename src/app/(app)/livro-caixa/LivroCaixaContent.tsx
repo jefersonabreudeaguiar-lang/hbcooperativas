@@ -322,6 +322,7 @@ export default function LivroCaixaPage() {
     setAbaLivro(pastaDoFormulario());
     setModalOpen(false);
     resetForm();
+    void publicar({ force: true });
   };
 
   const salvarNovaOrigem = () => {
