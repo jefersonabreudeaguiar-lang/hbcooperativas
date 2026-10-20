@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search, Tag, RefreshCw } from "lucide-react";
 import { useAppDataReady, useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
@@ -12,6 +12,13 @@ import {
   cooperadoPwaUiSubscribesAppData,
   isCooperadoPwaMessengerMode,
 } from "@/lib/cooperado/cooperadoPwaMessengerMode";
+import {
+  emptyCooperadoPwaPrecosCatalogoView,
+  lerCooperadoPrecosCatalogoLeitura,
+  persistirCooperadoPwaPrecosCatalogoSnapshotFromUser,
+  type CooperadoPwaPrecosCatalogoView,
+} from "@/lib/cooperado/cooperadoPwaPrecosCatalogoSnapshot";
+import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUiEvents";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId, resolveGestaoCooperativaId } from "@/utils/cooperativa";
 import { PageHeader } from "@/components/ui/Table";
@@ -26,9 +33,8 @@ import { syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudServ
 import {
   getInstituicoesCatalogo,
   getTodosProdutosCatalogo,
-  contarItensCatalogo,
 } from "@/services/catalogoContratosService";
-import { getData } from "@/services/dataStore";
+import { getData, getSession } from "@/services/dataStore";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 const PRECOS_APP_DATA_DOMAINS: AppDataNotifyDomain[] = ["operacional", "shell"];
@@ -50,10 +56,16 @@ export default function PrecosPage() {
         : undefined,
     [user?.id, user?.cooperativaId, user?.cooperativaCnpj, isCooperado]
   );
-  const coopId = coopIdSel ?? coopIdPerm ?? undefined;
+  const coopId = coopIdSel ?? coopIdPerm ?? user?.cooperativaId ?? undefined;
   const [instSelecionada, setInstSelecionada] = useState<string>("");
   const [busca, setBusca] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const [messengerCatalogo, setMessengerCatalogo] = useState<CooperadoPwaPrecosCatalogoView>(() => {
+    if (typeof window === "undefined") return emptyCooperadoPwaPrecosCatalogoView();
+    const session = getSession();
+    const id = session?.cooperativaId ?? "";
+    return messenger && id ? lerCooperadoPrecosCatalogoLeitura(id) : emptyCooperadoPwaPrecosCatalogoView();
+  });
 
   const runSync = async () => {
     if (!coopId || !user) return;
@@ -63,12 +75,22 @@ export default function PrecosPage() {
     try {
       const cnpj = await resolveCooperativaCnpj(d, coopId, user);
       if (cnpj) await syncAllCooperativaFromCloud(cnpj);
+      persistirCooperadoPwaPrecosCatalogoSnapshotFromUser(user);
+      if (messenger) setMessengerCatalogo(lerCooperadoPrecosCatalogoLeitura(coopId));
     } finally {
       setSyncing(false);
     }
   };
 
-  const instituicoes =
+  useEffect(() => {
+    if (!messenger || !coopId) return;
+    const refresh = () => setMessengerCatalogo(lerCooperadoPrecosCatalogoLeitura(coopId));
+    refresh();
+    window.addEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, refresh);
+    return () => window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, refresh);
+  }, [messenger, coopId, ready, tabActive]);
+
+  const liveInstituicoes =
     useAppDataSelectorForDomainsWhenActive(
       appDataUiOn,
       PRECOS_APP_DATA_DOMAINS,
@@ -76,13 +98,16 @@ export default function PrecosPage() {
       [coopId]
     ) ?? [];
 
-  const produtosDaCoop =
+  const liveProdutos =
     useAppDataSelectorForDomainsWhenActive(
       appDataUiOn,
       PRECOS_APP_DATA_DOMAINS,
       (d) => (coopId ? getTodosProdutosCatalogo(d, coopId) : []),
       [coopId]
     ) ?? [];
+
+  const instituicoes = messenger ? messengerCatalogo.instituicoes : liveInstituicoes;
+  const produtosDaCoop = messenger ? messengerCatalogo.itens : liveProdutos;
 
   const instMap = useMemo(() => new Map(instituicoes.map((i) => [i.id, i.nome])), [instituicoes]);
 
@@ -104,7 +129,7 @@ export default function PrecosPage() {
   const instComItens = instituicoes.filter((i) =>
     produtosDaCoop.some((p) => p.instituicaoId === i.id)
   );
-  const totalItens = coopId && ready ? contarItensCatalogo(getData()!, coopId) : 0;
+  const totalItens = produtosDaCoop.length;
 
   return (
     <div className="max-w-2xl mx-auto">

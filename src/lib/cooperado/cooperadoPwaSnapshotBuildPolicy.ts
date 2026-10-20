@@ -12,6 +12,7 @@ const PWA_SNAPSHOT_KEY_MARKERS = [
   "hb.coop.inicioCard",
   "hb.coop.pwaInicioDash",
   "hb.coop.pwaEntregasResumos",
+  "hb.coop.pwaPrecosCatalogo",
   "hb.coop.pwaFichaResumo",
   "hb.coop.readModels",
   "hb.coop.reciboAssinadoLocal",

@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v506
+
+- **Preços:** a aba volta a mostrar o valor de cada item do contrato no celular.
+- **Dados:** o catálogo fica gravado no aparelho depois do sync — não some ao trocar de aba.
+- **Início / Financeiro / Entregas:** iguais ao v505.
+
 ## v505
 
 - **Responsável:** F5 não apaga mais o painel — a última tela reaparece na hora, sem precisar trocar de aba.
