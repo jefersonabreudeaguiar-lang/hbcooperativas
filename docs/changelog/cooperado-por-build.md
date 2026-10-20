@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v522
+
+- **HB Créditos:** no celular, a compra feita no mercado entra na ficha depois que o Início já abriu — sem puxar o operacional inteiro.
+- **A receber:** Início e Financeiro passam a mostrar o valor já descontado, sem esperar Atualizar.
+- **Cooperado:** Entregas e troca de abas iguais ao v521.
+
 ## v521
 
 - **HB Créditos:** a compra já gravada na ficha não some quando o Atualizar ou a nuvem vêm vazios.

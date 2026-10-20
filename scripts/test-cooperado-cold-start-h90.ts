@@ -110,8 +110,9 @@ assert(persist.includes("45 * 24"), "cache abertura ampliado (45d)");
 const hbWarmup = read("src/hooks/useHbCreditDescontosWarmup.ts");
 assert(
   hbWarmup.includes("isCooperadoManualOperacionalSync") &&
-    hbWarmup.includes('user.role === "cooperado"'),
-  "HB warmup desligado para cooperado sync manual"
+    hbWarmup.includes('user.role === "cooperado"') &&
+    hbWarmup.includes("puxarDebitoHbFichaDescontosSilentCooperado"),
+  "HB warmup operacional desligado; ficha-descontos silencioso no idle"
 );
 const hbResumo = read("src/components/hb-credit/CooperadoHbCreditResumoCard.tsx");
 assert(

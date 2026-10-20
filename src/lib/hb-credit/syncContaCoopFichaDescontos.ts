@@ -7,7 +7,7 @@ import {
   resolverCooperadoIdCanonico,
 } from "@/services/cooperadoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
-import { beginSaveBatch, endSaveBatch, getData, getSession, notifyAppDataSubscribers, updateData } from "@/services/dataStore";
+import { beginSaveBatch, endSaveBatch, getData, getSession, isAppDataWarm, notifyAppDataSubscribers, updateData } from "@/services/dataStore";
 import {
   persistDescontosContaCoopNoArquivo,
   getDescontosContaCoopMesCached,
@@ -39,6 +39,7 @@ import {
 import { cooperadoMesQuitado } from "@/services/cooperadoEntregasService";
 import {
   coalesceContaCoopAuxSync,
+  contaCoopAuxSyncKeyFichaSilent,
   contaCoopAuxSyncKeyValorReceber,
   contaCoopAuxSyncKeyWarmupBundle,
 } from "@/lib/hb-credit/contaCoopAuxSyncDedupe";
@@ -428,6 +429,53 @@ export async function refreshContaCoopValorReceberAfterHbTransaction(
   }
   refletirHbDebitoNoAReceberLocal();
   return { descontos };
+}
+
+/**
+ * PWA cooperado: busca só a lista de compras HB e grava no arquivo/snapshot.
+ * Sem operacional cheio e sem push — Início já pintou.
+ */
+export async function puxarDebitoHbFichaDescontosSilentCooperado(opts: {
+  cnpj: string;
+  cooperativaId: string;
+  user: Omit<User, "password">;
+}): Promise<boolean> {
+  if (!shouldSyncHbFichaBaseDescontos()) return false;
+  if (opts.user.role !== "cooperado" || !opts.user.cooperadoId) return false;
+  if (typeof window === "undefined") return false;
+  if (typeof navigator !== "undefined" && !navigator.onLine) return false;
+  if (!isAppDataWarm()) return false;
+
+  return coalesceContaCoopAuxSync(
+    contaCoopAuxSyncKeyFichaSilent(opts.cnpj, opts.user.cooperadoId),
+    async () => {
+      const data = getData();
+      const canonico = resolverCooperadoIdCanonico(
+        data,
+        opts.user.cooperadoId,
+        opts.cooperativaId,
+        opts.user.name
+      );
+      const paridade = cooperadoLeituraFinanceiraExibicao(data, canonico, opts.cooperativaId);
+      const mesReferencia =
+        paridade.mesesResumo[paridade.mesesResumo.length - 1] ??
+        paridade.mesesResumo[0] ??
+        hbCreditMesPrincipal(data, canonico, opts.cooperativaId);
+      if (!mesReferencia) return false;
+      const { changed, financeChanged } = await applyLocalContaCoopDescontosRefresh({
+        cnpj: opts.cnpj,
+        cooperadoId: canonico,
+        mesReferencia,
+        cooperativaId: opts.cooperativaId,
+        cooperadoNome: opts.user.name,
+        pushCloud: false,
+      });
+      if (!changed && !financeChanged) {
+        refletirHbDebitoNoAReceberLocal();
+      }
+      return changed || financeChanged;
+    }
+  );
 }
 
 /**

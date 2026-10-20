@@ -27,3 +27,7 @@ export function contaCoopAuxSyncKeyWarmupBundle(cnpj: string, userId: string): s
 export function contaCoopAuxSyncKeyAccountPersist(cnpj: string, cooperadoId: string): string {
   return `account-persist:${cnpj}:${cooperadoId}`;
 }
+
+export function contaCoopAuxSyncKeyFichaSilent(cnpj: string, cooperadoId: string): string {
+  return `ficha-silent:${cnpj}:${cooperadoId}`;
+}
