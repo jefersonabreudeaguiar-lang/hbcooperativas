@@ -43,4 +43,7 @@ assert.equal(mesmo?.valor, 80, "ficha igual mantém o card");
 const fichaZero = cooperadoInicioCardAlinharValorFicha(persistido, 0, "Outubro 2026");
 assert.equal(fichaZero?.valor, 80, "ficha 0 não apaga o card");
 
+const fichaMenor = cooperadoInicioCardAlinharValorFicha(persistido, 50, "Outubro 2026");
+assert.equal(fichaMenor?.valor, 80, "sem flag a ficha menor não baixa o card");
+
 console.log("ok: a receber persiste e sobe com a ficha");

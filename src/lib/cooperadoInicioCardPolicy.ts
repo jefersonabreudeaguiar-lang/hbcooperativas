@@ -93,11 +93,13 @@ export function cooperadoInicioCardEscolherDisplayEstavel(opts: {
 /**
  * Card A receber permanece visível; se a ficha tiver valor maior, o card sobe para esse valor.
  * Não zera o lastro quando a ficha ainda não chegou.
+ * Queda só com `permitirQuedaPorHb` (ficha local já debitou compra HB) e valor ainda > 0.
  */
 export function cooperadoInicioCardAlinharValorFicha(
   persistido: InicioCardMotorSnapshot | null | undefined,
   fichaValor: number,
-  fichaMesLabel?: string
+  fichaMesLabel?: string,
+  opts?: { permitirQuedaPorHb?: boolean }
 ): InicioCardMotorSnapshot | null {
   const prev =
     persistido && cooperadoMotorTemObrigacaoReceber(persistido) ? persistido : null;
@@ -111,6 +113,22 @@ export function cooperadoInicioCardAlinharValorFicha(
       valor: ficha,
       valorRecibo: prev?.valorRecibo ?? 0,
       aguardandoAssinatura: false,
+    };
+  }
+  if (
+    opts?.permitirQuedaPorHb &&
+    ficha > 0.005 &&
+    prev &&
+    ficha + 0.005 < prev.valor
+  ) {
+    return {
+      mesLabel:
+        fichaMesLabel?.trim() && fichaMesLabel !== "—"
+          ? fichaMesLabel
+          : prev.mesLabel,
+      valor: ficha,
+      valorRecibo: prev.valorRecibo,
+      aguardandoAssinatura: prev.aguardandoAssinatura,
     };
   }
   return prev ?? persistido ?? null;

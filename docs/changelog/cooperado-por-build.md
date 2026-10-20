@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v521
+
+- **HB Créditos:** a compra já gravada na ficha não some quando o Atualizar ou a nuvem vêm vazios.
+- **A receber:** depois do desconto HB na ficha, o valor no Início e no Financeiro baixa de verdade.
+- **Cooperado:** Entregas e abertura do app iguais ao v520.
+
 ## v520
 
 - **HB Créditos:** a compra grava o desconto na ficha na hora do PIN — a linha aparece no Financeiro.

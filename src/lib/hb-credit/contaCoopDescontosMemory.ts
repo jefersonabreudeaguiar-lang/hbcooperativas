@@ -48,9 +48,13 @@ export function mergeContaCoopDescontosArquivoEMemoria(
   return dedupeDescontosContaCoopRemotos([...arquivo, ...memoria]);
 }
 
+function comTransacaoHb(d: DescontoContaCoopRemoto): boolean {
+  return Boolean(d.hbTransactionId?.trim());
+}
+
 /**
- * Fonte HB para valor a receber: memória da API na sessão prevalece quando tem linhas;
- * memória vazia após poll não apaga descontos já gravados no arquivo mensal (sync/cloud).
+ * Fonte HB para valor a receber: memória da API prevalece quando tem linhas.
+ * Fetch vazio não apaga compra já gravada com hbTransactionId (só lixo operacional sem id).
  */
 export function resolveDescontosContaCoopMesParaCalculo(
   fromArquivo: DescontoContaCoopRemoto[],
@@ -60,7 +64,10 @@ export function resolveDescontosContaCoopMesParaCalculo(
 ): DescontoContaCoopRemoto[] {
   const arquivo = dedupeDescontosContaCoopRemotos(fromArquivo);
   const memoria = dedupeDescontosContaCoopRemotos(fromMemoria);
-  if (mesFetchAutoritativo) return memoria;
+  if (mesFetchAutoritativo) {
+    if (memoria.length > 0) return memoria;
+    return arquivo.filter(comTransacaoHb);
+  }
   if (!temMemoriaSessao) return arquivo;
   if (memoria.length > 0) return memoria;
   return arquivo;

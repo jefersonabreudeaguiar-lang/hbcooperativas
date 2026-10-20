@@ -167,5 +167,8 @@ export function persistirCooperadoPwaFichaResumoSnapshotFromUser(
     return previous;
   }
   gravarCooperadoPwaFichaResumoSnapshot(canon, coopId, built);
+  if (user.cooperadoId && user.cooperadoId !== canon) {
+    gravarCooperadoPwaFichaResumoSnapshot(user.cooperadoId, coopId, built);
+  }
   return built;
 }

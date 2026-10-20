@@ -739,6 +739,41 @@ export function mergeArquivosMensaisFromCloud(
   return [...map.values()];
 }
 
+/** Replace do operacional não pode apagar compra HB já gravada no aparelho (hbTransactionId). */
+export function overlayContaCoopDescontosLocalAposReplace(
+  data: AppData,
+  localCoop: ArquivoMensalCooperado[],
+  replaced: ArquivoMensalCooperado[]
+): ArquivoMensalCooperado[] {
+  const out = replaced.map((cloud) => {
+    const key = arquivoMensalSyncKey(data, cloud);
+    const local = localCoop.find((a) => arquivoMensalSyncKey(data, a) === key);
+    if (!local) return cloud;
+    const locaisComTx = (local.contaCoopDescontos ?? []).filter((d) => Boolean(d.hbTransactionId?.trim()));
+    if (!locaisComTx.length) return cloud;
+    const merged = mergeContaCoopDescontosField({ ...local, contaCoopDescontos: locaisComTx }, cloud);
+    if (!merged?.length) return cloud;
+    return {
+      ...cloud,
+      contaCoopDescontos: merged,
+      contaCoopDescontosUpdatedAt:
+        contaCoopDescontosHbTime(local) >= contaCoopDescontosHbTime(cloud)
+          ? local.contaCoopDescontosUpdatedAt ?? cloud.contaCoopDescontosUpdatedAt
+          : cloud.contaCoopDescontosUpdatedAt ?? local.contaCoopDescontosUpdatedAt,
+    };
+  });
+  const seen = new Set(out.map((a) => arquivoMensalSyncKey(data, a)));
+  for (const local of localCoop) {
+    const key = arquivoMensalSyncKey(data, local);
+    if (seen.has(key)) continue;
+    const temTx = (local.contaCoopDescontos ?? []).some((d) => Boolean(d.hbTransactionId?.trim()));
+    if (!temTx) continue;
+    out.push(local);
+    seen.add(key);
+  }
+  return out;
+}
+
 export function getArquivoMensalCooperado(
   data: AppData,
   cooperadoId: string,

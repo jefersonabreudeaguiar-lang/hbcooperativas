@@ -12,9 +12,12 @@ import {
 import {
   getResumoPagamentoConsolidadoCooperado,
   getResumoPagamentoCooperado,
+  overlayContaCoopDescontosLocalAposReplace,
   persistDescontosContaCoopNoArquivo,
 } from "../src/services/notaPedidoService";
 import { getValorQuantoVouReceber } from "../src/services/cooperadoEntregasService";
+import { resolveDescontosContaCoopMesParaCalculo } from "../src/lib/hb-credit/contaCoopDescontosMemory";
+import { cooperadoInicioCardAlinharValorFicha } from "../src/lib/cooperadoInicioCardPolicy";
 
 const COOP = "coop-hb-debito";
 const COOPERADO = "c_hb_debito";
@@ -151,6 +154,59 @@ function baseData(meses: Array<{ mes: string; valor: number }>): AppData {
   assert.equal(consolidado.valorEntregas, 500);
   assert.equal(consolidado.valorLiquido, 400, "A receber consolidado não conta a mesma compra duas vezes");
   assert.equal(getValorQuantoVouReceber(data, COOPERADO, COOP).valor, 400);
+}
+
+{
+  const comTx: DescontoContaCoopRemoto[] = [compra("2026-09-10T12:00:00.000Z", 80, "tx_keep")];
+  const staleSemId: DescontoContaCoopRemoto[] = [
+    { motivo: "Compra HB stale", valorReais: 80, tipo: "conta_coop", createdAt: "2026-09-09T10:00:00.000Z" },
+  ];
+  const keep = resolveDescontosContaCoopMesParaCalculo(comTx, [], true, true);
+  assert.equal(keep.length, 1, "fetch vazio não apaga compra com hbTransactionId");
+  assert.equal(keep[0]?.hbTransactionId, "tx_keep");
+  const drop = resolveDescontosContaCoopMesParaCalculo(staleSemId, [], true, true);
+  assert.equal(drop.length, 0, "HB-002: lixo operacional sem id some após fetch autoritativo vazio");
+}
+
+{
+  let data = baseData([{ mes: "2026-09", valor: 500 }]);
+  data = persistDescontosContaCoopNoArquivo(data, COOPERADO, "2026-09", COOP, [
+    compra("2026-10-08T14:00:00.000Z", 80, "tx_keep_replace"),
+  ]);
+  const local = data.arquivosMensais.filter((a) => a.cooperativaId === COOP);
+  const cloud = local.map((a) => ({ ...a, contaCoopDescontos: [], contaCoopDescontosUpdatedAt: undefined }));
+  const overlay = overlayContaCoopDescontosLocalAposReplace(data, local, cloud);
+  assert.ok(
+    overlay.some((a) => (a.contaCoopDescontos ?? []).some((d) => d.hbTransactionId === "tx_keep_replace")),
+    "replace do operacional não apaga compra com transação"
+  );
+
+  let stale = baseData([{ mes: "2026-09", valor: 500 }]);
+  stale = persistDescontosContaCoopNoArquivo(stale, COOPERADO, "2026-09", COOP, [
+    { motivo: "Compra HB stale", valorReais: 80, tipo: "conta_coop", createdAt: "2026-09-09T10:00:00.000Z" },
+  ]);
+  const staleLocal = stale.arquivosMensais.filter((a) => a.cooperativaId === COOP);
+  const staleCloud = staleLocal.map((a) => ({ ...a, contaCoopDescontos: [], contaCoopDescontosUpdatedAt: undefined }));
+  const staleOverlay = overlayContaCoopDescontosLocalAposReplace(stale, staleLocal, staleCloud);
+  assert.equal(
+    staleOverlay.reduce((n, a) => n + (a.contaCoopDescontos ?? []).length, 0),
+    0,
+    "HB-002: replace vazio não devolve lixo operacional sem id"
+  );
+}
+
+{
+  const persistido = { mesLabel: "Setembro 2026", valor: 500, valorRecibo: 0, aguardandoAssinatura: false };
+  const semOpt = cooperadoInicioCardAlinharValorFicha(persistido, 420, "Setembro 2026");
+  assert.equal(semOpt?.valor, 500, "v504: sem flag o card não cai");
+  const comHb = cooperadoInicioCardAlinharValorFicha(persistido, 420, "Setembro 2026", {
+    permitirQuedaPorHb: true,
+  });
+  assert.equal(comHb?.valor, 420, "ficha já debitou HB: A receber pode cair");
+  const zero = cooperadoInicioCardAlinharValorFicha(persistido, 0, "Setembro 2026", {
+    permitirQuedaPorHb: true,
+  });
+  assert.equal(zero?.valor, 500, "ficha 0 ainda não zera o card");
 }
 
 console.log("ok hb-debito-ficha-mes-a-receber");

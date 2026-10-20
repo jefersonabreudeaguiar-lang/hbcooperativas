@@ -26,6 +26,7 @@ import type { User } from "@/types";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import { lerCooperadoPwaFichaResumoSnapshot } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
+import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 
 export type CooperadoInicioCardPersistUser = Omit<User, "password">;
 
@@ -89,13 +90,21 @@ export function persistirInicioCardValorReceberCooperado(
 
   const paridadeFicha = resolverMotorCardInicioParidadeFinanceiro(data, cooperadoId, cooperativaId);
   const fichaSnap = lerCooperadoPwaFichaResumoSnapshot(cooperadoId, cooperativaId);
-  const valorFicha = Math.max(
-    paridadeFicha.motor.valor,
+  const leitura = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId);
+  const temDebitoHb = leitura.descontosExtras.some((d) => d.tipo === "conta_coop");
+  const liveValor = paridadeFicha.motor.valor;
+  const snapValor = Math.max(
     fichaSnap?.paridade?.valorLiquido ?? 0,
     fichaSnap?.consolidado?.valorLiquido ?? 0
   );
+  const valorFicha =
+    temDebitoHb && liveValor > 0.005 && liveValor + 0.005 < snapValor
+      ? liveValor
+      : Math.max(liveValor, snapValor);
   display =
-    cooperadoInicioCardAlinharValorFicha(display, valorFicha, paridadeFicha.motor.mesLabel) ?? display;
+    cooperadoInicioCardAlinharValorFicha(display, valorFicha, paridadeFicha.motor.mesLabel, {
+      permitirQuedaPorHb: temDebitoHb && liveValor > 0.005,
+    }) ?? display;
 
   if (!cooperadoMotorTemObrigacaoReceber(display)) {
     return false;

@@ -150,9 +150,16 @@ export async function syncContaCoopDescontosMesLocal(
     listCooperadoIdsMesmoTitular(data, canonico, opts.cooperativaId)
   );
   let descontos: DescontoContaCoopRemoto[];
+  const locais = getDescontosContaCoopMesCached(data, canonico, opts.mesReferencia, opts.cooperativaId);
+  const locaisComTx = locais.filter((d) => Boolean(d.hbTransactionId?.trim()));
   try {
     const raw = await fetchFichaDescontosContaCoop(opts.cnpj, titularIds, opts.mesReferencia);
     descontos = dedupeDescontosContaCoopRemotos(raw);
+    if (!descontos.length && locaisComTx.length) {
+      descontos = locaisComTx;
+    } else if (descontos.length && locaisComTx.length) {
+      descontos = dedupeDescontosContaCoopRemotos([...descontos, ...locaisComTx]);
+    }
     markContaCoopDescontosMesFetchOk(opts.cooperativaId, canonico, opts.mesReferencia);
   } catch (e) {
     markContaCoopDescontosFetchFailed(
@@ -161,7 +168,7 @@ export async function syncContaCoopDescontosMesLocal(
       e instanceof Error ? e.message : "ficha_descontos_failed",
       opts.mesReferencia
     );
-    descontos = getDescontosContaCoopMesCached(data, canonico, opts.mesReferencia, opts.cooperativaId);
+    descontos = locais;
     return { data, descontos };
   }
   setContaCoopDescontosMemoria(opts.cooperativaId, canonico, opts.mesReferencia, descontos);

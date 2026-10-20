@@ -11,7 +11,7 @@ import { getData, getDataOperationalTruth, saveDataSafe, runWithBatchedSaveAsync
 import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
-import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas, idsNotasPedidoExcluidas } from "@/services/notaPedidoService";
+import { mergeArquivosMensaisFromCloud, overlayContaCoopDescontosLocalAposReplace, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas, idsNotasPedidoExcluidas } from "@/services/notaPedidoService";
 import { posProcessarIntegridadePagamentosCooperativa, cooperadoMesTemPagamentoNaLista, type RegistroPagamentoResponsavelPatch } from "@/services/pagamentoIntegridadeService";
 import {
   mergePagamentosCooperadoFromCloud,
@@ -1665,7 +1665,11 @@ export function mergeOperacionalIntoData(
     arquivosMensais: [
       ...filterCoop(data.arquivosMensais, (a) => a.cooperativaId === coopId),
       ...(replaceArquivos
-        ? cloudArquivos
+        ? overlayContaCoopDescontosLocalAposReplace(
+            data,
+            data.arquivosMensais.filter((a) => a.cooperativaId === coopId),
+            cloudArquivos
+          )
         : !dominioFornecido("arquivosMensais")
           ? data.arquivosMensais.filter((a) => a.cooperativaId === coopId)
           : mergeArquivosMensaisFromCloud(

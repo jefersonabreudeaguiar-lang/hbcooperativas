@@ -548,14 +548,20 @@ export function useCooperadoInicioValorReceberCardState(input: {
       : null;
     let fichaValor = fichaSnap?.paridade?.valorLiquido ?? fichaSnap?.consolidado?.valorLiquido ?? 0;
     let fichaMes = fichaSnap?.paridade?.mesLabel ?? fichaSnap?.consolidado?.mesLabel;
+    let permitirQuedaPorHb = false;
     if (isAppDataWarm() && coopId) {
       const live = cooperadoLeituraFinanceiraExibicao(getData(), input.cooperadoId, coopId);
+      const temDebitoHb = live.descontosExtras.some((d) => d.tipo === "conta_coop");
       if (live.valorLiquido > fichaValor) {
         fichaValor = live.valorLiquido;
         fichaMes = live.mesLabel;
+      } else if (temDebitoHb && live.valorLiquido > 0.005 && live.valorLiquido + 0.005 < fichaValor) {
+        fichaValor = live.valorLiquido;
+        fichaMes = live.mesLabel;
       }
+      permitirQuedaPorHb = temDebitoHb && fichaValor > 0.005;
     }
-    return cooperadoInicioCardAlinharValorFicha(base, fichaValor, fichaMes) ?? base;
+    return cooperadoInicioCardAlinharValorFicha(base, fichaValor, fichaMes, { permitirQuedaPorHb }) ?? base;
   }, [
     resolved.display,
     persistido,
@@ -563,6 +569,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
     input.cooperativaId,
     persistidoTick,
     appDataWarmKey,
+    hbDescontosRevision,
   ]);
 
   useEffect(() => {
