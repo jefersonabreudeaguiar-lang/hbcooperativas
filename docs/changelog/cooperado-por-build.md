@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v510
+
+- **Abas:** Início, Entregas, Financeiro e Preços trocam na hora — a aba já visitada reaparece sem travar.
+- **Dados:** a ficha e o sync continuam depois do toque, sem esperar a nuvem para mudar de aba.
+- **Financeiro / Entregas / HB:** iguais ao v509.
+
 ## v509
 
 - **Responsável:** Pagar cooperados abre na aba Pagar e a fila de quem ainda tem a receber não some no F5 nem no sync.

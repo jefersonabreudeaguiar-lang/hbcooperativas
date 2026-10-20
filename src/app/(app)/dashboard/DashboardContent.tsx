@@ -4,7 +4,6 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -416,9 +415,10 @@ function CooperadoDashboard() {
     return () => window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
   }, [inicioSnapshotFirst, refreshPwaInicioView]);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (!inicioSnapshotFirst || !tabActive) return;
-    refreshPwaInicioView();
+    const id = requestAnimationFrame(() => refreshPwaInicioView());
+    return () => cancelAnimationFrame(id);
   }, [inicioSnapshotFirst, tabActive, refreshPwaInicioView]);
 
   const inicioDomainsRevision = useAppDataDomainsRevisionWhenActive(appDataUiOn, DASHBOARD_INICIO_DOMAINS);

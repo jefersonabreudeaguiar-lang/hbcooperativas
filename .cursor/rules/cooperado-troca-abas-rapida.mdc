@@ -1,0 +1,23 @@
+---
+description: Troca de abas do cooperado — rápida, sem trabalho pesado no toque
+alwaysApply: true
+---
+
+# Cooperado — troca de abas rápida
+
+Modelo travado em `src/lib/cooperado/cooperadoTrocaAbasRapida.ts` (`COOPERADO_TROCA_ABAS_RAPIDA_VERSION`).
+
+## O que o cooperado vê
+
+1. Tocar numa aba (Início, Entregas, Financeiro, Preços) troca na hora.
+2. A aba já visitada reaparece do keep-alive — sem tela vazia e sem esperar a nuvem.
+3. Sync e recálculo da ficha correm depois, em idle.
+
+## Proibido sem bump da versão do contrato + ordem explícita
+
+- Parsear AppData (`ensureAppDataEagerWarm` / `setAppDataWarmTick`) no `useLayoutEffect` só porque a aba ficou visível.
+- Disparar `operacional` / sync de ficha no mesmo frame do toque.
+- Soltar o keep-alive ou o `replaceState` otimista das abas em cache.
+- Fazer release align ao trocar de aba.
+
+Teste: `npx tsx scripts/test-cooperado-troca-abas-rapida.ts`

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useMemo, useState, useEffect, useCallback, useLayoutEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard, History, Users, ChevronDown, Pencil, RefreshCw, Eye } from "lucide-react";
 import { useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
@@ -329,15 +329,25 @@ function FichaCorridaPageInner() {
     user?.cooperativaId ??
     undefined;
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (!tabActive || !(messenger || pilotFinanceiroLeve) || !isCooperado) return;
-    ensureAppDataEagerWarm();
-    if (isAppDataWarm()) setAppDataWarmTick((n) => n + 1);
-    else {
-      void import("@/services/dataStore").then(({ waitForAppDataWarm }) =>
-        waitForAppDataWarm().then((ok) => ok && setAppDataWarmTick((n) => n + 1))
-      );
+    /** Já quente: não parsear nem forçar tick — isso travava a troca de aba. */
+    if (isAppDataWarm()) return;
+    const run = () => {
+      ensureAppDataEagerWarm();
+      if (isAppDataWarm()) setAppDataWarmTick((n) => n + 1);
+      else {
+        void import("@/services/dataStore").then(({ waitForAppDataWarm }) =>
+          waitForAppDataWarm().then((ok) => ok && setAppDataWarmTick((n) => n + 1))
+        );
+      }
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(run, { timeout: 800 });
+      return () => cancelIdleCallback(id);
     }
+    const t = window.setTimeout(run, 0);
+    return () => window.clearTimeout(t);
   }, [tabActive, messenger, pilotFinanceiroLeve, isCooperado]);
 
   useEffect(() => {
@@ -360,7 +370,13 @@ function FichaCorridaPageInner() {
 
   useEffect(() => {
     if (!tabActive || !isCooperado || !user || user.role !== "cooperado") return;
-    scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user, { silent: true });
+    const run = () => scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user, { silent: true });
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(run, { timeout: 1_200 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(run, 0);
+    return () => window.clearTimeout(t);
   }, [tabActive, isCooperado, user?.id, appDataWarmTick]);
 
   useEffect(() => {
