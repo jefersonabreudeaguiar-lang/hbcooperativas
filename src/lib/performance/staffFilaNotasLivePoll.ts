@@ -57,3 +57,11 @@ export function resolveStaffFilaBackgroundCatchupMs(conferirPageActive: boolean)
 }
 
 export const STAFF_FILA_UPLOAD_PROGRESS_MAX_NOTAS = 12;
+
+/** Primeiro pull da fila após pintar o lastro — não espera o idle longo do staff. */
+export function scheduleStaffConferirFilaPrimeiroPull(run: () => void): void {
+  if (typeof window === "undefined") return;
+  requestAnimationFrame(() => {
+    window.setTimeout(run, 0);
+  });
+}

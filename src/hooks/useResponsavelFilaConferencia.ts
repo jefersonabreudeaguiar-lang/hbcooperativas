@@ -10,14 +10,21 @@ import {
   isNotaConferenciaDecididaLocalmente,
   reconciliarNotasConferenciaDecididasLocalmente,
 } from "@/lib/conferencia/conferenciaFilaDecisaoLocal";
-import { listNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
+import {
+  listNotasFilaConferenciaDeDados,
+  listNotasFilaConferenciaResponsavel,
+} from "@/services/responsavelPainelIndex";
 import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedidoCloudService";
 import { agruparPendentesPorCooperado } from "@/utils/fotoEntrega";
 import {
   isNotaSaiuDaFilaConferencia,
   notaElegivelParaFilaConferenciaResponsavel,
 } from "@/utils/notaStatus";
-import { buildPendentesEstaveisConferencia, lastroContagemFila } from "@/utils/filaConferenciaSticky";
+import {
+  buildPendentesEstaveisConferencia,
+  fundirFilaConferirComLastro,
+  lastroContagemFila,
+} from "@/utils/filaConferenciaSticky";
 
 /**
  * Fila de conferência do responsável — cálculo pesado (sticky) só quando a aba Conferir está ativa.
@@ -89,12 +96,22 @@ export function useResponsavelFilaConferencia(
     ) ?? 0;
 
   const pendentesTodas = useMemo(() => {
-    if (!pendingDeleteIds || pendingDeleteIds.size === 0) return pendentesTodasBase;
-    return pendentesTodasBase.filter((n) => !pendingDeleteIds.has(n.id));
-  }, [pendentesTodasBase, pendingDeleteIds]);
+    const base =
+      !pendingDeleteIds || pendingDeleteIds.size === 0
+        ? pendentesTodasBase
+        : pendentesTodasBase.filter((n) => !pendingDeleteIds.has(n.id));
+    const lastro = peekStaffGestaoLastGood();
+    if (!lastro || !coopId) return base;
+    const extra = listNotasFilaConferenciaDeDados(lastro, coopId).filter(
+      (n) => !isNotaConferenciaDecididaLocalmente(n.id)
+    );
+    return fundirFilaConferirComLastro(base, extra);
+  }, [pendentesTodasBase, pendingDeleteIds, coopId]);
+
+  const lastEstaveisRef = useRef<NotaPedido[]>([]);
 
   useEffect(() => {
-    if (!filaDetalhada) return;
+    if (!filaDetalhada || !subscribeFila) return;
     const sticky = stickyRef.current;
     const truth = isAppDataWarm() ? getDataOperationalTruth() : peekStaffGestaoLastGood();
     for (const n of pendentesTodas) {
@@ -104,12 +121,13 @@ export function useResponsavelFilaConferencia(
       sticky.ids.add(n.id);
       sticky.snapshot.set(n.id, n);
     }
-  }, [pendentesTodas, filaDetalhada]);
+  }, [pendentesTodas, filaDetalhada, subscribeFila]);
 
   const pendentesEstaveis = useMemo(() => {
-    if (!filaDetalhada) return pendentesTodas;
+    if (!filaDetalhada) return lastEstaveisRef.current.length ? lastEstaveisRef.current : pendentesTodas;
+    if (!subscribeFila) return lastEstaveisRef.current;
     const data = isAppDataWarm() ? getDataOperationalTruth() : peekStaffGestaoLastGood();
-    if (!data) return pendentesTodas;
+    if (!data) return pendentesTodas.length ? pendentesTodas : lastEstaveisRef.current;
     return buildPendentesEstaveisConferencia(
       data,
       pendentesTodas,
@@ -117,7 +135,7 @@ export function useResponsavelFilaConferencia(
       coopId,
       stickyRef.current
     );
-  }, [pendentesTodas, pendingDeleteIds, coopId, filaDetalhada]);
+  }, [pendentesTodas, pendingDeleteIds, coopId, filaDetalhada, subscribeFila]);
 
   const pendentesPorCooperado = useMemo(() => {
     if (!filaDetalhada) return [];
@@ -127,6 +145,9 @@ export function useResponsavelFilaConferencia(
   }, [pendentesEstaveis, coopId, filaDetalhada]);
 
   const lastFilaEstavelCountRef = useRef(0);
+  if (filaDetalhada && subscribeFila && pendentesEstaveis.length > 0) {
+    lastEstaveisRef.current = pendentesEstaveis;
+  }
   if (filaDetalhada) lastFilaEstavelCountRef.current = pendentesEstaveis.length;
   const filaNavCount = filaDetalhada
     ? pendentesEstaveis.length

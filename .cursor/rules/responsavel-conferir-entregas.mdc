@@ -1,0 +1,24 @@
+---
+description: Contrato Conferir entregas + Em aberto — lastro instantâneo, nota só sai no lançamento
+alwaysApply: true
+---
+
+# Responsável — Conferir entregas + Em aberto
+
+Modelo travado em `src/lib/responsavel/responsavelConferirEntregasContrato.ts` (`RESPONSAVEL_CONFERIR_ENTREGAS_CONTRATO_VERSION`).
+
+## O que o responsável vê
+
+1. **Conferir entregas** abre com a última fila do aparelho — não espera a nuvem.
+2. A nota **não some** só porque o sync veio vazio. Só sai da fila quando o responsável **lança na ficha**, rejeita, cancela ou apaga.
+3. **Em aberto** abre com o lastro já calculado. Abrir a aba **não** zera o cache.
+4. Lastro do painel fica no aparelho (sobrevive fechar o PWA). Novas notas entram em segundo plano.
+
+## Proibido sem bump da versão do contrato + ordem explícita
+
+- Apagar o card da fila quando a nota some do snapshot (sync pobre / keep-alive).
+- Chamar `resetResponsavelPainelIndexCache` ao abrir Em aberto.
+- Esperar tarefa pós-interativa longa para o primeiro pull da fila.
+- Guardar lastro só em sessionStorage (fecha o app e a tela zera).
+
+Teste: `npx tsx scripts/test-responsavel-conferir-entregas-contrato.ts`

@@ -20,7 +20,11 @@ const handler = staff.match(
 )?.[0];
 assert.ok(handler, "handler de abertura existe");
 assert.match(handler, /prefetchStaffNotasLancamentosAbertoChunk\(\)/, "prefetch preservado");
-assert.match(handler, /resetResponsavelPainelIndexCache\(\)/, "reset de cache em memória preservado");
+assert.doesNotMatch(
+  handler,
+  /resetResponsavelPainelIndexCache/,
+  "abrir Em aberto não zera o lastro"
+);
 assert.match(handler, /setVistaResponsavel\("aberto"\)/, "transição de vista preservada");
 assert.doesNotMatch(handler, /requestAppSyncImmediate/, "handler não dispara sync imediato");
 assert.doesNotMatch(handler, /requestAppSync\(/, "handler não dispara sync");
@@ -34,8 +38,8 @@ assert.doesNotMatch(
 assert.doesNotMatch(staff, /requestAppSyncImmediate/, "staff app sem requestAppSyncImmediate");
 assert.match(
   staff,
-  /mostrarPainelLancamentosAberto && coopId && \([\s\S]*?<LancamentosEmAbertoPainel/,
-  "painel real continua montado na vista aberto"
+  /mostrarPainelLancamentosAberto && coopId && relatorioEmAbertoConferir/,
+  "Em aberto pinta o lastro na hora (View, sem esperar chunk)"
 );
 assert.match(wrapper, /montarRelatorioEmAbertoConferir/, "wrapper usa transformação existente");
 assert.match(wrapper, /LancamentosEmAbertoPainelView/, "wrapper renderiza View existente");

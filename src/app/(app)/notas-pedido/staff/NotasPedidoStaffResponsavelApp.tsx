@@ -61,7 +61,6 @@ import { requestAppSync, requestAppSyncLight } from "@/services/syncRequest";
 import {
   isCooperadoManualOperacionalSync,
   scheduleCooperadoPostInteractiveTask,
-  scheduleStaffPostInteractiveTask,
 } from "@/lib/performance/cooperadoColdStart";
 import { useEnsureAppDataWarm } from "@/hooks/useEnsureAppDataWarm";
 import { useReconciliarLivroCaixaGestao } from "@/hooks/useReconciliarLivroCaixaGestao";
@@ -76,6 +75,7 @@ import {
   resolveStaffFilaUploadProgressPollMs,
   resolveStaffNotasPollIntervalMs,
   resolveStaffNotasPullMinIntervalMs,
+  scheduleStaffConferirFilaPrimeiroPull,
   STAFF_FILA_UPLOAD_PROGRESS_MAX_NOTAS,
 } from "@/lib/performance/staffFilaNotasLivePoll";
 import { markRqlColdStartPhase, markRqlStaffNotasSubviewTransition } from "@/lib/performance/rqlMarks";
@@ -219,8 +219,10 @@ import { ConferenciaNuvemSyncBanner } from "@/components/notas-pedido/Conferenci
 import { getInstituicoesCatalogo, getProdutosContrato } from "@/services/catalogoContratosService";
 import {
   countNotasFilaConferenciaResponsavel,
-  resetResponsavelPainelIndexCache,
+  listNotasFilaConferenciaDeDados,
 } from "@/services/responsavelPainelIndex";
+import { montarRelatorioEmAbertoConferir } from "@/components/notas/montarRelatorioEmAbertoConferir";
+import { LancamentosEmAbertoPainelView } from "@/components/notas/LancamentosEmAbertoPainelView";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, filtrarResumosMesesNaoQuitados } from "@/services/cooperadoEntregasService";
 import {
   staffListarResumosFichaEmAberto,
@@ -248,14 +250,6 @@ const CorrecoesEntregasPanel = dynamic(
       default: m.CorrecoesEntregasPanel,
     })),
   { loading: () => <div className="py-6 text-center text-sm text-gray-500">Carregando correções…</div> }
-);
-
-const LancamentosEmAbertoPainel = dynamic(
-  () =>
-    import("@/components/notas/LancamentosEmAbertoPainel").then((m) => ({
-      default: m.LancamentosEmAbertoPainel,
-    })),
-  { loading: () => <div className="py-6 text-center text-sm text-gray-500">Carregando lançamentos…</div> }
 );
 
 const NotasPedidoHistoricoResponsavel = dynamic(
@@ -1860,6 +1854,7 @@ export default function NotasPedidoStaffMain() {
     filaNavCount,
     removerNotaDaFilaSticky,
     touchNotaNaFilaSticky,
+    emAberto,
     emAbertoCount: cooperadosComLancamentoAbertoCount,
   } = useConferirProjection({
     coopId,
@@ -2036,7 +2031,6 @@ export default function NotasPedidoStaffMain() {
 
   const abrirLancamentosAbertoResponsavel = () => {
     prefetchStaffNotasLancamentosAbertoChunk();
-    resetResponsavelPainelIndexCache();
     startVistaTransition(() => {
       setVistaResponsavel("aberto");
       setAbaConferenciaKey("");
@@ -2063,7 +2057,17 @@ export default function NotasPedidoStaffMain() {
     !isCooperado && (vistaConteudo === "fila" || vistaConteudo === "cooperado");
 
   const dadosCarregandoFilaConferencia =
-    mostrarFilaResponsavelConteudo && data === null;
+    mostrarFilaResponsavelConteudo &&
+    data === null &&
+    pendentesEstaveis.length === 0 &&
+    filaNavCount === 0;
+
+  const relatorioEmAbertoConferir = useMemo(() => {
+    if (!mostrarPainelLancamentosAberto || !coopId) return null;
+    const fonte = dataLeitura ?? (isAppDataWarm() ? getData() : peekStaffGestaoLastGood());
+    if (!fonte) return null;
+    return montarRelatorioEmAbertoConferir(fonte, coopId, filtroCooperadoId || undefined);
+  }, [mostrarPainelLancamentosAberto, coopId, dataLeitura, filtroCooperadoId]);
 
   const contratosEntrega =
     useAppDataSelectorForDomainsWhenActive(
@@ -2227,22 +2231,24 @@ export default function NotasPedidoStaffMain() {
     requestAppSyncLight();
   }, [isCooperado, data]);
 
-  // Responsável: full de notas após pintar a fila (1× por sessão); pull não depende da aba visível no keep-alive.
+  // Responsável: pinta lastro e puxa notas no primeiro frame — não espera idle longo.
   useEffect(() => {
     if (isCooperado || !data || !coopId) return;
     if (responsavelMountSyncRef.current) return;
     responsavelMountSyncRef.current = true;
     responsavelPrimeiroPullAgendadoRef.current = true;
-    scheduleStaffPostInteractiveTask(() => {
-      const d = getData();
-      const filaLocalQuente =
-        Boolean(d && coopId && countNotasFilaConferenciaResponsavel(d, coopId) > 0);
+    scheduleStaffConferirFilaPrimeiroPull(() => {
+      const lastro = peekStaffGestaoLastGood();
+      const live = getData();
+      if (lastro && live) {
+        const kept = preservarStaffGestaoContraWipe(lastro, live);
+        if (kept !== live) saveDataSafe(kept);
+      }
+      const d = getData() ?? lastro;
+      const filaLocalQuente = Boolean(
+        d && coopId && listNotasFilaConferenciaDeDados(d, coopId).length > 0
+      );
       if (!filaLocalQuente) {
-        const lastro = peekStaffGestaoLastGood();
-        if (lastro) {
-          const kept = preservarStaffGestaoContraWipe(lastro, getData());
-          if (kept !== getData()) saveDataSafe(kept);
-        }
         recuperarFilaConferencia();
       } else {
         const cnpj = d && coopId ? getCooperativaCnpj(d, coopId) : undefined;
@@ -4718,9 +4724,35 @@ export default function NotasPedidoStaffMain() {
             />
           )}
 
-          {mostrarPainelLancamentosAberto && coopId && (
-            <LancamentosEmAbertoPainel coopId={coopId} cooperadoId={filtroCooperadoId || undefined} />
-          )}
+          {mostrarPainelLancamentosAberto && coopId && relatorioEmAbertoConferir ? (
+            <LancamentosEmAbertoPainelView
+              linhasTabela={relatorioEmAbertoConferir.linhasTabela}
+              totalGeral={relatorioEmAbertoConferir.totalGeral}
+              detalharPorMes={relatorioEmAbertoConferir.detalharPorMes}
+              cooperadosCount={relatorioEmAbertoConferir.porCooperado.length}
+            />
+          ) : mostrarPainelLancamentosAberto && coopId && emAberto.count > 0 ? (
+            <LancamentosEmAbertoPainelView
+              linhasTabela={emAberto.linhas.map((l) => ({
+                id: l.cooperadoId,
+                cooperado: l.cooperado,
+                mesesLabel: l.mesesLabel,
+                entregas: l.entregas,
+                total: l.total,
+                situacao: "—",
+              }))}
+              totalGeral={emAberto.total}
+              detalharPorMes={false}
+              cooperadosCount={emAberto.count}
+            />
+          ) : mostrarPainelLancamentosAberto ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/90 px-5 py-6 text-center">
+              <p className="text-base font-semibold text-amber-950">Abrindo lançamentos deste aparelho…</p>
+              <p className="text-sm text-amber-900/80 mt-1 max-w-md mx-auto">
+                O que já estava em aberto reaparece na hora. A nuvem entra em segundo plano.
+              </p>
+            </div>
+          ) : null}
 
           {!mostrarPainelLancamentosAberto &&
           !mostrarCorrecoesResponsavel &&

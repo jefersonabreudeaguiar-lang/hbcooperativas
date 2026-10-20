@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v514
+
+- **Responsável:** Conferir entregas abre com a fila salva no aparelho — a nota do cooperado não some até o lançamento na ficha.
+- **Em aberto:** a lista do lastro aparece na hora; abrir a aba não esvazia o painel.
+- **Cooperado:** Início, Financeiro e Entregas iguais ao v513.
+
 ## v513
 
 - **Ficha:** Minha ficha abre com todos os meses do lastro — não fica vazia esperando a nuvem.

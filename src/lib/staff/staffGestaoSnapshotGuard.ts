@@ -83,7 +83,13 @@ function persistLastGoodToSessionNow(cnpj: string, data: AppData): void {
     const slim = stripBinaryForPersist(data, { role: "responsavel" });
     const json = JSON.stringify(slim);
     if (json.length > STAFF_GESTAO_LKG_MAX_CHARS) return;
-    sessionStorage.setItem(staffLkgSessionKey(cnpj), json);
+    const key = staffLkgSessionKey(cnpj);
+    sessionStorage.setItem(key, json);
+    try {
+      localStorage.setItem(key, json);
+    } catch {
+      /* quota / private — session ainda vale nesta aba */
+    }
   } catch {
     /* quota / private */
   }
@@ -115,11 +121,9 @@ function bindStaffGestaoLkgPagehide(): void {
   window.addEventListener("beforeunload", flush);
 }
 
-function readLastGoodFromSession(cnpj: string): AppData | null {
-  if (typeof window === "undefined" || cnpj.length !== 14) return null;
+function parseStaffLastGoodJson(raw: string | null, cnpj: string): AppData | null {
+  if (!raw) return null;
   try {
-    const raw = sessionStorage.getItem(staffLkgSessionKey(cnpj));
-    if (!raw) return migrateLegacyLastGoodIfMatches(cnpj);
     const parsed = JSON.parse(raw) as AppData;
     if (!parsed || typeof parsed !== "object") return null;
     if (staffGestaoRiquezaTotal(medirRiquezaStaffGestao(parsed)) <= 0) return null;
@@ -129,6 +133,27 @@ function readLastGoodFromSession(cnpj: string): AppData | null {
   } catch {
     return null;
   }
+}
+
+function readLastGoodFromSession(cnpj: string): AppData | null {
+  if (typeof window === "undefined" || cnpj.length !== 14) return null;
+  const key = staffLkgSessionKey(cnpj);
+  const fromSession = parseStaffLastGoodJson(sessionStorage.getItem(key), cnpj);
+  if (fromSession) return fromSession;
+  try {
+    const fromLocal = parseStaffLastGoodJson(localStorage.getItem(key), cnpj);
+    if (fromLocal) {
+      try {
+        sessionStorage.setItem(key, JSON.stringify(fromLocal));
+      } catch {
+        /* quota */
+      }
+      return fromLocal;
+    }
+  } catch {
+    /* private */
+  }
+  return migrateLegacyLastGoodIfMatches(cnpj);
 }
 
 /** Lastro antigo (sem CNPJ) só vale se for da cooperativa da sessão. */
@@ -253,12 +278,21 @@ export function resetStaffGestaoSnapshotGuardForTests(): void {
   if (typeof window === "undefined") return;
   try {
     sessionStorage.removeItem(STAFF_GESTAO_LKG_SESSION_KEY);
-    const toRemove: string[] = [];
-    for (let i = 0; i < sessionStorage.length; i++) {
-      const key = sessionStorage.key(i);
-      if (key?.startsWith(`${STAFF_GESTAO_LKG_SESSION_KEY}:`)) toRemove.push(key);
+    const prefix = `${STAFF_GESTAO_LKG_SESSION_KEY}:`;
+    const clearStore = (store: Storage) => {
+      const toRemove: string[] = [];
+      for (let i = 0; i < store.length; i++) {
+        const key = store.key(i);
+        if (key?.startsWith(prefix) || key === STAFF_GESTAO_LKG_SESSION_KEY) toRemove.push(key);
+      }
+      for (const key of toRemove) store.removeItem(key);
+    };
+    clearStore(sessionStorage);
+    try {
+      clearStore(localStorage);
+    } catch {
+      /* ignore */
     }
-    for (const key of toRemove) sessionStorage.removeItem(key);
   } catch {
     /* ignore */
   }

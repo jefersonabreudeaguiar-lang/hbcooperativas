@@ -18,6 +18,7 @@ export function prefetchStaffNotasPedidoUiChunks(): void {
   if (typeof window === "undefined") return;
   void import("@/components/notas/ResponsavelFilaCooperadosList");
   void import("@/components/notas/NotasPedidoHistoricoResponsavel");
+  void import("@/components/notas/LancamentosEmAbertoPainelView");
 }
 
 export function prefetchStaffNotasHistoricoChunk(): void {
@@ -32,6 +33,7 @@ export function prefetchStaffNotasCorrecoesChunk(): void {
 
 export function prefetchStaffNotasLancamentosAbertoChunk(): void {
   if (typeof window === "undefined") return;
+  void import("@/components/notas/LancamentosEmAbertoPainelView");
   void import("@/components/notas/LancamentosEmAbertoPainel");
 }
 

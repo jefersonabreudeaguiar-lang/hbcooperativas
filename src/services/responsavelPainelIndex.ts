@@ -10,6 +10,7 @@ import {
   resolverCooperadoIdCanonico,
 } from "@/services/cooperadoCloudService";
 import { getDataOperationalTruth, getDataRevision } from "@/services/dataStore";
+import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { listarMesesFichaEmAbertoCooperado } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
 import { alinharFichaComPagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
@@ -384,6 +385,12 @@ function aplicarLastroCompletenessConferir(candidato: AppData, key = "_"): AppDa
 export function appDataParaConferirLeitura(data: AppData, coopId?: string): AppData {
   garantirCacheDoBuildAtual();
   const key = coopId || "_";
+  if (!conferirLeituraLatchByKey.has(key)) {
+    const lkg = peekStaffGestaoLastGood();
+    if (lkg && ((lkg.notasPedido?.length ?? 0) > 0 || (lkg.fichaCorrida?.length ?? 0) > 0)) {
+      conferirLeituraLatchByKey.set(key, lkg);
+    }
+  }
   const truth = getDataOperationalTruth();
   const merged = escolherSnapshotMaisCompleto(truth, data);
   return aplicarLastroCompletenessConferir(alinharFichaComPagamentosCooperativa(merged), key);
@@ -513,6 +520,12 @@ export function fundirLinhasEmAbertoEstavel(
     if (vivo) byId.set(old.cooperadoId, vivo);
   }
   return [...byId.values()].sort((a, b) => a.cooperado.localeCompare(b.cooperado, "pt-BR"));
+}
+
+/** Lista da fila a partir de um snapshot — sem cache da revisão ao vivo. */
+export function listNotasFilaConferenciaDeDados(data: AppData, coopId: string): NotaPedido[] {
+  if (!coopId) return [];
+  return coletarFilaNotasConferir(data, coopId);
 }
 
 function coletarFilaNotasConferir(data: AppData, coopId: string): NotaPedido[] {
