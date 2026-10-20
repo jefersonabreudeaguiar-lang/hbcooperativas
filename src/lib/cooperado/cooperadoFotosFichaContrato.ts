@@ -146,3 +146,17 @@ export function resumosFotosAPartirDeResumos(
     }))
     .filter((r) => r.notas.length > 0);
 }
+
+/** Junta lastros da Ficha (AppData, snapshot Entregas, snapshot Financeiro). */
+export function mesclarResumosFichaCompletaFontes(
+  ...fontes: Array<readonly ResumoMesEntregasCooperado[] | undefined | null>
+): ResumoMesEntregasCooperado[] {
+  const byMes = new Map<string, ResumoMesEntregasCooperado>();
+  for (const lista of fontes) {
+    for (const r of lista ?? []) {
+      const prev = byMes.get(r.mesReferencia);
+      if (!prev || r.notas.length > prev.notas.length) byMes.set(r.mesReferencia, r);
+    }
+  }
+  return [...byMes.values()].sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia));
+}

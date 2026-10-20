@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v513
+
+- **Ficha:** Minha ficha abre com todos os meses do lastro — não fica vazia esperando a nuvem.
+- **Fotos:** Fotos por mês junta as fotos da Ficha e do Financeiro; toque amplia e passa na sequência.
+- **Entregas:** a lista acompanha o lastro quando a aba está aberta.
+
 ## v512
 
 - **Entregas:** o histórico completo por mês continua na lista — não some depois de conferir.

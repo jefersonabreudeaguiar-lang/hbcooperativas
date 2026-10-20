@@ -53,10 +53,12 @@ import { valorPendenteRecebimentoFichaCooperado } from "@/services/cooperadoFich
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import {
   COOPERADO_FICHA_FOTOS_LIQUIDADAS_LABEL,
+  listarResumosFichaCompletaCooperado,
   listarResumosFotosFichaTodas,
-  mesclarResumosFichaComMesesAnteriores,
+  mesclarResumosFichaCompletaFontes,
   resumosFotosAPartirDeResumos,
 } from "@/lib/cooperado/cooperadoFotosFichaContrato";
+import { lerCooperadoPwaFichaResumoSnapshot } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import { baixarRecibo, nomeArquivoRecibo } from "@/utils/recibo";
 import { CooperadoPagamentoMesView } from "@/components/cooperado/CooperadoPagamentoMesView";
 import type { AppData, FichaCorridaDesconto } from "@/types";
@@ -578,10 +580,22 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
   );
   const data = dataLive ?? (typeof window !== "undefined" && isAppDataWarm() ? getData() : null);
 
-  const resumosExtrato = useMemo(
-    () => mesclarResumosFichaComMesesAnteriores(resumos, pagamentosRealizadosCache ?? []),
-    [resumos, pagamentosRealizadosCache]
-  );
+  const fichaFinSnap = useMemo(() => {
+    if (!cooperadoId || !cooperativaId) return null;
+    return lerCooperadoPwaFichaResumoSnapshot(cooperadoId, cooperativaId);
+  }, [cooperadoId, cooperativaId, data]);
+
+  const resumosExtrato = useMemo(() => {
+    const doLastro = data && cooperadoId
+      ? listarResumosFichaCompletaCooperado(data, cooperadoId, cooperativaId)
+      : [];
+    return mesclarResumosFichaCompletaFontes(
+      doLastro,
+      resumos,
+      pagamentosRealizadosCache,
+      fichaFinSnap?.fichaAberto
+    );
+  }, [data, cooperadoId, cooperativaId, resumos, pagamentosRealizadosCache, fichaFinSnap]);
 
   const trocarSubAba = (aba: "extrato" | "pagamentos" | "fotos") => {
     startTransition(() => setSubAba(aba));
@@ -635,11 +649,26 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
       : `/ficha-corrida?cooperado=${encodeURIComponent(cooperadoId)}`;
 
   const resumosFotos = useMemo(() => {
-    if (!abaFotosAtiva) return [];
-    if (data) return listarResumosFotosFichaTodas(data, cooperadoId, cooperativaId);
-    if ((fotosFichaLiquidadaCache?.length ?? 0) > 0) return fotosFichaLiquidadaCache!;
-    return resumosFotosAPartirDeResumos(resumosHistorico);
-  }, [abaFotosAtiva, data, cooperadoId, cooperativaId, fotosFichaLiquidadaCache, resumosHistorico]);
+    const doLastro =
+      data && cooperadoId
+        ? listarResumosFotosFichaTodas(data, cooperadoId, cooperativaId)
+        : [];
+    return mesclarResumosFichaCompletaFontes(
+      doLastro,
+      fotosFichaLiquidadaCache,
+      fichaFinSnap?.fotosAReceber,
+      resumosFotosAPartirDeResumos(resumosExtrato),
+      resumosFotosAPartirDeResumos(resumosHistorico)
+    );
+  }, [
+    data,
+    cooperadoId,
+    cooperativaId,
+    fotosFichaLiquidadaCache,
+    fichaFinSnap,
+    resumosExtrato,
+    resumosHistorico,
+  ]);
 
   const mesesHistoricoKey = useMemo(
     () => resumosHistorico.map((r) => r.mesReferencia).join("|"),

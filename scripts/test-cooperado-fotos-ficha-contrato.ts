@@ -10,6 +10,7 @@ import {
   COOPERADO_FICHA_FOTOS_LIQUIDADAS_LABEL,
   COOPERADO_FINANCEIRO_FOTO_A_RECEBER_LABEL,
   COOPERADO_FOTOS_FICHA_CONTRATO_VERSION,
+  mesclarResumosFichaCompletaFontes,
   mesclarResumosFichaComMesesAnteriores,
   particionarResumosFotosPorAberto,
   resumosFotosAPartirDeResumos,
@@ -67,6 +68,13 @@ assert.deepEqual(fichaLiquidada.map((r) => r.mesReferencia), ["2026-09"]);
 const soComFoto = resumosFotosAPartirDeResumos([resumo("2026-08", false), resumo("2026-07", true)]);
 assert.deepEqual(soComFoto.map((r) => r.mesReferencia), ["2026-07"]);
 
+const mesclado = mesclarResumosFichaCompletaFontes(
+  [],
+  [resumo("2026-10", true)],
+  [resumo("2026-09", true)]
+);
+assert.deepEqual(mesclado.map((r) => r.mesReferencia), ["2026-10", "2026-09"]);
+
 const financeiroNav = read("src/components/cooperado/CooperadoFinanceiroSecoesNav.tsx");
 assert.match(financeiroNav, /COOPERADO_FINANCEIRO_FOTO_A_RECEBER_LABEL/);
 assert.doesNotMatch(financeiroNav, /label: "Fotos"/);
@@ -77,11 +85,15 @@ assert.doesNotMatch(financeiroPage, /listarResumosFotosCooperado\(/);
 
 const fichaTab = read("src/components/cooperado/CooperadoMinhaFichaTab.tsx");
 assert.match(fichaTab, /listarResumosFotosFichaTodas/);
+assert.match(fichaTab, /listarResumosFichaCompletaCooperado/);
+assert.match(fichaTab, /mesclarResumosFichaCompletaFontes/);
+assert.match(fichaTab, /lerCooperadoPwaFichaResumoSnapshot/);
 assert.match(fichaTab, /COOPERADO_FICHA_FOTOS_LIQUIDADAS_LABEL/);
 assert.match(fichaTab, /Ficha completa/);
 
 const entregasMain = read("src/app/(app)/notas-pedido/NotasPedidoCooperadoMain.tsx");
 assert.match(entregasMain, /listarResumosFichaCompletaCooperado/);
+assert.match(entregasMain, /painelCooperadoEntregasAtivo/);
 assert.match(entregasMain, /fotosFichaLiquidadaCache/);
 assert.match(entregasMain, /useState\(""\)/);
 assert.doesNotMatch(entregasMain, /useState\(isCooperado \? "pendentes"/);

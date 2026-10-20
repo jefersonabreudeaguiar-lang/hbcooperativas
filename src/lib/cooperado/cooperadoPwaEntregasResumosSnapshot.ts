@@ -40,8 +40,16 @@ export type CooperadoPwaEntregasResumosSnapshot = {
   pagamentosRealizados: ResumoMesEntregasCooperado[];
 };
 
+function storageKeyForVersion(
+  version: number,
+  cooperadoId: string,
+  cooperativaId: string
+): string {
+  return `hb.coop.pwaEntregasResumos.v${version}:${cooperativaId}:${cooperadoId}`;
+}
+
 function storageKey(cooperadoId: string, cooperativaId: string): string {
-  return `hb.coop.pwaEntregasResumos.v${COOPERADO_PWA_ENTREGAS_SNAPSHOT_VERSION}:${cooperativaId}:${cooperadoId}`;
+  return storageKeyForVersion(COOPERADO_PWA_ENTREGAS_SNAPSHOT_VERSION, cooperadoId, cooperativaId);
 }
 
 export type BuildCooperadoPwaEntregasSnapshotOpts = {
@@ -63,9 +71,11 @@ export function buildCooperadoPwaEntregasResumosSnapshot(
     ? (opts.pagamentosRealizadosAnteriores ?? [])
     : listarResumosExtratoHistoricoCooperado(data, cooperadoId, cooperativaId);
   const fichaExtrato = listarResumosFichaCompletaCooperado(data, cooperadoId, cooperativaId);
-  const fotosFichaLiquidada = opts?.omitirPagamentosHistorico
-    ? (opts.fotosFichaLiquidadaAnteriores ?? [])
-    : listarResumosFotosFichaTodas(data, cooperadoId, cooperativaId);
+  const fotosTodas = listarResumosFotosFichaTodas(data, cooperadoId, cooperativaId);
+  const fotosFichaLiquidada =
+    opts?.omitirPagamentosHistorico && (opts.fotosFichaLiquidadaAnteriores?.length ?? 0) > fotosTodas.length
+      ? opts.fotosFichaLiquidadaAnteriores!
+      : fotosTodas;
   return {
     v: COOPERADO_PWA_ENTREGAS_SNAPSHOT_VERSION,
     appBuild: APP_BUILD_VERSION,
@@ -84,10 +94,11 @@ export function lerCooperadoPwaEntregasResumosSnapshot(
 ): CooperadoPwaEntregasResumosSnapshot | null {
   if (typeof localStorage === "undefined") return null;
   try {
-    const raw = localStorage.getItem(storageKey(cooperadoId, cooperativaId));
+    let raw = localStorage.getItem(storageKey(cooperadoId, cooperativaId));
+    if (!raw) raw = localStorage.getItem(storageKeyForVersion(1, cooperadoId, cooperativaId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CooperadoPwaEntregasResumosSnapshot;
-    if (parsed.v !== COOPERADO_PWA_ENTREGAS_SNAPSHOT_VERSION || !Array.isArray(parsed.entregasBase)) {
+    if ((parsed.v !== COOPERADO_PWA_ENTREGAS_SNAPSHOT_VERSION && parsed.v !== 1) || !Array.isArray(parsed.entregasBase)) {
       return null;
     }
     if (!cooperadoPwaSnapshotBuildReadable(parsed.appBuild)) return null;

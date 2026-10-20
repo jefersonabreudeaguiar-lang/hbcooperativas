@@ -202,8 +202,10 @@ import { countCooperadosLancamentosEmAbertoResponsavel } from "@/services/respon
 import { filtrarResumosEntregasPendentes } from "@/services/cooperadoEntregasService";
 import {
   listarResumosFichaCompletaCooperado,
+  mesclarResumosFichaCompletaFontes,
   mesclarResumosFichaComMesesAnteriores,
 } from "@/lib/cooperado/cooperadoFotosFichaContrato";
+import { lerCooperadoPwaFichaResumoSnapshot } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import {
   bicCentralListarResumosMensaisEntregas,
   bicCentralMesPrincipalQuantoVouReceber,
@@ -653,6 +655,12 @@ export default function NotasPedidoCooperadoMain() {
     window.addEventListener(COOPERADO_PWA_ENTREGAS_SNAPSHOT_REFRESH_EVENT, onRefresh);
     return () => window.removeEventListener(COOPERADO_PWA_ENTREGAS_SNAPSHOT_REFRESH_EVENT, onRefresh);
   }, [entregasPwaLeve, refreshPwaEntregasResumosSnap]);
+
+  useEffect(() => {
+    if (!isCooperado || abaCooperado !== "ficha") return;
+    if (!cooperadoId || !coopId || !isAppDataWarm()) return;
+    refreshPwaEntregasResumosSnap();
+  }, [isCooperado, abaCooperado, cooperadoId, coopId, refreshPwaEntregasResumosSnap]);
   const mesHbSync =
     data && cooperadoCanonico && coopId
       ? bicCentralMesPrincipalQuantoVouReceber(data, cooperadoCanonico, coopId)
@@ -1832,11 +1840,13 @@ export default function NotasPedidoCooperadoMain() {
 
   const deferredStatusFilter = useDeferredValue(statusFilter);
 
+  const painelCooperadoEntregasAtivo = tabActive && isCooperado;
+
   const resumosMensaisLive =
     useAppDataSelectorWhenActive(
-      appDataUiOn,
+      painelCooperadoEntregasAtivo,
       (d) => {
-        if (!cooperadoId || !coopId || abaCooperado !== "entregas") return [];
+        if (!cooperadoId || !coopId) return [];
         const base = bicCentralListarResumosMensaisEntregas(d, cooperadoId, coopId);
         if (deferredStatusFilter === "pendentes") return filtrarResumosEntregasPendentes(base);
         if (!deferredStatusFilter) return base;
@@ -1847,17 +1857,17 @@ export default function NotasPedidoCooperadoMain() {
           }))
           .filter((r) => r.notas.length > 0);
       },
-      [cooperadoId, coopId, deferredStatusFilter, hbDescontosRevision, abaCooperado, entregasPwaLeve]
+      [cooperadoId, coopId, deferredStatusFilter, hbDescontosRevision]
     ) ?? [];
 
   const resumosFichaLive =
     useAppDataSelectorWhenActive(
-      appDataUiOn,
+      painelCooperadoEntregasAtivo,
       (d) => {
-        if (!cooperadoId || !coopId || abaCooperado !== "ficha") return [];
+        if (!cooperadoId || !coopId) return [];
         return listarResumosFichaCompletaCooperado(d, cooperadoId, coopId);
       },
-      [cooperadoId, coopId, hbDescontosRevision, abaCooperado, entregasPwaLeve]
+      [cooperadoId, coopId, hbDescontosRevision]
     ) ?? [];
 
   const resumosMensaisCooperado = useMemo(() => {
@@ -1893,22 +1903,25 @@ export default function NotasPedidoCooperadoMain() {
   ]);
 
   const resumosFichaCooperado = useMemo(() => {
-    if ((!entregasPwaLeve && !messenger) || abaCooperado !== "ficha") {
-      if (resumosFichaLive.length > 0) return resumosFichaLive;
-    }
-    if (!messenger && resumosFichaLive.length > 0) return resumosFichaLive;
     const snapExtrato =
       pwaEntregasResumosSnap?.fichaExtrato ??
       mesclarResumosFichaComMesesAnteriores(
         pwaEntregasResumosSnap?.fichaAberto ?? [],
         pwaEntregasResumosSnap?.pagamentosRealizados ?? []
       );
-    if (snapExtrato.length > 0) return snapExtrato;
-    if (cooperadoId && coopId && isAppDataWarm()) {
-      return listarResumosFichaCompletaCooperado(getData(), cooperadoId, coopId);
-    }
-    return resumosFichaLive;
-  }, [entregasPwaLeve, messenger, abaCooperado, pwaEntregasResumosSnap, resumosFichaLive, cooperadoId, coopId]);
+    const finSnap =
+      cooperadoId && coopId ? lerCooperadoPwaFichaResumoSnapshot(cooperadoId, coopId) : null;
+    const doLastro =
+      cooperadoId && coopId && isAppDataWarm()
+        ? listarResumosFichaCompletaCooperado(getData(), cooperadoId, coopId)
+        : [];
+    return mesclarResumosFichaCompletaFontes(
+      resumosFichaLive,
+      doLastro,
+      snapExtrato,
+      finSnap?.fichaAberto
+    );
+  }, [pwaEntregasResumosSnap, resumosFichaLive, cooperadoId, coopId]);
 
   const getEscolaLabelCooperado = useCallback(
     (n: NotaPedido) => getEscolaNotaLabel(n, data?.instituicoes ?? []),
