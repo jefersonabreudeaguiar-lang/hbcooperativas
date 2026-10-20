@@ -170,6 +170,22 @@ export async function pushCobrancaSaasToCloud(
   }
 }
 
+/** Lê a cobrança confirmada pelo admin — lookup público não traz cobranca_saas. */
+export async function fetchCobrancaSaasFromCloud(
+  cnpj: string
+): Promise<CobrancaSaasCooperativa | null> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return null;
+  try {
+    const res = await secureApiFetch(`/api/cooperativas/${digits}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { cobrancaSaas?: CobrancaSaasCooperativa | null };
+    return json.cobrancaSaas ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function scoreMensalidadeConfig(cfg?: MensalidadeConfig): number {
   if (!cfg) return 0;
   let score = 0;
@@ -230,8 +246,34 @@ export function mergeMensalidadeConfig(
   };
 }
 
+function rankStatusLancamentoCobrancaSaas(status: string | undefined): number {
+  if (status === "paga") return 4;
+  if (status === "aguardando_confirmacao") return 3;
+  if (status === "enviada" || status === "rejeitada") return 2;
+  return 1;
+}
+
+function fundirHistoricoCobrancaSaas(
+  local?: CobrancaSaasCooperativa["historico"],
+  cloud?: CobrancaSaasCooperativa["historico"]
+): NonNullable<CobrancaSaasCooperativa["historico"]> {
+  const byPeriodo = new Map<string, NonNullable<CobrancaSaasCooperativa["historico"]>[number]>();
+  for (const h of [...(local ?? []), ...(cloud ?? [])]) {
+    const prev = byPeriodo.get(h.periodoId);
+    if (!prev || rankStatusLancamentoCobrancaSaas(h.status) >= rankStatusLancamentoCobrancaSaas(prev.status)) {
+      byPeriodo.set(h.periodoId, h);
+    }
+  }
+  return [...byPeriodo.values()];
+}
+
+function cobrancaSaasTemPagamentoConfirmado(c: CobrancaSaasCooperativa): boolean {
+  if (c.statusMes === "em_dia" && Boolean(c.ultimoPeriodoPago)) return true;
+  return (c.historico ?? []).some((h) => h.status === "paga");
+}
+
 /** Mescla cobrança SaaS priorizando confirmação na nuvem (ex.: pagamento Asaas). */
-function mergeCobrancaSaas(
+export function mergeCobrancaSaas(
   local: CobrancaSaasCooperativa | undefined,
   cloud: CobrancaSaasCooperativa | undefined,
   localUpdatedAt?: string,
@@ -242,26 +284,44 @@ function mergeCobrancaSaas(
 
   const cloudTs = cloudUpdatedAt ? new Date(cloudUpdatedAt).getTime() : 0;
   const localTs = localUpdatedAt ? new Date(localUpdatedAt).getTime() : 0;
-
-  if (cloud.statusMes === "em_dia" && local.statusMes !== "em_dia") return cloud;
-
-  const cloudPaid = cloud.statusMes === "em_dia" && Boolean(cloud.ultimoPeriodoPago);
+  const historico = fundirHistoricoCobrancaSaas(local.historico, cloud.historico);
+  const cloudPaid = cobrancaSaasTemPagamentoConfirmado(cloud);
   const localStillBilling =
     local.statusMes === "aguardando_confirmacao" ||
     local.statusMes === "cobranca_enviada" ||
     local.statusMes === "aviso_bloqueio" ||
     local.statusMes === "bloqueado";
 
-  if (cloudPaid && localStillBilling) return cloud;
-  if (local.statusMes === "aguardando_confirmacao" && cloud.statusMes === "em_dia") return cloud;
+  if (cloudPaid && (local.statusMes !== "em_dia" || localStillBilling)) {
+    return {
+      ...local,
+      ...cloud,
+      historico,
+      cicloInicioEm: local.cicloInicioEm ?? cloud.cicloInicioEm,
+      ultimoPeriodoPago: cloud.ultimoPeriodoPago ?? local.ultimoPeriodoPago,
+      statusMes: "em_dia",
+      avisoMensagem: undefined,
+      avisoEm: undefined,
+      bloqueadoEm: undefined,
+      bloqueadoPor: undefined,
+    };
+  }
+
+  if (cloud.statusMes === "em_dia" && local.statusMes !== "em_dia") {
+    return { ...cloud, historico, cicloInicioEm: local.cicloInicioEm ?? cloud.cicloInicioEm };
+  }
 
   if (cloud.ultimoPeriodoPago && cloud.ultimoPeriodoPago === local.ultimoPeriodoPago && cloudPaid) {
-    return cloud;
+    return { ...cloud, historico, cicloInicioEm: local.cicloInicioEm ?? cloud.cicloInicioEm };
   }
-  if (cloud.ultimoPeriodoPago && cloudPaid && !local.ultimoPeriodoPago) return cloud;
+  if (cloud.ultimoPeriodoPago && cloudPaid && !local.ultimoPeriodoPago) {
+    return { ...cloud, historico, cicloInicioEm: local.cicloInicioEm ?? cloud.cicloInicioEm };
+  }
 
-  if (cloudTs > localTs) return cloud;
-  return local;
+  if (cloudTs > localTs) {
+    return { ...cloud, historico, cicloInicioEm: local.cicloInicioEm ?? cloud.cicloInicioEm };
+  }
+  return { ...local, historico, ultimoPeriodoPago: local.ultimoPeriodoPago ?? cloud.ultimoPeriodoPago };
 }
 
 /** Sincroniza cooperativa da nuvem para o armazenamento local. */

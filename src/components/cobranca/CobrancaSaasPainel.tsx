@@ -20,9 +20,14 @@ import { getData, updateData } from "@/services/dataStore";
 import {
   ensureCobrancaPeriodoAtualSaas,
   getPainelCobrancaSaasResponsavel,
+  patchCobrancaSaas,
   responsavelInformouPagamentoSaas,
   sincronizarCicloCobrancaSaas,
 } from "@/services/cobrancaSaasService";
+import {
+  fetchCobrancaSaasFromCloud,
+  mergeCobrancaSaas,
+} from "@/services/cooperativaCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { isDiretoriaRole } from "@/permissions";
 import { PROPRIETARIO_APP } from "@/config/contratoServicoApp";
@@ -45,13 +50,29 @@ export function CobrancaSaasPainel() {
     const d = getData();
     const coop = d.cooperativas.find((c) => c.id === coopId);
     if (!coop) return;
-    updateData((current) => {
-      const before = JSON.stringify(current.cooperativas.find((c) => c.id === coopId)?.cobrancaSaas ?? {});
-      let next = sincronizarCicloCobrancaSaas(current, coopId);
-      next = ensureCobrancaPeriodoAtualSaas(next, coopId).data;
-      const after = JSON.stringify(next.cooperativas.find((c) => c.id === coopId)?.cobrancaSaas ?? {});
-      return before === after ? current : next;
+    let cancelled = false;
+    const aplicar = (cloud?: ReturnType<typeof mergeCobrancaSaas>) => {
+      if (cancelled) return;
+      updateData((current) => {
+        const before = JSON.stringify(current.cooperativas.find((c) => c.id === coopId)?.cobrancaSaas ?? {});
+        let next = current;
+        if (cloud) {
+          const local = current.cooperativas.find((c) => c.id === coopId)?.cobrancaSaas;
+          const merged = mergeCobrancaSaas(local, cloud);
+          if (merged) next = patchCobrancaSaas(next, coopId, merged);
+        }
+        next = sincronizarCicloCobrancaSaas(next, coopId);
+        next = ensureCobrancaPeriodoAtualSaas(next, coopId).data;
+        const after = JSON.stringify(next.cooperativas.find((c) => c.id === coopId)?.cobrancaSaas ?? {});
+        return before === after ? current : next;
+      });
+    };
+    void fetchCobrancaSaasFromCloud(coop.cnpj).then((cloud) => {
+      aplicar(cloud ?? undefined);
     });
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id, user?.role, coopId]);
 
   const painel = useMemo(() => {
@@ -64,7 +85,7 @@ export function CobrancaSaasPainel() {
   }
 
   if (painel.statusMes === "aguardando_primeiro_cooperado" || painel.valorTotal <= 0) return null;
-  if (painel.statusMes === "em_dia") return null;
+  if (painel.statusMes === "em_dia" || painel.lancamentoStatus === "paga") return null;
 
   const copyBoleto = async () => {
     if (!painel.boletoReferencia) return;

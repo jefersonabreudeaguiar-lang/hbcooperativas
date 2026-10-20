@@ -340,6 +340,30 @@ function lancamentoPeriodoAtual(cob: CobrancaSaasCooperativa, periodoId: string)
   return (cob.historico ?? []).find((h) => h.periodoId === periodoId);
 }
 
+function ymFromPeriodoId(periodoId: string): string | undefined {
+  const m = periodoId.match(/^(\d{4}-\d{2})/);
+  return m?.[1];
+}
+
+/** Ciclo já confirmado pelo admin — não reabrir cobrança nem mostrar painel. */
+export function periodoCobrancaSaasEstaPago(
+  cob: CobrancaSaasCooperativa,
+  periodoId?: string,
+  mesReferencia?: string
+): boolean {
+  const historico = cob.historico ?? [];
+  if (periodoId) {
+    if (cob.ultimoPeriodoPago === periodoId) return true;
+    if (historico.some((h) => h.periodoId === periodoId && h.status === "paga")) return true;
+  }
+  const mes = mesReferencia || (periodoId ? ymFromPeriodoId(periodoId) : undefined);
+  if (mes) {
+    if (historico.some((h) => h.mesReferencia === mes && h.status === "paga")) return true;
+    if (cob.ultimoPeriodoPago && ymFromPeriodoId(cob.ultimoPeriodoPago) === mes) return true;
+  }
+  return false;
+}
+
 function diasAtraso(vencimento: string, ref = new Date()): number {
   const v = new Date(`${vencimento}T23:59:59`);
   const diff = ref.getTime() - v.getTime();
@@ -364,11 +388,12 @@ export function ensureCobrancaPeriodoAtualSaas(
   const qtd = contarCooperadosCobranca(next, cooperativaId);
   if (qtd <= 0) return { data: next, ok: true };
 
-  if (cob.ultimoPeriodoPago === periodo.periodoId) {
+  if (periodoCobrancaSaasEstaPago(cob, periodo.periodoId, periodo.mesReferencia)) {
     if (cob.statusMes !== "em_dia" && cob.statusMes !== "aguardando_primeiro_cooperado") {
       next = patchCobrancaSaas(next, cooperativaId, {
         ...cob,
         statusMes: "em_dia",
+        ultimoPeriodoPago: cob.ultimoPeriodoPago ?? periodo.periodoId,
         avisoMensagem: undefined,
         avisoEm: undefined,
         bloqueadoEm: undefined,
@@ -494,6 +519,8 @@ export function getPainelCobrancaSaasResponsavel(
   const periodo = cob.cicloInicioEm ? getPeriodoCobrancaSaas(cob.cicloInicioEm) : undefined;
   const lanc = periodo ? lancamentoPeriodoAtual(cob, periodo.periodoId) : undefined;
   const atraso = periodo ? diasAtraso(periodo.vencimento) : 0;
+  const pago = periodoCobrancaSaasEstaPago(cob, periodo?.periodoId, periodo?.mesReferencia);
+  const statusMes: CobrancaSaasStatusMes = pago ? "em_dia" : cob.statusMes;
 
   return {
     precisaContrato,
@@ -506,8 +533,8 @@ export function getPainelCobrancaSaasResponsavel(
     qtdCooperados: qtd,
     valorTotal: calc.valorTotal,
     valorFormatado: formatCurrency(calc.valorTotal),
-    statusMes: cob.statusMes,
-    statusLabel: statusLabel(cob.statusMes),
+    statusMes,
+    statusLabel: statusLabel(statusMes),
     lancamentoStatus: lanc?.status,
     pixChave: PROPRIETARIO_APP.pixChave,
     pixNome: PROPRIETARIO_APP.pixNome,
@@ -517,15 +544,16 @@ export function getPainelCobrancaSaasResponsavel(
         ? gerarReferenciaBoletoSaas(normalizeCnpj(coop.cnpj), periodo.periodoId, calc.valorTotal)
         : undefined,
     podeInformarPagamento: Boolean(
-      !precisaContrato &&
+      !pago &&
+        !precisaContrato &&
         lanc &&
         (lanc.status === "enviada" || lanc.status === "rejeitada") &&
         calc.valorTotal > 0
     ),
-    aguardandoConfirmacao: lanc?.status === "aguardando_confirmacao",
-    avisoMensagem: cob.avisoMensagem,
-    emAtraso: atraso > 0 && cob.ultimoPeriodoPago !== periodo?.periodoId,
-    diasAtraso: atraso,
+    aguardandoConfirmacao: !pago && lanc?.status === "aguardando_confirmacao",
+    avisoMensagem: pago ? undefined : cob.avisoMensagem,
+    emAtraso: !pago && atraso > 0 && cob.ultimoPeriodoPago !== periodo?.periodoId,
+    diasAtraso: pago ? 0 : atraso,
   };
 }
 
@@ -833,7 +861,7 @@ export function getCobrancaSaasAvisosResponsavel(
   const periodo = cob?.cicloInicioEm ? getPeriodoCobrancaSaas(cob.cicloInicioEm) : undefined;
 
   if (
-    (periodo && cob?.ultimoPeriodoPago === periodo.periodoId) ||
+    (cob && periodoCobrancaSaasEstaPago(cob, periodo?.periodoId, periodo?.mesReferencia)) ||
     painel.lancamentoStatus === "paga" ||
     (painel.statusMes === "em_dia" && !painel.emAtraso)
   ) {

@@ -329,7 +329,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
     }
   };
 
-  const handleConfirmarPagamento = (row: CobrancaSaasAdminRow) => {
+  const handleConfirmarPagamento = async (row: CobrancaSaasAdminRow) => {
     setFeedback(null);
     setBusyId(row.cooperativaId);
     try {
@@ -338,8 +338,13 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
         if (!r.ok) throw new Error(r.error ?? "Não foi possível confirmar.");
         return r.data;
       });
-      syncSaasCloud(row.cooperativaId);
-      setFeedback({ type: "ok", text: `Pagamento confirmado — ${row.nome} em dia.` });
+      const synced = await syncSaasCloud(row.cooperativaId);
+      setFeedback({
+        type: synced ? "ok" : "erro",
+        text: synced
+          ? `Pagamento confirmado — ${row.nome} em dia. O responsável deixa de ver a cobrança neste ciclo.`
+          : `Pagamento confirmado neste aparelho, mas não gravou na nuvem. O responsável ainda pode ver a cobrança. Tente de novo.`,
+      });
     } catch (e) {
       setFeedback({ type: "erro", text: e instanceof Error ? e.message : "Falha ao aplicar ação." });
     } finally {
@@ -347,7 +352,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
     }
   };
 
-  const handleRejeitarPagamento = (row: CobrancaSaasAdminRow) => {
+  const handleRejeitarPagamento = async (row: CobrancaSaasAdminRow) => {
     const motivo = window.prompt(
       `Recusar pagamento informado por ${row.nome}?\n\nOpcional: descreva o motivo para o responsável.`
     );
@@ -360,8 +365,13 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
         if (!r.ok) throw new Error(r.error ?? "Não foi possível recusar.");
         return r.data;
       });
-      syncSaasCloud(row.cooperativaId);
-      setFeedback({ type: "ok", text: `Pagamento não confirmado — ${row.nome} notificado.` });
+      const synced = await syncSaasCloud(row.cooperativaId);
+      setFeedback({
+        type: synced ? "ok" : "erro",
+        text: synced
+          ? `Pagamento não confirmado — ${row.nome} notificado.`
+          : `Recusa gravada neste aparelho, mas não publicou na nuvem. Tente de novo.`,
+      });
     } catch (e) {
       setFeedback({ type: "erro", text: e instanceof Error ? e.message : "Falha ao aplicar ação." });
     } finally {

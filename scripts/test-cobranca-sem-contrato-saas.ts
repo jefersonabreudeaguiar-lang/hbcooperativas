@@ -8,10 +8,13 @@ import {
   contratoServicoAssinado,
   precisaAssinarContratoServico,
   getPainelCobrancaSaasResponsavel,
+  getCobrancaSaasAvisosResponsavel,
   ensureCobrancaPeriodoAtualSaas,
+  periodoCobrancaSaasEstaPago,
   responsavelInformouPagamentoSaas,
   confirmarPagamentoCobrancaSaas,
 } from "../src/services/cobrancaSaasService.ts";
+import { mergeCobrancaSaas } from "../src/services/cooperativaCloudService.ts";
 
 const COOP = "coop-1";
 
@@ -69,5 +72,40 @@ const confirmado = confirmarPagamentoCobrancaSaas(informado.data, COOP, "Criador
 assert.equal(confirmado.ok, true, confirmado.error);
 const depois = getPainelCobrancaSaasResponsavel(confirmado.data, COOP);
 assert.equal(depois?.statusMes, "em_dia");
+assert.equal(getCobrancaSaasAvisosResponsavel(confirmado.data, COOP), null);
 
-console.log("ok: cobrança sem contrato SaaS — PIX + confirmação admin");
+const reaberta = ensureCobrancaPeriodoAtualSaas(confirmado.data, COOP);
+assert.equal(getPainelCobrancaSaasResponsavel(reaberta.data, COOP)?.statusMes, "em_dia");
+assert.equal(getCobrancaSaasAvisosResponsavel(reaberta.data, COOP), null);
+
+const cobPago = confirmado.data.cooperativas[0].cobrancaSaas!;
+assert.equal(periodoCobrancaSaasEstaPago(cobPago, cobPago.ultimoPeriodoPago), true);
+
+const localAindaCobra = gerada.data.cooperativas[0].cobrancaSaas!;
+assert.equal(localAindaCobra.statusMes !== "em_dia", true);
+const mesclado = mergeCobrancaSaas(localAindaCobra, cobPago);
+assert.ok(mesclado);
+assert.equal(mesclado.statusMes, "em_dia");
+assert.equal(periodoCobrancaSaasEstaPago(mesclado, cobPago.ultimoPeriodoPago), true);
+
+const painelAposNuvem = getPainelCobrancaSaasResponsavel(
+  {
+    ...gerada.data,
+    cooperativas: gerada.data.cooperativas.map((c) =>
+      c.id === COOP ? { ...c, cobrancaSaas: mesclado } : c
+    ),
+  },
+  COOP
+);
+assert.equal(painelAposNuvem?.statusMes, "em_dia");
+assert.equal(getCobrancaSaasAvisosResponsavel(
+  {
+    ...gerada.data,
+    cooperativas: gerada.data.cooperativas.map((c) =>
+      c.id === COOP ? { ...c, cobrancaSaas: mesclado } : c
+    ),
+  },
+  COOP
+), null);
+
+console.log("ok: cobrança sem contrato SaaS — PIX + confirmação admin some no responsável");

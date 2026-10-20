@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v516
+
+- **Responsável:** depois que o admin confirma o pagamento da mensalidade do app, a cobrança some neste ciclo.
+- **Admin:** a confirmação grava na nuvem de verdade — se falhar, o painel avisa para tentar de novo.
+- **Cooperado:** Início, Financeiro e Entregas iguais ao v515.
+
 ## v515
 
 - **Responsável:** Pagar cooperados abre de verdade — não cai mais na tela «não terminou de carregar».

@@ -5,6 +5,54 @@ import type { Cooperativa, MensalidadeConfig } from "@/types";
 import { guardCooperativaApi } from "@/lib/security/apiGuard";
 import { cooperativaFromCloudRow, mensalidadeConfigComSenhaCadastro, mensalidadeConfigComSenhaAreaAdmin } from "@/utils/cooperativaCadastro";
 
+/** Leitura autenticada da cobrança SaaS — o responsável some a mensalidade após o admin confirmar. */
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ cnpj: string }> }
+) {
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ error: "Nuvem não configurada." }, { status: 503 });
+  }
+
+  const { cnpj: rawCnpj } = await context.params;
+  const cnpj = normalizeCnpj(rawCnpj ?? "");
+  if (cnpj.length !== 14) {
+    return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
+  }
+
+  const guard = await guardCooperativaApi(request, cnpj, {
+    requireManagement: true,
+    write: false,
+    checkSaas: false,
+  });
+  if (!guard.ok) return guard.response;
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return NextResponse.json({ error: "Cliente Supabase indisponível." }, { status: 503 });
+  }
+
+  const { data, error } = await supabase
+    .from("cooperativas")
+    .select("id, nome, cnpj, status, cobranca_saas, updated_at")
+    .eq("cnpj", cnpj)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[cooperativas/get-cobranca]", error.message);
+    return NextResponse.json({ error: "Erro ao ler cobrança na nuvem." }, { status: 500 });
+  }
+  if (!data) {
+    return NextResponse.json({ error: "Cooperativa não encontrada na nuvem." }, { status: 404 });
+  }
+
+  return NextResponse.json({
+    success: true,
+    cobrancaSaas: data.cobranca_saas ?? null,
+    updatedAt: data.updated_at ?? null,
+  });
+}
+
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ cnpj: string }> }
