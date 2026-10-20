@@ -40,14 +40,12 @@ export async function GET(request: Request) {
     if (!sessionId) {
       return NextResponse.json({ error: "Sem permissão." }, { status: 403 });
     }
-    if (cooperadoId && cooperadoId !== sessionId) {
-      return NextResponse.json({ error: "Sem permissão." }, { status: 403 });
-    }
     const extras = cooperadoIdsParam
       .split(",")
       .map((s) => s.trim())
       .filter((id) => id && id !== sessionId);
-    cooperadoIds.splice(0, cooperadoIds.length, sessionId, ...extras);
+    if (cooperadoId && cooperadoId !== sessionId) extras.push(cooperadoId);
+    cooperadoIds.splice(0, cooperadoIds.length, sessionId, ...[...new Set(extras)]);
   } else {
     for (const id of cooperadoIds) {
       const denySelf = requireCreditCooperado(gate.ctx, id);

@@ -13,7 +13,10 @@ import type {
   ContaCoopSettlement,
   ContaCoopSolicitacaoEstorno,
 } from "@/modules/hb-credit/types";
-import { refreshContaCoopValorReceberAfterHbTransaction } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
+import {
+  aplicarDebitoHbCompraLocal,
+  refreshContaCoopValorReceberAfterHbTransaction,
+} from "@/lib/hb-credit/syncContaCoopFichaDescontos";
 import type { AuthoritativeCreditBaseErrorPayload } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import type { HbAuthorizeProjecaoAReceberResult } from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
 import { notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
@@ -374,6 +377,7 @@ export type AuthorizeCreditPaymentResult = {
   ok?: boolean;
   error?: string;
   receiptCode?: string;
+  transacaoId?: string;
   disponivelAposCents?: number;
   financeiroConfirmado?: boolean;
   projecaoPendente?: boolean;
@@ -403,6 +407,8 @@ export async function authorizeCreditPayment(input: {
   cooperadoNome?: string;
   cooperativaId?: string;
   mesReferencia?: string;
+  /** Valor debitado do crédito (reais) — grava na ficha na hora. */
+  amountReais?: number;
   intentId: string;
   nonce: string;
   pin: string;
@@ -530,21 +536,38 @@ export async function authorizeCreditPayment(input: {
       cooperadoNome: input.cooperadoNome,
     };
 
+    const valorDebito =
+      typeof input.amountReais === "number" && Number.isFinite(input.amountReais)
+        ? Math.round(input.amountReais * 100) / 100
+        : 0;
+    if (valorDebito > 0.005) {
+      aplicarDebitoHbCompraLocal({
+        cooperadoId: canonico,
+        cooperativaId: coopId,
+        cooperadoNome: input.cooperadoNome,
+        mesReferencia: mes,
+        valorReais: valorDebito,
+        hbTransactionId: data.transacaoId,
+        motivo: data.receiptCode
+          ? `Compra HB Créditos — mercado (${data.receiptCode})`
+          : "Compra HB Créditos — mercado",
+      });
+    }
+
     const maxAttempts = data.projecaoPendente ? 3 : 2;
-    void (async () => {
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        if (attempt > 0) {
-          await sleepMs(HB_REFRESH_RETRY_MS);
-        }
-        try {
-          await refreshContaCoopValorReceberAfterHbTransaction(refreshOpts);
-          notifyHbCreditLimiteSynced({ immediate: true });
-          return;
-        } catch {
-          /* ficha local — pagamento HB já confirmado na nuvem */
-        }
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (attempt > 0) {
+        await sleepMs(HB_REFRESH_RETRY_MS);
       }
-    })();
+      try {
+        await refreshContaCoopValorReceberAfterHbTransaction(refreshOpts);
+        notifyHbCreditLimiteSynced({ immediate: true });
+        syncContaCoop = "ok";
+        break;
+      } catch {
+        /* ficha local já tem o débito — pagamento HB confirmado na nuvem */
+      }
+    }
   } else {
     syncContaCoop = "pending";
     syncContaCoopError = "refresh_not_executed_missing_cooperativa_or_cnpj";

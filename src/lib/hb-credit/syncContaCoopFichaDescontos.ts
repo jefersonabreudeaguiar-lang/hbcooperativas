@@ -8,7 +8,12 @@ import {
 } from "@/services/cooperadoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { beginSaveBatch, endSaveBatch, getData, getSession, notifyAppDataSubscribers, updateData } from "@/services/dataStore";
-import { persistDescontosContaCoopNoArquivo, getDescontosContaCoopMesCached } from "@/services/notaPedidoService";
+import {
+  persistDescontosContaCoopNoArquivo,
+  getDescontosContaCoopMesCached,
+  getPagamentoConfirmadoCooperadoMes,
+  listarFichasPendentesPagamento,
+} from "@/services/notaPedidoService";
 import { hbCreditMesPrincipal, hbCreditValorLiquidoMes } from "@/lib/hb-credit/hbCreditLeituraBic";
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import {
@@ -51,6 +56,77 @@ type RefreshOpts = SyncContaCoopValorReceberOpts & {
   pushCloud?: boolean;
 };
 
+function idsFichaDescontosParaFetch(titularIds: string[]): string[] {
+  const sessionId = getSession()?.cooperadoId?.trim() ?? "";
+  const uniq = [...new Set(titularIds.filter(Boolean))];
+  if (!sessionId) return uniq;
+  return [sessionId, ...uniq.filter((id) => id !== sessionId)];
+}
+
+function mesAbertoParaDebitoHb(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string,
+  mesHint?: string
+): string {
+  const meses = listMesesReferenciaHbFichaBaseSync(data, cooperadoId, cooperativaId, mesHint);
+  const candidatos = [...meses];
+  if (mesHint && !candidatos.includes(mesHint)) candidatos.push(mesHint);
+  for (const mes of [...candidatos].sort().reverse()) {
+    const confirmado = getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mes);
+    if (confirmado && listarFichasPendentesPagamento(data, cooperadoId, mes, cooperativaId).length === 0) {
+      continue;
+    }
+    return mes;
+  }
+  return mesHint || candidatos[candidatos.length - 1] || "";
+}
+
+/** Grava a compra no arquivo do mês em aberto — a ficha e o A receber leem daqui, sem esperar a API. */
+export function aplicarDebitoHbCompraLocal(opts: {
+  cooperadoId: string;
+  cooperativaId: string;
+  cooperadoNome?: string;
+  mesReferencia?: string;
+  valorReais: number;
+  motivo?: string;
+  hbTransactionId?: string;
+  createdAt?: string;
+}): boolean {
+  const valor = Math.round(opts.valorReais * 100) / 100;
+  if (!(valor > 0.005) || typeof window === "undefined") return false;
+  const data = getData();
+  const canonico = resolverCooperadoIdCanonico(
+    data,
+    opts.cooperadoId,
+    opts.cooperativaId,
+    opts.cooperadoNome
+  );
+  const mes = mesAbertoParaDebitoHb(data, canonico, opts.cooperativaId, opts.mesReferencia);
+  if (!mes) return false;
+  const linha: DescontoContaCoopRemoto = {
+    motivo: (opts.motivo ?? "Compra HB Créditos — mercado").trim(),
+    valorReais: valor,
+    tipo: "conta_coop",
+    createdAt: opts.createdAt ?? new Date().toISOString(),
+    ...(opts.hbTransactionId ? { hbTransactionId: opts.hbTransactionId } : {}),
+  };
+  const existentes = getDescontosContaCoopMesCached(data, canonico, mes, opts.cooperativaId);
+  const descontos = dedupeDescontosContaCoopRemotos([...existentes, linha]);
+  const next = persistDescontosContaCoopNoArquivo(
+    data,
+    canonico,
+    mes,
+    opts.cooperativaId,
+    descontos
+  );
+  setContaCoopDescontosMemoria(opts.cooperativaId, canonico, mes, descontos);
+  updateData(() => next);
+  bumpContaCoopDescontosRevision();
+  refletirHbDebitoNoAReceberLocal();
+  return true;
+}
+
 const SYNC_CONCURRENCY = 6;
 
 /** Busca compras HB Créditos na nuvem e grava no arquivo mensal local (abatimento do valor a receber). */
@@ -70,7 +146,9 @@ export async function syncContaCoopDescontosMesLocal(
     opts.cooperativaId,
     opts.cooperadoNome
   );
-  const titularIds = listCooperadoIdsMesmoTitular(data, canonico, opts.cooperativaId);
+  const titularIds = idsFichaDescontosParaFetch(
+    listCooperadoIdsMesmoTitular(data, canonico, opts.cooperativaId)
+  );
   let descontos: DescontoContaCoopRemoto[];
   try {
     const raw = await fetchFichaDescontosContaCoop(opts.cnpj, titularIds, opts.mesReferencia);
@@ -184,6 +262,9 @@ async function applyLocalContaCoopDescontosRefresh(
   } else if (financeChanged) {
     bumpContaCoopDescontosRevision();
     notifyAppDataSubscribers();
+  }
+  if (changed || financeChanged) {
+    refletirHbDebitoNoAReceberLocal();
   }
   return { changed, financeChanged, descontos: synced.descontos, data: synced.data };
 }

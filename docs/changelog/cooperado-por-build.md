@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v520
+
+- **HB Créditos:** a compra grava o desconto na ficha na hora do PIN — a linha aparece no Financeiro.
+- **A receber:** Início e Financeiro já mostram o valor com o HB descontado, sem esperar Atualizar.
+- **Cooperado:** Entregas e abertura do app iguais ao v519.
+
 ## v519
 
 - **HB Créditos:** cada compra desconta a ficha do mês da compra (ou a última ficha ainda em aberto).
