@@ -4,6 +4,10 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import type { AbaLastGoodNome } from "@/lib/responsavel/abaLastGoodCheckpoint";
 import { tryRestoreAbaLastGoodInStore } from "@/lib/responsavel/abaLastGoodStore";
+import {
+  recarregarAbaStaffDocumento,
+  staffAbaDeveRecarregarDocumento,
+} from "@/lib/responsavel/staffPainelRecuperarAba";
 
 type Props = { children: ReactNode; aba: AbaLastGoodNome; coopId?: string };
 type State = { hasError: boolean; restored: boolean };
@@ -16,7 +20,16 @@ export class AbaLastGoodSafeRoot extends Component<Props, State> {
     return { hasError: true };
   }
 
-  componentDidCatch(_error: Error, _info: ErrorInfo) {
+  componentDidMount() {
+    if (staffAbaDeveRecarregarDocumento()) recarregarAbaStaffDocumento();
+  }
+
+  componentDidCatch(error: Error, _info: ErrorInfo) {
+    console.error(`[${this.props.aba}-safe-root]`, error);
+    if (staffAbaDeveRecarregarDocumento()) {
+      recarregarAbaStaffDocumento();
+      return;
+    }
     const restored = tryRestoreAbaLastGoodInStore(this.props.aba, this.props.coopId);
     if (restored) this.setState({ restored: true });
   }
@@ -41,7 +54,7 @@ export class AbaLastGoodSafeRoot extends Component<Props, State> {
               size="sm"
               onClick={() => {
                 tryRestoreAbaLastGoodInStore(this.props.aba, this.props.coopId);
-                this.setState({ hasError: false, restored: false });
+                recarregarAbaStaffDocumento();
               }}
             >
               Recarregar aba

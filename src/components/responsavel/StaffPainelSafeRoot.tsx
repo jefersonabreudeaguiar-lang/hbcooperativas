@@ -3,6 +3,10 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { Button } from "@/components/ui/Button";
+import {
+  recarregarAbaStaffDocumento,
+  staffAbaDeveRecarregarDocumento,
+} from "@/lib/responsavel/staffPainelRecuperarAba";
 
 type Props = { children: ReactNode };
 type State = { hasError: boolean };
@@ -15,8 +19,13 @@ export class StaffPainelSafeRoot extends Component<Props, State> {
     return { hasError: true };
   }
 
-  componentDidCatch(_error: Error, _info: ErrorInfo) {
-    /* o Início deve continuar navegável */
+  componentDidMount() {
+    if (staffAbaDeveRecarregarDocumento()) recarregarAbaStaffDocumento();
+  }
+
+  componentDidCatch(error: Error, _info: ErrorInfo) {
+    console.error("[staff-painel-safe-root]", error);
+    if (staffAbaDeveRecarregarDocumento()) recarregarAbaStaffDocumento();
   }
 
   render() {
@@ -31,8 +40,7 @@ export class StaffPainelSafeRoot extends Component<Props, State> {
               className="mt-3"
               size="sm"
               onClick={() => {
-                this.setState({ hasError: false });
-                window.location.reload();
+                recarregarAbaStaffDocumento();
               }}
             >
               Recarregar

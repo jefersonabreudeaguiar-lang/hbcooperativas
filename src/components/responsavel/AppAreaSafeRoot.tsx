@@ -2,6 +2,10 @@
 
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
+import {
+  recarregarAbaStaffDocumento,
+  staffAbaDeveRecarregarDocumento,
+} from "@/lib/responsavel/staffPainelRecuperarAba";
 
 type Props = { children: ReactNode };
 type State = { hasError: boolean };
@@ -14,8 +18,13 @@ export class AppAreaSafeRoot extends Component<Props, State> {
     return { hasError: true };
   }
 
-  componentDidCatch(_error: Error, _info: ErrorInfo) {
-    /* o painel deve continuar recuperável */
+  componentDidMount() {
+    if (staffAbaDeveRecarregarDocumento()) recarregarAbaStaffDocumento();
+  }
+
+  componentDidCatch(error: Error, _info: ErrorInfo) {
+    console.error("[app-area-safe-root]", error);
+    if (staffAbaDeveRecarregarDocumento()) recarregarAbaStaffDocumento();
   }
 
   render() {
@@ -29,8 +38,11 @@ export class AppAreaSafeRoot extends Component<Props, State> {
           <Button
             type="button"
             onClick={() => {
-              this.setState({ hasError: false });
-              window.location.assign("/dashboard");
+              try {
+                window.location.assign("/dashboard?_hbStaffAba=1");
+              } catch {
+                recarregarAbaStaffDocumento();
+              }
             }}
           >
             Abrir Início
