@@ -11,8 +11,9 @@
  * 3. **Preservar verdade local** — Não apagar sessão, AppData operacional nem rascunhos
  *    de entrega. Snapshots de UI (card início, resumos) podem ser invalidados por época.
  *
- * 4. **Service Worker é último recurso** — Não desregistrar SW em “limpeza de frota”.
- *    SW + release shield tratam assets; frota só limpa snapshots e chaves de align presas.
+ * 4. **Service Worker é último recurso** — Não desregistrar SW em “limpeza de frota”
+ *    nem no align do atalho instalado (WebAPK). Cache API + `registration.update()` +
+ *    um `location.replace` depois do cold start. Nunca limpar cookie/sessão para atualizar.
  *
  * 5. **Uma alavanca por época** — `COOPERADO_FLEET_MAINTENANCE_EPOCH` sobe quando precisar
  *    invalidar cache de UI em todos os aparelhos; não amarrar a cada `APP_BUILD_VERSION`.

@@ -19,9 +19,11 @@ import { runClientReleaseIntegrityProbe } from "@/lib/pwa/pwaReleaseIntegrityPro
 import { materializeCooperadoPwaSnapshotsForCurrentBuild } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
 import {
   isPwaColdStartWindow,
+  PWA_COLD_START_SW_RELOAD_GRACE_MS,
   shouldAutoAlignClientRelease,
   stripReleaseAlignQueryFromUrl,
 } from "@/lib/pwa/clientRelease";
+import { COOPERADO_ATUALIZACAO_COLD_START_ENDED_TRIGGER } from "@/lib/cooperado/cooperadoAtualizacaoPwaContrato";
 
 /** 1ª linha do bundle do shield: descarta snapshots PWA só quando `APP_BUILD_VERSION` mudou (O(1) se igual). */
 if (typeof window !== "undefined") {
@@ -44,7 +46,13 @@ export function ClientReleaseShieldHost() {
     if (!shouldAutoAlignClientRelease()) return;
 
     const kick = (trigger: string) => {
-      if (isPwaColdStartWindow() && trigger !== "manual") return;
+      if (
+        isPwaColdStartWindow() &&
+        trigger !== "manual" &&
+        trigger !== COOPERADO_ATUALIZACAO_COLD_START_ENDED_TRIGGER
+      ) {
+        return;
+      }
       if (cooperadoExperience) materializeCooperadoPwaSnapshotsForCurrentBuild();
       if (cooperadoExperience && isForegroundShieldTrigger(trigger)) {
         void runClientReleaseIntegrityProbe(`foreground:${trigger}`);
@@ -83,7 +91,17 @@ export function ClientReleaseShieldHost() {
     }
 
     const unbind = bindClientReleaseShieldEvents(kick);
-    return unbind;
+    const afterColdMs = Math.max(
+      400,
+      PWA_COLD_START_SW_RELOAD_GRACE_MS - performance.now() + 400
+    );
+    const afterCold = window.setTimeout(() => {
+      kick(COOPERADO_ATUALIZACAO_COLD_START_ENDED_TRIGGER);
+    }, afterColdMs);
+    return () => {
+      window.clearTimeout(afterCold);
+      unbind();
+    };
   }, [cooperadoExperience]);
 
   return null;

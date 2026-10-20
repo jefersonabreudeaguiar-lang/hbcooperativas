@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v525
+
+- **Atalho PWA:** a versão nova chega no ícone instalado — sem sair do app e sem apagar cache ou cookie.
+- **Atualização:** o Início abre na hora; depois o HTML antigo é trocado uma vez se a nuvem estiver na frente.
+- **Cooperado:** Entregas, Ficha, Financeiro e A receber iguais ao v524.
+
 ## v524
 
 - **Entregas:** o histórico do mês não some quando um sync pobre chega vazio — a lista junta lastro, ficha e o que já estava no aparelho.

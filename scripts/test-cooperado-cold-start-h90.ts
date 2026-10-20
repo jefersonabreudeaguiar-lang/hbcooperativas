@@ -48,6 +48,11 @@ assert(
   !releaseHost.includes("COOPERADO_RELEASE_POLL_MS") && !releaseHost.includes("setInterval"),
   "release host sem polling periodico de versao"
 );
+assert(
+  releaseHost.includes("COOPERADO_ATUALIZACAO_COLD_START_ENDED_TRIGGER") &&
+    releaseHost.includes("PWA_COLD_START_SW_RELOAD_GRACE_MS"),
+  "PWA instalado re-tenta o probe depois da janela de cold start"
+);
 assert(sync.includes("markCooperadoUserSyncVisible"), "sync visível só com ação do usuário");
 assert(
   sync.includes("cooperadoBloqueiaSyncOperacionalAutomatico()") &&

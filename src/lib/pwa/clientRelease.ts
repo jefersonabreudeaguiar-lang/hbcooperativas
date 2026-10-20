@@ -491,7 +491,14 @@ export function clearCooperadoReleaseAlignLocalKeys(): void {
   }
 }
 
-export async function clearClientRuntimeCaches(): Promise<void> {
+export type ClearClientRuntimeCachesOptions = {
+  /** Atalho instalado: nunca desregistrar SW (WebAPK cai). Só limpa Cache API e pede update. */
+  preserveServiceWorker?: boolean;
+};
+
+export async function clearClientRuntimeCaches(
+  options?: ClearClientRuntimeCachesOptions
+): Promise<void> {
   if (typeof window === "undefined") return;
   try {
     if ("caches" in window) {
@@ -500,6 +507,15 @@ export async function clearClientRuntimeCaches(): Promise<void> {
     }
   } catch {
     /* ignore */
+  }
+  if (options?.preserveServiceWorker) {
+    try {
+      const reg = await navigator.serviceWorker?.getRegistration();
+      await reg?.update();
+    } catch {
+      /* ignore */
+    }
+    return;
   }
   try {
     if ("serviceWorker" in navigator) {
@@ -587,7 +603,9 @@ export async function alignClientRuntimeToRelease(
     return true;
   }
 
-  await clearClientRuntimeCaches();
+  await clearClientRuntimeCaches({
+    preserveServiceWorker: shouldAutoAlignClientRelease(),
+  });
   try {
     sessionStorage?.setItem(RELEASE_NAV_MARK_KEY, String(Date.now()));
   } catch {
