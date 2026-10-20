@@ -1,21 +1,26 @@
 /**
  * Contrato das fotos do cooperado — não voltar ao modelo antigo sem bump.
  *
+ * v2: Ficha = extrato completo (todos os meses). Fotos por mês = todas as fotos,
+ * uma sanfona por mês, ampliar e passar na sequência.
  * Financeiro: aba "Foto a receber" = só mês em aberto.
- * Ficha: entregas do mês anterior + aba de fotos por mês já liquidado.
- * Ao liquidar, a foto sai do Financeiro e entra na Ficha daquele mês.
  */
 import type { AppData } from "@/types";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
 import {
+  getResumoMesEntregasCooperado,
   listarMesesEmAbertoPagamentoResponsavel,
   listarResumosExtratoHistoricoCooperado,
   listarResumosFotosCooperado,
+  listarResumosMensaisEntregas,
   notaTemFotoEnviadaCooperado,
 } from "@/services/cooperadoEntregasService";
-import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
+import {
+  listarMesesTimelineFichaCooperado,
+  listarResumosFichaEmAbertoCooperado,
+} from "@/services/cooperadoFichaTimelineService";
 
-export const COOPERADO_FOTOS_FICHA_CONTRATO_VERSION = 1;
+export const COOPERADO_FOTOS_FICHA_CONTRATO_VERSION = 2;
 
 export const COOPERADO_FINANCEIRO_FOTO_A_RECEBER_SECAO = "fotos" as const;
 export const COOPERADO_FINANCEIRO_FOTO_A_RECEBER_LABEL = "Foto a receber";
@@ -98,6 +103,37 @@ export function listarResumosFichaComMesesAnteriores(
     listarResumosFichaEmAbertoCooperado(data, cooperadoId, cooperativaId),
     listarResumosExtratoHistoricoCooperado(data, cooperadoId, cooperativaId)
   );
+}
+
+/** Ficha completa — todos os meses com entrega, ficha, PIX ou foto. */
+export function listarResumosFichaCompletaCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): ResumoMesEntregasCooperado[] {
+  const byMes = new Map<string, ResumoMesEntregasCooperado>();
+  for (const mes of listarMesesTimelineFichaCooperado(data, cooperadoId, cooperativaId)) {
+    byMes.set(mes, getResumoMesEntregasCooperado(data, cooperadoId, mes, cooperativaId));
+  }
+  for (const r of listarResumosMensaisEntregas(data, cooperadoId, cooperativaId)) {
+    const prev = byMes.get(r.mesReferencia);
+    if (!prev || r.notas.length > prev.notas.length) byMes.set(r.mesReferencia, r);
+  }
+  for (const r of listarResumosFichaComMesesAnteriores(data, cooperadoId, cooperativaId)) {
+    if (!byMes.has(r.mesReferencia)) byMes.set(r.mesReferencia, r);
+  }
+  return [...byMes.values()]
+    .filter((r) => r.notas.length > 0 || r.valorAReceber > 0.005 || r.valorRecebido > 0.005)
+    .sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia));
+}
+
+/** Todas as fotos do cooperado, um resumo por mês — aba Fotos por mês. */
+export function listarResumosFotosFichaTodas(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): ResumoMesEntregasCooperado[] {
+  return listarResumosFotosCooperado(data, cooperadoId, cooperativaId);
 }
 
 export function resumosFotosAPartirDeResumos(

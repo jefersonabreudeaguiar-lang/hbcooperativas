@@ -100,8 +100,8 @@ export function CooperadoFichaFotosPanel({
         <Camera size={48} className="mx-auto mb-4 text-gray-300" />
         <p className="font-semibold text-gray-800">Nenhuma foto enviada ainda</p>
         <p className="text-sm mt-2 max-w-sm mx-auto">
-          Depois que o mês for liquidado, as fotos das entregas entram aqui, uma aba por mês. Enquanto
-          estiver em aberto, elas ficam em Financeiro → Foto a receber.
+          Quando houver entrega com foto, ela aparece aqui por mês. Toque para ampliar e passe para a
+          próxima.
         </p>
       </div>
     );

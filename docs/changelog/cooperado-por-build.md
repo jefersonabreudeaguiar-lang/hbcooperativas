@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v512
+
+- **Entregas:** o histórico completo por mês continua na lista — não some depois de conferir.
+- **Ficha:** Minha ficha mostra todos os meses com entrega, valor e itens.
+- **Fotos:** Fotos por mês tem todas as fotos do mês; toque amplia e passa na sequência.
+
 ## v511
 
 - **Responsável:** Conferir → Correções lista os cooperados com nota ainda sem liquidar.

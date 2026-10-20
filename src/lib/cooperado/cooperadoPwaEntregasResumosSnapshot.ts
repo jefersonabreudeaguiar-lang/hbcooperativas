@@ -4,14 +4,11 @@
 import type { User } from "@/types";
 import type { AppData } from "@/types";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
-import {
-  filtrarResumosMesesNaoQuitados,
-  listarResumosExtratoHistoricoCooperado,
-} from "@/services/cooperadoEntregasService";
+import { listarResumosExtratoHistoricoCooperado } from "@/services/cooperadoEntregasService";
 import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
 import {
-  listarResumosFichaComMesesAnteriores,
-  listarResumosFotosFichaLiquidada,
+  listarResumosFichaCompletaCooperado,
+  listarResumosFotosFichaTodas,
 } from "@/lib/cooperado/cooperadoFotosFichaContrato";
 import { bicCentralListarResumosMensaisEntregas } from "@/services/bicLeituraCentralCooperado";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
@@ -24,7 +21,7 @@ import {
   dispatchCooperadoPwaLeveUiSnapshotRefresh,
 } from "@/lib/cooperado/cooperadoPwaLeveUiEvents";
 
-export const COOPERADO_PWA_ENTREGAS_SNAPSHOT_VERSION = 1;
+export const COOPERADO_PWA_ENTREGAS_SNAPSHOT_VERSION = 2;
 
 export const COOPERADO_PWA_ENTREGAS_SNAPSHOT_REFRESH_EVENT =
   COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT;
@@ -36,9 +33,9 @@ export type CooperadoPwaEntregasResumosSnapshot = {
   /** Base mensal (antes do filtro de status na UI). */
   entregasBase: ResumoMesEntregasCooperado[];
   fichaAberto: ResumoMesEntregasCooperado[];
-  /** Extrato da Ficha: mês aberto + meses anteriores já liquidados. */
+  /** Extrato da Ficha: todos os meses com entrega, ficha ou PIX. */
   fichaExtrato?: ResumoMesEntregasCooperado[];
-  /** Fotos só de mês liquidado — aba Fotos por mês. */
+  /** Fotos por mês — todos os meses com foto. */
   fotosFichaLiquidada?: ResumoMesEntregasCooperado[];
   pagamentosRealizados: ResumoMesEntregasCooperado[];
 };
@@ -60,19 +57,15 @@ export function buildCooperadoPwaEntregasResumosSnapshot(
   cooperativaId: string,
   opts?: BuildCooperadoPwaEntregasSnapshotOpts
 ): CooperadoPwaEntregasResumosSnapshot {
-  const entregasBase = filtrarResumosMesesNaoQuitados(
-    data,
-    cooperadoId,
-    bicCentralListarResumosMensaisEntregas(data, cooperadoId, cooperativaId)
-  );
+  const entregasBase = bicCentralListarResumosMensaisEntregas(data, cooperadoId, cooperativaId);
   const fichaAberto = listarResumosFichaEmAbertoCooperado(data, cooperadoId, cooperativaId);
   const pagamentosRealizados = opts?.omitirPagamentosHistorico
     ? (opts.pagamentosRealizadosAnteriores ?? [])
     : listarResumosExtratoHistoricoCooperado(data, cooperadoId, cooperativaId);
-  const fichaExtrato = listarResumosFichaComMesesAnteriores(data, cooperadoId, cooperativaId);
+  const fichaExtrato = listarResumosFichaCompletaCooperado(data, cooperadoId, cooperativaId);
   const fotosFichaLiquidada = opts?.omitirPagamentosHistorico
     ? (opts.fotosFichaLiquidadaAnteriores ?? [])
-    : listarResumosFotosFichaLiquidada(data, cooperadoId, cooperativaId);
+    : listarResumosFotosFichaTodas(data, cooperadoId, cooperativaId);
   return {
     v: COOPERADO_PWA_ENTREGAS_SNAPSHOT_VERSION,
     appBuild: APP_BUILD_VERSION,

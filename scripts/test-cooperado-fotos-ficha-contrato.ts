@@ -1,5 +1,5 @@
 /**
- * Contrato Ficha / Foto a receber — não voltar ao modelo antigo.
+ * Contrato Ficha / Foto a receber — ficha completa + fotos por mês com sequência.
  * npx tsx scripts/test-cooperado-fotos-ficha-contrato.ts
  */
 import assert from "node:assert/strict";
@@ -16,6 +16,10 @@ import {
 } from "../src/lib/cooperado/cooperadoFotosFichaContrato.ts";
 
 const root = join(import.meta.dirname ?? __dirname, "..");
+
+function read(rel: string): string {
+  return readFileSync(join(root, rel), "utf8");
+}
 
 function resumo(mes: string, comFoto: boolean): ResumoMesEntregasCooperado {
   return {
@@ -40,7 +44,7 @@ function resumo(mes: string, comFoto: boolean): ResumoMesEntregasCooperado {
   } as ResumoMesEntregasCooperado;
 }
 
-assert.equal(COOPERADO_FOTOS_FICHA_CONTRATO_VERSION, 1);
+assert.equal(COOPERADO_FOTOS_FICHA_CONTRATO_VERSION, 2);
 assert.equal(COOPERADO_FINANCEIRO_FOTO_A_RECEBER_LABEL, "Foto a receber");
 assert.equal(COOPERADO_FICHA_FOTOS_LIQUIDADAS_LABEL, "Fotos por mês");
 
@@ -53,92 +57,50 @@ assert.deepEqual(
   "Ficha Extrato mostra mês aberto e o anterior"
 );
 
-const abertoGanha = mesclarResumosFichaComMesesAnteriores(
-  [{ ...aberto, valorAReceber: 80 }],
-  [{ ...aberto, valorAReceber: 10 }]
-);
-assert.equal(abertoGanha.length, 1);
-assert.equal(abertoGanha[0]?.valorAReceber, 80);
-
 const { aReceber, fichaLiquidada } = particionarResumosFotosPorAberto(
   [aberto, anterior],
   new Set(["2026-10"])
 );
-assert.deepEqual(
-  aReceber.map((r) => r.mesReferencia),
-  ["2026-10"],
-  "Financeiro Foto a receber só tem mês em aberto"
-);
-assert.deepEqual(
-  fichaLiquidada.map((r) => r.mesReferencia),
-  ["2026-09"],
-  "Ficha Fotos por mês só tem mês já liquidado"
-);
+assert.deepEqual(aReceber.map((r) => r.mesReferencia), ["2026-10"]);
+assert.deepEqual(fichaLiquidada.map((r) => r.mesReferencia), ["2026-09"]);
 
-const soComFoto = resumosFotosAPartirDeResumos([
-  resumo("2026-08", false),
-  resumo("2026-07", true),
-]);
+const soComFoto = resumosFotosAPartirDeResumos([resumo("2026-08", false), resumo("2026-07", true)]);
 assert.deepEqual(soComFoto.map((r) => r.mesReferencia), ["2026-07"]);
 
-const financeiroNav = readFileSync(
-  join(root, "src/components/cooperado/CooperadoFinanceiroSecoesNav.tsx"),
-  "utf8"
-);
+const financeiroNav = read("src/components/cooperado/CooperadoFinanceiroSecoesNav.tsx");
 assert.match(financeiroNav, /COOPERADO_FINANCEIRO_FOTO_A_RECEBER_LABEL/);
-assert.doesNotMatch(
-  financeiroNav,
-  /label: "Fotos"/,
-  "Financeiro não pode voltar ao rótulo Fotos"
-);
+assert.doesNotMatch(financeiroNav, /label: "Fotos"/);
 
-const financeiroPage = readFileSync(
-  join(root, "src/app/(app)/ficha-corrida/FichaCorridaContent.tsx"),
-  "utf8"
-);
+const financeiroPage = read("src/app/(app)/ficha-corrida/FichaCorridaContent.tsx");
 assert.match(financeiroPage, /listarResumosFotosAReceber/);
-assert.match(financeiroPage, /COOPERADO_FINANCEIRO_FOTO_A_RECEBER_LABEL/);
-assert.doesNotMatch(
-  financeiroPage,
-  /listarResumosFotosCooperado\(/,
-  "Financeiro não lista todas as fotos — só mês a receber"
-);
+assert.doesNotMatch(financeiroPage, /listarResumosFotosCooperado\(/);
 
-const fichaTab = readFileSync(
-  join(root, "src/components/cooperado/CooperadoMinhaFichaTab.tsx"),
-  "utf8"
-);
-assert.match(fichaTab, /listarResumosFotosFichaLiquidada/);
-assert.match(fichaTab, /mesclarResumosFichaComMesesAnteriores/);
+const fichaTab = read("src/components/cooperado/CooperadoMinhaFichaTab.tsx");
+assert.match(fichaTab, /listarResumosFotosFichaTodas/);
 assert.match(fichaTab, /COOPERADO_FICHA_FOTOS_LIQUIDADAS_LABEL/);
+assert.match(fichaTab, /Ficha completa/);
 
-const entregasMain = readFileSync(
-  join(root, "src/app/(app)/notas-pedido/NotasPedidoCooperadoMain.tsx"),
-  "utf8"
-);
-assert.match(entregasMain, /listarResumosFichaComMesesAnteriores/);
+const entregasMain = read("src/app/(app)/notas-pedido/NotasPedidoCooperadoMain.tsx");
+assert.match(entregasMain, /listarResumosFichaCompletaCooperado/);
 assert.match(entregasMain, /fotosFichaLiquidadaCache/);
+assert.match(entregasMain, /useState\(""\)/);
+assert.doesNotMatch(entregasMain, /useState\(isCooperado \? "pendentes"/);
+assert.doesNotMatch(entregasMain, /filtrarResumosMesesNaoQuitados\(/);
 
-const snapshot = readFileSync(
-  join(root, "src/lib/cooperado/cooperadoPwaEntregasResumosSnapshot.ts"),
-  "utf8"
-);
+const snapshot = read("src/lib/cooperado/cooperadoPwaEntregasResumosSnapshot.ts");
 assert.match(snapshot, /fichaExtrato/);
-assert.match(snapshot, /fotosFichaLiquidada/);
-assert.match(snapshot, /listarResumosFichaComMesesAnteriores/);
-assert.match(snapshot, /listarResumosFotosFichaLiquidada/);
+assert.match(snapshot, /listarResumosFichaCompletaCooperado/);
+assert.match(snapshot, /listarResumosFotosFichaTodas/);
+assert.match(snapshot, /COOPERADO_PWA_ENTREGAS_SNAPSHOT_VERSION = 2/);
 
-const financeiroSnap = readFileSync(
-  join(root, "src/lib/cooperado/cooperadoPwaFichaResumoSnapshot.ts"),
-  "utf8"
-);
-assert.match(financeiroSnap, /fotosAReceber/);
-assert.match(financeiroSnap, /listarResumosFotosAReceber/);
+const sanfona = read("src/components/cooperado/cooperadoMesEntregasFotosSanfona.tsx");
+assert.match(sanfona, /FotoLightbox/);
+assert.match(sanfona, /sequencia/);
+assert.match(sanfona, /onIndexChange/);
 
-const contrato = readFileSync(
-  join(root, "src/lib/cooperado/cooperadoFotosFichaContrato.ts"),
-  "utf8"
-);
-assert.match(contrato, /COOPERADO_FOTOS_FICHA_CONTRATO_VERSION = 1/);
+const contrato = read("src/lib/cooperado/cooperadoFotosFichaContrato.ts");
+assert.match(contrato, /COOPERADO_FOTOS_FICHA_CONTRATO_VERSION = 2/);
+assert.match(contrato, /listarResumosFichaCompletaCooperado/);
+assert.match(contrato, /listarResumosFotosFichaTodas/);
 
-console.log("ok: contrato Ficha / Foto a receber travado (mês anterior + liquidação)");
+console.log("ok: contrato Ficha completa + Fotos por mês com sequência");

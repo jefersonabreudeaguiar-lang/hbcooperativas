@@ -53,7 +53,7 @@ import { valorPendenteRecebimentoFichaCooperado } from "@/services/cooperadoFich
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import {
   COOPERADO_FICHA_FOTOS_LIQUIDADAS_LABEL,
-  listarResumosFotosFichaLiquidada,
+  listarResumosFotosFichaTodas,
   mesclarResumosFichaComMesesAnteriores,
   resumosFotosAPartirDeResumos,
 } from "@/lib/cooperado/cooperadoFotosFichaContrato";
@@ -103,7 +103,7 @@ function MesFichaAccordion({
   onVerFotosMes?: (mesReferencia: string) => void;
   modo?: ModoFichaExtrato;
 }) {
-  const data = appData;
+  const data = appData ?? (typeof window !== "undefined" && isAppDataWarm() ? getData() : null);
   const hbDescontosRevision = useContaCoopDescontosRevision();
   const [viewInterna, setViewInterna] = useState<"detalhes" | "fotos">("detalhes");
   const [hbAberto, setHbAberto] = useState(false);
@@ -187,7 +187,42 @@ function MesFichaAccordion({
     return bicCentralTotalValoresAvulsosPendentes(data, cooperadoId, resumo.mesReferencia, cooperativaId);
   }, [data, cooperadoId, resumo.mesReferencia, cooperativaId, precisaDetalhesExpandido]);
 
-  if (!data) return null;
+  if (!data) {
+    return (
+      <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="w-full flex items-center gap-4 p-4 sm:p-5 text-left hover:bg-gray-50/80 transition-colors"
+        >
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-green-100 text-green-800">
+            <Wallet size={22} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-gray-900">{formatMesReferencia(resumo.mesReferencia)}</p>
+            <p className="text-sm text-gray-600 mt-0.5">
+              {resumo.quantidadeEntregas} entrega{resumo.quantidadeEntregas !== 1 ? "s" : ""}
+              {resumo.valorRecebido > 0 && ` · recebido ${formatCurrency(resumo.valorRecebido)}`}
+              {resumo.valorAReceber > 0 && ` · a receber ${formatCurrency(resumo.valorAReceber)}`}
+            </p>
+          </div>
+          {expandido ? <ChevronDown size={20} className="text-gray-400 shrink-0" /> : <ChevronRight size={20} className="text-gray-400 shrink-0" />}
+        </button>
+        {expandido && resumo.notas.length > 0 && (
+          <div className="border-t border-gray-100 px-4 sm:px-5 pb-5 pt-4 space-y-2 bg-gray-50/40">
+            {resumo.notas.map((n) => (
+              <div key={n.id} className="rounded-xl border border-gray-200 bg-white p-4">
+                <p className="font-semibold text-gray-900">{getEscolaLabel(n)}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {formatDate(n.dataEntrega)} · {n.numeroNota}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   const quitado = !!resumo.pagamentoConfirmado;
   const aguardando = !!resumo.pagamentoAguardando;
@@ -601,7 +636,7 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
 
   const resumosFotos = useMemo(() => {
     if (!abaFotosAtiva) return [];
-    if (data) return listarResumosFotosFichaLiquidada(data, cooperadoId, cooperativaId);
+    if (data) return listarResumosFotosFichaTodas(data, cooperadoId, cooperativaId);
     if ((fotosFichaLiquidadaCache?.length ?? 0) > 0) return fotosFichaLiquidadaCache!;
     return resumosFotosAPartirDeResumos(resumosHistorico);
   }, [abaFotosAtiva, data, cooperadoId, cooperativaId, fotosFichaLiquidadaCache, resumosHistorico]);
@@ -856,9 +891,9 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
           </div>
 
           <p className="text-sm text-gray-600">
-            Entregas do mês em aberto e dos meses anteriores. Fotos de mês já liquidado ficam em{" "}
-            <strong>{COOPERADO_FICHA_FOTOS_LIQUIDADAS_LABEL}</strong>. PIX confirmado também fica em{" "}
-            <strong>Pagamentos realizados</strong>.
+            Ficha completa: todos os meses com entrega. Fotos de cada mês ficam em{" "}
+            <strong>{COOPERADO_FICHA_FOTOS_LIQUIDADAS_LABEL}</strong> — toque para ampliar e passar na
+            sequência. PIX confirmado também fica em <strong>Pagamentos realizados</strong>.
           </p>
 
           {resumosExtrato.length > 0 ? (

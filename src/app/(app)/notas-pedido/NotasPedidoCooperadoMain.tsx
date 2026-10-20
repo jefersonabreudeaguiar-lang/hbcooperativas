@@ -199,9 +199,9 @@ import {
 } from "@/services/conferenciaDecisaoNuvemSync";
 import { getProdutosContrato } from "@/services/catalogoContratosService";
 import { countCooperadosLancamentosEmAbertoResponsavel } from "@/services/responsavelPainelIndex";
-import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, filtrarResumosMesesNaoQuitados } from "@/services/cooperadoEntregasService";
+import { filtrarResumosEntregasPendentes } from "@/services/cooperadoEntregasService";
 import {
-  listarResumosFichaComMesesAnteriores,
+  listarResumosFichaCompletaCooperado,
   mesclarResumosFichaComMesesAnteriores,
 } from "@/lib/cooperado/cooperadoFotosFichaContrato";
 import {
@@ -422,7 +422,7 @@ export default function NotasPedidoCooperadoMain() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const [statusFilter, setStatusFilter] = useState(isCooperado ? "pendentes" : "");
+  const [statusFilter, setStatusFilter] = useState("");
   const filtroResponsavelIniciado = useRef(false);
   const [anexarModal, setAnexarModal] = useState(false);
   const [pwaPreparandoEnvio, setPwaPreparandoEnvio] = useState(false);
@@ -1837,11 +1837,7 @@ export default function NotasPedidoCooperadoMain() {
       appDataUiOn,
       (d) => {
         if (!cooperadoId || !coopId || abaCooperado !== "entregas") return [];
-        const base = filtrarResumosMesesNaoQuitados(
-          d,
-          cooperadoId,
-          bicCentralListarResumosMensaisEntregas(d, cooperadoId, coopId)
-        );
+        const base = bicCentralListarResumosMensaisEntregas(d, cooperadoId, coopId);
         if (deferredStatusFilter === "pendentes") return filtrarResumosEntregasPendentes(base);
         if (!deferredStatusFilter) return base;
         return base
@@ -1859,17 +1855,22 @@ export default function NotasPedidoCooperadoMain() {
       appDataUiOn,
       (d) => {
         if (!cooperadoId || !coopId || abaCooperado !== "ficha") return [];
-        return listarResumosFichaComMesesAnteriores(d, cooperadoId, coopId);
+        return listarResumosFichaCompletaCooperado(d, cooperadoId, coopId);
       },
       [cooperadoId, coopId, hbDescontosRevision, abaCooperado, entregasPwaLeve]
     ) ?? [];
 
   const resumosMensaisCooperado = useMemo(() => {
-    if ((!entregasPwaLeve && !messenger) || abaCooperado !== "entregas") return resumosMensaisLive;
+    if ((!entregasPwaLeve && !messenger) || abaCooperado !== "entregas") {
+      if (resumosMensaisLive.length > 0) return resumosMensaisLive;
+    }
     let base =
       !messenger && resumosMensaisLive.length > 0
         ? resumosMensaisLive
         : (pwaEntregasResumosSnap?.entregasBase ?? resumosMensaisLive);
+    if (base.length === 0 && cooperadoId && coopId && isAppDataWarm()) {
+      base = bicCentralListarResumosMensaisEntregas(getData(), cooperadoId, coopId);
+    }
     if (deferredStatusFilter === "pendentes") base = filtrarResumosEntregasPendentes(base);
     else if (deferredStatusFilter) {
       base = base
@@ -1882,14 +1883,19 @@ export default function NotasPedidoCooperadoMain() {
     return base;
   }, [
     entregasPwaLeve,
+    messenger,
     abaCooperado,
     pwaEntregasResumosSnap,
     deferredStatusFilter,
     resumosMensaisLive,
+    cooperadoId,
+    coopId,
   ]);
 
   const resumosFichaCooperado = useMemo(() => {
-    if ((!entregasPwaLeve && !messenger) || abaCooperado !== "ficha") return resumosFichaLive;
+    if ((!entregasPwaLeve && !messenger) || abaCooperado !== "ficha") {
+      if (resumosFichaLive.length > 0) return resumosFichaLive;
+    }
     if (!messenger && resumosFichaLive.length > 0) return resumosFichaLive;
     const snapExtrato =
       pwaEntregasResumosSnap?.fichaExtrato ??
@@ -1897,8 +1903,12 @@ export default function NotasPedidoCooperadoMain() {
         pwaEntregasResumosSnap?.fichaAberto ?? [],
         pwaEntregasResumosSnap?.pagamentosRealizados ?? []
       );
-    return snapExtrato.length > 0 ? snapExtrato : resumosFichaLive;
-  }, [entregasPwaLeve, messenger, abaCooperado, pwaEntregasResumosSnap, resumosFichaLive]);
+    if (snapExtrato.length > 0) return snapExtrato;
+    if (cooperadoId && coopId && isAppDataWarm()) {
+      return listarResumosFichaCompletaCooperado(getData(), cooperadoId, coopId);
+    }
+    return resumosFichaLive;
+  }, [entregasPwaLeve, messenger, abaCooperado, pwaEntregasResumosSnap, resumosFichaLive, cooperadoId, coopId]);
 
   const getEscolaLabelCooperado = useCallback(
     (n: NotaPedido) => getEscolaNotaLabel(n, data?.instituicoes ?? []),
@@ -4755,8 +4765,8 @@ export default function NotasPedidoCooperadoMain() {
         {isCooperado && abaCooperado === "entregas" && (
           <FormField label="Filtrar entregas">
             <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="min-w-[200px]">
-              <option value="pendentes">Pendentes</option>
               <option value="">Histórico completo</option>
+              <option value="pendentes">Pendentes</option>
               <option value="aguardando_conferencia">Em análise</option>
               <option value="rejeitada">Precisa corrigir</option>
               <option value="conferida">Aprovadas</option>

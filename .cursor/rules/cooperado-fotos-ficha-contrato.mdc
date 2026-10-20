@@ -5,19 +5,22 @@ alwaysApply: true
 
 # Cooperado — Ficha e Foto a receber
 
-Modelo travado em `src/lib/cooperado/cooperadoFotosFichaContrato.ts` (`COOPERADO_FOTOS_FICHA_CONTRATO_VERSION`).
+Modelo travado em `src/lib/cooperado/cooperadoFotosFichaContrato.ts` (`COOPERADO_FOTOS_FICHA_CONTRATO_VERSION` = 2).
 
 ## O que o cooperado vê
 
-1. **Financeiro → Foto a receber**: só fotos do mês em aberto.
-2. **Ao liquidar**: essas fotos saem do Financeiro e entram na **Ficha → Fotos por mês**, uma aba/sanfona por mês liquidado.
-3. **Ficha → Extrato**: entregas do mês em aberto **e** dos meses anteriores.
+1. **Entregas:** histórico completo por mês (não some depois de conferir).
+2. **Minha ficha → Extrato:** ficha completa — todos os meses com entrega, valor e itens.
+3. **Minha ficha → Fotos por mês:** todas as fotos de cada mês; toque amplia e passa na sequência.
+4. **Financeiro → Foto a receber:** só fotos do mês em aberto.
 
 ## Proibido sem bump da versão do contrato + ordem explícita
 
+- Voltar o filtro padrão de Entregas para só «Pendentes» (lista some).
+- Esconder mês anterior ou mês pago no Extrato da Ficha.
+- Fotos por mês só com mês liquidado (some a foto do mês em aberto).
+- Tirar ampliar / sequência das fotos do mês.
 - Voltar o rótulo do Financeiro para «Fotos».
-- Mostrar mês liquidado em Foto a receber.
-- Esconder entregas do mês anterior no Extrato da Ficha.
 - Fazer a aba Fotos da Ficha depender só de `useAppData` ao vivo (mensageiro some).
 
 Teste: `npx tsx scripts/test-cooperado-fotos-ficha-contrato.ts`
