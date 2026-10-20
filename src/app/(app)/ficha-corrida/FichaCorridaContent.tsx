@@ -34,6 +34,12 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId, resolveGestaoCooperativaId } from "@/utils/cooperativa";
 import { AbaLastGoodSafeRoot } from "@/components/responsavel/AbaLastGoodSafeRoot";
 import { saveAbaLastGoodFromData } from "@/lib/responsavel/abaLastGoodCheckpoint";
+import { tryReaplicarPagarLastGoodSeRegrediuInStore } from "@/lib/responsavel/abaLastGoodStore";
+import {
+  abaInicialPagarCooperadosResponsavel,
+  RESPONSAVEL_PAGAR_COOPERADOS_TITULO,
+} from "@/lib/responsavel/responsavelPagarCooperadosContrato";
+import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { getInstituicoesCatalogo } from "@/services/catalogoContratosService";
 import {
   resumoFromPagamento,
@@ -294,19 +300,21 @@ function FichaCorridaPageInner() {
     tabActive && financeiroDormant,
     readModelsRevision + appDataWarmTick
   );
-  const data = financeiroDormant ? dataDormant : dataLive;
+  const data = financeiroDormant
+    ? dataDormant
+    : dataLive ??
+      (!isCooperado ? (isAppDataWarm() ? getData() : peekStaffGestaoLastGood()) : null);
   const hbDescontosRevision = useContaCoopDescontosRevisionWhenLive(!financeiroDormant);
   const financeiroUiEpoch = financeiroDormant ? readModelsRevision : hbDescontosRevision;
   const searchParams = useSearchParams();
   const [mesFilter, setMesFilter] = useState(searchParams.get("mes") ?? getCurrentMesReferencia());
   const [cooperadoFilter, setCooperadoFilter] = useState(searchParams.get("cooperado") ?? "");
-  const [aba, setAba] = useState<"ficha" | "pagar">(() => {
-    const fila = searchParams.get("fila");
-    if (searchParams.get("aba") === "pagar" || fila === "assinaturas" || fila === "verificar-recibos") {
-      return "pagar";
-    }
-    return "ficha";
-  });
+  const [aba, setAba] = useState<"ficha" | "pagar">(() =>
+    abaInicialPagarCooperadosResponsavel({
+      abaQuery: searchParams.get("aba"),
+      filaQuery: searchParams.get("fila"),
+    })
+  );
   const [abaMesCooperado, setAbaMesCooperado] = useState<"aberto" | string>("aberto");
   const [abaSecaoCooperado, setAbaSecaoCooperado] = useState<CooperadoFinanceiroSecao>("resumo");
   const [abaMesPagamentoResponsavel, setAbaMesPagamentoResponsavel] = useState<"pendente" | string>("pendente");
@@ -375,7 +383,9 @@ function FichaCorridaPageInner() {
     const fila = searchParams.get("fila");
     if (c && !isCooperado) setCooperadoFilter(c);
     if (m) setMesFilter(m);
-    if (!isCooperado && (a === "pagar" || fila === "assinaturas" || fila === "verificar-recibos")) setAba("pagar");
+    if (!isCooperado && (a === "ficha" || a === "pagar" || fila === "assinaturas" || fila === "verificar-recibos")) {
+      setAba(abaInicialPagarCooperadosResponsavel({ abaQuery: a, filaQuery: fila }));
+    }
   }, [searchParams, isCooperado]);
 
   useEffect(() => {
@@ -475,6 +485,16 @@ function FichaCorridaPageInner() {
       cancel = true;
     };
   }, [data, coopId, user?.id, tabActive]);
+
+  useEffect(() => {
+    if (isCooperado || !coopId || !isAppDataWarm()) return;
+    tryReaplicarPagarLastGoodSeRegrediuInStore(coopId);
+  }, [isCooperado, coopId]);
+
+  useEffect(() => {
+    if (isCooperado || !data || !coopId) return;
+    saveAbaLastGoodFromData(dataPagar ?? data, coopId, "pagar");
+  }, [isCooperado, data, dataPagar, coopId]);
 
   useEffect(() => {
     if (isCooperado || !user || !coopId || !data) return;
@@ -2019,7 +2039,7 @@ function FichaCorridaPageInner() {
   return (
     <div>
       <PageHeader
-        title={isCooperado ? "Financeiro" : "Pagar cooperados"}
+        title={isCooperado ? "Financeiro" : RESPONSAVEL_PAGAR_COOPERADOS_TITULO}
         subtitle={
           isCooperado
             ? "Mês em aberto com valores pendentes — meses pagos ficam nas abas ao lado"

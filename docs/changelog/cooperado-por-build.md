@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v509
+
+- **Responsável:** Pagar cooperados abre na aba Pagar e a fila de quem ainda tem a receber não some no F5 nem no sync.
+- **Pagamento:** o valor continua o da ficha em aberto; quem já tem PIX confirmado não volta para a lista.
+- **Cooperado:** Início, Financeiro e Entregas iguais ao v508.
+
 ## v508
 
 - **Abertura:** o Início aparece na hora ao tocar no app, com o último A receber do aparelho.

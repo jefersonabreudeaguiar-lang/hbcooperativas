@@ -1,0 +1,25 @@
+---
+description: Contrato da aba Pagar cooperados — não retroceder sem bump
+alwaysApply: true
+---
+
+# Responsável — Pagar cooperados
+
+Modelo travado em `src/lib/responsavel/responsavelPagarCooperadosContrato.ts` (`RESPONSAVEL_PAGAR_COOPERADOS_CONTRATO_VERSION`).
+
+## O que o responsável vê
+
+1. Menu **Pagar cooperados** abre na aba **Pagar** (Ficha só com `?aba=ficha`).
+2. Lista quem tem ficha em aberto ou nota conferida sem PIX.
+3. Valor a pagar = ficha em aberto — não some para R$ 0 porque a ficha ainda não gravou.
+4. Abrir a aba **não** puxa operacional (isso retrocede o painel).
+5. Last-good guarda PIX confirmado **e** a fila a pagar. Sync pobre não esvazia a lista.
+
+## Proibido sem bump da versão do contrato + ordem explícita
+
+- Default da rota `/ficha-corrida` voltar para a aba Ficha.
+- Puxar `operacional` / `financeiro_delta` ao abrir Pagar.
+- Last-good só de PIX confirmado (a fila a pagar some).
+- Zerar a tela quando o keep-alive pausa o subscribe (usar `getData()` / lastro).
+
+Teste: `npx tsx scripts/test-responsavel-pagar-cooperados-contrato.ts`

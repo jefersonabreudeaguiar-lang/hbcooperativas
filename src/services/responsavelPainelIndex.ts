@@ -55,7 +55,7 @@ type RelatorioAbertoCache = {
 
 let relatorioAbertoCache: RelatorioAbertoCache | null = null;
 let relatorioAbertoLatch: { coopId: string; linhas: LinhaPagarCooperadoEmAberto[] } | null = null;
-let conferirLeituraLatch: AppData | null = null;
+const conferirLeituraLatchByKey = new Map<string, AppData>();
 let conferirLatchBuild = APP_BUILD_VERSION;
 
 function garantirCacheDoBuildAtual(): void {
@@ -64,7 +64,7 @@ function garantirCacheDoBuildAtual(): void {
   pagarProjCache = null;
   relatorioAbertoCache = null;
   relatorioAbertoLatch = null;
-  conferirLeituraLatch = null;
+  conferirLeituraLatchByKey.clear();
   conferirLatchBuild = APP_BUILD_VERSION;
 }
 
@@ -166,7 +166,7 @@ export function appDataParaPagarCooperadosResponsavel(data: AppData, coopId?: st
   if (pagarProjCache && pagarProjCache.revision === revision && pagarProjCache.coopId === key) {
     return pagarProjCache.data;
   }
-  const leitura = appDataParaConferirLeitura(data);
+  const leitura = appDataParaConferirLeitura(data, coopId);
   const next = completarFichaProjetadaComNota(
     alinharFichaComPagamentosCooperativa(reconciliarFichaFromNotasConferidas(leitura))
   );
@@ -351,10 +351,10 @@ function escolherSnapshotMaisCompleto(truth: AppData, data: AppData): AppData {
   return { ...base, notasPedido, pagamentosCooperado };
 }
 
-function aplicarLastroCompletenessConferir(candidato: AppData): AppData {
-  const prev = conferirLeituraLatch;
+function aplicarLastroCompletenessConferir(candidato: AppData, key = "_"): AppData {
+  const prev = conferirLeituraLatchByKey.get(key);
   if (!prev || !snapshotConferirPoorerSemProva(candidato, prev)) {
-    conferirLeituraLatch = candidato;
+    conferirLeituraLatchByKey.set(key, candidato);
     return candidato;
   }
   const pagamentosCooperado = mergePagamentosCooperadoParaConferir(
@@ -372,19 +372,21 @@ function aplicarLastroCompletenessConferir(candidato: AppData): AppData {
     notasPedido: mergeNotasPreferindoAtualizacao(prev.notasPedido, candidato.notasPedido),
     pagamentosCooperado,
   });
-  conferirLeituraLatch = fundido;
+  conferirLeituraLatchByKey.set(key, fundido);
   return fundido;
 }
 
 /**
  * Foto única da aba Conferir: verdade operacional + merge de notas, com lastro de completeness.
  * PIX confirmado alinha ficha/nota a pago antes do lastro — pago não volta a em aberto.
+ * Lastro por cooperativa — uma CNPJ não herda a fila da outra.
  */
-export function appDataParaConferirLeitura(data: AppData): AppData {
+export function appDataParaConferirLeitura(data: AppData, coopId?: string): AppData {
   garantirCacheDoBuildAtual();
+  const key = coopId || "_";
   const truth = getDataOperationalTruth();
   const merged = escolherSnapshotMaisCompleto(truth, data);
-  return aplicarLastroCompletenessConferir(alinharFichaComPagamentosCooperativa(merged));
+  return aplicarLastroCompletenessConferir(alinharFichaComPagamentosCooperativa(merged), key);
 }
 
 /**
@@ -565,7 +567,7 @@ function getPainelCache(data: AppData, coopId: string): PainelCache {
   if (painelCache && painelCache.revision === revision && painelCache.coopId === coopId) {
     return painelCache;
   }
-  painelCache = buildPainelCache(appDataParaConferirLeitura(data), data, coopId);
+  painelCache = buildPainelCache(appDataParaConferirLeitura(data, coopId), data, coopId);
   return painelCache;
 }
 
@@ -659,7 +661,7 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
   cooperadoId?: string
 ): LinhaPagarCooperadoEmAberto[] {
   if (!coopId) return [];
-  const dataAberto = alinharFichaComPagamentosCooperativa(appDataParaConferirLeitura(data));
+  const dataAberto = alinharFichaComPagamentosCooperativa(appDataParaConferirLeitura(data, coopId));
   if (cooperadoId) {
     return fundirLinhasEmAbertoEstavel(
       [],
@@ -706,6 +708,6 @@ export function resetResponsavelPainelIndexCache(): void {
   pagarProjCache = null;
   relatorioAbertoCache = null;
   relatorioAbertoLatch = null;
-  conferirLeituraLatch = null;
+  conferirLeituraLatchByKey.clear();
   conferirLatchBuild = APP_BUILD_VERSION;
 }

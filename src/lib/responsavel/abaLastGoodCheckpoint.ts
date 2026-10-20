@@ -72,8 +72,23 @@ export function contratosSliceValido(slice: ContratosLastGoodSlice): boolean {
   return slice.instituicoes.length > 0;
 }
 
+function valorFichaPagar(f: FichaCorrida): number {
+  const liq = Number(f.valorLiquido);
+  if (Number.isFinite(liq) && liq > 0.005) return liq;
+  const bruto = Number(f.valorBruto);
+  return Number.isFinite(bruto) && bruto > 0.005 ? bruto : 0;
+}
+
+function fichaPendenteAPagar(f: FichaCorrida): boolean {
+  return f.status === "pendente" && valorFichaPagar(f) > 0.005;
+}
+
+/** Last-good vale se tem PIX confirmado ou alguém ainda a pagar. */
 export function pagarSliceValido(slice: PagarLastGoodSlice): boolean {
-  return slice.pagamentosCooperado.some((p) => p.status === "confirmado");
+  return (
+    slice.pagamentosCooperado.some((p) => p.status === "confirmado") ||
+    slice.fichaCorrida.some(fichaPendenteAPagar)
+  );
 }
 
 export function contarItensPublicadosSlice(slice: ContratosLastGoodSlice): number {
@@ -91,8 +106,16 @@ export function contratosRegrediu(atual: ContratosLastGoodSlice, lastGood: Contr
 }
 
 export function pagarRegrediu(atual: PagarLastGoodSlice, lastGood: PagarLastGoodSlice): boolean {
-  const atuais = new Set(idsPagamentosConfirmados(atual));
-  return idsPagamentosConfirmados(lastGood).some((id) => !atuais.has(id));
+  const pixAtual = new Set(idsPagamentosConfirmados(atual));
+  if (idsPagamentosConfirmados(lastGood).some((id) => !pixAtual.has(id))) return true;
+  const fichasAtual = new Map(atual.fichaCorrida.map((f) => [f.id, f]));
+  return lastGood.fichaCorrida.some((f) => {
+    if (!fichaPendenteAPagar(f)) return false;
+    const cur = fichasAtual.get(f.id);
+    if (!cur) return true;
+    if (cur.status === "pago") return false;
+    return !fichaPendenteAPagar(cur);
+  });
 }
 
 function mergeById<T extends { id: string }>(current: T[], checkpoint: T[]): T[] {
