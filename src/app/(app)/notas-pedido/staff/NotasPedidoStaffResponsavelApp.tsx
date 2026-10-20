@@ -4189,7 +4189,7 @@ export default function NotasPedidoStaffMain() {
       return;
     }
 
-    const cnpjHint = getCooperativaCnpj(data, coopId);
+    const cnpjHint = getCooperativaCnpj(live, coopId);
     if (cnpjHint) {
       queueNotaDelete(cnpjHint, alvo.id);
     }
