@@ -423,34 +423,36 @@ export default function LivroCaixaPage() {
     }
   };
 
-  const relatorioOptsAtual = (): LivroCaixaRelatorioPlanilhaOpts =>
-    relatorioModo === "dia"
-      ? {
-          modo: "dia",
-          dataIso: dataRelatorio,
-          incluirExtratoFicha: incluirFichaRelatorio,
-          incluirSobrasPerdas: incluirSobrasRelatorio,
-          mesSobrasPerdas: mes,
-          incluirValoresEmAberto: incluirAbertosRelatorio,
-        }
-      : relatorioModo === "periodo"
+  const relatorioOptsAtual = (): LivroCaixaRelatorioPlanilhaOpts => {
+    const base: LivroCaixaRelatorioPlanilhaOpts =
+      relatorioModo === "dia"
         ? {
-            modo: "periodo",
-            dataDe: relatorioDe,
-            dataAte: relatorioAte,
+            modo: "dia",
+            dataIso: dataRelatorio,
+            incluirExtratoFicha: incluirFichaRelatorio,
             incluirSobrasPerdas: incluirSobrasRelatorio,
             mesSobrasPerdas: mes,
             incluirValoresEmAberto: incluirAbertosRelatorio,
           }
-        : {
-            modo: "mes",
-            mesReferencia: mes,
-            somenteMesEmAberto: somenteMesAbertoRelatorio,
-            incluirSobrasPerdas: incluirSobrasRelatorio,
-            mesSobrasPerdas: mes,
-            incluirValoresEmAberto: incluirAbertosRelatorio,
-          };
+        : relatorioModo === "periodo"
+          ? {
+              modo: "periodo",
+              dataDe: relatorioDe,
+              dataAte: relatorioAte,
+              incluirSobrasPerdas: incluirSobrasRelatorio,
+              mesSobrasPerdas: mes,
+              incluirValoresEmAberto: incluirAbertosRelatorio,
+            }
+          : {
+              modo: "mes",
+              mesReferencia: mes,
+              somenteMesEmAberto: somenteMesAbertoRelatorio,
+              incluirSobrasPerdas: incluirSobrasRelatorio,
+              mesSobrasPerdas: mes,
+              incluirValoresEmAberto: incluirAbertosRelatorio,
+            };
     return pastaAtiva ? { ...base, pastaOrigem: pastaAtiva } : base;
+  };
 
   const imprimirRelatorio = () => {
     const html = gerarRelatorioLivroCaixaPlanilhaHtml(data, coopId, coopNome, relatorioOptsAtual());
@@ -700,6 +702,7 @@ export default function LivroCaixaPage() {
               <Button
                 type="button"
                 onClick={() => {
+                  if (!pastaAtiva) return;
                   resetForm();
                   if (pastaAtiva.startsWith("cad:")) setOrigem(pastaAtiva);
                   else setOrigem(pastaAtiva.slice(4));
