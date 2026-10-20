@@ -35,6 +35,7 @@ const ORIGEM_LABELS: Record<LivroCaixaOrigem, string> = {
   pnae: "PNAE / contrato",
   prestacao_contas: "Prestação de contas",
   hb_app_repasse: "Repasse HB Créditos",
+  origem_cadastrada: "Origem cadastrada",
   outro: "Outro",
 };
 
@@ -122,6 +123,13 @@ export const MAPEAMENTO_ORIGEM_CONTA: {
     contaDebitoSugerida: "A definir",
     contaCreditoSugerida: "A definir",
     notas: "Prestação de contas",
+  },
+  {
+    origem: "origem_cadastrada",
+    tipoLivro: "Variável",
+    contaDebitoSugerida: "A definir",
+    contaCreditoSugerida: "A definir",
+    notas: "Pasta de origem cadastrada no Livro caixa",
   },
   {
     origem: "outro",

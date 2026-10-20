@@ -405,10 +405,20 @@ export function criarLancamentoManual(
   tipo: LivroCaixaTipo,
   valor: number,
   historico: string,
-  opts?: { data?: string; origem?: LivroCaixaOrigem; categoria?: string; responsavel?: string }
+  opts?: {
+    data?: string;
+    origem?: LivroCaixaOrigem;
+    origemCadastroId?: string;
+    categoria?: string;
+    responsavel?: string;
+  }
 ): AppData {
   const dataLanc = opts?.data ?? new Date().toISOString().split("T")[0];
-  const origem = opts?.origem ?? (tipo === "credito" ? "credito_avulso" : "debito_avulso");
+  const origemCadastroId = opts?.origemCadastroId?.trim() || undefined;
+  const origem =
+    origemCadastroId
+      ? "origem_cadastrada"
+      : (opts?.origem ?? (tipo === "credito" ? "credito_avulso" : "debito_avulso"));
   return appendLivroCaixaLancamento(data, {
     cooperativaId,
     data: dataLanc,
@@ -417,6 +427,7 @@ export function criarLancamentoManual(
     valor: Math.abs(valor),
     historico: historico.trim(),
     origem,
+    origemCadastroId,
     categoria: opts?.categoria,
     responsavel: opts?.responsavel,
   });
@@ -937,6 +948,8 @@ const ORIGENS_LANCAMENTO_MANUAL: LivroCaixaOrigem[] = [
   "credito_avulso",
   "debito_avulso",
   "pnae",
+  "prestacao_contas",
+  "origem_cadastrada",
   "outro",
 ];
 
@@ -963,6 +976,7 @@ export function atualizarLancamentoManual(
     historico: string;
     data?: string;
     origem?: LivroCaixaOrigem;
+    origemCadastroId?: string;
   }
 ): AppData {
   const idx = (data.livroCaixa ?? []).findIndex((l) => l.id === lancamentoId && l.cooperativaId === cooperativaId);
@@ -971,9 +985,13 @@ export function atualizarLancamentoManual(
   if (!isLancamentoManualEditavel(cur)) return data;
 
   const dataLanc = patch.data ?? cur.data;
-  let origem = patch.origem ?? cur.origem;
-  if (patch.tipo === "credito" && origem === "debito_avulso") origem = "credito_avulso";
-  if (patch.tipo === "debito" && (origem === "credito_avulso" || origem === "pnae")) origem = "debito_avulso";
+  const origemCadastroId =
+    patch.origemCadastroId !== undefined ? patch.origemCadastroId.trim() || undefined : cur.origemCadastroId;
+  let origem = origemCadastroId ? "origem_cadastrada" : (patch.origem ?? cur.origem);
+  if (!origemCadastroId) {
+    if (patch.tipo === "credito" && origem === "debito_avulso") origem = "credito_avulso";
+    if (patch.tipo === "debito" && (origem === "credito_avulso" || origem === "pnae")) origem = "debito_avulso";
+  }
   if (!ORIGENS_LANCAMENTO_MANUAL.includes(origem)) return data;
 
   const nextItem: LivroCaixaLancamento = {
@@ -984,6 +1002,7 @@ export function atualizarLancamentoManual(
     data: dataLanc,
     mesReferencia: mesFromData(dataLanc),
     origem,
+    origemCadastroId,
     updatedAt: new Date().toISOString(),
   };
 

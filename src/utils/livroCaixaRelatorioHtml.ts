@@ -1,4 +1,10 @@
 import type { AppData, LivroCaixaLancamento, LivroCaixaOrigem } from "@/types";
+import {
+  filtrarLancamentosPorPasta,
+  nomePastaLivroCaixa,
+  rotuloOrigemLancamento,
+  type LivroCaixaPastaKey,
+} from "@/lib/livro-caixa/livroCaixaOrigemPastas";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
 import {
@@ -31,6 +37,7 @@ const ORIGEM_LABELS: Record<LivroCaixaOrigem, string> = {
   pnae: "PNAE / contrato",
   prestacao_contas: "Prestação de contas",
   hb_app_repasse: "Repasse HB Créditos",
+  origem_cadastrada: "Origem cadastrada",
   outro: "Outro",
 };
 
@@ -62,7 +69,7 @@ function linhaPlanilhaHtml(
   return `<tr>
     <td>${formatNumeroSequenciaExibicao(l.numeroSequencia)}</td>
     <td>${formatDate(resolverDataIsoLancamentoLivroCaixa(l, data))}</td>
-    <td>${escapeHtml(l.historico)}<br/><small style="color:#6b7280">${ORIGEM_LABELS[l.origem]}${ret}</small></td>
+    <td>${escapeHtml(l.historico)}<br/><small style="color:#6b7280">${escapeHtml(rotuloOrigemLancamento(l, data.livroCaixaOrigensCadastro ?? []))}${ret}</small></td>
     <td class="num credito">${credito != null ? formatCurrency(credito) : ""}</td>
     <td class="num debito">${debito != null ? formatCurrency(debito) : ""}</td>
     <td class="num"><strong>${formatCurrency(saldoCorrido)}</strong></td>
@@ -180,6 +187,8 @@ export type LivroCaixaRelatorioPlanilhaOpts = {
   incluirSobrasPerdas?: boolean;
   mesSobrasPerdas?: string;
   incluirValoresEmAberto?: boolean;
+  /** Relatório só da pasta/origem. */
+  pastaOrigem?: LivroCaixaPastaKey;
 };
 
 export function gerarRelatorioLivroCaixaPlanilhaHtml(
@@ -209,6 +218,11 @@ export function gerarRelatorioLivroCaixaPlanilhaHtml(
     tituloPeriodo = `${formatDate(opts.dataDe)} a ${formatDate(opts.dataAte)}`;
     lancamentos = lancamentosLivroCaixaPeriodo(data, cooperativaId, opts.dataDe, opts.dataAte);
     saldoInicial = saldoLivroCaixaAntesData(data, cooperativaId, opts.dataDe);
+  }
+
+  if (opts.pastaOrigem) {
+    lancamentos = filtrarLancamentosPorPasta(lancamentos, opts.pastaOrigem);
+    tituloPeriodo += ` · pasta ${nomePastaLivroCaixa(data, cooperativaId, opts.pastaOrigem)}`;
   }
 
   const resumo = resumoLivroCaixa(data, cooperativaId);

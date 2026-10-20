@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v526
+
+- **Responsável:** Livro caixa ganha pastas por origem — cadastra a origem, lança e o valor fica no livro e na pasta.
+- **Livro caixa:** em cada pasta dá para emitir o relatório só daquela origem.
+- **Cooperado:** Início, Entregas, Ficha, Financeiro e A receber iguais ao v525.
+
 ## v525
 
 - **Atalho PWA:** a versão nova chega no ícone instalado — sem sair do app e sem apagar cache ou cookie.

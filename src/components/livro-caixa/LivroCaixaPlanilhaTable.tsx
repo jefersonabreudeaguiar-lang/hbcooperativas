@@ -26,6 +26,7 @@ const ORIGEM_LABELS: Record<LivroCaixaOrigem, string> = {
   pnae: "PNAE / contrato",
   prestacao_contas: "Prestação de contas",
   hb_app_repasse: "Repasse HB Créditos",
+  origem_cadastrada: "Origem cadastrada",
   outro: "Outro",
 };
 
@@ -41,6 +42,7 @@ export interface LivroCaixaPlanilhaTableProps {
   pagina?: number;
   onPaginaChange?: (pagina: number) => void;
   linhasPorPagina?: number;
+  rotuloOrigem?: (l: LivroCaixaLancamento) => string;
 }
 
 export function LivroCaixaPlanilhaTable({
@@ -55,6 +57,7 @@ export function LivroCaixaPlanilhaTable({
   pagina = 1,
   onPaginaChange,
   linhasPorPagina = LIVRO_CAIXA_LINHAS_POR_PAGINA,
+  rotuloOrigem,
 }: LivroCaixaPlanilhaTableProps) {
   const mostrarSaldoAnterior = Math.abs(saldoInicial) > 0.0001;
 
@@ -126,7 +129,7 @@ export function LivroCaixaPlanilhaTable({
                   <td className="px-3 py-2 border-b border-slate-100">
                     <p className="font-medium text-slate-900 leading-snug">{l.historico}</p>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      {ORIGEM_LABELS[l.origem]}
+                      {rotuloOrigem ? rotuloOrigem(l) : ORIGEM_LABELS[l.origem]}
                       {retencao ? " · retenção (ficha)" : ""}
                       {l.responsavel ? ` · ${l.responsavel}` : ""}
                     </p>

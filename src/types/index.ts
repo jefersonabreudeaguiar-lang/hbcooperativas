@@ -787,6 +787,7 @@ export type LivroCaixaOrigem =
   | "pnae"
   | "prestacao_contas"
   | "hb_app_repasse"
+  | "origem_cadastrada"
   | "outro";
 
 export interface LivroCaixaLancamento {
@@ -798,6 +799,8 @@ export interface LivroCaixaLancamento {
   valor: number;
   historico: string;
   origem: LivroCaixaOrigem;
+  /** Pasta cadastrada pelo responsável (origem_cadastrada). */
+  origemCadastroId?: string;
   /** Evita duplicar lançamento automático. */
   origemId?: string;
   /** Número sequencial do evento no livro (reinicia após encerramento anual autorizado). */
@@ -810,6 +813,14 @@ export interface LivroCaixaLancamento {
   responsavel?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Origem cadastrada pelo responsável — vira pasta no Livro caixa. */
+export interface LivroCaixaOrigemCadastro {
+  id: string;
+  cooperativaId: string;
+  nome: string;
+  createdAt: string;
 }
 
 export interface LivroCaixaEncerramentoAnoRegistro {
@@ -955,6 +966,8 @@ export interface AppData {
   livroCaixa: LivroCaixaLancamento[];
   livroCaixaControleAnual?: LivroCaixaControleAnual[];
   livroCaixaExcluidos?: LivroCaixaExcluidoRef[];
+  /** Pastas de origem criadas no Livro caixa (por cooperativa). */
+  livroCaixaOrigensCadastro?: LivroCaixaOrigemCadastro[];
   prestacoesContas: PrestacaoContas[];
   prestacoesContasExcluidas?: PrestacaoContasExcluida[];
   notasPedidoExcluidas?: NotaPedidoExcluida[];

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, TrendingUp, TrendingDown, Wallet, Send, FileText, Search, Download, Users, BookOpen } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, Send, FileText, Search, Download, Users, BookOpen, FolderOpen, FolderPlus } from "lucide-react";
 import { useAppDataSnapshotForDomains } from "@/hooks/useAppData";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -12,7 +12,7 @@ import { PageHeader, Modal } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea, FormField } from "@/components/ui/Form";
 import { Card } from "@/components/ui/Card";
-import { updateData, addAuditEntry, getData } from "@/services/dataStore";
+import { updateData, addAuditEntry, getData, generateId } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { posProcessarIntegridadePagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
@@ -57,6 +57,16 @@ import {
   calcularResumoPorCooperadoLivroCaixaCompleto,
 } from "@/services/livroCaixaResumoCooperado";
 import type { LivroCaixaLancamento } from "@/types";
+import {
+  cadastrarOrigemLivroCaixa,
+  filtrarLancamentosPorPasta,
+  LIVRO_CAIXA_ORIGEM_LABELS,
+  listarOrigensCadastroCooperativa,
+  listarPastasLivroCaixa,
+  nomePastaLivroCaixa,
+  rotuloOrigemLancamento,
+  type LivroCaixaPastaKey,
+} from "@/lib/livro-caixa/livroCaixaOrigemPastas";
 import { imprimirDocumentoHtml } from "@/utils/relatorioHtml";
 import {
   buildLivroCaixaPacoteContabil,
@@ -86,7 +96,9 @@ export default function LivroCaixaPage() {
   const [valor, setValor] = useState("");
   const [historico, setHistorico] = useState("");
   const [dataLanc, setDataLanc] = useState(new Date().toISOString().split("T")[0]);
-  const [origem, setOrigem] = useState<LivroCaixaOrigem>("credito_avulso");
+  const [origem, setOrigem] = useState<string>("credito_avulso");
+  const [cadastroOrigemOpen, setCadastroOrigemOpen] = useState(false);
+  const [novaOrigemNome, setNovaOrigemNome] = useState("");
   const [publicando, setPublicando] = useState(false);
   const [editing, setEditing] = useState<LivroCaixaLancamento | null>(null);
   const [buscaSequencia, setBuscaSequencia] = useState("");
@@ -109,7 +121,7 @@ export default function LivroCaixaPage() {
   const [somenteMesAbertoRelatorio, setSomenteMesAbertoRelatorio] = useState(false);
   const [encBackupOk, setEncBackupOk] = useState(false);
   const [encRelatoriosOk, setEncRelatoriosOk] = useState(false);
-  const [abaLivro, setAbaLivro] = useState<"livro" | "resumo-cooperado">("livro");
+  const [abaLivro, setAbaLivro] = useState<"livro" | "resumo-cooperado" | LivroCaixaPastaKey>("livro");
 
   const resetForm = () => {
     setTipo("credito");
@@ -118,6 +130,18 @@ export default function LivroCaixaPage() {
     setDataLanc(new Date().toISOString().split("T")[0]);
     setOrigem("credito_avulso");
     setEditing(null);
+  };
+
+  const resolverOrigemForm = (): { origem: LivroCaixaOrigem; origemCadastroId?: string } => {
+    if (origem.startsWith("cad:")) {
+      return { origem: "origem_cadastrada", origemCadastroId: origem.slice(4) };
+    }
+    return { origem: origem as LivroCaixaOrigem };
+  };
+
+  const pastaDoFormulario = (): LivroCaixaPastaKey => {
+    const orig = resolverOrigemForm();
+    return orig.origemCadastroId ? `cad:${orig.origemCadastroId}` : `sys:${orig.origem}`;
   };
 
   const openNovo = () => {
@@ -131,7 +155,7 @@ export default function LivroCaixaPage() {
     setValor(String(l.valor));
     setHistorico(l.historico);
     setDataLanc(l.data);
-    setOrigem(l.origem);
+    setOrigem(l.origemCadastroId ? `cad:${l.origemCadastroId}` : l.origem);
     setModalOpen(true);
   };
 
@@ -157,7 +181,7 @@ export default function LivroCaixaPage() {
 
   useEffect(() => {
     setPaginaPlanilha(1);
-  }, [mes, modoVisualizacao, filtroDe, filtroAte]);
+  }, [mes, modoVisualizacao, filtroDe, filtroAte, abaLivro]);
 
   const meses = useMemo(
     () => (dataCaixa && coopId ? mesesLivroCaixa(dataCaixa, coopId) : [getCurrentMesReferencia()]),
@@ -204,6 +228,24 @@ export default function LivroCaixaPage() {
     [lancamentosVisao, saldoInicialVisao]
   );
 
+  const pastasOrigem = useMemo(
+    () => (dataCaixa && coopId ? listarPastasLivroCaixa(dataCaixa, coopId, lancamentosVisao) : []),
+    [dataCaixa, coopId, lancamentosVisao]
+  );
+  const pastaAtiva = abaLivro !== "livro" && abaLivro !== "resumo-cooperado" ? abaLivro : null;
+  const origensCadastro = useMemo(
+    () => (dataCaixa && coopId ? listarOrigensCadastroCooperativa(dataCaixa, coopId) : []),
+    [dataCaixa, coopId]
+  );
+  const lancamentosPasta = useMemo(
+    () => filtrarLancamentosPorPasta(lancamentosVisao, pastaAtiva),
+    [lancamentosVisao, pastaAtiva]
+  );
+  const planilhaPasta = useMemo(
+    () => buildPlanilhaLinhas(lancamentosPasta, 0),
+    [lancamentosPasta]
+  );
+
   const saldoFinalMes = useMemo(() => {
     if (planilhaLinhas.length) return saldoCorridoFinalPlanilha(planilhaLinhas, saldoInicialVisao);
     return modoVisualizacao === "periodo" ? saldoInicialVisao : saldoInicialMes;
@@ -238,12 +280,14 @@ export default function LivroCaixaPage() {
 
     if (editing) {
       updateData((d) => {
+        const orig = resolverOrigemForm();
         const next = atualizarLancamentoManual(d, coopId, editing.id, {
           tipo,
           valor: v,
           historico,
           data: dataLanc,
-          origem,
+          origem: orig.origem,
+          origemCadastroId: orig.origemCadastroId,
         });
         if (next === d) return d;
         return addAuditEntry(next, {
@@ -257,9 +301,11 @@ export default function LivroCaixaPage() {
       });
     } else {
       updateData((d) => {
+        const orig = resolverOrigemForm();
         const next = criarLancamentoManual(d, coopId, tipo, v, historico, {
           data: dataLanc,
-          origem,
+          origem: orig.origem,
+          origemCadastroId: orig.origemCadastroId,
           responsavel: permUser.name,
         });
         return addAuditEntry(next, {
@@ -273,8 +319,40 @@ export default function LivroCaixaPage() {
       });
     }
 
+    setAbaLivro(pastaDoFormulario());
     setModalOpen(false);
     resetForm();
+  };
+
+  const salvarNovaOrigem = () => {
+    const nome = novaOrigemNome.trim();
+    if (!nome || !canEdit) return;
+    const existente = origensCadastro.find((o) => o.nome.toLowerCase() === nome.toLowerCase());
+    if (existente) {
+      setOrigem(`cad:${existente.id}`);
+      setAbaLivro(`cad:${existente.id}`);
+      setNovaOrigemNome("");
+      setCadastroOrigemOpen(false);
+      return;
+    }
+    const id = generateId("lc-orig");
+    updateData((d) => {
+      const next = cadastrarOrigemLivroCaixa(d, { id, cooperativaId: coopId, nome });
+      if (next === d) return d;
+      return addAuditEntry(next, {
+        entityType: "financeiro",
+        entityId: id,
+        action: "criar",
+        userId: permUser.id,
+        userName: permUser.name,
+        changes: `Livro caixa · origem cadastrada · ${nome}`,
+      });
+    });
+    setOrigem(`cad:${id}`);
+    setAbaLivro(`cad:${id}`);
+    setNovaOrigemNome("");
+    setCadastroOrigemOpen(false);
+    void publicar({ force: true });
   };
 
   const excluirLancamento = (l: LivroCaixaLancamento) => {
@@ -372,6 +450,7 @@ export default function LivroCaixaPage() {
             mesSobrasPerdas: mes,
             incluirValoresEmAberto: incluirAbertosRelatorio,
           };
+    return pastaAtiva ? { ...base, pastaOrigem: pastaAtiva } : base;
 
   const imprimirRelatorio = () => {
     const html = gerarRelatorioLivroCaixaPlanilhaHtml(data, coopId, coopNome, relatorioOptsAtual());
@@ -577,6 +656,23 @@ export default function LivroCaixaPage() {
         >
           <Users size={16} /> Resumo por cooperado
         </button>
+        {pastasOrigem.map((pasta) => (
+          <button
+            key={pasta.key}
+            type="button"
+            role="tab"
+            aria-selected={abaLivro === pasta.key}
+            onClick={() => setAbaLivro(pasta.key)}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 ${
+              abaLivro === pasta.key
+                ? "border-green-600 text-green-700"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <FolderOpen size={16} /> {pasta.nome}
+            <span className="text-xs tabular-nums text-gray-400">{pasta.quantidade}</span>
+          </button>
+        ))}
       </div>
 
       {abaLivro === "resumo-cooperado" && (
@@ -588,8 +684,95 @@ export default function LivroCaixaPage() {
         </Card>
       )}
 
+      {pastaAtiva && dataCaixa && (
+        <Card
+          title={`Pasta · ${nomePastaLivroCaixa(dataCaixa, coopId, pastaAtiva)}`}
+        >
+          <p className="text-sm text-gray-600 mb-4">
+            Estes lançamentos também estão no livro completo. A pasta junta só a origem escolhida no
+            lançamento.
+          </p>
+          <div className="flex flex-wrap gap-2 mb-4">
+            <Button type="button" variant="secondary" onClick={imprimirRelatorio}>
+              <FileText size={16} /> Emitir relatório desta origem
+            </Button>
+            {canEdit && (
+              <Button
+                type="button"
+                onClick={() => {
+                  resetForm();
+                  if (pastaAtiva.startsWith("cad:")) setOrigem(pastaAtiva);
+                  else setOrigem(pastaAtiva.slice(4));
+                  setModalOpen(true);
+                }}
+              >
+                <Plus size={16} /> Lançar nesta origem
+              </Button>
+            )}
+          </div>
+          <LivroCaixaPlanilhaTable
+            linhas={planilhaPasta}
+            saldoInicial={0}
+            destaqueId={destaqueSeqId}
+            onEditar={openEditar}
+            onExcluir={excluirLancamento}
+            canEdit={canEditLancamento}
+            canDelete={canDeleteLancamento}
+            rotuloOrigem={(l) => rotuloOrigemLancamento(l, origensCadastro)}
+            emptyMessage="Nenhum lançamento nesta origem no período. Lance com esta origem ou amplie as datas."
+            pagina={paginaPlanilha}
+            onPaginaChange={setPaginaPlanilha}
+          />
+        </Card>
+      )}
+
       {abaLivro === "livro" && (
       <>
+      {canEdit && (
+        <Card title="Cadastrar origem do lançamento">
+          <p className="text-sm text-gray-600 mb-3">
+            Cada origem vira uma pasta. Ao lançar, o valor entra no livro e na pasta da origem
+            escolhida.
+          </p>
+          {cadastroOrigemOpen ? (
+            <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+              <div className="flex-1">
+                <FormField label="Nome da origem">
+                  <Input
+                    value={novaOrigemNome}
+                    onChange={(e) => setNovaOrigemNome(e.target.value)}
+                    placeholder="Ex.: Combustível, PNAE escola X, Repasse extra"
+                  />
+                </FormField>
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" onClick={salvarNovaOrigem} disabled={!novaOrigemNome.trim()}>
+                  <FolderPlus size={16} /> Salvar origem
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setCadastroOrigemOpen(false);
+                    setNovaOrigemNome("");
+                  }}
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button type="button" variant="secondary" onClick={() => setCadastroOrigemOpen(true)}>
+              <FolderPlus size={16} /> Nova origem
+            </Button>
+          )}
+          {origensCadastro.length > 0 && (
+            <p className="text-xs text-gray-500 mt-3">
+              Origens cadastradas: {origensCadastro.map((o) => o.nome).join(" · ")}
+            </p>
+          )}
+        </Card>
+      )}
       <Card title="Conferência rápida">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-3">
@@ -758,6 +941,7 @@ export default function LivroCaixaPage() {
           onExcluir={excluirLancamento}
           canEdit={canEditLancamento}
           canDelete={canDeleteLancamento}
+          rotuloOrigem={(l) => rotuloOrigemLancamento(l, origensCadastro)}
           emptyMessage="Nenhum lançamento neste período. Amplie o intervalo de datas ou confira se o PIX está confirmado na ficha."
           pagina={paginaPlanilha}
           onPaginaChange={setPaginaPlanilha}
@@ -782,6 +966,7 @@ export default function LivroCaixaPage() {
               onChange={(e) => {
                 const t = e.target.value as LivroCaixaTipo;
                 setTipo(t);
+                if (origem.startsWith("cad:")) return;
                 setOrigem(t === "credito" ? "credito_avulso" : "debito_avulso");
               }}
             >
@@ -789,20 +974,33 @@ export default function LivroCaixaPage() {
               <option value="debito">Débito (saída)</option>
             </Select>
           </FormField>
-          <FormField label="Origem">
-            <Select value={origem} onChange={(e) => setOrigem(e.target.value as LivroCaixaOrigem)}>
-              {tipo === "credito" ? (
-                <>
-                  <option value="credito_avulso">Crédito avulso</option>
-                  <option value="pnae">PNAE / contrato</option>
-                  <option value="outro">Outro</option>
-                </>
-              ) : (
-                <>
-                  <option value="debito_avulso">Débito avulso</option>
-                  <option value="outro">Outro</option>
-                </>
+          <FormField label="Origem" hint="O lançamento vai para o livro e para a pasta desta origem.">
+            <Select value={origem} onChange={(e) => setOrigem(e.target.value)}>
+              {origensCadastro.length > 0 && (
+                <optgroup label="Origens cadastradas">
+                  {origensCadastro.map((o) => (
+                    <option key={o.id} value={`cad:${o.id}`}>
+                      {o.nome}
+                    </option>
+                  ))}
+                </optgroup>
               )}
+              <optgroup label={tipo === "credito" ? "Entradas" : "Saídas"}>
+                {tipo === "credito" ? (
+                  <>
+                    <option value="credito_avulso">{LIVRO_CAIXA_ORIGEM_LABELS.credito_avulso}</option>
+                    <option value="pnae">{LIVRO_CAIXA_ORIGEM_LABELS.pnae}</option>
+                    <option value="prestacao_contas">{LIVRO_CAIXA_ORIGEM_LABELS.prestacao_contas}</option>
+                    <option value="outro">{LIVRO_CAIXA_ORIGEM_LABELS.outro}</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="debito_avulso">{LIVRO_CAIXA_ORIGEM_LABELS.debito_avulso}</option>
+                    <option value="prestacao_contas">{LIVRO_CAIXA_ORIGEM_LABELS.prestacao_contas}</option>
+                    <option value="outro">{LIVRO_CAIXA_ORIGEM_LABELS.outro}</option>
+                  </>
+                )}
+              </optgroup>
             </Select>
           </FormField>
           <div className="grid grid-cols-2 gap-3">
