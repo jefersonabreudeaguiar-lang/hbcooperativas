@@ -6,9 +6,13 @@ import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
 
 const SEEN_PREFIX = "hb-staff-primeiro-dia-contratos:";
 
+export const STAFF_PRIMEIRO_DIA_INICIO_TITULO = "Primeiro dia da cooperativa";
+export const STAFF_PRIMEIRO_DIA_INICIO_TEXTO =
+  "Este painel é só desta cooperativa. Comece pelo contrato e pelo primeiro cooperado. A mensalidade só começa no primeiro cadastro.";
 export const STAFF_PRIMEIRO_DIA_CONTRATOS_TITULO = "Primeiro dia: cadastre o primeiro contrato";
 export const STAFF_PRIMEIRO_DIA_CONTRATOS_TEXTO =
   "Sem instituição, o cooperado ainda não consegue entregar. Cadastre a escola ou o comprador e depois os produtos com preço.";
+export const STAFF_PRIMEIRO_DIA_CONTRATOS_HREF = "/contratos";
 export const STAFF_PRIMEIRO_DIA_SENHA_TITULO = "Defina a senha de cadastro dos cooperados";
 export const STAFF_PRIMEIRO_DIA_SENHA_TEXTO =
   "Passe essa senha junto com o CNPJ. Sem ela, o cooperado não sabe o que informar no cadastro.";
@@ -72,6 +76,16 @@ export function shouldShowStaffPrimeiroDiaCobranca(opts: {
   if (cob?.cicloInicioEm) return false;
   if (cob?.statusMes && cob.statusMes !== "aguardando_primeiro_cooperado") return false;
   return (opts.data.cooperados ?? []).filter((c) => c.cooperativaId === opts.coopId).length === 0;
+}
+
+/** Início do responsável da cooperativa ativa: sem contrato ou sem cooperado. Casa com os dois não entra. */
+export function isStaffPrimeiroDiaInicio(opts: {
+  role?: string;
+  coopId?: string | null;
+  data: AppData | null;
+  warm: boolean;
+}): boolean {
+  return isStaffPrimeiroDiaContratosVazio(opts) || shouldShowStaffPrimeiroDiaConviteCooperado(opts);
 }
 
 export function shouldRedirectStaffPrimeiroDiaContratos(opts: {

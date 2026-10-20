@@ -105,6 +105,26 @@ import {
 } from "@/lib/performance/cooperadoColdStart";
 import { warmupCooperadoFinanceiroTabChunk } from "@/lib/performance/cooperadoFinanceiroTabWarmup";
 import { RestoreOperacionalPanel } from "@/components/sync/RestoreOperacionalPanel";
+import {
+  isStaffPrimeiroDiaContratosVazio,
+  isStaffPrimeiroDiaInicio,
+  shouldShowStaffPrimeiroDiaCobranca,
+  shouldShowStaffPrimeiroDiaConviteCooperado,
+  shouldShowStaffPrimeiroDiaSenhaCadastro,
+  STAFF_PRIMEIRO_DIA_COBRANCA_TEXTO,
+  STAFF_PRIMEIRO_DIA_COBRANCA_TITULO,
+  STAFF_PRIMEIRO_DIA_CONTRATOS_HREF,
+  STAFF_PRIMEIRO_DIA_CONTRATOS_TEXTO,
+  STAFF_PRIMEIRO_DIA_CONTRATOS_TITULO,
+  STAFF_PRIMEIRO_DIA_CONVITE_HREF,
+  STAFF_PRIMEIRO_DIA_CONVITE_TEXTO,
+  STAFF_PRIMEIRO_DIA_CONVITE_TITULO,
+  STAFF_PRIMEIRO_DIA_INICIO_TEXTO,
+  STAFF_PRIMEIRO_DIA_INICIO_TITULO,
+  STAFF_PRIMEIRO_DIA_SENHA_HREF,
+  STAFF_PRIMEIRO_DIA_SENHA_TEXTO,
+  STAFF_PRIMEIRO_DIA_SENHA_TITULO,
+} from "@/lib/staff/staffPrimeiroDiaContratos";
 import { CooperadoInicioValorReceberCard } from "@/components/cooperado/CooperadoInicioValorReceberCard";
 import {
   COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
@@ -633,7 +653,22 @@ function AdminDashboard() {
       };
     }
   }, [navUser?.id, navUser?.cooperativaId, navUser?.role, adminDataRevision]);
-  useReconciliarLivroCaixaGestao(meta?.coopId, Boolean(navUser && meta?.coopId));
+  const primeiroDiaInicio = useMemo(() => {
+    if (!navUser || !isAppDataWarm()) return false;
+    try {
+      const data = getData();
+      const activeCoopId = resolveGestaoCooperativaId(navUser, data);
+      return isStaffPrimeiroDiaInicio({
+        role: navUser.role,
+        coopId: activeCoopId,
+        data,
+        warm: true,
+      });
+    } catch {
+      return false;
+    }
+  }, [navUser?.id, navUser?.role, navUser?.cooperativaId, adminDataRevision]);
+  useReconciliarLivroCaixaGestao(meta?.coopId, Boolean(navUser && meta?.coopId && !primeiroDiaInicio));
 
   const dataRevision = adminDataRevision;
   const deferredRevision = useDeferredValue(dataRevision ?? -1);
@@ -645,16 +680,18 @@ function AdminDashboard() {
   } | null>(null);
 
   const quickStats = useMemo(() => {
-    if (!meta || deferredRevision == null || deferredRevision < 0) return null;
+    if (primeiroDiaInicio || !meta || deferredRevision == null || deferredRevision < 0) return null;
     try {
       return getAdminStatsCached(getData(), meta.coopId || undefined, { skipValoresAPagar: true });
     } catch {
       return null;
     }
-  }, [deferredRevision, meta?.coopId]);
+  }, [primeiroDiaInicio, deferredRevision, meta?.coopId]);
 
   const heavy = useMemo(() => {
-    if (adminStatsWorker || !meta || deferredRevision == null || deferredRevision < 0) return null;
+    if (primeiroDiaInicio || adminStatsWorker || !meta || deferredRevision == null || deferredRevision < 0) {
+      return null;
+    }
     try {
       const d = getData();
       const coopScope = meta.coopId || undefined;
@@ -665,10 +702,10 @@ function AdminDashboard() {
     } catch {
       return null;
     }
-  }, [adminStatsWorker, deferredRevision, meta?.coopId, meta?.mes]);
+  }, [primeiroDiaInicio, adminStatsWorker, deferredRevision, meta?.coopId, meta?.mes]);
 
   useEffect(() => {
-    if (!adminStatsWorker || !meta || deferredRevision == null || deferredRevision < 0) {
+    if (primeiroDiaInicio || !adminStatsWorker || !meta || deferredRevision == null || deferredRevision < 0) {
       setWorkerHeavy(null);
       return;
     }
@@ -690,7 +727,7 @@ function AdminDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [adminStatsWorker, deferredRevision, meta?.coopId, meta?.mes]);
+  }, [primeiroDiaInicio, adminStatsWorker, deferredRevision, meta?.coopId, meta?.mes]);
 
   if (!navUser || !meta) return <PageSkeleton />;
 
@@ -699,6 +736,51 @@ function AdminDashboard() {
   const fila = workerHeavy?.fila ?? heavy?.fila ?? [];
   const totaisFinanceirosPendentes =
     adminStatsWorker ? !workerHeavy?.stats : !heavy?.stats && Boolean(quickStats);
+
+  if (primeiroDiaInicio) {
+    const data = isAppDataWarm() ? getData() : null;
+    const opts = { role: navUser.role, coopId, data, warm: Boolean(data) };
+    return (
+      <div className="space-y-6 max-w-3xl">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Painel da cooperativa</h1>
+          <p className="text-sm text-gray-500 mt-1">{coopNome} · {formatMesReferencia(mes)}</p>
+        </div>
+        <AlertBanner variant="info" title={STAFF_PRIMEIRO_DIA_INICIO_TITULO}>
+          {STAFF_PRIMEIRO_DIA_INICIO_TEXTO}
+        </AlertBanner>
+        {isStaffPrimeiroDiaContratosVazio(opts) && (
+          <AlertBanner variant="info" title={STAFF_PRIMEIRO_DIA_CONTRATOS_TITULO}>
+            {STAFF_PRIMEIRO_DIA_CONTRATOS_TEXTO}{" "}
+            <Link href={STAFF_PRIMEIRO_DIA_CONTRATOS_HREF} className="font-semibold underline">
+              Abrir Contratos
+            </Link>
+          </AlertBanner>
+        )}
+        {shouldShowStaffPrimeiroDiaSenhaCadastro(opts) && (
+          <AlertBanner variant="info" title={STAFF_PRIMEIRO_DIA_SENHA_TITULO}>
+            {STAFF_PRIMEIRO_DIA_SENHA_TEXTO}{" "}
+            <Link href={STAFF_PRIMEIRO_DIA_SENHA_HREF} className="font-semibold underline">
+              Abrir Meu perfil
+            </Link>
+          </AlertBanner>
+        )}
+        {shouldShowStaffPrimeiroDiaConviteCooperado(opts) && (
+          <AlertBanner variant="info" title={STAFF_PRIMEIRO_DIA_CONVITE_TITULO}>
+            {STAFF_PRIMEIRO_DIA_CONVITE_TEXTO}{" "}
+            <Link href={STAFF_PRIMEIRO_DIA_CONVITE_HREF} className="font-semibold underline">
+              Abrir Cadastro
+            </Link>
+          </AlertBanner>
+        )}
+        {shouldShowStaffPrimeiroDiaCobranca(opts) && (
+          <AlertBanner variant="info" title={STAFF_PRIMEIRO_DIA_COBRANCA_TITULO}>
+            {STAFF_PRIMEIRO_DIA_COBRANCA_TEXTO}
+          </AlertBanner>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-3xl">
