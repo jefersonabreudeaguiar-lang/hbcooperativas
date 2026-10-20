@@ -3,6 +3,7 @@ import { getInstituicoesCatalogo } from "@/services/catalogoContratosService";
 import { isStaffGestaoRole } from "@/lib/performance/cooperadoColdStart";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
+import { medirRiquezaStaffGestao, staffGestaoRiquezaTotal } from "@/lib/staff/staffGestaoSnapshotGuard";
 
 const SEEN_PREFIX = "hb-staff-primeiro-dia-contratos:";
 
@@ -78,14 +79,16 @@ export function shouldShowStaffPrimeiroDiaCobranca(opts: {
   return (opts.data.cooperados ?? []).filter((c) => c.cooperativaId === opts.coopId).length === 0;
 }
 
-/** Início do responsável da cooperativa ativa: sem contrato ou sem cooperado. Casa com os dois não entra. */
+/** Avisos no Início só se a cooperativa ativa ainda não tem operação. Casa com lastro não entra. */
 export function isStaffPrimeiroDiaInicio(opts: {
   role?: string;
   coopId?: string | null;
   data: AppData | null;
   warm: boolean;
 }): boolean {
-  return isStaffPrimeiroDiaContratosVazio(opts) || shouldShowStaffPrimeiroDiaConviteCooperado(opts);
+  if (!isStaffPrimeiroDiaContratosVazio(opts)) return false;
+  if (!opts.data || !opts.coopId) return false;
+  return staffGestaoRiquezaTotal(medirRiquezaStaffGestao(opts.data, opts.coopId)) === 0;
 }
 
 export function shouldRedirectStaffPrimeiroDiaContratos(opts: {

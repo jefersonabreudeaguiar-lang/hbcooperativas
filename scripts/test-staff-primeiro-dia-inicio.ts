@@ -50,6 +50,27 @@ assert.equal(
   "casa com contrato e cooperado não troca o Início"
 );
 
+const casaComLastro = {
+  ...emptyInitialData,
+  cooperativas: [
+    { id: "coop-casa", nome: "CoopeagriPla", cnpj: "62351750000165", status: "ativa" } as never,
+  ],
+  instituicoes: [],
+  cooperados: [],
+  notasPedido: [{ id: "n1", cooperativaId: "coop-casa" } as never],
+  fichaCorrida: [{ id: "f1", cooperativaId: "coop-casa" } as never],
+};
+assert.equal(
+  isStaffPrimeiroDiaInicio({
+    role: "responsavel",
+    coopId: "coop-casa",
+    data: casaComLastro,
+    warm: true,
+  }),
+  false,
+  "responsável principal com lastro não perde o Início"
+);
+
 assert.equal(
   isStaffPrimeiroDiaInicio({
     role: "cooperado",
@@ -83,8 +104,8 @@ assert.equal(
     data: novaComContrato,
     warm: true,
   }),
-  true,
-  "já tem contrato, ainda sem cooperado: Início continua primeiro dia"
+  false,
+  "já tem contrato: Início volta ao painel padrão"
 );
 
 const novaComCooperado = {
@@ -98,8 +119,8 @@ assert.equal(
     data: novaComCooperado,
     warm: true,
   }),
-  true,
-  "já tem cooperado, ainda sem contrato: Início continua primeiro dia"
+  false,
+  "já tem cooperado: Início volta ao painel padrão"
 );
 
 assert.equal(
@@ -121,13 +142,9 @@ assert.match(dashboard, /function AdminDashboard/);
 assert.match(dashboard, /isStaffPrimeiroDiaInicio/);
 assert.match(dashboard, /STAFF_PRIMEIRO_DIA_INICIO_TITULO/);
 assert.match(dashboard, /STAFF_PRIMEIRO_DIA_CONTRATOS_HREF/);
-assert.match(dashboard, /primeiroDiaInicio/);
-assert.equal(
-  dashboard.includes("if (primeiroDiaInicio) {\r\n    return <CooperadoDashboard") ||
-    dashboard.includes("if (primeiroDiaInicio) {\n    return <CooperadoDashboard"),
-  false,
-  "primeiro dia não troca o Início do cooperado"
-);
+assert.match(dashboard, /primeiroDiaInicio &&/);
+assert.match(dashboard, /RestoreOperacionalPanel/);
+assert.equal(dashboard.includes("if (primeiroDiaInicio) {"), false, "primeiro dia não substitui o painel");
 assert.match(STAFF_PRIMEIRO_DIA_INICIO_TITULO, /Primeiro dia/);
 assert.equal(STAFF_PRIMEIRO_DIA_CONTRATOS_HREF, "/contratos");
 
