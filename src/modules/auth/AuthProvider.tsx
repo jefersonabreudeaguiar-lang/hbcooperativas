@@ -294,6 +294,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     const result = await doLogin(email, password);
     if (result) {
+      const sessionNow = getSession();
+      const safeUserEarly = enrichAccountSession(
+        sessionNow ??
+          (() => {
+            const { password: _, ...u } = result;
+            return u;
+          })()
+      );
+      const jwtRoleEarly = normalizeUserRole(sessionNow?.role ?? result.role);
+      if (jwtRoleEarly === "cooperado") {
+        if (resetCooperadoAposVazamentoPainelGestao(safeUserEarly)) {
+          return { ok: true as const, redirectTo: "/dashboard", navigated: true as const };
+        }
+        setPreferPainelResponsavelMobile(false);
+        setAccountUser(safeUserEarly);
+        setActiveCloudProfile(userToCloudProfile(safeUserEarly));
+        markCooperadoPostLoginFinanceSync();
+        void (async () => {
+          const cloudProfile = await fetchCloudSessionProfile();
+          if (cloudProfile) applyCloudProfileToLocalSession(cloudProfile);
+          await ensureCloudSessionReady(userToCloudProfile(getSession() ?? safeUserEarly));
+          if (!isCooperadoPwaMessengerMode()) {
+            persistirInicioCardValorReceberCooperado(getSession() ?? safeUserEarly);
+          }
+          void repairBrowserProfileIfStale({ includeStandalone: true });
+        })();
+        const redirectTo = "/dashboard";
+        if (typeof window !== "undefined") {
+          window.location.assign(redirectTo);
+          return { ok: true as const, redirectTo, navigated: true as const };
+        }
+        setLoading(false);
+        return { ok: true as const, redirectTo };
+      }
       const cloudProfile = await fetchCloudSessionProfile();
       const synced = cloudProfile ? applyCloudProfileToLocalSession(cloudProfile) : null;
       const sessionUser = synced ?? getSession();

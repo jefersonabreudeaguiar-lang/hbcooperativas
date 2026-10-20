@@ -54,7 +54,6 @@ import {
 import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
 import { ajustesFichaMesId } from "@/services/notaPedidoService";
 import { forceNextFullNotasSync, clearNotasSyncMeta } from "@/services/syncMetaService";
-import { requestAppSync } from "@/services/syncRequest";
 import { inferAppDataDomainsTouched, touchAppDataDomains } from "@/lib/performance/appDataDomainNotify";
 import { normalizarPrestacaoContas, aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
@@ -1300,25 +1299,21 @@ async function finishLoginSession(user: User, data: AppData, plainPassword: stri
   setActiveCloudProfile(cloudProfile);
   clearCloudBootstrapCredentials();
 
-  if (user.role !== "parceiro") {
+  if (user.role === "parceiro") {
+    markCloudSessionActive();
+  } else if (user.role === "cooperado") {
+    void establishCloudSession(user.email, plainPassword, cloudProfile);
+  } else {
     const cloudHit = await loginViaCloudApi(user.email, plainPassword);
     if (cloudHit) {
       setActiveCloudProfile(cloudHit.user);
     }
     await establishCloudSession(user.email, plainPassword, cloudProfile);
-  } else {
-    markCloudSessionActive();
   }
 
-  // Após sair/voltar, delta de notas pode vir vazio com local zerado — força full na próxima sync.
   if (user.role === "cooperado" && cooperativaCnpj?.length === 14) {
     clearNotasSyncMeta(cooperativaCnpj);
     forceNextFullNotasSync(cooperativaCnpj);
-    queueMicrotask(() => {
-      window.setTimeout(() => {
-        if (readStoredSessionRaw()) requestAppSync();
-      }, 1_200);
-    });
   }
 
   return user;
@@ -1442,8 +1437,14 @@ async function bootstrapLocalUserFromCloudLogin(
 
   try {
     if (cnpj.length === 14) {
-      await ensureCooperativaLocalForCnpj(cnpj);
-      await syncCooperadosFromCloud(cnpj, profile.cooperativaId ?? undefined);
+      const warm = isAppDataWarm() ? getData() : null;
+      const jaTemCooperativa = Boolean(warm && findCooperativaByCnpj(warm, cnpj));
+      if (jaTemCooperativa) {
+        void syncCooperadosFromCloud(cnpj, profile.cooperativaId ?? undefined);
+      } else {
+        await ensureCooperativaLocalForCnpj(cnpj);
+        void syncCooperadosFromCloud(cnpj, profile.cooperativaId ?? undefined);
+      }
     }
   } catch {
     /* login não deve falhar por sync operacional incompleto */

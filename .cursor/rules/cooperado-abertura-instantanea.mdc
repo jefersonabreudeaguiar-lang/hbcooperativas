@@ -1,0 +1,22 @@
+---
+description: Abertura do app cooperado — Início na hora, sem esperar nuvem
+alwaysApply: true
+---
+
+# Cooperado — abertura instantânea
+
+Modelo travado em `src/lib/cooperado/cooperadoAberturaInstantanea.ts`.
+
+## O que o cooperado vê
+
+1. Ao tocar no app, o **Início aparece na hora** (último A receber do aparelho).
+2. Login entra no Início assim que a sessão local existe.
+3. Nuvem, JWT e sync rodam **depois**, sem tela de espera.
+
+## Proibido sem bump da versão + ordem explícita
+
+- Esperar `ensureCloudSessionReady` / `operacional_full` para pintar o Início.
+- Manter splash/skeleton do PWA no cooperado sem pintar o cache local.
+- Disparar `requestAppSync` no login só para “entrar”.
+
+Teste: `npx tsx scripts/test-cooperado-abertura-instantanea.ts`

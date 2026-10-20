@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v508
+
+- **Abertura:** o Início aparece na hora ao tocar no app, com o último A receber do aparelho.
+- **Login:** entra sem esperar a nuvem — o sync continua em segundo plano.
+- **Ficha / Financeiro:** iguais ao v507.
+
 ## v507
 
 - **Ficha:** o Extrato mostra as entregas do mês em aberto e as do mês anterior.
