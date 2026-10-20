@@ -9,6 +9,10 @@ import {
   listarResumosExtratoHistoricoCooperado,
 } from "@/services/cooperadoEntregasService";
 import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
+import {
+  listarResumosFichaComMesesAnteriores,
+  listarResumosFotosFichaLiquidada,
+} from "@/lib/cooperado/cooperadoFotosFichaContrato";
 import { bicCentralListarResumosMensaisEntregas } from "@/services/bicLeituraCentralCooperado";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -32,6 +36,10 @@ export type CooperadoPwaEntregasResumosSnapshot = {
   /** Base mensal (antes do filtro de status na UI). */
   entregasBase: ResumoMesEntregasCooperado[];
   fichaAberto: ResumoMesEntregasCooperado[];
+  /** Extrato da Ficha: mês aberto + meses anteriores já liquidados. */
+  fichaExtrato?: ResumoMesEntregasCooperado[];
+  /** Fotos só de mês liquidado — aba Fotos por mês. */
+  fotosFichaLiquidada?: ResumoMesEntregasCooperado[];
   pagamentosRealizados: ResumoMesEntregasCooperado[];
 };
 
@@ -43,6 +51,7 @@ export type BuildCooperadoPwaEntregasSnapshotOpts = {
   /** Fase rápida após sync — histórico PIX completo fica para idle. */
   omitirPagamentosHistorico?: boolean;
   pagamentosRealizadosAnteriores?: ResumoMesEntregasCooperado[];
+  fotosFichaLiquidadaAnteriores?: ResumoMesEntregasCooperado[];
 };
 
 export function buildCooperadoPwaEntregasResumosSnapshot(
@@ -60,12 +69,18 @@ export function buildCooperadoPwaEntregasResumosSnapshot(
   const pagamentosRealizados = opts?.omitirPagamentosHistorico
     ? (opts.pagamentosRealizadosAnteriores ?? [])
     : listarResumosExtratoHistoricoCooperado(data, cooperadoId, cooperativaId);
+  const fichaExtrato = listarResumosFichaComMesesAnteriores(data, cooperadoId, cooperativaId);
+  const fotosFichaLiquidada = opts?.omitirPagamentosHistorico
+    ? (opts.fotosFichaLiquidadaAnteriores ?? [])
+    : listarResumosFotosFichaLiquidada(data, cooperadoId, cooperativaId);
   return {
     v: COOPERADO_PWA_ENTREGAS_SNAPSHOT_VERSION,
     appBuild: APP_BUILD_VERSION,
     savedAt: new Date().toISOString(),
     entregasBase,
     fichaAberto,
+    fichaExtrato,
+    fotosFichaLiquidada,
     pagamentosRealizados,
   };
 }
@@ -88,6 +103,10 @@ export function lerCooperadoPwaEntregasResumosSnapshot(
       pagamentosRealizados: Array.isArray(parsed.pagamentosRealizados)
         ? parsed.pagamentosRealizados
         : [],
+      fichaExtrato: Array.isArray(parsed.fichaExtrato) ? parsed.fichaExtrato : undefined,
+      fotosFichaLiquidada: Array.isArray(parsed.fotosFichaLiquidada)
+        ? parsed.fotosFichaLiquidada
+        : undefined,
     };
   } catch {
     return null;

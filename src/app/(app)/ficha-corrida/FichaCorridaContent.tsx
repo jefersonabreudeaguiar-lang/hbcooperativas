@@ -113,9 +113,12 @@ import {
   getPagamentoConfirmadoMes,
   getPagamentoRegistradoMes,
   listarMesesComPagamentoRegistradoCooperado,
-  listarResumosFotosCooperado,
   getResumoMesEntregasCooperado,
 } from "@/services/cooperadoEntregasService";
+import {
+  COOPERADO_FINANCEIRO_FOTO_A_RECEBER_LABEL,
+  listarResumosFotosAReceber,
+} from "@/lib/cooperado/cooperadoFotosFichaContrato";
 
 const CooperadoFichaFotosPanel = dynamic(
   () =>
@@ -1515,11 +1518,15 @@ function FichaCorridaPageInner() {
   );
 
   const resumosFotosMesAbertoCooperado = useMemo(() => {
-    if (!data || !isCooperado || !cooperadoSelecionadoId || visualizandoHistorico) return [];
-    const todos = listarResumosFotosCooperado(data, cooperadoSelecionadoId, coopId);
-    const abertos = new Set(mesesFinanceiroCooperado);
-    for (const r of resumosMesEmAbertoCooperado) abertos.add(r.mesReferencia);
-    return todos.filter((r) => abertos.has(r.mesReferencia));
+    if (!isCooperado || !cooperadoSelecionadoId || visualizandoHistorico) return [];
+    if (data) {
+      const extra = [
+        ...mesesFinanceiroCooperado,
+        ...resumosMesEmAbertoCooperado.map((r) => r.mesReferencia),
+      ];
+      return listarResumosFotosAReceber(data, cooperadoSelecionadoId, coopId, extra);
+    }
+    return fichaResumoSnap?.fotosAReceber ?? [];
   }, [
     data,
     isCooperado,
@@ -1528,6 +1535,7 @@ function FichaCorridaPageInner() {
     visualizandoHistorico,
     mesesFinanceiroCooperado,
     resumosMesEmAbertoCooperado,
+    fichaResumoSnap,
   ]);
 
   const resumoReciboPagamento = useMemo(() => {
@@ -2172,7 +2180,7 @@ function FichaCorridaPageInner() {
         </Card>
       )}
       {verFotosCooperado && !exibirPagamento && (
-        <Card title="Fotos do mês a receber" className="mb-6">
+        <Card title={COOPERADO_FINANCEIRO_FOTO_A_RECEBER_LABEL} className="mb-6">
           {resumosFotosMesAbertoCooperado.length > 0 ? (
             <CooperadoFichaFotosPanel
               resumos={resumosFotosMesAbertoCooperado}
@@ -2671,7 +2679,7 @@ function FichaCorridaPageInner() {
                 </Card>
               )}
               {verFotosCooperado && (
-                <Card title="Fotos do mês a receber" className="mb-6">
+                <Card title={COOPERADO_FINANCEIRO_FOTO_A_RECEBER_LABEL} className="mb-6">
                   {resumosFotosMesAbertoCooperado.length > 0 ? (
                     <>
                       <p className="text-sm text-gray-600 mb-4">

@@ -50,6 +50,13 @@ import { bicCentralTotalValoresAvulsosPendentes } from "@/services/bicLeituraCen
 import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
 import { cn } from "@/utils/format";
 import { valorPendenteRecebimentoFichaCooperado } from "@/services/cooperadoFichaTimelineService";
+import { getData, isAppDataWarm } from "@/services/dataStore";
+import {
+  COOPERADO_FICHA_FOTOS_LIQUIDADAS_LABEL,
+  listarResumosFotosFichaLiquidada,
+  mesclarResumosFichaComMesesAnteriores,
+  resumosFotosAPartirDeResumos,
+} from "@/lib/cooperado/cooperadoFotosFichaContrato";
 import { baixarRecibo, nomeArquivoRecibo } from "@/utils/recibo";
 import { CooperadoPagamentoMesView } from "@/components/cooperado/CooperadoPagamentoMesView";
 import type { AppData, FichaCorridaDesconto } from "@/types";
@@ -65,6 +72,8 @@ interface CooperadoMinhaFichaTabProps {
   resumos: ResumoMesEntregasCooperado[];
   /** PWA mensageiro: histórico materializado pós-sync (evita lista vazia sem AppData ao vivo). */
   pagamentosRealizadosCache?: ResumoMesEntregasCooperado[];
+  /** PWA: fotos de meses já liquidados (aba Fotos por mês). */
+  fotosFichaLiquidadaCache?: ResumoMesEntregasCooperado[];
   /** PWA keep-alive: painel montado mas aba de rota oculta — não assina AppData. */
   painelRotaAtiva?: boolean;
   getEscolaLabel: (nota: import("@/types").NotaPedido) => string;
@@ -107,16 +116,19 @@ function MesFichaAccordion({
   }, [expandido]);
 
   const resumoFotosMes = useMemo(() => {
-    if (!data || !expandido) return null;
-    return (
-      listarResumosFotosCooperado(data, cooperadoId, cooperativaId).find(
-        (r) => r.mesReferencia === resumo.mesReferencia
-      ) ?? null
-    );
-  }, [data, cooperadoId, cooperativaId, resumo.mesReferencia, expandido]);
+    if (!expandido) return null;
+    if (data) {
+      return (
+        listarResumosFotosCooperado(data, cooperadoId, cooperativaId).find(
+          (r) => r.mesReferencia === resumo.mesReferencia
+        ) ?? (resumo.notas.some((n) => notaTemFotoEnviadaCooperado(n)) ? resumo : null)
+      );
+    }
+    return resumo.notas.some((n) => notaTemFotoEnviadaCooperado(n)) ? resumo : null;
+  }, [data, cooperadoId, cooperativaId, resumo, expandido]);
 
   const temFotosMes =
-    !!resumoFotosMes && resumo.notas.some((n) => notaTemFotoEnviadaCooperado(n));
+    !!resumoFotosMes && resumoFotosMes.notas.some((n) => notaTemFotoEnviadaCooperado(n));
 
   const linkQuantoVouReceber =
     modo === "cooperado"
@@ -511,6 +523,7 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
   nomeCooperado,
   resumos,
   pagamentosRealizadosCache,
+  fotosFichaLiquidadaCache,
   painelRotaAtiva = true,
   getEscolaLabel,
   modo = "cooperado",
@@ -524,9 +537,15 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
   const abaExtratoAtiva = subAba === "extrato";
   const abaFotosAtiva = subAba === "fotos";
 
-  const data = useAppDataSnapshotForDomainsWhenActive(
+  const dataLive = useAppDataSnapshotForDomainsWhenActive(
     painelRotaAtiva,
     abaFotosAtiva ? (["notas"] as const) : (["financeiro", "notas"] as const)
+  );
+  const data = dataLive ?? (typeof window !== "undefined" && isAppDataWarm() ? getData() : null);
+
+  const resumosExtrato = useMemo(
+    () => mesclarResumosFichaComMesesAnteriores(resumos, pagamentosRealizadosCache ?? []),
+    [resumos, pagamentosRealizadosCache]
   );
 
   const trocarSubAba = (aba: "extrato" | "pagamentos" | "fotos") => {
@@ -581,9 +600,11 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
       : `/ficha-corrida?cooperado=${encodeURIComponent(cooperadoId)}`;
 
   const resumosFotos = useMemo(() => {
-    if (!abaFotosAtiva || !data) return [];
-    return listarResumosFotosCooperado(data, cooperadoId, cooperativaId);
-  }, [abaFotosAtiva, data, cooperadoId, cooperativaId]);
+    if (!abaFotosAtiva) return [];
+    if (data) return listarResumosFotosFichaLiquidada(data, cooperadoId, cooperativaId);
+    if ((fotosFichaLiquidadaCache?.length ?? 0) > 0) return fotosFichaLiquidadaCache!;
+    return resumosFotosAPartirDeResumos(resumosHistorico);
+  }, [abaFotosAtiva, data, cooperadoId, cooperativaId, fotosFichaLiquidadaCache, resumosHistorico]);
 
   const mesesHistoricoKey = useMemo(
     () => resumosHistorico.map((r) => r.mesReferencia).join("|"),
@@ -602,7 +623,7 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
   const aplicouAbaInicialRef = useRef(false);
   useEffect(() => {
     if (aplicouAbaInicialRef.current) return;
-    if (resumos.length > 0) {
+    if (resumosExtrato.length > 0) {
       aplicouAbaInicialRef.current = true;
       return;
     }
@@ -610,7 +631,7 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
       startTransition(() => setSubAba("pagamentos"));
       aplicouAbaInicialRef.current = true;
     }
-  }, [resumos.length, temHistoricoPixRegistrado]);
+  }, [resumosExtrato.length, temHistoricoPixRegistrado]);
 
   const resumoHistoricoAtivo = useMemo(
     () => resumosHistorico.find((r) => r.mesReferencia === mesHistoricoAtivo) ?? null,
@@ -638,7 +659,7 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
     };
   }, [abaPagamentosAtiva, resumoHistoricoAtivo, data, cooperadoId, cooperativaId]);
 
-  if (resumos.length === 0 && resumosHistorico.length === 0) {
+  if (resumosExtrato.length === 0 && resumosHistorico.length === 0) {
     return (
       <div className="space-y-6">
         <div className="flex gap-2 border-b border-gray-200">
@@ -664,7 +685,7 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
                 : "border-transparent text-gray-500 hover:text-gray-700"
             )}
           >
-            <Camera size={16} /> Fotos por mês
+            <Camera size={16} /> {COOPERADO_FICHA_FOTOS_LIQUIDADAS_LABEL}
           </button>
         </div>
 
@@ -732,7 +753,7 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
               : "border-transparent text-gray-500 hover:text-gray-700"
           )}
         >
-          <Camera size={16} /> Fotos por mês
+          <Camera size={16} /> {COOPERADO_FICHA_FOTOS_LIQUIDADAS_LABEL}
         </button>
       </div>
 
@@ -835,13 +856,14 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
           </div>
 
           <p className="text-sm text-gray-600">
-            Somente valores novos ainda não pagos. Meses quitados ficam em{" "}
+            Entregas do mês em aberto e dos meses anteriores. Fotos de mês já liquidado ficam em{" "}
+            <strong>{COOPERADO_FICHA_FOTOS_LIQUIDADAS_LABEL}</strong>. PIX confirmado também fica em{" "}
             <strong>Pagamentos realizados</strong>.
           </p>
 
-          {resumos.length > 0 ? (
+          {resumosExtrato.length > 0 ? (
             <div className="space-y-3">
-              {resumos.map((resumo) => (
+              {resumosExtrato.map((resumo) => (
                 <MesFichaAccordion
                   key={resumo.mesReferencia}
                   appData={data}

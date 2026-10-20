@@ -8,7 +8,8 @@ import {
   getCooperativaCnpj,
   resolveCooperativaCnpj,
 } from "@/services/notaPedidoCloudService";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppDataSnapshotForDomainsWhenActive } from "@/hooks/useAppData";
+import { getData, isAppDataWarm } from "@/services/dataStore";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { contarFotosEnviadasNotas } from "@/utils/fotoEntrega";
 import { normalizeCnpj } from "@/utils/cooperativa";
@@ -32,7 +33,8 @@ export function CooperadoFichaFotosPanel({
   mesReferenciaInicial,
   modoInline,
 }: CooperadoFichaFotosPanelProps) {
-  const data = useAppData();
+  const dataLive = useAppDataSnapshotForDomainsWhenActive(true, ["notas"] as const);
+  const data = dataLive ?? (typeof window !== "undefined" && isAppDataWarm() ? getData() : null);
   const { user } = useAuth();
   const [cnpj, setCnpj] = useState<string | undefined>();
 
@@ -98,8 +100,8 @@ export function CooperadoFichaFotosPanel({
         <Camera size={48} className="mx-auto mb-4 text-gray-300" />
         <p className="font-semibold text-gray-800">Nenhuma foto enviada ainda</p>
         <p className="text-sm mt-2 max-w-sm mx-auto">
-          As fotos das entregas que você enviar aparecerão aqui, organizadas por mês — em análise ou já
-          lançadas.
+          Depois que o mês for liquidado, as fotos das entregas entram aqui, uma aba por mês. Enquanto
+          estiver em aberto, elas ficam em Financeiro → Foto a receber.
         </p>
       </div>
     );

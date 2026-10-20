@@ -1,6 +1,10 @@
 "use client";
 
 import { Camera, CreditCard, Receipt, Wallet } from "lucide-react";
+import {
+  COOPERADO_FINANCEIRO_FOTO_A_RECEBER_LABEL,
+  COOPERADO_FINANCEIRO_FOTO_A_RECEBER_SECAO,
+} from "@/lib/cooperado/cooperadoFotosFichaContrato";
 
 export type CooperadoFinanceiroSecao = "resumo" | "ficha" | "creditos" | "fotos";
 
@@ -8,7 +12,7 @@ const SECOES: { id: CooperadoFinanceiroSecao; label: string; Icon: typeof Wallet
   { id: "resumo", label: "Resumo", Icon: Wallet },
   { id: "ficha", label: "Ficha", Icon: Receipt },
   { id: "creditos", label: "HB Créditos", Icon: CreditCard },
-  { id: "fotos", label: "Fotos", Icon: Camera },
+  { id: COOPERADO_FINANCEIRO_FOTO_A_RECEBER_SECAO, label: COOPERADO_FINANCEIRO_FOTO_A_RECEBER_LABEL, Icon: Camera },
 ];
 
 export function CooperadoFinanceiroSecoesNav({

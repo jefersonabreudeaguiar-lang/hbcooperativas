@@ -1,0 +1,23 @@
+---
+description: Contrato Ficha + Foto a receber do cooperado — não reverter sem bump
+alwaysApply: true
+---
+
+# Cooperado — Ficha e Foto a receber
+
+Modelo travado em `src/lib/cooperado/cooperadoFotosFichaContrato.ts` (`COOPERADO_FOTOS_FICHA_CONTRATO_VERSION`).
+
+## O que o cooperado vê
+
+1. **Financeiro → Foto a receber**: só fotos do mês em aberto.
+2. **Ao liquidar**: essas fotos saem do Financeiro e entram na **Ficha → Fotos por mês**, uma aba/sanfona por mês liquidado.
+3. **Ficha → Extrato**: entregas do mês em aberto **e** dos meses anteriores.
+
+## Proibido sem bump da versão do contrato + ordem explícita
+
+- Voltar o rótulo do Financeiro para «Fotos».
+- Mostrar mês liquidado em Foto a receber.
+- Esconder entregas do mês anterior no Extrato da Ficha.
+- Fazer a aba Fotos da Ficha depender só de `useAppData` ao vivo (mensageiro some).
+
+Teste: `npx tsx scripts/test-cooperado-fotos-ficha-contrato.ts`

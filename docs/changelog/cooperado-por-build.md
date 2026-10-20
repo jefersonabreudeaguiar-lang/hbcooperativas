@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v507
+
+- **Ficha:** o Extrato mostra as entregas do mês em aberto e as do mês anterior.
+- **Fotos:** depois da liquidação, as fotos vão para Ficha → Fotos por mês, uma aba por mês.
+- **Financeiro:** a aba Foto a receber fica só com as fotos do mês em aberto.
+
 ## v506
 
 - **Preços:** a aba volta a mostrar o valor de cada item do contrato no celular.

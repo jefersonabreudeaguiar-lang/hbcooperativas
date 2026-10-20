@@ -15,6 +15,7 @@ import { agregarItensFichaMeses } from "@/services/notaPedidoService";
 import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
+import { listarResumosFotosAReceber } from "@/lib/cooperado/cooperadoFotosFichaContrato";
 
 export const COOPERADO_PWA_FICHA_RESUMO_SNAPSHOT_VERSION = 2;
 
@@ -29,6 +30,8 @@ export type CooperadoPwaFichaResumoSnapshot = {
   paridade?: LeituraFinanceiraParidadeCooperado;
   /** Itens das entregas em aberto — o Financeiro reabre com a mesma tabela. */
   itensEntregas?: ReturnType<typeof agregarItensFichaMeses>;
+  /** Aba Foto a receber — só mês em aberto. */
+  fotosAReceber?: ResumoMesEntregasCooperado[];
 };
 
 function storageKeyForVersion(
@@ -84,6 +87,7 @@ export function buildCooperadoPwaFichaResumoSnapshot(
   const itensEntregas = agregarItensFichaMeses(data, canon, mesesItens, cooperativaId, {
     apenasPendentes: true,
   });
+  const fotosAReceber = listarResumosFotosAReceber(data, canon, cooperativaId, mesesPar);
   return {
     v: COOPERADO_PWA_FICHA_RESUMO_SNAPSHOT_VERSION,
     appBuild: APP_BUILD_VERSION,
@@ -93,6 +97,7 @@ export function buildCooperadoPwaFichaResumoSnapshot(
     consolidado,
     paridade,
     itensEntregas,
+    fotosAReceber,
   };
 }
 

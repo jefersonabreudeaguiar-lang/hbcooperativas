@@ -200,7 +200,10 @@ import {
 import { getProdutosContrato } from "@/services/catalogoContratosService";
 import { countCooperadosLancamentosEmAbertoResponsavel } from "@/services/responsavelPainelIndex";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, filtrarResumosMesesNaoQuitados } from "@/services/cooperadoEntregasService";
-import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
+import {
+  listarResumosFichaComMesesAnteriores,
+  mesclarResumosFichaComMesesAnteriores,
+} from "@/lib/cooperado/cooperadoFotosFichaContrato";
 import {
   bicCentralListarResumosMensaisEntregas,
   bicCentralMesPrincipalQuantoVouReceber,
@@ -614,6 +617,7 @@ export default function NotasPedidoCooperadoMain() {
     cancelIdle();
     if (isAppDataWarm()) {
       const prevHist = pwaEntregasResumosSnapRef.current?.pagamentosRealizados;
+      const prevFotos = pwaEntregasResumosSnapRef.current?.fotosFichaLiquidada;
       const builtLight = persistirCooperadoPwaEntregasResumosSnapshot(
         cooperadoCanonico,
         coopId,
@@ -621,6 +625,7 @@ export default function NotasPedidoCooperadoMain() {
         {
           omitirPagamentosHistorico: true,
           pagamentosRealizadosAnteriores: prevHist,
+          fotosFichaLiquidadaAnteriores: prevFotos,
         }
       );
       if (builtLight) setPwaEntregasResumosSnap(builtLight);
@@ -1854,7 +1859,7 @@ export default function NotasPedidoCooperadoMain() {
       appDataUiOn,
       (d) => {
         if (!cooperadoId || !coopId || abaCooperado !== "ficha") return [];
-        return listarResumosFichaEmAbertoCooperado(d, cooperadoId, coopId);
+        return listarResumosFichaComMesesAnteriores(d, cooperadoId, coopId);
       },
       [cooperadoId, coopId, hbDescontosRevision, abaCooperado, entregasPwaLeve]
     ) ?? [];
@@ -1886,7 +1891,13 @@ export default function NotasPedidoCooperadoMain() {
   const resumosFichaCooperado = useMemo(() => {
     if ((!entregasPwaLeve && !messenger) || abaCooperado !== "ficha") return resumosFichaLive;
     if (!messenger && resumosFichaLive.length > 0) return resumosFichaLive;
-    return pwaEntregasResumosSnap?.fichaAberto ?? resumosFichaLive;
+    const snapExtrato =
+      pwaEntregasResumosSnap?.fichaExtrato ??
+      mesclarResumosFichaComMesesAnteriores(
+        pwaEntregasResumosSnap?.fichaAberto ?? [],
+        pwaEntregasResumosSnap?.pagamentosRealizados ?? []
+      );
+    return snapExtrato.length > 0 ? snapExtrato : resumosFichaLive;
   }, [entregasPwaLeve, messenger, abaCooperado, pwaEntregasResumosSnap, resumosFichaLive]);
 
   const getEscolaLabelCooperado = useCallback(
@@ -4812,8 +4823,13 @@ export default function NotasPedidoCooperadoMain() {
               resumos={resumosFichaCooperado}
               painelRotaAtiva={tabActive && abaCooperado === "ficha"}
               pagamentosRealizadosCache={
-                entregasPwaLeve || (messenger && !data)
+                entregasPwaLeve || messenger
                   ? pwaEntregasResumosSnap?.pagamentosRealizados
+                  : undefined
+              }
+              fotosFichaLiquidadaCache={
+                entregasPwaLeve || messenger
+                  ? pwaEntregasResumosSnap?.fotosFichaLiquidada
                   : undefined
               }
               getEscolaLabel={getEscolaLabelCooperado}
