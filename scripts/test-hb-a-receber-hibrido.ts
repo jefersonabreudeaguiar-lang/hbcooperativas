@@ -114,5 +114,16 @@ assert.match(inicio, /permitirQuedaPorHb/, "Início pode cair quando há débito
 const financeiro = readFileSync(join(ROOT, "src/app/(app)/ficha-corrida/FichaCorridaContent.tsx"), "utf8");
 assert.match(financeiro, /aplicarDebitoHbHibridoNaParidade/, "Financeiro aplica híbrido");
 assert.match(financeiro, /if \(drift && liveValor > 0\.005\)/, "Financeiro não troca lastro por zero");
+assert.match(financeiro, /HB_A_RECEBER_HIBRIDO_EVENT/, "Financeiro ouve overlay sem rematerializar Entregas");
+
+assert.match(inicio, /HB_A_RECEBER_HIBRIDO_EVENT/, "Início ouve overlay sem rematerializar Entregas");
+
+const hibridoSrc = readFileSync(join(ROOT, "src/lib/hb-credit/hbAReceberHibrido.ts"), "utf8");
+assert.match(hibridoSrc, /dispatchHbAReceberHibridoRefresh/);
+assert.doesNotMatch(
+  hibridoSrc,
+  /dispatchCooperadoPwaLeveUiSnapshotRefresh/,
+  "overlay HB não dispara refresh da aba Entregas"
+);
 
 console.log("test-hb-a-receber-hibrido.ts ok");

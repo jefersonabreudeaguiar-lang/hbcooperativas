@@ -1874,13 +1874,19 @@ export default function NotasPedidoCooperadoMain() {
     if ((!entregasPwaLeve && !messenger) || abaCooperado !== "entregas") {
       if (resumosMensaisLive.length > 0) return resumosMensaisLive;
     }
-    let base =
-      !messenger && resumosMensaisLive.length > 0
-        ? resumosMensaisLive
-        : (pwaEntregasResumosSnap?.entregasBase ?? resumosMensaisLive);
-    if (base.length === 0 && cooperadoId && coopId && isAppDataWarm()) {
-      base = bicCentralListarResumosMensaisEntregas(getData(), cooperadoId, coopId);
-    }
+    const lastro =
+      cooperadoId && coopId && isAppDataWarm()
+        ? bicCentralListarResumosMensaisEntregas(getData(), cooperadoId, coopId)
+        : [];
+    const finSnap =
+      cooperadoId && coopId ? lerCooperadoPwaFichaResumoSnapshot(cooperadoId, coopId) : null;
+    let base = mesclarResumosFichaCompletaFontes(
+      resumosMensaisLive,
+      lastro,
+      pwaEntregasResumosSnap?.entregasBase,
+      pwaEntregasResumosSnap?.fichaExtrato,
+      finSnap?.fichaAberto
+    );
     if (deferredStatusFilter === "pendentes") base = filtrarResumosEntregasPendentes(base);
     else if (deferredStatusFilter) {
       base = base

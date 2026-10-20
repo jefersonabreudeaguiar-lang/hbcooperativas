@@ -25,6 +25,7 @@ import { isCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { isCooperadoMobilePilotPerfActive } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUiEvents";
+import { HB_A_RECEBER_HIBRIDO_EVENT } from "@/lib/hb-credit/hbAReceberHibrido";
 import {
   cooperadoTemReciboAssinadoLocalSemPendenciaUi,
   resolverCooperativaIdReciboLatch,
@@ -147,7 +148,11 @@ export function useCooperadoInicioValorReceberCardState(input: {
     if (!leituraSomentePwa) return;
     const onRefresh = () => setPersistidoTick((n) => n + 1);
     window.addEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
-    return () => window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
+    window.addEventListener(HB_A_RECEBER_HIBRIDO_EVENT, onRefresh);
+    return () => {
+      window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
+      window.removeEventListener(HB_A_RECEBER_HIBRIDO_EVENT, onRefresh);
+    };
   }, [leituraSomentePwa]);
 
   const persistido = useMemo(() => {

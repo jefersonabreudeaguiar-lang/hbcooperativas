@@ -626,22 +626,43 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
     return ordenarResumosExtratoHistoricoPorDataPagamento([...byMes.values()]);
   }, [pagamentosRealizadosCache, resumosHistoricoLive]);
 
-  const totalRecebido = useAppDataSelectorWhenActive(
-    abaPagamentosAtiva,
-    (d) => somarTotalRecebidoConfirmadoCooperado(d, cooperadoId, cooperativaId),
-    [cooperadoId, cooperativaId]
-  ) ?? 0;
+  const totalRecebidoLive =
+    useAppDataSelectorWhenActive(
+      abaPagamentosAtiva,
+      (d) => somarTotalRecebidoConfirmadoCooperado(d, cooperadoId, cooperativaId),
+      [cooperadoId, cooperativaId]
+    ) ?? 0;
+  const totalRecebidoLastro = useMemo(
+    () =>
+      (pagamentosRealizadosCache ?? []).reduce(
+        (s, r) => s + (Number.isFinite(r.valorRecebido) ? r.valorRecebido : 0),
+        0
+      ),
+    [pagamentosRealizadosCache]
+  );
+  const totalRecebido = totalRecebidoLive > 0.005 ? totalRecebidoLive : totalRecebidoLastro;
 
   const abrirFotosDoMes = (mesReferencia: string) => {
     setFotosMesFocus(mesReferencia);
     trocarSubAba("fotos");
   };
 
-  const totalPendente = useAppDataSelectorWhenActive(
-    abaExtratoAtiva,
-    (d) => valorPendenteRecebimentoFichaCooperado(d, cooperadoId, cooperativaId),
-    [cooperadoId, cooperativaId]
-  ) ?? 0;
+  const totalPendenteLive =
+    useAppDataSelectorWhenActive(
+      abaExtratoAtiva,
+      (d) => valorPendenteRecebimentoFichaCooperado(d, cooperadoId, cooperativaId),
+      [cooperadoId, cooperativaId]
+    ) ?? 0;
+  const totalPendenteLastro = useMemo(
+    () =>
+      resumosExtrato.reduce((s, r) => {
+        if (r.pagamentoConfirmado) return s;
+        const v = Number.isFinite(r.valorAReceber) ? r.valorAReceber : 0;
+        return s + v;
+      }, 0),
+    [resumosExtrato]
+  );
+  const totalPendente = totalPendenteLive > 0.005 ? totalPendenteLive : totalPendenteLastro;
 
   const linkQuantoVouReceber =
     modo === "cooperado"

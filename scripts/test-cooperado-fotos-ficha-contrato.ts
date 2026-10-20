@@ -104,6 +104,13 @@ assert.match(snapshot, /fichaExtrato/);
 assert.match(snapshot, /listarResumosFichaCompletaCooperado/);
 assert.match(snapshot, /listarResumosFotosFichaTodas/);
 assert.match(snapshot, /COOPERADO_PWA_ENTREGAS_SNAPSHOT_VERSION = 2/);
+assert.match(snapshot, /prevTemValor && !builtTemValor/);
+assert.match(snapshot, /mesclarResumosFichaCompletaFontes/);
+
+assert.match(entregasMain, /pwaEntregasResumosSnap\?\.entregasBase/);
+assert.match(entregasMain, /pwaEntregasResumosSnap\?\.fichaExtrato/);
+assert.match(fichaTab, /totalRecebidoLastro/);
+assert.match(fichaTab, /totalPendenteLastro/);
 
 const sanfona = read("src/components/cooperado/cooperadoMesEntregasFotosSanfona.tsx");
 assert.match(sanfona, /FotoLightbox/);

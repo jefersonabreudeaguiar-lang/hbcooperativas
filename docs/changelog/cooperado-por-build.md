@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v524
+
+- **Entregas:** o histórico do mês não some quando um sync pobre chega vazio — a lista junta lastro, ficha e o que já estava no aparelho.
+- **Minha ficha:** Extrato, Pagamentos e Fotos por mês mostram os valores reais de cada mês, mesmo se a nuvem atrasar.
+- **Cooperado:** Início, Financeiro e A receber iguais ao v523.
+
 ## v523
 
 - **A receber:** o desconto da compra HB aparece no Início e no Financeiro no mesmo ritmo do card HB — a ficha manda; se a linha ainda não gravou, o lastro local cobre.

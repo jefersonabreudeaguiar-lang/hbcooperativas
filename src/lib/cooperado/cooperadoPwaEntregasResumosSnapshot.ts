@@ -9,6 +9,7 @@ import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTi
 import {
   listarResumosFichaCompletaCooperado,
   listarResumosFotosFichaTodas,
+  mesclarResumosFichaCompletaFontes,
 } from "@/lib/cooperado/cooperadoFotosFichaContrato";
 import { bicCentralListarResumosMensaisEntregas } from "@/services/bicLeituraCentralCooperado";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
@@ -139,9 +140,35 @@ export function persistirCooperadoPwaEntregasResumosSnapshot(
   const d = data ?? (isAppDataWarm() ? getData() : null);
   if (!d) return null;
   const canon = resolverCooperadoIdCanonico(d, cooperadoId, cooperativaId);
+  const previous = lerCooperadoPwaEntregasResumosSnapshot(canon, cooperativaId);
   const built = buildCooperadoPwaEntregasResumosSnapshot(d, canon, cooperativaId, opts);
-  gravarCooperadoPwaEntregasResumosSnapshot(canon, cooperativaId, built);
-  return built;
+  const prevTemValor =
+    (previous?.entregasBase.length ?? 0) > 0 ||
+    (previous?.fichaExtrato?.length ?? 0) > 0 ||
+    (previous?.fichaAberto.length ?? 0) > 0;
+  const builtTemValor =
+    built.entregasBase.length > 0 ||
+    (built.fichaExtrato?.length ?? 0) > 0 ||
+    built.fichaAberto.length > 0;
+  if (prevTemValor && !builtTemValor) {
+    return previous;
+  }
+  const merged: CooperadoPwaEntregasResumosSnapshot = {
+    ...built,
+    entregasBase: mesclarResumosFichaCompletaFontes(built.entregasBase, previous?.entregasBase),
+    fichaAberto: mesclarResumosFichaCompletaFontes(built.fichaAberto, previous?.fichaAberto),
+    fichaExtrato: mesclarResumosFichaCompletaFontes(built.fichaExtrato, previous?.fichaExtrato),
+    fotosFichaLiquidada: mesclarResumosFichaCompletaFontes(
+      built.fotosFichaLiquidada,
+      previous?.fotosFichaLiquidada
+    ),
+    pagamentosRealizados: mesclarResumosFichaCompletaFontes(
+      built.pagamentosRealizados,
+      previous?.pagamentosRealizados
+    ),
+  };
+  gravarCooperadoPwaEntregasResumosSnapshot(canon, cooperativaId, merged);
+  return merged;
 }
 
 export function persistirCooperadoPwaEntregasResumosSnapshotFromUser(

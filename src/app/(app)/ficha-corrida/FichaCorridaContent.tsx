@@ -20,6 +20,7 @@ import {
 } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import {
   aplicarDebitoHbHibridoNaParidade,
+  HB_A_RECEBER_HIBRIDO_EVENT,
   linhasOverlayDebitoHbAReceber,
 } from "@/lib/hb-credit/hbAReceberHibrido";
 import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
@@ -372,7 +373,11 @@ function FichaCorridaPageInner() {
       if (isAppDataWarm()) setAppDataWarmTick((n) => n + 1);
     };
     window.addEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
-    return () => window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
+    window.addEventListener(HB_A_RECEBER_HIBRIDO_EVENT, onRefresh);
+    return () => {
+      window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
+      window.removeEventListener(HB_A_RECEBER_HIBRIDO_EVENT, onRefresh);
+    };
   }, [messenger, pilotFinanceiroLeve, cooperadoId, coopIdEarly]);
 
   useEffect(() => {

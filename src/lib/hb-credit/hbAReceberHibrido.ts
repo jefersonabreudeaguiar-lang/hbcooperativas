@@ -8,7 +8,15 @@ import type { DescontoContaCoopRemoto } from "@/lib/hb-credit/mergeFichaDesconto
 import { dedupeDescontosContaCoopRemotos } from "@/lib/hb-credit/mergeFichaDescontos";
 import type { LeituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import { valorLiquidoFromResumoPartes } from "@/services/notaPedidoService";
-import { dispatchCooperadoPwaLeveUiSnapshotRefresh } from "@/lib/cooperado/cooperadoPwaLeveUiEvents";
+import { bumpContaCoopDescontosRevision } from "@/lib/hb-credit/contaCoopDescontosNotify";
+
+export const HB_A_RECEBER_HIBRIDO_EVENT = "hb-a-receber-hibrido-refresh";
+
+export function dispatchHbAReceberHibridoRefresh(): void {
+  bumpContaCoopDescontosRevision();
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(HB_A_RECEBER_HIBRIDO_EVENT));
+}
 
 export const HB_A_RECEBER_HIBRIDO_VERSION = 1;
 
@@ -141,7 +149,7 @@ export function gravarOverlayDebitoHbAReceber(payload: OverlayDebitoHbAReceber):
       overlayKey(payload.cooperativaId, payload.cooperadoId),
       JSON.stringify({ ...payload, v: HB_A_RECEBER_HIBRIDO_VERSION })
     );
-    dispatchCooperadoPwaLeveUiSnapshotRefresh();
+    dispatchHbAReceberHibridoRefresh();
   } catch {
     /* quota */
   }
