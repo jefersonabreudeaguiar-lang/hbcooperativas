@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v519
+
+- **HB Créditos:** cada compra desconta a ficha do mês da compra (ou a última ficha ainda em aberto).
+- **A receber:** depois da compra, o valor no Início e no Financeiro já sai com o HB descontado.
+- **Cooperado:** Entregas e abertura do app iguais ao v518.
+
 ## v518
 
 - **Mercado HB:** compras com crédito não pedem mais nota fiscal do cooperado; o valor já fica liberado para receber.

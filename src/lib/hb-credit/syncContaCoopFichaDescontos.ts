@@ -7,7 +7,7 @@ import {
   resolverCooperadoIdCanonico,
 } from "@/services/cooperadoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
-import { beginSaveBatch, endSaveBatch, getData, notifyAppDataSubscribers, updateData } from "@/services/dataStore";
+import { beginSaveBatch, endSaveBatch, getData, getSession, notifyAppDataSubscribers, updateData } from "@/services/dataStore";
 import { persistDescontosContaCoopNoArquivo, getDescontosContaCoopMesCached } from "@/services/notaPedidoService";
 import { hbCreditMesPrincipal, hbCreditValorLiquidoMes } from "@/lib/hb-credit/hbCreditLeituraBic";
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
@@ -300,6 +300,22 @@ export async function refreshContaCoopValorReceberPilot(
   );
 }
 
+/** Início / Financeiro do cooperado leem snapshot — grava o A receber já líquido sem puxar operacional. */
+function refletirHbDebitoNoAReceberLocal(): void {
+  if (typeof window === "undefined") return;
+  const session = getSession();
+  if (!session || session.role !== "cooperado") return;
+  void import("@/lib/cooperado/cooperadoPwaFichaResumoSnapshot").then(({ persistirCooperadoPwaFichaResumoSnapshotFromUser }) => {
+    persistirCooperadoPwaFichaResumoSnapshotFromUser(session, true);
+    void import("@/lib/cooperado/cooperadoPwaLeveUi").then(
+      ({ persistirInicioCardCooperadoNotificarPwaLeve, dispatchCooperadoPwaLeveUiSnapshotRefresh }) => {
+        persistirInicioCardCooperadoNotificarPwaLeve(session);
+        dispatchCooperadoPwaLeveUiSnapshotRefresh();
+      }
+    );
+  });
+}
+
 /**
  * Imediatamente após pagamento ou estorno HB Créditos — abate valor a receber e linhas do resumo.
  * Sincroniza todos os meses em aberto do cooperado e envia operacional à nuvem.
@@ -322,6 +338,7 @@ export async function refreshContaCoopValorReceberAfterHbTransaction(
     bumpContaCoopDescontosRevision();
     notifyAppDataSubscribers();
   }
+  refletirHbDebitoNoAReceberLocal();
   return { descontos };
 }
 

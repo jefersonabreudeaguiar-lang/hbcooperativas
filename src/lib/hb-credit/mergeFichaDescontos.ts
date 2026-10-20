@@ -91,9 +91,26 @@ export function dedupeArquivoContaCoopDescontos<
 }
 
 /**
- * Com ficha de agosto e setembro abertas, compras de setembro só abatem setembro —
- * evita cobrar duas vezes a mesma transação nos totais consolidados.
+ * Cada compra HB debita uma ficha só:
+ * — mês da compra, se essa ficha ainda está em aberto;
+ * — senão a última ficha em aberto, quando a compra é depois dela
+ *   (ex.: compra em outubro com setembro ainda sem PIX).
+ * Evita a mesma transação abater agosto e setembro no consolidado / A receber.
  */
+export function mesAlvoDebitoContaCoop(
+  txMes: string,
+  mesReferencia: string,
+  mesesPendentes: string[]
+): boolean {
+  const pending = [...new Set(mesesPendentes.filter(Boolean))].sort();
+  if (!pending.length) return true;
+  const latest = pending[pending.length - 1]!;
+  if (!txMes) return mesReferencia === latest;
+  if (pending.includes(txMes)) return txMes === mesReferencia;
+  if (txMes > latest) return mesReferencia === latest;
+  return false;
+}
+
 export function filtrarDescontosContaCoopParaMesReferencia(
   descontos: DescontoContaCoopRemoto[],
   mesReferencia: string,
@@ -101,12 +118,9 @@ export function filtrarDescontosContaCoopParaMesReferencia(
 ): DescontoContaCoopRemoto[] {
   const deduped = dedupeDescontosContaCoopRemotos(descontos);
   if (!mesesPendentes?.length) return deduped;
-  const posteriores = mesesPendentes.filter((m) => m > mesReferencia);
-  if (!posteriores.length) return deduped;
-  return deduped.filter((d) => {
-    const txMes = mesReferenciaFromIso(d.createdAt);
-    return !(txMes > mesReferencia && posteriores.includes(txMes));
-  });
+  return deduped.filter((d) =>
+    mesAlvoDebitoContaCoop(mesReferenciaFromIso(d.createdAt), mesReferencia, mesesPendentes)
+  );
 }
 
 export function dedupeDescontosExtrasContaCoop(extras: FichaCorridaDesconto[]): FichaCorridaDesconto[] {
