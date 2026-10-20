@@ -17,6 +17,10 @@ import {
   sincronizarSenhaContadorNaNuvem,
 } from "@/services/equipeService";
 import { CONTADOR_ACESSO_DESCRICAO, PRESET_CONTADOR, getUserFuncaoLabel } from "@/permissions";
+import {
+  CONTADOR_ACESSO_OPERACIONAL_AVISO,
+  CONTADOR_ACESSO_OPERACIONAL_ESCOPO,
+} from "@/lib/staff/contadorAcessoOperacionalContrato";
 import { MODULOS_ACESSO } from "@/permissions";
 import type { User } from "@/types";
 
@@ -131,6 +135,9 @@ export function EquipeContadorPanel({ cooperativaId, cooperativaCnpj }: EquipeCo
     <>
       <Card title="Contador / auditoria" className="mb-6">
         <p className="text-sm text-gray-500 mb-3">{CONTADOR_ACESSO_DESCRICAO}</p>
+        <AlertBanner variant="warning" title="O que a contadora vê" className="mb-3">
+          {CONTADOR_ACESSO_OPERACIONAL_AVISO} {CONTADOR_ACESSO_OPERACIONAL_ESCOPO}
+        </AlertBanner>
 
         {feedbackOk && (
           <AlertBanner variant="success" title="Pronto" className="mb-3">

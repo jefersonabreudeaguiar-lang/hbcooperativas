@@ -15,7 +15,12 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { ContadorAccessGuard } from "@/components/contador/ContadorAccessGuard";
 import { PageHeader, DataTable } from "@/components/ui/Table";
 import { Card, StatCard } from "@/components/ui/Card";
+import { AlertBanner } from "@/components/ui/AlertBanner";
 import { Button } from "@/components/ui/Button";
+import {
+  CONTADOR_ACESSO_OPERACIONAL_AVISO,
+  CONTADOR_ACESSO_OPERACIONAL_ESCOPO,
+} from "@/lib/staff/contadorAcessoOperacionalContrato";
 import { Select, FormField } from "@/components/ui/Form";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
@@ -66,6 +71,10 @@ export default function ContadorDashboardPage() {
           </div>
         }
       />
+
+      <AlertBanner variant="warning" title="Livro operacional — não é contabilidade oficial" className="mb-6">
+        {CONTADOR_ACESSO_OPERACIONAL_AVISO} {CONTADOR_ACESSO_OPERACIONAL_ESCOPO}
+      </AlertBanner>
 
       {conciliacao && (
         <>

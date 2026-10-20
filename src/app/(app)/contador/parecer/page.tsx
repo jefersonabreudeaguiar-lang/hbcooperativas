@@ -26,6 +26,7 @@ import {
 import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { hrefRelatorio } from "@/utils/relatorioRoutes";
 import type { EmissorRelatorio } from "@/types";
+import { CONTADOR_ACESSO_OPERACIONAL_AVISO } from "@/lib/staff/contadorAcessoOperacionalContrato";
 
 const MODELO_PARECER = `Em minha qualidade de contador responsável pela revisão dos registros operacionais da cooperativa, analisei os documentos, relatórios de conciliação e trilha de auditoria referentes ao mês indicado.
 
@@ -106,6 +107,9 @@ export default function ContadorParecerPage() {
 
   return (
     <ContadorAccessGuard>
+      <AlertBanner variant="warning" title="Revisão operacional" className="mb-4">
+        {CONTADOR_ACESSO_OPERACIONAL_AVISO}
+      </AlertBanner>
       <PageHeader
         title="Parecer contábil mensal"
         subtitle={formatMesReferencia(mes)}

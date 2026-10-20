@@ -162,8 +162,7 @@ export const PRESET_CONTADOR: Resource[] = [
   "conta_coop",
 ];
 
-export const CONTADOR_ACESSO_DESCRICAO =
-  "Painel contador, conciliação, trilha de auditoria, relatórios R1–R10, dossiê ZIP, snapshot de fechamento e consultas financeiras — sem alterar lançamentos.";
+export { CONTADOR_ACESSO_DESCRICAO } from "@/lib/staff/contadorAcessoOperacionalContrato";
 
 /** Perfil legado "presidente" → responsável (sessões e dados antigos). */
 export function normalizeUserRole(role: string): UserRole {
@@ -309,6 +308,8 @@ export function resolveAppUserRole(
     }
     return "cooperado";
   }
+  if (sessionRole === "contador") return "contador";
+  if (data && resolveAuthoritativePanelRole(user, data) === "contador") return "contador";
   if (canAccessPainelResponsavelSession(user, data)) {
     const fromData = data ? resolveAuthoritativePanelRole(user, data) : null;
     if (fromData && isDiretoriaRole(fromData)) return fromData;
@@ -372,7 +373,6 @@ const CONTADOR_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/contador/snapshot", label: "Snapshot fechamento", resource: "contador" },
   { href: "/relatorios", label: "Relatórios", resource: "relatorios" },
   { href: "/relatorios?tipo=fechamento_mensal", label: "Fechamento mensal", resource: "fechamento" },
-  { href: "/ficha-corrida", label: "Ficha corrida", resource: "ficha_corrida" },
   { href: "/livro-caixa", label: "Livro caixa", resource: "livro_caixa" },
   { href: "/conta-coop", label: "HB Créditos", resource: "conta_coop" },
 ];
