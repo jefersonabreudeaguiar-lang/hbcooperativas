@@ -20,7 +20,8 @@ assert.doesNotMatch(silent, /refreshContaCoopValorReceberPilot/, "silent sem bun
 assert.doesNotMatch(silent, /refreshContaCoopLimiteFromFicha/, "silent sem sync-limite");
 assert.match(silent, /applyLocalContaCoopDescontosRefresh/, "silent grava arquivo mensal local");
 assert.match(silent, /refletirHbDebitoNoAReceberLocal/, "silent rematerializa A receber");
-assert.match(silent, /isAppDataWarm/, "silent espera AppData já quente");
+assert.match(silent, /gravarOverlayDebitoHbAReceber/, "silent grava overlay se a ficha ainda não tem a linha");
+assert.match(silent, /isAppDataWarm/, "com AppData quente grava no arquivo; sem AppData usa overlay");
 
 const warmup = read("src/hooks/useHbCreditDescontosWarmup.ts");
 assert.match(warmup, /puxarDebitoHbFichaDescontosSilentCooperado/, "warmup mobile usa puxão silencioso");

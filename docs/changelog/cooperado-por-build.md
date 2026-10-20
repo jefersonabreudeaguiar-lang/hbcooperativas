@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v523
+
+- **A receber:** o desconto da compra HB aparece no Início e no Financeiro no mesmo ritmo do card HB — a ficha manda; se a linha ainda não gravou, o lastro local cobre.
+- **Financeiro:** o valor não some na abertura; a linha da compra entra no resumo sem esperar o operacional inteiro.
+- **Cooperado:** Entregas e troca de abas iguais ao v522.
+
 ## v522
 
 - **HB Créditos:** no celular, a compra feita no mercado entra na ficha depois que o Início já abriu — sem puxar o operacional inteiro.

@@ -41,6 +41,11 @@ import {
   resolveParidadeFromFichaResumoSnapshot,
 } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import {
+  aplicarDebitoHbHibridoNoValor,
+  escolherDebitoHbHibrido,
+  linhasOverlayDebitoHbAReceber,
+} from "@/lib/hb-credit/hbAReceberHibrido";
+import {
   getAppDataDomainRevision,
   subscribeAppDataDomain,
   type AppDataNotifyDomain,
@@ -548,9 +553,12 @@ export function useCooperadoInicioValorReceberCardState(input: {
       : null;
     let fichaValor = fichaSnap?.paridade?.valorLiquido ?? fichaSnap?.consolidado?.valorLiquido ?? 0;
     let fichaMes = fichaSnap?.paridade?.mesLabel ?? fichaSnap?.consolidado?.mesLabel;
+    const overlayLinhas = linhasOverlayDebitoHbAReceber(input.cooperadoId, coopId);
+    let extrasFicha = fichaSnap?.paridade?.descontosExtras ?? [];
     let permitirQuedaPorHb = false;
     if (isAppDataWarm() && coopId) {
       const live = cooperadoLeituraFinanceiraExibicao(getData(), input.cooperadoId, coopId);
+      extrasFicha = live.descontosExtras;
       const temDebitoHb = live.descontosExtras.some((d) => d.tipo === "conta_coop");
       if (live.valorLiquido > fichaValor) {
         fichaValor = live.valorLiquido;
@@ -560,6 +568,20 @@ export function useCooperadoInicioValorReceberCardState(input: {
         fichaMes = live.mesLabel;
       }
       permitirQuedaPorHb = temDebitoHb && fichaValor > 0.005;
+    }
+    const hibrido = escolherDebitoHbHibrido({
+      linhasFicha: extrasFicha,
+      linhasOverlay: overlayLinhas,
+    });
+    if (hibrido.fonte === "overlay" && hibrido.valorReais > 0.005) {
+      const baseValor = cooperadoMotorTemObrigacaoReceber(base) ? base.valor : fichaValor;
+      const alvo = aplicarDebitoHbHibridoNoValor(baseValor > 0.005 ? baseValor : fichaValor, hibrido.valorReais);
+      if (alvo + 0.005 < (base.valor ?? 0) || alvo + 0.005 < fichaValor) {
+        fichaValor = alvo;
+        permitirQuedaPorHb = alvo > 0.005;
+      }
+    } else if (hibrido.fonte === "ficha" && hibrido.valorReais > 0.005) {
+      permitirQuedaPorHb = fichaValor > 0.005;
     }
     return cooperadoInicioCardAlinharValorFicha(base, fichaValor, fichaMes, { permitirQuedaPorHb }) ?? base;
   }, [

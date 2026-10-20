@@ -1,6 +1,9 @@
 import type { AppData } from "@/types";
 import type { DescontoContaCoopRemoto } from "@/lib/hb-credit/mergeFichaDescontos";
-import { dedupeDescontosContaCoopRemotos } from "@/lib/hb-credit/mergeFichaDescontos";
+import {
+  dedupeDescontosContaCoopRemotos,
+  filtrarDescontosContaCoopParaMesReferencia,
+} from "@/lib/hb-credit/mergeFichaDescontos";
 import { fetchFichaDescontosContaCoop } from "@/services/creditApiService";
 import {
   listCooperadoIdsMesmoTitular,
@@ -43,6 +46,8 @@ import {
   contaCoopAuxSyncKeyValorReceber,
   contaCoopAuxSyncKeyWarmupBundle,
 } from "@/lib/hb-credit/contaCoopAuxSyncDedupe";
+import { gravarOverlayDebitoHbAReceber } from "@/lib/hb-credit/hbAReceberHibrido";
+import { lerCooperadoPwaFichaResumoSnapshot } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 
 export type SyncContaCoopValorReceberOpts = {
   cnpj: string;
@@ -124,6 +129,14 @@ export function aplicarDebitoHbCompraLocal(opts: {
   setContaCoopDescontosMemoria(opts.cooperativaId, canonico, mes, descontos);
   updateData(() => next);
   bumpContaCoopDescontosRevision();
+  gravarOverlayDebitoHbAReceber({
+    v: 1,
+    cooperadoId: canonico,
+    cooperativaId: opts.cooperativaId,
+    mesReferencia: mes,
+    linhas: descontos,
+    savedAt: new Date().toISOString(),
+  });
   refletirHbDebitoNoAReceberLocal();
   return true;
 }
@@ -270,6 +283,16 @@ async function applyLocalContaCoopDescontosRefresh(
   } else if (financeChanged) {
     bumpContaCoopDescontosRevision();
     notifyAppDataSubscribers();
+  }
+  if (synced.descontos.length) {
+    gravarOverlayDebitoHbAReceber({
+      v: 1,
+      cooperadoId: opts.cooperadoId,
+      cooperativaId: opts.cooperativaId,
+      mesReferencia: opts.mesReferencia,
+      linhas: synced.descontos,
+      savedAt: new Date().toISOString(),
+    });
   }
   if (changed || financeChanged) {
     refletirHbDebitoNoAReceberLocal();
@@ -446,36 +469,65 @@ export async function puxarDebitoHbFichaDescontosSilentCooperado(opts: {
   if (!cooperadoId) return false;
   if (typeof window === "undefined") return false;
   if (typeof navigator !== "undefined" && !navigator.onLine) return false;
-  if (!isAppDataWarm()) return false;
 
   return coalesceContaCoopAuxSync(
     contaCoopAuxSyncKeyFichaSilent(opts.cnpj, cooperadoId),
     async () => {
-      const data = getData();
-      const canonico = resolverCooperadoIdCanonico(
-        data,
-        cooperadoId,
-        opts.cooperativaId,
-        opts.user.name
-      );
-      const paridade = cooperadoLeituraFinanceiraExibicao(data, canonico, opts.cooperativaId);
-      const mesReferencia =
-        paridade.mesesResumo[paridade.mesesResumo.length - 1] ??
-        paridade.mesesResumo[0] ??
-        hbCreditMesPrincipal(data, canonico, opts.cooperativaId);
-      if (!mesReferencia) return false;
-      const { changed, financeChanged } = await applyLocalContaCoopDescontosRefresh({
-        cnpj: opts.cnpj,
-        cooperadoId: canonico,
-        mesReferencia,
-        cooperativaId: opts.cooperativaId,
-        cooperadoNome: opts.user.name,
-        pushCloud: false,
-      });
-      if (!changed && !financeChanged) {
-        refletirHbDebitoNoAReceberLocal();
+      if (isAppDataWarm()) {
+        const data = getData();
+        const canonico = resolverCooperadoIdCanonico(
+          data,
+          cooperadoId,
+          opts.cooperativaId,
+          opts.user.name
+        );
+        const paridade = cooperadoLeituraFinanceiraExibicao(data, canonico, opts.cooperativaId);
+        const mesReferencia =
+          paridade.mesesResumo[paridade.mesesResumo.length - 1] ??
+          paridade.mesesResumo[0] ??
+          hbCreditMesPrincipal(data, canonico, opts.cooperativaId);
+        if (!mesReferencia) return false;
+        const { changed, financeChanged, descontos } = await applyLocalContaCoopDescontosRefresh({
+          cnpj: opts.cnpj,
+          cooperadoId: canonico,
+          mesReferencia,
+          cooperativaId: opts.cooperativaId,
+          cooperadoNome: opts.user.name,
+          pushCloud: false,
+        });
+        if (descontos.length) {
+          gravarOverlayDebitoHbAReceber({
+            v: 1,
+            cooperadoId: canonico,
+            cooperativaId: opts.cooperativaId,
+            mesReferencia,
+            linhas: descontos,
+            savedAt: new Date().toISOString(),
+          });
+        }
+        return changed || financeChanged || descontos.length > 0;
       }
-      return changed || financeChanged;
+
+      const snap = lerCooperadoPwaFichaResumoSnapshot(cooperadoId, opts.cooperativaId);
+      const mesesSnap = snap?.paridade?.mesesResumo ?? [];
+      const mesFetch = mesesSnap[0] ?? mesesSnap[mesesSnap.length - 1] ?? snap?.mesPrincipal;
+      const mes = typeof mesFetch === "string" && mesFetch.length >= 7 ? mesFetch.slice(0, 7) : "";
+      if (!mes) return false;
+      const raw = await fetchFichaDescontosContaCoop(opts.cnpj, [cooperadoId], mes).catch(() => []);
+      const pending = mesesSnap.length ? mesesSnap : [mes];
+      const latest = pending[pending.length - 1] ?? mes;
+      const linhas = filtrarDescontosContaCoopParaMesReferencia(raw, latest, pending);
+      if (!linhas.length) return false;
+      gravarOverlayDebitoHbAReceber({
+        v: 1,
+        cooperadoId,
+        cooperativaId: opts.cooperativaId,
+        mesReferencia: latest,
+        linhas,
+        savedAt: new Date().toISOString(),
+      });
+      refletirHbDebitoNoAReceberLocal();
+      return true;
     }
   );
 }

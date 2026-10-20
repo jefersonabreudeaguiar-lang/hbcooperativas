@@ -18,6 +18,10 @@ import {
   resolveParidadeFromFichaResumoSnapshot,
   type CooperadoPwaFichaResumoSnapshot,
 } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
+import {
+  aplicarDebitoHbHibridoNaParidade,
+  linhasOverlayDebitoHbAReceber,
+} from "@/lib/hb-credit/hbAReceberHibrido";
 import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { scheduleCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
 import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/cooperadoMobilePilotPerf";
@@ -544,35 +548,38 @@ function FichaCorridaPageInner() {
       : null;
     const liveValor = live?.valorLiquido ?? 0;
     const snapValor = fromSnapGuard?.valorLiquido ?? 0;
+    const overlayHb = linhasOverlayDebitoHbAReceber(cooperadoId, coopId);
+    const withHybrid = (p: typeof live) =>
+      p ? aplicarDebitoHbHibridoNaParidade(p, overlayHb) : p;
     const liquidadoPeloResponsavel = Boolean(
       store &&
         coopId &&
         cooperadoBicAutorizaZerarCardInicio(store, cooperadoId, coopId)
     );
     if (fromSnapGuard && snapValor > 0.005 && liveValor <= 0.005 && !liquidadoPeloResponsavel) {
-      return fromSnapGuard;
+      return withHybrid(fromSnapGuard);
     }
-    if (liveValor > 0.005) return live;
-    if (liquidadoPeloResponsavel) return live ?? fromSnapGuard;
+    if (liveValor > 0.005) return withHybrid(live);
+    if (liquidadoPeloResponsavel) return withHybrid(live ?? fromSnapGuard);
     if (isCooperadoFinanceiroAppDataLiveRead()) {
-      if (!store) return fromSnapGuard && snapValor > 0.005 ? fromSnapGuard : null;
-      return live ?? (fromSnapGuard && snapValor > 0.005 ? fromSnapGuard : null);
+      if (!store) return withHybrid(fromSnapGuard && snapValor > 0.005 ? fromSnapGuard : null);
+      return withHybrid(live ?? (fromSnapGuard && snapValor > 0.005 ? fromSnapGuard : null));
     }
     if (financeiroDormant && fromSnapGuard && snapValor > 0.005) {
       const bicPadrao = isCooperadoBicExibicaoPadraoAtiva();
       if (bicPadrao && live && isAppDataWarm()) {
         const drift = Math.abs(snapValor - liveValor) > 0.02;
-        if (drift) return live;
-        return fromSnapGuard;
+        if (drift && liveValor > 0.005) return withHybrid(live);
+        return withHybrid(fromSnapGuard);
       }
-      if (isBicCentralReadAuthorityEnabled() && live && isAppDataWarm()) {
-        return live;
+      if (isBicCentralReadAuthorityEnabled() && live && isAppDataWarm() && liveValor > 0.005) {
+        return withHybrid(live);
       }
-      if (live && Math.abs(snapValor - liveValor) > 0.02) return live;
-      return fromSnapGuard;
+      if (live && liveValor > 0.005 && Math.abs(snapValor - liveValor) > 0.02) return withHybrid(live);
+      return withHybrid(fromSnapGuard);
     }
-    if (!store) return fromSnapGuard && snapValor > 0.005 ? fromSnapGuard : null;
-    return live ?? (fromSnapGuard && snapValor > 0.005 ? fromSnapGuard : null);
+    if (!store) return withHybrid(fromSnapGuard && snapValor > 0.005 ? fromSnapGuard : null);
+    return withHybrid(live ?? (fromSnapGuard && snapValor > 0.005 ? fromSnapGuard : null));
   }, [
     tabActive,
     isCooperado,

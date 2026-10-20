@@ -6,7 +6,10 @@ import {
   refreshContaCoopDescontosAfterOperacionalSync,
 } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
 import { HB_CREDIT_ACCOUNT_LOADED_EVENT } from "@/lib/hb-credit/hbCreditEntryEvents";
+import { HB_CREDIT_ACCOUNT_CACHE_EVENT } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import { cooperadoHbCreditCacheTemValor } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { getData, isAppDataWarm } from "@/services/dataStore";
+import { lerCnpjHbCreditPersistidoParaCooperado } from "@/lib/hb-credit/hbCreditAccountPersistencia";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { shouldSyncHbFichaBaseDescontos } from "@/lib/hb-credit/hbFichaBaseOperacional";
@@ -47,44 +50,62 @@ export function useHbCreditDescontosWarmup(user: Omit<User, "password"> | null) 
         current.role !== "cooperado" ||
         typeof navigator === "undefined" ||
         !navigator.onLine ||
-        document.visibilityState !== "visible" ||
-        !isAppDataWarm()
+        document.visibilityState !== "visible"
       ) {
         return;
       }
       if (Date.now() - lastSilentFichaAt < SILENT_FICHA_VISIBLE_GAP_MS) return;
-      const cid = getUserCooperativaId(current, getData());
+      const data = isAppDataWarm() ? getData() : null;
+      const cid = (data ? getUserCooperativaId(current, data) : null) ?? current.cooperativaId;
       if (!cid || !current.cooperadoId) return;
-      void resolveCooperativaCnpj(getData(), cid, current).then((cnpj) => {
+      const fromAccount = lerCnpjHbCreditPersistidoParaCooperado(current.cooperadoId);
+      const cnpjHint =
+        (current.cooperativaCnpj ?? "").replace(/\D/g, "").length === 14
+          ? current.cooperativaCnpj!.replace(/\D/g, "")
+          : fromAccount;
+      const apply = (cnpj: string) => {
         if (cancelled || !cnpj) return;
-        lastSilentFichaAt = Date.now();
         void puxarDebitoHbFichaDescontosSilentCooperado({
           cnpj,
           cooperativaId: cid,
           user: current,
+        }).then((ok) => {
+          if (ok) lastSilentFichaAt = Date.now();
         });
-      });
+      };
+      if (cnpjHint) {
+        apply(cnpjHint);
+        return;
+      }
+      if (!data) return;
+      void resolveCooperativaCnpj(data, cid, current).then((cnpj) => apply(cnpj ?? ""));
     };
 
-    const run = () => {
+    const runRapido = () => {
+      idleCleanups.push(
+        scheduleContaCoopAuxSync(runCore, { idleTimeoutMs: 800, fallbackMs: 200 })
+      );
+    };
+    const runIdle = () => {
       idleCleanups.push(
         scheduleContaCoopAuxSync(runCore, { idleTimeoutMs: 16_000, fallbackMs: 5_000 })
       );
     };
 
-    scheduleCooperadoPostInteractiveTask(run);
+    if (cooperadoHbCreditCacheTemValor(user)) runRapido();
+    else scheduleCooperadoPostInteractiveTask(runIdle);
+
+    const onAccountCache = () => runRapido();
+    window.addEventListener(HB_CREDIT_ACCOUNT_CACHE_EVENT, onAccountCache);
 
     const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        idleCleanups.push(
-          scheduleContaCoopAuxSync(runCore, { idleTimeoutMs: 16_000, fallbackMs: 8_000 })
-        );
-      }
+      if (document.visibilityState === "visible") runRapido();
     };
     document.addEventListener("visibilitychange", onVisible);
 
     return () => {
       cancelled = true;
+      window.removeEventListener(HB_CREDIT_ACCOUNT_CACHE_EVENT, onAccountCache);
       document.removeEventListener("visibilitychange", onVisible);
       for (const cleanup of idleCleanups) cleanup();
     };
