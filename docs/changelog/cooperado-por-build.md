@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v533
+
+- **Responsável:** Em aberto (Conferir) e Pagar cooperados mostram o mesmo R$ da ficha ainda sem PIX, com avulso e HB.
+- **Em aberto / Pagar:** mês já pago some; sync pobre não devolve valor liquidado nem troca o número da outra aba.
+- **Cooperado:** Início, Entregas, Ficha, Financeiro e A receber iguais ao v532.
+
 ## v532
 
 - **Responsável:** F5, Conferir, Pagar, Livro e troca de aba pintam o lastro e só depois puxam a nuvem — o arquivo grande não trava o primeiro quadro.

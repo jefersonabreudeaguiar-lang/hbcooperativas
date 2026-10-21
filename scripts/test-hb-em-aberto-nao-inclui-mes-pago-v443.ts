@@ -348,9 +348,9 @@ function emptyData(): AppData {
   const relatorio = getRelatorioPagarCooperadoEmAberto(pago, COOP);
   assert.equal(relatorio.length, 1, "conferir só lista quem tem a receber");
   assert.equal(relatorio[0]?.cooperadoId, CID);
-  assert.equal(relatorio[0]?.total, hbCreditCreditoBaseReais(pago, CID, COOP));
-  assert.equal(relatorio[0]?.total, 50);
-  assert.equal(getTotalValoresAPagarGestaoCooperativa(pago, COOP), 50);
+  assert.equal(hbCreditCreditoBaseReais(pago, CID, COOP), 50, "crédito-base HB segue o bruto da ficha");
+  assert.equal(relatorio[0]?.total, 45, "a pagar = líquido da ficha sem PIX");
+  assert.equal(getTotalValoresAPagarGestaoCooperativa(pago, COOP), 45);
 }
 
 console.log("test-hb-em-aberto-nao-inclui-mes-pago-v443: OK");

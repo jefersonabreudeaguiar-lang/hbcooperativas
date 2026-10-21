@@ -6,8 +6,10 @@ import {
   listarMesesEmAbertoPagamentoResponsavel,
   cooperadoPendentePagamentoResponsavel,
 } from "@/services/cooperadoEntregasService";
-import { listarMesesFichaEmAbertoCooperado } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
-import { getTotalValoresAPagarGestaoCooperativa } from "@/lib/responsavel/responsavelGestaoLeitura";
+import {
+  getTotalValoresAPagarGestaoCooperativa,
+  valorAPagarCooperadoEmAberto,
+} from "@/lib/responsavel/responsavelGestaoLeitura";
 import {
   agregarItensNotasCooperado,
   getPagamentoAguardandoCooperado,
@@ -409,9 +411,8 @@ export function getRelatorioPagarCooperadoEmAberto(
         (!cooperadoId || c.id === cooperadoId)
     )
     .map((c) => {
-      const aberto = listarMesesFichaEmAbertoCooperado(data, c.id, cooperativaId, {
-        usarLiquido: true,
-      });
+      const coopScope = cooperativaId ?? c.cooperativaId;
+      const aberto = valorAPagarCooperadoEmAberto(data, c.id, coopScope);
       const porMes: LinhaPagarCooperadoEmAberto["porMes"] = aberto.porMes.map((m) => ({
         mes: m.mes,
         mesLabel: formatMesReferencia(m.mes),

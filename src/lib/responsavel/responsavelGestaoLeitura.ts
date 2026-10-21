@@ -6,15 +6,18 @@ import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify"
 import type { ConsolidadoFinanceiroCooperado } from "@/services/cooperadoEntregasService";
 import { mesReferenciaPagamentoResponsavelEmAberto } from "@/services/cooperadoEntregasService";
 import { bicCentralGetResumoPagamentoExibicao } from "@/services/bicLeituraCentralFicha";
-import { staffCooperadoLeituraFinanceiraExibicao } from "@/lib/bic/bicStaffLeituraCooperado";
 import {
   getResumoPagamentoConsolidadoCooperado,
+  getResumoPagamentoCooperado,
   notaQuitadaPorPagamentoCooperativaRegistrado,
   resumoFromPagamento,
   type AjustesResumoPagamento,
   type ResumoPagamentoCooperado,
 } from "@/services/notaPedidoService";
-import { hbCreditCreditoBaseReais } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
+import {
+  hbCreditCreditoBaseReais,
+  listarMesesFichaEmAbertoCooperado,
+} from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
 import type { PagamentoCooperadoRegistro } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { round2 } from "@/utils/calculations";
@@ -90,12 +93,78 @@ export function getTotalValoresAPagarGestaoCooperativa(
   return round2(
     cooperados.reduce((s, c) => {
       const coopScope = cooperativaId ?? c.cooperativaId;
+      if (!coopScope) return s;
+      const aberto = valorAPagarCooperadoEmAberto(data, c.id, coopScope);
+      if (aberto.total > 0.005) return s + aberto.total;
       const ficha = hbCreditCreditoBaseReais(data, c.id, coopScope);
       if (ficha > 0.005) return s + ficha;
-      if (!coopScope) return s;
       return s + somaNotasConferidasSemPix(data, c.id, coopScope);
     }, 0)
   );
+}
+
+export type MesValorAPagarEmAberto = {
+  mes: string;
+  entregas: number;
+  total: number;
+};
+
+/**
+ * Mesmo R$ do Em aberto e do Pagar: ficha sem PIX + líquido do motor de pagamento
+ * (mensalidade, avulso, HB da ficha). Uma tela não pode mostrar outro número.
+ */
+function valorAPagarDeNotasSemFicha(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string
+): { meses: string[]; porMes: MesValorAPagarEmAberto[]; total: number } {
+  const porMesMap = new Map<string, MesValorAPagarEmAberto>();
+  for (const n of data.notasPedido ?? []) {
+    if (n.cooperativaId !== cooperativaId) continue;
+    if (n.cooperadoId !== cooperadoId) continue;
+    if (n.status !== "conferida") continue;
+    if (!n.mesReferencia) continue;
+    if (notaQuitadaPorPagamentoCooperativaRegistrado(data, n, cooperadoId)) continue;
+    const liq = Number(n.valorLiquido);
+    const bruto = Number(n.valorBruto);
+    const valor = liq > 0.005 ? liq : bruto > 0.005 ? bruto : 0;
+    if (valor <= 0.005) continue;
+    const cur = porMesMap.get(n.mesReferencia) ?? { mes: n.mesReferencia, entregas: 0, total: 0 };
+    cur.entregas += 1;
+    cur.total = round2(cur.total + valor);
+    porMesMap.set(n.mesReferencia, cur);
+  }
+  const porMes = [...porMesMap.values()].sort((a, b) => a.mes.localeCompare(b.mes));
+  return {
+    meses: porMes.map((m) => m.mes),
+    porMes,
+    total: round2(porMes.reduce((s, m) => s + m.total, 0)),
+  };
+}
+
+export function valorAPagarCooperadoEmAberto(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string
+): { meses: string[]; porMes: MesValorAPagarEmAberto[]; total: number } {
+  const aberto = listarMesesFichaEmAbertoCooperado(data, cooperadoId, cooperativaId, {
+    usarLiquido: true,
+  });
+  if (aberto.total <= 0.005) {
+    return valorAPagarDeNotasSemFicha(data, cooperadoId, cooperativaId);
+  }
+  const porMes: MesValorAPagarEmAberto[] = [];
+  let total = 0;
+  for (const m of aberto.porMes) {
+    const liq = getResumoPagamentoCooperado(data, cooperadoId, m.mes, cooperativaId).valorLiquido;
+    if (liq <= 0.005) continue;
+    porMes.push({ mes: m.mes, entregas: m.entregas, total: liq });
+    total = round2(total + liq);
+  }
+  if (total <= 0.005) {
+    return valorAPagarDeNotasSemFicha(data, cooperadoId, cooperativaId);
+  }
+  return { meses: porMes.map((m) => m.mes), porMes, total };
 }
 
 export type PickResumoStaffFichaPagarInput = {
@@ -131,9 +200,31 @@ export function pickResumoStaffFichaPagar(
     mesReferenciaPagamentoResponsavelEmAberto(data, cooperadoId, mes, cooperativaId)
   );
 
-  const bic = staffCooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId);
-  if (mesesEmAberto.length > 0 && bic.valorLiquido > 0.005 && bic.resumo.valorLiquido > 0.005) {
-    return bic.resumo;
+  const coopId = cooperativaId ?? "";
+  const abertoPagar = coopId ? valorAPagarCooperadoEmAberto(data, cooperadoId, coopId) : { meses: [], total: 0 };
+  if (abertoPagar.total > 0.005 && abertoPagar.meses.length > 0) {
+    const consolidado = getResumoPagamentoConsolidadoCooperado(
+      data,
+      cooperadoId,
+      abertoPagar.meses,
+      cooperativaId,
+      resumoAjustes && mesAtivo ? { [mesAtivo]: resumoAjustes } : undefined
+    );
+    if (consolidado.valorLiquido > 0.005) {
+      if (Math.abs(consolidado.valorLiquido - abertoPagar.total) > 0.005) {
+        return { ...consolidado, valorLiquido: abertoPagar.total };
+      }
+      return consolidado;
+    }
+    return {
+      valorBruto: abertoPagar.total,
+      descontoCooperativa: 0,
+      descontosExtras: [],
+      valorEntregas: abertoPagar.total,
+      valorLiquido: abertoPagar.total,
+      fichaIds: [],
+      notaPedidoIds: [],
+    };
   }
 
   const ajustesPorMes: Record<string, AjustesResumoPagamento> | undefined =

@@ -11,6 +11,7 @@ import {
 } from "@/services/cooperadoCloudService";
 import { getDataOperationalTruth, getDataRevision } from "@/services/dataStore";
 import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
+import { valorAPagarCooperadoEmAberto } from "@/lib/responsavel/responsavelGestaoLeitura";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { listarMesesFichaEmAbertoCooperado } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
 import {
@@ -179,6 +180,53 @@ function appDataParaLeituraFichaEmAbertoResponsavel(data: AppData, coopId?: stri
  * Foto da aba Pagar: lastro do Conferir + ficha reconstruída das notas conferidas.
  * Só leitura — não persiste.
  */
+function numeroFichaOuNotaValido(n: number | undefined): boolean {
+  return Number.isFinite(Number(n)) && Number(n) > 0.005;
+}
+
+/** A projeção não pode apagar o R$ que já estava na nota/ficha. */
+function preservarValoresNumericosDaFonte(fonte: AppData, projetado: AppData): AppData {
+  const notasFonte = new Map((fonte.notasPedido ?? []).map((n) => [n.id, n]));
+  let notasChanged = false;
+  const notas = (projetado.notasPedido ?? []).map((n) => {
+    const orig = notasFonte.get(n.id);
+    if (!orig || numeroFichaOuNotaValido(n.valorLiquido) || numeroFichaOuNotaValido(n.valorBruto)) {
+      return n;
+    }
+    if (!numeroFichaOuNotaValido(orig.valorLiquido) && !numeroFichaOuNotaValido(orig.valorBruto)) {
+      return n;
+    }
+    notasChanged = true;
+    return {
+      ...n,
+      valorBruto: orig.valorBruto,
+      valorLiquido: orig.valorLiquido,
+      valorDesconto: orig.valorDesconto,
+    };
+  });
+  const nextNotas = notasChanged ? { ...projetado, notasPedido: notas } : projetado;
+  const fichasFonte = new Map((fonte.fichaCorrida ?? []).map((f) => [f.id, f]));
+  let fichasChanged = false;
+  const fichas = (nextNotas.fichaCorrida ?? []).map((f) => {
+    const orig = fichasFonte.get(f.id);
+    if (!orig || numeroFichaOuNotaValido(f.valorLiquido) || numeroFichaOuNotaValido(f.valorBruto)) {
+      return f;
+    }
+    if (!numeroFichaOuNotaValido(orig.valorLiquido) && !numeroFichaOuNotaValido(orig.valorBruto)) {
+      return f;
+    }
+    fichasChanged = true;
+    return {
+      ...f,
+      valorBruto: orig.valorBruto,
+      valorLiquido: orig.valorLiquido,
+      descontos: orig.descontos,
+    };
+  });
+  const next = fichasChanged ? { ...nextNotas, fichaCorrida: fichas } : nextNotas;
+  return completarFichaProjetadaComNota(next);
+}
+
 export function appDataParaPagarCooperadosResponsavel(data: AppData, coopId?: string): AppData {
   garantirCacheDoBuildAtual();
   const revision = getDataRevision();
@@ -187,7 +235,8 @@ export function appDataParaPagarCooperadosResponsavel(data: AppData, coopId?: st
     return pagarProjCache.data;
   }
   const leitura = appDataParaLeituraFichaEmAbertoResponsavel(data, coopId);
-  const next = completarFichaProjetadaComNota(
+  const next = preservarValoresNumericosDaFonte(
+    data,
     alinharFichaComPagamentosCooperativa(reconciliarFichaFromNotasConferidas(leitura))
   );
   pagarProjCache = { revision, coopId: key, data: next };
@@ -450,9 +499,7 @@ function linhaEmAbertoSoFichaSemPix(
   data: AppData,
   coopId: string
 ): LinhaPagarCooperadoEmAberto | null {
-  const aberto = listarMesesFichaEmAbertoCooperado(data, base.cooperadoId, coopId, {
-    usarLiquido: true,
-  });
+  const aberto = valorAPagarCooperadoEmAberto(data, base.cooperadoId, coopId);
   if (aberto.total <= 0.005) return null;
   return {
     ...base,
@@ -494,6 +541,31 @@ function mesPagoDeveSairDoEmAberto(
   });
 }
 
+/** Tira do card o mês que o PIX já cobriu. Sync pobre não devolve mês liquidado. */
+function recortarLinhaEmAbertoMesesSemPix(
+  linha: LinhaPagarCooperadoEmAberto,
+  data: AppData,
+  coopId: string
+): LinhaPagarCooperadoEmAberto | null {
+  const porMes = (linha.porMes ?? []).filter((m) => {
+    if (!m.mes || m.total <= 0.005) return false;
+    return !mesPagoDeveSairDoEmAberto(data, linha.cooperadoId, m.mes, coopId);
+  });
+  if (porMes.length === 0) return null;
+  if (porMes.length === (linha.porMes?.length ?? 0)) return linha;
+  const meses = porMes.map((m) => m.mes);
+  const total = round2(porMes.reduce((s, m) => s + m.total, 0));
+  if (total <= 0.005) return null;
+  return {
+    ...linha,
+    meses,
+    mesesLabel: formatMesesReferenciaRotulo(meses),
+    entregas: porMes.reduce((s, m) => s + m.entregas, 0),
+    total,
+    porMes,
+  };
+}
+
 /** Lastro sem valor já coberto por PIX — mês pago some; só fica o que ainda não foi pago. */
 function linhaEmAbertoSemValoresPagos(
   base: LinhaPagarCooperadoEmAberto,
@@ -501,24 +573,10 @@ function linhaEmAbertoSemValoresPagos(
   coopId: string
 ): LinhaPagarCooperadoEmAberto | null {
   const vivo = linhaEmAbertoSoFichaSemPix(base, data, coopId);
-  const fonte = vivo ?? base;
-  const porMes = (fonte.porMes ?? []).filter((m) => {
-    if (!m.mes || m.total <= 0.005) return false;
-    return !mesPagoDeveSairDoEmAberto(data, fonte.cooperadoId, m.mes, coopId);
-  });
-  if (porMes.length === 0) return null;
-  if (vivo && porMes.length === (fonte.porMes?.length ?? 0)) return vivo;
-  const meses = porMes.map((m) => m.mes);
-  const total = round2(porMes.reduce((s, m) => s + m.total, 0));
-  if (total <= 0.005) return null;
-  return {
-    ...fonte,
-    meses,
-    mesesLabel: formatMesesReferenciaRotulo(meses),
-    entregas: porMes.reduce((s, m) => s + m.entregas, 0),
-    total,
-    porMes,
-  };
+  if (vivo) return recortarLinhaEmAbertoMesesSemPix(vivo, data, coopId);
+  if (cooperadoEmAbertoPodeSair(data, base.cooperadoId, coopId, base.meses)) return null;
+  if (base.total <= 0.005) return null;
+  return recortarLinhaEmAbertoMesesSemPix(base, data, coopId);
 }
 
 /** Lastro só contra lista vazia. Valor já pago não volta; total vem só da ficha sem PIX. */

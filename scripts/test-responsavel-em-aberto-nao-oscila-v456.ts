@@ -223,8 +223,8 @@ const data23pixSemFicha = {
   notasPedido: [] as NotaPedido[],
 };
 resetResponsavelPainelIndexCache();
-appDataParaConferirLeitura(data23);
-const leituraComPix = appDataParaConferirLeitura(data23pixSemFicha);
+appDataParaConferirLeitura(data23, COOP);
+const leituraComPix = appDataParaConferirLeitura(data23pixSemFicha, COOP);
 assert.equal(leituraComPix.fichaCorrida.length, 23, "wipe de ficha não apaga o lastro");
 assert.equal(leituraComPix.pagamentosCooperado.length, 14, "PIX novo entra mesmo com snapshot pobre");
 assert.equal(
