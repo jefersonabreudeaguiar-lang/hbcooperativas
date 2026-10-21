@@ -361,12 +361,13 @@ export async function uploadNotaToStorage(
   return { ok: true };
 }
 
-export async function fetchNotasFromStorage(
-  supabase: SupabaseClient,
-  cnpj: string
-): Promise<NotaPedido[]> {
+/** Downloads simultâneos por requisição — sequencial levava minutos em cooperativas com centenas de notas. */
+const NOTAS_STORAGE_DOWNLOAD_CONCURRENCY = 16;
+
+/** Lista só os `<notaId>.json` da pasta do CNPJ (pastas de fotos ficam de fora). */
+async function listNotaJsonFileNames(supabase: SupabaseClient, cnpj: string): Promise<string[]> {
   await ensureEntregasBucket(supabase);
-  const files: { name: string }[] = [];
+  const names: string[] = [];
   let offset = 0;
   const pageSize = 500;
   for (;;) {
@@ -374,30 +375,52 @@ export async function fetchNotasFromStorage(
       .from(BUCKET)
       .list(cnpj, { limit: pageSize, offset });
     if (error || !page?.length) break;
-    files.push(...page);
+    for (const file of page) {
+      if (file.name.endsWith(".json")) names.push(file.name);
+    }
     if (page.length < pageSize) break;
     offset += pageSize;
   }
-  if (!files.length) return [];
+  return names;
+}
 
+async function downloadNotasJsonParallel(
+  supabase: SupabaseClient,
+  cnpj: string,
+  fileNames: readonly string[]
+): Promise<NotaPedido[]> {
   const notas: NotaPedido[] = [];
-  for (const file of files) {
-    if (!file.name.endsWith(".json")) continue;
-    const { data: blob, error: dlErr } = await supabase.storage
-      .from(BUCKET)
-      .download(`${cnpj}/${file.name}`);
-    if (dlErr || !blob) continue;
-    try {
-      const parsed = JSON.parse(await blob.text()) as NotaPedido;
-      if (!parsed?.id) continue;
-      notas.push(parsed);
-    } catch {
-      /* ignore corrupt file */
+  let cursor = 0;
+  const worker = async () => {
+    for (;;) {
+      const idx = cursor++;
+      if (idx >= fileNames.length) return;
+      const { data: blob, error: dlErr } = await supabase.storage
+        .from(BUCKET)
+        .download(`${cnpj}/${fileNames[idx]}`);
+      if (dlErr || !blob) continue;
+      try {
+        const parsed = JSON.parse(await blob.text()) as NotaPedido;
+        if (parsed?.id) notas.push(parsed);
+      } catch {
+        /* ignore corrupt file */
+      }
     }
-  }
+  };
+  const workers = Math.min(NOTAS_STORAGE_DOWNLOAD_CONCURRENCY, fileNames.length);
+  await Promise.all(Array.from({ length: workers }, worker));
   return notas.sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   );
+}
+
+export async function fetchNotasFromStorage(
+  supabase: SupabaseClient,
+  cnpj: string
+): Promise<NotaPedido[]> {
+  const names = await listNotaJsonFileNames(supabase, cnpj);
+  if (!names.length) return [];
+  return downloadNotasJsonParallel(supabase, cnpj, names);
 }
 
 export async function fetchNotaFromStorage(
@@ -673,7 +696,12 @@ export async function mergeStorageFilaOrphansIntoTableNotas(
   tableNotas: NotaPedido[]
 ): Promise<NotaPedido[]> {
   const tableIds = new Set(tableNotas.map((n) => n.id));
-  const storageNotas = await fetchNotasFromStorage(supabase, cnpj);
+  // Só baixa o JSON de quem não está na tabela — antes baixava todas as notas a cada GET.
+  const candidatos = (await listNotaJsonFileNames(supabase, cnpj)).filter(
+    (name) => !tableIds.has(name.slice(0, -".json".length))
+  );
+  if (candidatos.length === 0) return tableNotas;
+  const storageNotas = await downloadNotasJsonParallel(supabase, cnpj, candidatos);
   const orphans = storageNotas.filter(
     (n) =>
       n.status !== "rascunho" &&

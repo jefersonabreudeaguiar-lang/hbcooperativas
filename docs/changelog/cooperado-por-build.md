@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v538
+
+- **Responsável:** Conferir e a fila de notas carregam em segundos — a nuvem lia as notas uma a uma (minutos) e o Atualizar ficava preso.
+- **Dados:** troca de aba e poll da fila só leem da nuvem as notas que faltam na tabela; nada muda no que é conferido, lançado ou pago.
+- **Cooperado:** Início, Entregas, Ficha, Financeiro e A receber iguais ao v537 (só o servidor ficou mais rápido).
+
 ## v537
 
 - **Responsável:** tocar numa aba já visitada (Início, Conferir, Pagar, Livro) troca na hora — o lastro reaparece, sem montar a tela de novo.

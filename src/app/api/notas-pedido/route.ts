@@ -18,6 +18,10 @@ import {
 } from "@/lib/supabase/notasStorage";
 import { sanitizarNotaParaFilaConferencia } from "@/utils/notaStatus";
 
+export const dynamic = "force-dynamic";
+/** Listagem completa lê SQL + storage de centenas de notas — folga acima do default serverless. */
+export const maxDuration = 60;
+
 export async function GET(request: Request) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ notas: [], configured: false });
