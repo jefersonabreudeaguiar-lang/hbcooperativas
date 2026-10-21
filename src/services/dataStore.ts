@@ -166,7 +166,7 @@ export function reloadStaffGestaoPersistAfterFirstPaint(): void {
   const stored = readAppDataPersistRaw();
   if (!stored) return;
   try {
-    let data = migrateData(JSON.parse(stored) as AppData);
+    let data = migrateData(JSON.parse(stored) as Partial<AppData> & Record<string, unknown>);
     const ensured = ensureCreatorAdminAccount(data);
     data = ensured.data;
     const reset = applyOperationalResetIfNeeded(data);
