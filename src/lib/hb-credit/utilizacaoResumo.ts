@@ -43,6 +43,8 @@ export type HbUtilizacaoResumoLancamento = {
   cooperadoId: string;
   partnerId: string;
   partnerNome: string;
+  /** Mercado pelo nome, ou «Crédito para {cooperado}». */
+  usoLabel?: string;
   receiptCode?: string;
   eventType: "PAYMENT" | "REFUND";
   transactionStatus: string;

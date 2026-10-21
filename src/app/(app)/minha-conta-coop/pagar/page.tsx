@@ -259,6 +259,7 @@ function HbCreditPagarContent() {
         cooperativaId: contaCoopValorSync?.cooperativaId,
         mesReferencia: contaCoopValorSync?.mesReferencia,
         amountReais: debito / 100,
+        parceiroNome: draft.parceiroNome,
         intentId: intent.id,
         nonce: intent.nonce,
         pin: payPin,

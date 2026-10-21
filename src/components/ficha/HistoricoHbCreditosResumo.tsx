@@ -171,8 +171,8 @@ export function HistoricoHbCreditosResumo({
                 key={l.hbTransactionId}
                 className="flex items-center justify-between gap-2 px-2 py-1.5 text-[11px] leading-tight"
               >
-                <span className="min-w-0 truncate text-gray-800" title={l.partnerNome}>
-                  {l.partnerNome}
+                <span className="min-w-0 truncate text-gray-800" title={l.usoLabel ?? l.partnerNome}>
+                  {l.usoLabel ?? l.partnerNome}
                   <span className="text-gray-400 font-normal"> · {formatDataCurta(l.createdAt)}</span>
                   {l.statusResumo !== "CONFIRMED" && (
                     <span className="text-gray-500 font-normal"> · {statusLabel(l.statusResumo)}</span>
@@ -208,7 +208,7 @@ export function HistoricoHbCreditosResumo({
         {lancamentos.map((l) => (
           <li key={l.hbTransactionId} className="rounded-lg border bg-gray-50/80 p-2.5 text-sm space-y-1">
             <div className="flex flex-wrap justify-between gap-2 font-medium text-gray-900">
-              <span>{l.partnerNome}</span>
+              <span>{l.usoLabel ?? l.partnerNome}</span>
               <span className="text-gray-600">{formatDataHora(l.createdAt)}</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-gray-700">

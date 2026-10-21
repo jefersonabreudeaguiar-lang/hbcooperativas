@@ -9,6 +9,7 @@ import { getLimiteCooperadoAlinhadoAEntregas } from "@/lib/supabase/contaCoopSto
 import type { ContaCoopIntent, ContaCoopLimiteCooperado, IntentStatus } from "@/modules/hb-credit/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { verifyFinancialPin } from "@/lib/supabase/contaCoopStorage";
+import { formatHbCreditUsoMotivo, nomeDestinoHbUso } from "@/lib/hb-credit/hbCreditUsoDescricao";
 
 export type CooperadoTransferIntent = {
   id: string;
@@ -198,7 +199,9 @@ export async function createCooperadoTransferIntent(
       cooperative_cnpj: digits,
       receiver_cooperado_id: input.receiverCooperadoId,
       amount_cents: input.amountCents,
-      description: input.descricao?.trim() || null,
+      description:
+        input.descricao?.trim() ||
+        formatHbCreditUsoMotivo({ kind: "transferencia", nome: input.receiverNome }),
       status: "PENDING",
       nonce,
       expires_at: expiresAt,
@@ -378,6 +381,8 @@ export async function authorizeCooperadoTransferPayment(
       disponivelAposCents: number;
       duplicate?: boolean;
       cooperadoTransfer: true;
+      receiverCooperadoId: string;
+      receiverNome: string;
     }
   | { ok: false; error: string; code?: string }
 > {
@@ -423,11 +428,96 @@ export async function authorizeCooperadoTransferPayment(
     return { ok: false, error: result?.error ?? "Transferência recusada." };
   }
 
+  const { data: intentRow } = await supabase
+    .from("hb_credit_cooperado_transfer_intents")
+    .select("receiver_cooperado_id")
+    .eq("id", input.intentId)
+    .maybeSingle();
+  const receiverCooperadoId = intentRow ? String(intentRow.receiver_cooperado_id ?? "") : "";
+  const receiverNome = receiverCooperadoId
+    ? await resolveCooperadoNomeForTransfer(supabase, input.cooperativeCnpj, receiverCooperadoId)
+    : "Cooperado";
+
   return {
     ok: true,
     receiptCode: result.receipt_code ?? receiptCode,
     disponivelAposCents: Number(result.disponivel_apos_centavos ?? 0),
     duplicate: Boolean(result.duplicate),
     cooperadoTransfer: true,
+    receiverCooperadoId,
+    receiverNome,
   };
+}
+
+/** Uso do pagador: crédito passado a outro cooperado — entra na ficha com o nome. */
+export async function listTransferenciasUsoComoDescontosFicha(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoIds: string | string[],
+  startIso: string,
+  endIso: string
+): Promise<
+  Array<{
+    motivo: string;
+    valorReais: number;
+    tipo: "conta_coop";
+    createdAt: string;
+    hbTransactionId: string;
+    receiverNome: string;
+  }>
+> {
+  const digits = normalizeCnpj(cnpj);
+  const ids = [...new Set((Array.isArray(cooperadoIds) ? cooperadoIds : [cooperadoIds]).filter(Boolean))];
+  if (!ids.length) return [];
+
+  const { data: rows, error } = await supabase
+    .from("hb_credit_cooperado_transfer_intents")
+    .select(
+      "id, receiver_cooperado_id, payer_cooperado_id, amount_cents, description, receipt_code, confirmed_at, created_at, status"
+    )
+    .eq("cooperative_cnpj", digits)
+    .eq("status", "CONFIRMED")
+    .in("payer_cooperado_id", ids)
+    .gte("confirmed_at", startIso)
+    .lte("confirmed_at", endIso);
+
+  if (error || !rows?.length) return [];
+
+  const out: Array<{
+    motivo: string;
+    valorReais: number;
+    tipo: "conta_coop";
+    createdAt: string;
+    hbTransactionId: string;
+    receiverNome: string;
+  }> = [];
+
+  const nomeCache = new Map<string, string>();
+  for (const row of rows) {
+    const receiverId = String(row.receiver_cooperado_id ?? "");
+    let receiverNome = nomeDestinoHbUso(row.description ? String(row.description) : "");
+    if (!receiverNome || /^crédito para /i.test(receiverNome)) {
+      receiverNome = receiverNome.replace(/^crédito para /i, "").trim();
+    }
+    if (!receiverNome && receiverId) {
+      if (!nomeCache.has(receiverId)) {
+        nomeCache.set(receiverId, await resolveCooperadoNomeForTransfer(supabase, digits, receiverId));
+      }
+      receiverNome = nomeCache.get(receiverId) ?? "Cooperado";
+    }
+    const receipt = row.receipt_code ? String(row.receipt_code) : null;
+    out.push({
+      motivo: formatHbCreditUsoMotivo({
+        kind: "transferencia",
+        nome: receiverNome || "cooperado",
+        receiptCode: receipt,
+      }),
+      valorReais: Math.round(Number(row.amount_cents) || 0) / 100,
+      tipo: "conta_coop",
+      createdAt: String(row.confirmed_at ?? row.created_at),
+      hbTransactionId: String(row.id),
+      receiverNome: receiverNome || "Cooperado",
+    });
+  }
+  return out.filter((r) => r.valorReais > 0.005);
 }

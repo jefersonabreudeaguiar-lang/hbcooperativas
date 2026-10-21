@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v534
+
+- **HB Créditos:** cada uso na ficha e no Financeiro mostra o nome do mercado, ou «Crédito para» + o nome do cooperado.
+- **Pagar / A receber:** o desconto HB deixa de aparecer só como um total genérico — cada compra ou transferência tem a descrição.
+- **Cooperado:** Início, Entregas e troca de aba iguais ao v533.
+
 ## v533
 
 - **Responsável:** Em aberto (Conferir) e Pagar cooperados mostram o mesmo R$ da ficha ainda sem PIX, com avulso e HB.

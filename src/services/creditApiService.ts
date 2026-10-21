@@ -20,6 +20,7 @@ import {
 import type { AuthoritativeCreditBaseErrorPayload } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import type { HbAuthorizeProjecaoAReceberResult } from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
 import { notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import { formatHbCreditUsoMotivo, nomeDestinoHbUso } from "@/lib/hb-credit/hbCreditUsoDescricao";
 import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { getData } from "@/services/dataStore";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
@@ -383,6 +384,8 @@ export type AuthorizeCreditPaymentResult = {
   projecaoPendente?: boolean;
   projecaoAReceber?: HbAuthorizeProjecaoAReceberResult;
   cooperadoTransfer?: boolean;
+  receiverNome?: string;
+  parceiroNome?: string;
   /** Propagação AppData pós-compra HB — não altera validade da autorização. */
   syncContaCoop?: "ok" | "pending";
   syncContaCoopError?: string;
@@ -409,6 +412,8 @@ export async function authorizeCreditPayment(input: {
   mesReferencia?: string;
   /** Valor debitado do crédito (reais) — grava na ficha na hora. */
   amountReais?: number;
+  /** Nome do mercado ou do cooperado que recebeu o crédito. */
+  parceiroNome?: string;
   intentId: string;
   nonce: string;
   pin: string;
@@ -509,14 +514,6 @@ export async function authorizeCreditPayment(input: {
   let syncContaCoop: AuthorizeCreditPaymentResult["syncContaCoop"];
   let syncContaCoopError: string | undefined;
 
-  if (isCooperadoTransfer) {
-    return {
-      ...data,
-      cooperadoTransfer: true,
-      syncContaCoop: "ok",
-    };
-  }
-
   if (coopId && input.cnpj) {
     syncContaCoop = "pending";
     const canonico = resolverCooperadoIdCanonico(
@@ -541,16 +538,19 @@ export async function authorizeCreditPayment(input: {
         ? Math.round(input.amountReais * 100) / 100
         : 0;
     if (valorDebito > 0.005) {
+      const destino = nomeDestinoHbUso(input.parceiroNome || data.receiverNome || data.parceiroNome);
       aplicarDebitoHbCompraLocal({
         cooperadoId: canonico,
         cooperativaId: coopId,
         cooperadoNome: input.cooperadoNome,
         mesReferencia: mes,
         valorReais: valorDebito,
-        hbTransactionId: data.transacaoId,
-        motivo: data.receiptCode
-          ? `Compra HB Créditos — mercado (${data.receiptCode})`
-          : "Compra HB Créditos — mercado",
+        hbTransactionId: data.transacaoId ?? input.intentId,
+        motivo: formatHbCreditUsoMotivo({
+          kind: isCooperadoTransfer ? "transferencia" : "mercado",
+          nome: destino,
+          receiptCode: data.receiptCode,
+        }),
       });
     }
 

@@ -23,11 +23,15 @@ export function formatLedgerEntryLabel(
   entry: Pick<ContaCoopLedgerEntry, "tipo" | "parceiroNome">
 ): string {
   const tipo = String(entry.tipo);
-  const mercado = entry.parceiroNome?.trim();
-  if (mercado) {
-    if (tipo === "PAYMENT") return `Pagamento — ${mercado}`;
-    if (tipo === "REFUND") return `Estorno — ${mercado}`;
-    if (tipo === "CASHBACK_EARN") return `Cashback — ${mercado}`;
+  const destino = entry.parceiroNome?.trim();
+  if (destino) {
+    const ehCooperado = /^cooperado\s*[·\-–:]/i.test(destino) || tipo === "TRANSFER_OUT";
+    if (tipo === "PAYMENT" && ehCooperado) {
+      return `Crédito para ${destino.replace(/^cooperado\s*[·\-–:]\s*/i, "").trim()}`;
+    }
+    if (tipo === "PAYMENT") return `Pagamento — ${destino}`;
+    if (tipo === "REFUND") return `Estorno — ${destino}`;
+    if (tipo === "CASHBACK_EARN") return `Cashback — ${destino}`;
   }
   return labelLedgerTipo(tipo);
 }

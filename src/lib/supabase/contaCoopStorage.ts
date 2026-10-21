@@ -36,6 +36,7 @@ import {
 import { validateHbFinancialLimitRow } from "@/modules/hb-credit/engine/hbCreditFinancialLimitInvariants";
 import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { signedLedgerAmountCentsForExtrato } from "@/lib/hb-credit/ledgerLabels";
+import { formatHbCreditUsoMotivo } from "@/lib/hb-credit/hbCreditUsoDescricao";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import { hbCreditCreditoBaseReais } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
 import { isHbCreditMercadoNfDispensada } from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
@@ -5074,15 +5075,27 @@ type HbTxFichaRow = {
 };
 
 function mapHbTxToDescontoRow(t: HbTxFichaRow, partnerNames: Record<string, string>): CooperadoContaCoopDescontoRow {
-  const partnerNome = partnerNames[String(t.partner_id)] ?? "Mercado parceiro";
+  const intentId = t.payment_intent_id ? String(t.payment_intent_id) : "";
+  const transfer =
+    intentId.startsWith("ctrf_") || String(t.partner_id) === "cooperado_transfer";
+  const partnerNome =
+    partnerNames[String(t.partner_id)] ?? partnerNames[intentId] ?? (transfer ? "" : "Mercado parceiro");
   const isRefund = String(t.event_type) === "REFUND";
   const isReversedPayment = String(t.event_type) === "PAYMENT" && String(t.status) === "reversed";
-  const receipt = t.receipt_code ? ` (${String(t.receipt_code)})` : "";
   const valorReais = valorReaisLinhaResumoCooperado(t);
   return {
-    motivo: isRefund
-      ? `Estorno HB Créditos — ${partnerNome}${receipt}`
-      : `Compra HB Créditos — ${partnerNome}${receipt}${isReversedPayment ? " (estornada)" : ""}`,
+    motivo: formatHbCreditUsoMotivo({
+      kind: isRefund
+        ? transfer
+          ? "estorno_transferencia"
+          : "estorno_mercado"
+        : transfer
+          ? "transferencia"
+          : "mercado",
+      nome: partnerNome,
+      receiptCode: t.receipt_code ? String(t.receipt_code) : null,
+      reversed: isReversedPayment,
+    }),
     valorReais,
     tipo: "conta_coop" as const,
     createdAt: String(t.created_at),
@@ -5098,7 +5111,11 @@ function mapHbTxToUtilizacaoLancamento(
   const discountCents = Number(t.discount_cents ?? 0);
   const netCents = Number(t.net_receivable_cents ?? t.amount_cents);
   const debitedCents = Number(t.credit_debited_cents ?? t.amount_cents);
-  const partnerNome = partnerNames[String(t.partner_id)] ?? "Mercado parceiro";
+  const intentId = t.payment_intent_id ? String(t.payment_intent_id) : "";
+  const transfer =
+    intentId.startsWith("ctrf_") || String(t.partner_id) === "cooperado_transfer";
+  const partnerNome =
+    partnerNames[String(t.partner_id)] ?? partnerNames[intentId] ?? (transfer ? "Cooperado" : "Mercado parceiro");
   const pct =
     t.partner_discount_percent != null
       ? Number(t.partner_discount_percent)
@@ -5112,6 +5129,18 @@ function mapHbTxToUtilizacaoLancamento(
     cooperadoId: String(t.cooperado_id),
     partnerId: String(t.partner_id),
     partnerNome,
+    usoLabel: formatHbCreditUsoMotivo({
+      kind: String(t.event_type) === "REFUND"
+        ? transfer
+          ? "estorno_transferencia"
+          : "estorno_mercado"
+        : transfer
+          ? "transferencia"
+          : "mercado",
+      nome: partnerNome,
+      receiptCode: t.receipt_code ? String(t.receipt_code) : null,
+      reversed: String(t.event_type) === "PAYMENT" && String(t.status) === "reversed",
+    }),
     receiptCode: t.receipt_code ? String(t.receipt_code) : undefined,
     eventType: String(t.event_type) === "REFUND" ? "REFUND" : "PAYMENT",
     transactionStatus: String(t.status),
@@ -5127,6 +5156,31 @@ function mapHbTxToUtilizacaoLancamento(
       String(t.event_type) === "PAYMENT" && String(t.status) === "reversed"
         ? "Compra estornada — par com crédito de estorno no resumo."
         : undefined,
+  };
+}
+
+function utilizacaoFromTransferencia(r: {
+  motivo: string;
+  valorReais: number;
+  createdAt: string;
+  hbTransactionId: string;
+  receiverNome: string;
+}): HbUtilizacaoResumoLancamento {
+  return {
+    hbTransactionId: r.hbTransactionId,
+    cooperadoId: "",
+    partnerId: "cooperado_transfer",
+    partnerNome: r.receiverNome,
+    usoLabel: r.motivo,
+    eventType: "PAYMENT",
+    transactionStatus: "posted",
+    statusResumo: "CONFIRMED",
+    createdAt: r.createdAt,
+    valorCompraReais: r.valorReais,
+    valorDescontoReais: 0,
+    valorFinalCompraReais: r.valorReais,
+    valorHbUtilizadoReais: r.valorReais,
+    valorImpactoAReceberReais: -r.valorReais,
   };
 }
 
@@ -5187,14 +5241,34 @@ async function listCooperadoContaCoopDescontosIntervalo(
   if (!txs.length) return [];
 
   const partnerNames = await partnerNamesById(supabase, txs);
-
-  return txs
+  const fromTx = txs
     .filter((t) => {
       if (opts?.incluirPagamentosEstornados) return true;
       if (String(t.event_type) === "PAYMENT" && String(t.status) === "reversed") return false;
       return true;
     })
     .map((t) => mapHbTxToDescontoRow(t, partnerNames));
+
+  const { listTransferenciasUsoComoDescontosFicha } = await import(
+    "@/lib/supabase/cooperadoTransferenciaCreditoStorage"
+  );
+  const fromTransfer = await listTransferenciasUsoComoDescontosFicha(
+    supabase,
+    cnpj,
+    cooperadoIds,
+    startIso,
+    endIso
+  );
+  return [
+    ...fromTx,
+    ...fromTransfer.map((r) => ({
+      motivo: r.motivo,
+      valorReais: r.valorReais,
+      tipo: "conta_coop" as const,
+      createdAt: r.createdAt,
+      hbTransactionId: r.hbTransactionId,
+    })),
+  ];
 }
 
 /** Histórico auditável HB → resumo cooperado (fonte: hb_credit_transactions). */
@@ -5213,9 +5287,36 @@ export async function listCooperadoHbUtilizacaoResumoAbateValorReceber(
     new Date().toISOString(),
     { incluirPagamentosEstornados: true }
   );
-  if (!txs.length) return [];
+  if (!txs.length) {
+    const { listTransferenciasUsoComoDescontosFicha } = await import(
+      "@/lib/supabase/cooperadoTransferenciaCreditoStorage"
+    );
+    const fromTransfer = await listTransferenciasUsoComoDescontosFicha(
+      supabase,
+      cnpj,
+      cooperadoIds,
+      start,
+      new Date().toISOString()
+    );
+    return fromTransfer.map((r) => utilizacaoFromTransferencia(r));
+  }
   const partnerNames = await partnerNamesById(supabase, txs);
-  return txs.map((t) => mapHbTxToUtilizacaoLancamento(t, partnerNames));
+  const fromTx = txs.map((t) => mapHbTxToUtilizacaoLancamento(t, partnerNames));
+  const { listTransferenciasUsoComoDescontosFicha } = await import(
+    "@/lib/supabase/cooperadoTransferenciaCreditoStorage"
+  );
+  const fromTransfer = await listTransferenciasUsoComoDescontosFicha(
+    supabase,
+    cnpj,
+    cooperadoIds,
+    start,
+    new Date().toISOString()
+  );
+  const seen = new Set(fromTx.map((t) => t.hbTransactionId));
+  return [
+    ...fromTx,
+    ...fromTransfer.filter((r) => !seen.has(r.hbTransactionId)).map((r) => utilizacaoFromTransferencia(r)),
+  ];
 }
 
 /** Compras/estornos confirmados no mês calendário (liquidação mercado, relatórios). */

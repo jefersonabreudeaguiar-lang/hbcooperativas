@@ -90,6 +90,9 @@ export async function POST(request: Request) {
       ok: true,
       financeiroConfirmado: true,
       cooperadoTransfer: true,
+      receiverNome: result.receiverNome,
+      parceiroNome: result.receiverNome,
+      transacaoId: intentId,
     });
   }
 

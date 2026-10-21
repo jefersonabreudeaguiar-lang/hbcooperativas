@@ -1,3 +1,5 @@
+import { preferMotivoHbUsoEspecifico } from "@/lib/hb-credit/hbCreditUsoDescricao";
+
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
@@ -44,11 +46,15 @@ export function chaveIncidenciaHbDescontoContaCoop(d: DescontoContaCoopRemoto): 
   return `legacy:line|${d.createdAt}|${round2(d.valorReais)}|${d.motivo}`;
 }
 
-function preferDescontoCanonico(
+export function preferDescontoCanonico(
   prev: DescontoContaCoopRemoto,
   next: DescontoContaCoopRemoto
 ): DescontoContaCoopRemoto {
-  if (!prev.hbTransactionId?.trim() && next.hbTransactionId?.trim()) return next;
+  if (!prev.hbTransactionId?.trim() && next.hbTransactionId?.trim()) {
+    return { ...next, motivo: preferMotivoHbUsoEspecifico(next.motivo, prev.motivo) };
+  }
+  const motivo = preferMotivoHbUsoEspecifico(prev.motivo, next.motivo);
+  if (motivo !== prev.motivo) return { ...prev, motivo };
   return prev;
 }
 

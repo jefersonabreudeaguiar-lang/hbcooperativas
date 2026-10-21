@@ -1,5 +1,6 @@
 import type { AppData } from "@/types";
 import type { DescontoContaCoopRemoto } from "@/lib/hb-credit/mergeFichaDescontos";
+import { formatHbCreditUsoMotivo } from "@/lib/hb-credit/hbCreditUsoDescricao";
 import {
   dedupeDescontosContaCoopRemotos,
   filtrarDescontosContaCoopParaMesReferencia,
@@ -111,7 +112,7 @@ export function aplicarDebitoHbCompraLocal(opts: {
   const mes = mesAbertoParaDebitoHb(data, canonico, opts.cooperativaId, opts.mesReferencia);
   if (!mes) return false;
   const linha: DescontoContaCoopRemoto = {
-    motivo: (opts.motivo ?? "Compra HB Créditos — mercado").trim(),
+    motivo: (opts.motivo ?? formatHbCreditUsoMotivo({ kind: "mercado" })).trim(),
     valorReais: valor,
     tipo: "conta_coop",
     createdAt: opts.createdAt ?? new Date().toISOString(),

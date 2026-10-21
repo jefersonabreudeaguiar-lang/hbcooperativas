@@ -9,6 +9,7 @@ import { dedupeDescontosContaCoopRemotos } from "@/lib/hb-credit/mergeFichaDesco
 import type { LeituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import { valorLiquidoFromResumoPartes } from "@/services/notaPedidoService";
 import { bumpContaCoopDescontosRevision } from "@/lib/hb-credit/contaCoopDescontosNotify";
+import { formatHbCreditUsoMotivo } from "@/lib/hb-credit/hbCreditUsoDescricao";
 
 export const HB_A_RECEBER_HIBRIDO_EVENT = "hb-a-receber-hibrido-refresh";
 
@@ -62,7 +63,7 @@ export function escolherDebitoHbHibrido(opts: {
   const fichaRemotas = opts.linhasFicha
     .filter((d) => !d.tipo || d.tipo === "conta_coop")
     .map((d) => ({
-      motivo: ("motivo" in d && d.motivo ? String(d.motivo) : "Compra HB Créditos") as string,
+      motivo: ("motivo" in d && d.motivo ? String(d.motivo) : formatHbCreditUsoMotivo({ kind: "mercado" })) as string,
       valorReais: Number("valorReais" in d ? d.valorReais : d.valor) || 0,
       tipo: "conta_coop" as const,
       createdAt: "createdAt" in d && typeof d.createdAt === "string" ? d.createdAt : "",
