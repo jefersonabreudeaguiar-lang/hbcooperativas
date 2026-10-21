@@ -12,8 +12,10 @@ import {
 import {
   getData,
   getSession,
+  hydrateStaffGestaoFirstPaintFromLastro,
   isAppDataWarm,
   preloadAppData,
+  scheduleStaffGestaoPersistReloadAfterPaint,
 } from "@/services/dataStore";
 import {
   inicioCardCacheProntoParaAbertura,
@@ -111,7 +113,7 @@ export function shouldSkipCooperadoSecondaryMountSync(): boolean {
 function shouldDeferAppDataEagerWarmForSession(session: ReturnType<typeof getSession>): boolean {
   if (!session) return false;
   if (isStaffGestaoRole(session.role)) {
-    // F5 do responsável: sempre hidrata na hora — o painel não pode nascer vazio.
+    // F5 do responsável: lastro no 1º quadro; persist no quadro seguinte.
     return false;
   }
   if (
@@ -137,7 +139,8 @@ function scheduleDeferredAppDataEagerWarm(): void {
 export function ensureCooperadoAppDataEagerWarm(): void {
   const session = getSession();
   if (isStaffGestaoRole(session?.role)) {
-    preloadAppData({ eager: true });
+    hydrateStaffGestaoFirstPaintFromLastro();
+    scheduleStaffGestaoPersistReloadAfterPaint();
     return;
   }
   if (!isCooperadoInstantResumeEnabled()) return;

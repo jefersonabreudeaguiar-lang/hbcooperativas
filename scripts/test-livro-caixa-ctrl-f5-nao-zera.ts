@@ -40,10 +40,23 @@ assert.ok(!caixa.includes("requestAppSyncLight"), "Livro Caixa não dispara sync
 assert.ok(caixa.includes("useReconciliarLivroCaixaGestao"), "só reconcilia caixa com guarda");
 assert.match(caixa, /resolveGestaoCooperativaId/, "Livro caixa acha a cooperativa pelo CNPJ da sessão");
 assert.match(caixa, /Abrindo o livro da cooperativa/, "não some a tela enquanto o lastro chega");
+assert.ok(caixa.includes("flushStaffGestaoLastGoodNow"), "salvar grava lastro na hora");
+assert.ok(caixa.includes("getDataOperationalTruth"), "publicar manda o livro da memória, não a view");
 assert.ok(
   !/useEffect\(\(\) => \{\s*if \(!data \|\| !coopId\) return;\s*const aligned = posProcessar/.test(caixa),
   "não grava posProcessar sem guarda no F5"
 );
+
+const cold = readFileSync(join(ROOT, "src/lib/performance/cooperadoColdStart.ts"), "utf8");
+assert.ok(cold.includes("hydrateStaffGestaoFirstPaintFromLastro"), "F5 do responsável pinta lastro primeiro");
+assert.ok(
+  !/isStaffGestaoRole\(session\?\.role\) \{\s*preloadAppData\(\{ eager: true \}\)/.test(cold),
+  "F5 do responsável não parseia o persist no primeiro quadro"
+);
+
+const syncCloud = readFileSync(join(ROOT, "src/services/cooperativaSyncCloudService.ts"), "utf8");
+assert.ok(syncCloud.includes("peekStaffGestaoLastGood"), "Atualizar une lastro no livro da nuvem");
+assert.ok(syncCloud.includes("preservarStaffGestaoContraWipe(data"), "finalize do pull não apaga manual");
 
 const light = readFileSync(join(ROOT, "src/services/syncRequest.ts"), "utf8");
 assert.ok(!light.includes("financeiro_delta"), "sync leve nunca vira financeiro_delta");

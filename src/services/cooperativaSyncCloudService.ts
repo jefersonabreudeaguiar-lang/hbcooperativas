@@ -5,6 +5,7 @@ import {
   markStaffOperacionalPullAplicado,
   staffLocalOperacionalVazio,
 } from "@/lib/staff/staffOperacionalColdHydrate";
+import { peekStaffGestaoLastGood, preservarStaffGestaoContraWipe } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
 import { getData, getDataOperationalTruth, saveDataSafe, runWithBatchedSaveAsync } from "@/services/dataStore";
@@ -127,9 +128,11 @@ function finalizeOperacionalPullLocalState(
   cnpj?: string
 ): AppData {
   const base = posProcessarFinanceiroLocal(data, cnpj);
-  if (!temPagamentoCooperadoParaLivroCaixa(base)) return base;
+  if (!temPagamentoCooperadoParaLivroCaixa(base)) {
+    return preservarStaffGestaoContraWipe(data, base);
+  }
   // PIX/pagamento: ficha paga, sai de Em aberto e entra no Livro Caixa (mesmo motor do v465).
-  return posProcessarIntegridadePagamentosCooperativa(base);
+  return preservarStaffGestaoContraWipe(data, posProcessarIntegridadePagamentosCooperativa(base));
 }
 
 export type ConfirmarPagamentoCooperadoNaNuvemResult = {
@@ -446,9 +449,19 @@ function mergeLivroCaixaFromCloud(
 ): LivroCaixaLancamento[] {
   const cloudFiltered = cloudItems.filter((l) => !excluidosIds.has(l.id));
   const localFiltered = localCoop.filter((l) => !excluidosIds.has(l.id));
-  const merged = mergeOperacionalArrayFromCloud(localFiltered, cloudFiltered, cloudSyncTime);
+  const coopId = localFiltered[0]?.cooperativaId ?? cloudFiltered[0]?.cooperativaId;
+  const lastroCoop = (peekStaffGestaoLastGood()?.livroCaixa ?? []).filter(
+    (l) => (!coopId || l.cooperativaId === coopId) && !excluidosIds.has(l.id)
+  );
+  const localComLastro = (() => {
+    const map = new Map<string, LivroCaixaLancamento>();
+    for (const item of lastroCoop) map.set(item.id, item);
+    for (const item of localFiltered) map.set(item.id, item);
+    return [...map.values()];
+  })();
+  const merged = mergeOperacionalArrayFromCloud(localComLastro, cloudFiltered, cloudSyncTime);
   return preservarLivroCaixaDePagamentosConfirmados(
-    { livroCaixa: localFiltered, pagamentosCooperado },
+    { livroCaixa: localComLastro, pagamentosCooperado },
     { livroCaixa: merged, pagamentosCooperado }
   ).payload.livroCaixa ?? merged;
 }

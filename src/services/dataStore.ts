@@ -141,6 +141,68 @@ function sessionRoleLooksStaffGestao(): boolean {
   }
 }
 
+let staffPersistReloadScheduled = false;
+
+/**
+ * F5 do responsável: pinta o lastro no primeiro quadro, sem parsear o blob do persist.
+ * O persist entra no quadro seguinte e só acrescenta — não apaga o que já estava na tela.
+ */
+export function hydrateStaffGestaoFirstPaintFromLastro(): boolean {
+  if (typeof window === "undefined") return false;
+  if (memoryCache) return true;
+  if (!sessionRoleLooksStaffGestao()) return false;
+  const lkg = peekStaffGestaoLastGood();
+  if (!lkg || staffGestaoRiquezaTotal(medirRiquezaStaffGestao(lkg)) <= 0) return false;
+  memoryCache = lkg;
+  noteStaffGestaoLastGood(lkg);
+  notifyImmediate();
+  return true;
+}
+
+/** Depois do primeiro paint: lê o persist e une com o lastro. Não bloqueia a tela. */
+export function reloadStaffGestaoPersistAfterFirstPaint(): void {
+  if (typeof window === "undefined") return;
+  if (!sessionRoleLooksStaffGestao()) return;
+  const stored = readAppDataPersistRaw();
+  if (!stored) return;
+  try {
+    let data = migrateData(JSON.parse(stored) as AppData);
+    const ensured = ensureCreatorAdminAccount(data);
+    data = ensured.data;
+    const reset = applyOperationalResetIfNeeded(data);
+    data = reset.data;
+    data = restoreStaffGestaoFromLastGoodIfNeeded(data);
+    if (memoryCache) {
+      data = preservarStaffGestaoContraWipe(memoryCache, data);
+    }
+    memoryCache = data;
+    noteStaffGestaoLastGood(data);
+    notifyImmediate();
+  } catch {
+    /* persist ilegível — lastro já está na tela */
+  }
+}
+
+export function scheduleStaffGestaoPersistReloadAfterPaint(): void {
+  if (typeof window === "undefined" || staffPersistReloadScheduled) return;
+  if (!sessionRoleLooksStaffGestao()) return;
+  staffPersistReloadScheduled = true;
+  const run = () => {
+    try {
+      reloadStaffGestaoPersistAfterFirstPaint();
+    } finally {
+      staffPersistReloadScheduled = false;
+    }
+  };
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(run);
+    });
+    return;
+  }
+  queueMicrotask(run);
+}
+
 function restoreStaffGestaoFromLastGoodIfNeeded(data: AppData): AppData {
   if (!sessionRoleLooksStaffGestao()) return data;
   const hint =

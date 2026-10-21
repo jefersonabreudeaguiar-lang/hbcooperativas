@@ -249,7 +249,11 @@ function coopIdForCnpj(data: AppData | null | undefined, cnpj: string): string |
   return data.cooperativas.find((c) => normalizeCnpj(String(c.cnpj ?? "")) === cnpj)?.id;
 }
 
-export function noteStaffGestaoLastGood(data: AppData | null | undefined, cnpjHint?: string): void {
+export function noteStaffGestaoLastGood(
+  data: AppData | null | undefined,
+  cnpjHint?: string,
+  opts?: { immediate?: boolean }
+): void {
   if (!data) return;
   const session = readStaffSessionHint();
   if (session.role && !sessionLooksStaffGestao(session.role)) return;
@@ -264,7 +268,23 @@ export function noteStaffGestaoLastGood(data: AppData | null | undefined, cnpjHi
   const prev = lastGoodByCnpj.get(cnpj);
   if (prev && staffGestaoSnapshotPoorer(next, medirRiquezaStaffGestao(prev, coopId))) return;
   lastGoodByCnpj.set(cnpj, data);
-  persistLastGoodToSession(cnpj, data);
+  if (opts?.immediate) persistLastGoodToSessionNow(cnpj, data);
+  else persistLastGoodToSession(cnpj, data);
+}
+
+/** Grava o lastro agora — lançamento do Livro caixa não espera os 80ms. */
+export function flushStaffGestaoLastGoodNow(data?: AppData | null, cnpjHint?: string): void {
+  if (data) {
+    noteStaffGestaoLastGood(data, cnpjHint, { immediate: true });
+    return;
+  }
+  if (persistLkgTimer) {
+    clearTimeout(persistLkgTimer);
+    persistLkgTimer = null;
+  }
+  for (const [cnpj, stored] of lastGoodByCnpj) {
+    persistLastGoodToSessionNow(cnpj, stored);
+  }
 }
 
 export function peekStaffGestaoLastGood(cnpjHint?: string): AppData | null {
@@ -357,11 +377,11 @@ export function preservarStaffGestaoContraWipe(
     (incomingCnpj.length !== 14 || lastroMesmoTenant(baseline, incomingCnpj));
   const lastro = baselineOk ? baseline : scopedPeek;
   if (!lastro) {
-    noteStaffGestaoLastGood(incoming, incomingCnpj);
+    noteStaffGestaoLastGood(incoming, incomingCnpj, { immediate: true });
     return incoming;
   }
   if (incomingCnpj.length === 14 && !lastroMesmoTenant(lastro, incomingCnpj)) {
-    noteStaffGestaoLastGood(incoming, incomingCnpj);
+    noteStaffGestaoLastGood(incoming, incomingCnpj, { immediate: true });
     return incoming;
   }
 
@@ -382,8 +402,12 @@ export function preservarStaffGestaoContraWipe(
     livroCaixaOrigensCadastro: origensUnidas,
   };
 
+  const livroOuOrigemCresceu =
+    (comLivroLastro.livroCaixa?.length ?? 0) > (lastro.livroCaixa?.length ?? 0) ||
+    (comLivroLastro.livroCaixaOrigensCadastro?.length ?? 0) >
+      (lastro.livroCaixaOrigensCadastro?.length ?? 0);
   if (!staffGestaoSnapshotPoorer(medirRiquezaStaffGestao(incoming, coopId), medirRiquezaStaffGestao(lastro, coopId))) {
-    noteStaffGestaoLastGood(comLivroLastro, incomingCnpj);
+    noteStaffGestaoLastGood(comLivroLastro, incomingCnpj, { immediate: livroOuOrigemCresceu });
     return comLivroLastro;
   }
 
@@ -397,6 +421,6 @@ export function preservarStaffGestaoContraWipe(
       incoming.pagamentosCooperado ?? []
     ),
   };
-  noteStaffGestaoLastGood(kept, incomingCnpj);
+  noteStaffGestaoLastGood(kept, incomingCnpj, { immediate: livroOuOrigemCresceu });
   return kept;
 }

@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v531
+
+- **Responsável:** depois do F5 o painel aparece na hora com o lastro do aparelho — não espera o arquivo grande da cooperativa.
+- **Livro caixa:** valor lançado fica gravado na hora; Atualizar/F5 não apaga o que já entrou no livro.
+- **Cooperado:** Início, Entregas, Ficha, Financeiro e A receber iguais ao v530.
+
 ## v530
 
 - **Responsável:** o Livro caixa abre de novo após o F5 — acha a cooperativa pelo CNPJ da sessão, como o Conferir.

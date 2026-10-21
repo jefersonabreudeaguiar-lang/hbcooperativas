@@ -24,6 +24,7 @@ import { setCooperadoOptimisticTab } from "@/lib/performance/cooperadoOptimistic
 import { cooperadoTabWarmOnPointerDown } from "@/lib/performance/cooperadoTabPointerWarmup";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { getData, getDataRevision, isAppDataWarm } from "@/services/dataStore";
+import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { evaluateResponsavelPainelAbertura } from "@/lib/responsavel/responsavelPainelContrato";
 import { cooperadoSessaoNuncaPainelGestaoMobile } from "@/lib/responsavel/responsavelIdentidade";
@@ -618,7 +619,7 @@ function AdminDashboard() {
     if (!navUser) return null;
     const mes = getCurrentMesReferencia();
     try {
-      const data = isAppDataWarm() ? getData() : null;
+      const data = isAppDataWarm() ? getData() : peekStaffGestaoLastGood();
       if (!data) {
         const coopId = navUser.cooperativaId ?? "";
         const cnpj = navUser.cooperativaCnpj ? normalizeCnpj(navUser.cooperativaCnpj) : "";
@@ -950,7 +951,7 @@ export default function DashboardPage() {
   const mobile = isMobileCooperativaApp();
   const preferPainel = usePainelResponsavelMobilePref();
   const painelAbertura = useMemo(() => {
-    const data = isAppDataWarm() ? getData() : null;
+    const data = isAppDataWarm() ? getData() : peekStaffGestaoLastGood();
     const warmReady = Boolean(dataReady && data);
     return evaluateResponsavelPainelAbertura({
       accountUser,

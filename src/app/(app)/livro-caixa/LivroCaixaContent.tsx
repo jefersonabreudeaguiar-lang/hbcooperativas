@@ -12,7 +12,8 @@ import { PageHeader, Modal } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea, FormField } from "@/components/ui/Form";
 import { Card } from "@/components/ui/Card";
-import { updateData, addAuditEntry, getData, generateId } from "@/services/dataStore";
+import { updateData, addAuditEntry, getData, getDataOperationalTruth, generateId } from "@/services/dataStore";
+import { flushStaffGestaoLastGoodNow } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { posProcessarIntegridadePagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
@@ -328,6 +329,7 @@ export default function LivroCaixaPage() {
     setAbaLivro(pastaDoFormulario());
     setModalOpen(false);
     resetForm();
+    flushStaffGestaoLastGoodNow(getDataOperationalTruth());
     void publicar({ force: true });
   };
 
@@ -359,6 +361,7 @@ export default function LivroCaixaPage() {
     setAbaLivro(`cad:${id}`);
     setNovaOrigemNome("");
     setCadastroOrigemOpen(false);
+    flushStaffGestaoLastGoodNow(getDataOperationalTruth());
     void publicar({ force: true });
   };
 
@@ -383,6 +386,7 @@ export default function LivroCaixaPage() {
         changes: `Livro caixa removido · ${l.historico.slice(0, 80)}`,
       });
     });
+    flushStaffGestaoLastGoodNow(getDataOperationalTruth());
     void publicar({ force: true });
   };
 
@@ -544,12 +548,12 @@ export default function LivroCaixaPage() {
   const publicar = async (opts?: { force?: boolean }) => {
     setPublicando(true);
     try {
-      const d = getData();
+      const d = getDataOperationalTruth();
       const cnpj = await resolveCooperativaCnpj(d, coopId, permUser);
       if (cnpj) {
         await pushOperacionalToCloud(cnpj, d, coopId, {
           authoritative: true,
-          forceOperacionalPush: opts?.force,
+          forceOperacionalPush: opts?.force === true,
         });
       }
     } finally {
@@ -569,7 +573,7 @@ export default function LivroCaixaPage() {
         action={
           canEdit && (
             <div className="flex gap-2">
-              <Button variant="secondary" onClick={() => void publicar()} disabled={publicando}>
+              <Button variant="secondary" onClick={() => void publicar({ force: true })} disabled={publicando}>
                 <Send size={16} /> {publicando ? "Enviando…" : "Sincronizar"}
               </Button>
               <Button onClick={openNovo}>

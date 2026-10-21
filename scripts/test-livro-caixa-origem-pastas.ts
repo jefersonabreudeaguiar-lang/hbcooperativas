@@ -76,8 +76,8 @@ assert.match(ui, /pastasOrigem\.map/);
 assert.match(ui, /pastaOrigem: pastaAtiva/);
 assert.match(
   ui,
-  /resetForm\(\);\s*void publicar\(\{ force: true \}\);/,
-  "salvar lançamento publica na nuvem — F5 não depende só do aparelho"
+  /resetForm\(\);\s*flushStaffGestaoLastGoodNow\(getDataOperationalTruth\(\)\);\s*void publicar\(\{ force: true \}\);/,
+  "salvar lançamento grava lastro e publica na nuvem — F5 não depende só do aparelho"
 );
 
 const rel = readFileSync(join(root, "src/utils/livroCaixaRelatorioHtml.ts"), "utf8");

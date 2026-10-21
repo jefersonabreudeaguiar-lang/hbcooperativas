@@ -88,6 +88,22 @@ assert.ok(
   aposF5.livroCaixa.some((l) => l.id === "man1"),
   "F5/pull não apaga lançamento manual que já estava no aparelho"
 );
+const lastroAntigo = {
+  ...lastroComManual,
+  livroCaixa: [{ id: "pix1", cooperativaId: "coop1", origem: "pagamento_cooperado" } as never],
+};
+const incomingComNovoManual = {
+  ...lastroComManual,
+  livroCaixa: [
+    { id: "pix1", cooperativaId: "coop1", origem: "pagamento_cooperado" } as never,
+    { id: "man2", cooperativaId: "coop1", origem: "credito_avulso" } as never,
+  ],
+};
+const aposSalvar = preservarStaffGestaoContraWipe(lastroAntigo, incomingComNovoManual);
+assert.ok(
+  aposSalvar.livroCaixa.some((l) => l.id === "man2"),
+  "lançamento novo entra no lastro e não some no Atualizar"
+);
 assert.ok(
   (aposF5.livroCaixaOrigensCadastro ?? []).some((o) => o.id === "cad1"),
   "F5/pull não apaga origem cadastrada"
@@ -129,9 +145,13 @@ const store = readFileSync(join(ROOT, "src/services/dataStore.ts"), "utf8");
 assert.ok(store.includes("applyStaffGestaoWipeGuard"), "saveDataSafe recusa wipe");
 assert.ok(store.includes("restoreStaffGestaoFromLastGoodIfNeeded"), "F5 reaplica lastro se o blob veio pobre");
 assert.ok(store.includes("persistedAppDataBlobLooksHydrated"), "F5 detecta blob local rico");
+assert.ok(store.includes("hydrateStaffGestaoFirstPaintFromLastro"), "F5 pinta lastro sem parsear o persist");
+assert.ok(store.includes("reloadStaffGestaoPersistAfterFirstPaint"), "persist entra depois do primeiro quadro");
 
 const guard = readFileSync(join(ROOT, "src/lib/staff/staffGestaoSnapshotGuard.ts"), "utf8");
 assert.ok(guard.includes("hb-staff-gestao-lkg-v1"), "lastro sobrevive F5 no sessionStorage");
+assert.ok(guard.includes("flushStaffGestaoLastGoodNow"), "lançamento grava lastro na hora");
+assert.ok(guard.includes("immediate: livroOuOrigemCresceu"), "livro novo não espera debounce de 80ms");
 
 const provider = readFileSync(join(ROOT, "src/components/sync/CooperativaSyncProvider.tsx"), "utf8");
 assert.ok(provider.includes("refreshData()"), "sync staff relê localStorage se a memória veio vazia");
