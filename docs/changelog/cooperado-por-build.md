@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v530
+
+- **Responsável:** o Livro caixa abre de novo após o F5 — acha a cooperativa pelo CNPJ da sessão, como o Conferir.
+- **Livro caixa:** a tela não fica em branco enquanto o lastro chega.
+- **Cooperado:** Início, Entregas, Ficha, Financeiro e A receber iguais ao v529.
+
 ## v529
 
 - **Responsável:** valor já lançado na ficha some do Conferir — o lastro não reabre o card com o R$ antigo.

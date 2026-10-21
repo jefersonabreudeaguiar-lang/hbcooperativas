@@ -38,6 +38,8 @@ assert.equal(fin.bidirectionalFull, false);
 const caixa = readFileSync(join(ROOT, "src/app/(app)/livro-caixa/LivroCaixaContent.tsx"), "utf8");
 assert.ok(!caixa.includes("requestAppSyncLight"), "Livro Caixa não dispara sync leve no mount");
 assert.ok(caixa.includes("useReconciliarLivroCaixaGestao"), "só reconcilia caixa com guarda");
+assert.match(caixa, /resolveGestaoCooperativaId/, "Livro caixa acha a cooperativa pelo CNPJ da sessão");
+assert.match(caixa, /Abrindo o livro da cooperativa/, "não some a tela enquanto o lastro chega");
 assert.ok(
   !/useEffect\(\(\) => \{\s*if \(!data \|\| !coopId\) return;\s*const aligned = posProcessar/.test(caixa),
   "não grava posProcessar sem guarda no F5"

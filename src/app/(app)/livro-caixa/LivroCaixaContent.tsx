@@ -7,7 +7,7 @@ import { useAppDataSnapshotForDomains } from "@/hooks/useAppData";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { canUser } from "@/permissions";
-import { getUserCooperativaId } from "@/utils/cooperativa";
+import { resolveGestaoCooperativaId } from "@/utils/cooperativa";
 import { PageHeader, Modal } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea, FormField } from "@/components/ui/Form";
@@ -83,8 +83,7 @@ export default function LivroCaixaPage() {
   const { user, accountUser } = useAuth();
   const permUser = accountUser ?? user;
   const router = useRouter();
-  const coopId =
-    (accountUser ?? user) && data ? getUserCooperativaId(accountUser ?? user!, data) : undefined;
+  const coopId = resolveGestaoCooperativaId(accountUser ?? user, data);
 
   const check = (resource: Resource, action: Action) => {
     if (!permUser) return false;
@@ -263,7 +262,14 @@ export default function LivroCaixaPage() {
     if (preferido !== mes) setMes(preferido);
   }, [dataCaixa, coopId, mes, resumoMes.lancamentos.length]);
 
-  if (!data || !permUser || !coopId) return null;
+  if (!permUser) return null;
+  if (!data || !coopId) {
+    return (
+      <div className="max-w-6xl space-y-6">
+        <PageHeader title="Livro caixa" subtitle="Abrindo o livro da cooperativa…" />
+      </div>
+    );
+  }
 
   const coopNome = data.cooperativas.find((c) => c.id === coopId)?.nome ?? "Cooperativa";
   const isContador = permUser.role === "contador";
