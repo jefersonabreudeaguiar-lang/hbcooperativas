@@ -21,6 +21,7 @@ import {
 import { descontosDoCooperadoNoMes, descontoManualDuplicaContaCoop } from "@/services/descontosService";
 import {
   valoresAvulsosPendentesMes,
+  valoresAvulsosPendentesParaMesPagamento,
   marcarValoresAvulsosPagosMes,
   mesesComValoresAvulsos,
 } from "@/services/valoresAvulsosReceberService";
@@ -2445,7 +2446,24 @@ export function getResumoPagamentoCooperado(
       valor: d.valorDescontado,
     });
   }
-  for (const avulso of valoresAvulsosPendentesMes(data, cooperadoCanonico, mesReferencia, coopIdResolved)) {
+  const mesesFichaEmAbertoAvulso = [
+    ...new Set(
+      (data.fichaCorrida ?? [])
+        .filter(
+          (f) =>
+            f.mesReferencia &&
+            listarFichasEmAbertoPagamento(data, cooperadoCanonico, f.mesReferencia, coopIdResolved).length > 0
+        )
+        .map((f) => f.mesReferencia)
+    ),
+  ];
+  for (const avulso of valoresAvulsosPendentesParaMesPagamento(
+    data,
+    cooperadoCanonico,
+    mesReferencia,
+    mesesFichaEmAbertoAvulso,
+    coopIdResolved
+  )) {
     if (avulso.valor <= 0) continue;
     if (avulso.natureza === "debito") {
       descontosExtras.push({

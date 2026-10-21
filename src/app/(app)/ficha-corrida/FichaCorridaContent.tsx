@@ -176,6 +176,7 @@ import { descontosDoCooperadoNoMes, TIPO_DESCONTO_LABELS, descontoManualDuplicaC
 import {
   criarValorAvulsoReceber,
   cancelarValorAvulsoReceber,
+  mesReferenciaLancamentoAvulsoPagar,
 } from "@/services/valoresAvulsosReceberService";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { baixarRecibo, resumoReciboFromPagamento, nomeArquivoRecibo } from "@/utils/recibo";
@@ -839,6 +840,19 @@ function FichaCorridaPageInner() {
     return listarMesesNotaConferidaSemPix(leitura, cooperadoSelecionadoId, coopId);
   }, [coopId, cooperadoSelecionadoId, data, dataPagar, isCooperado]);
 
+  const mesLancamentoAvulsoPagar = useMemo(() => {
+    if (isCooperado || aba !== "pagar" || visualizandoHistoricoPagamentoResponsavel) {
+      return mesAtivo;
+    }
+    return mesReferenciaLancamentoAvulsoPagar(mesesPendentesPagamento, mesAtivo);
+  }, [
+    isCooperado,
+    aba,
+    visualizandoHistoricoPagamentoResponsavel,
+    mesesPendentesPagamento,
+    mesAtivo,
+  ]);
+
   const resumoPagamentoConsolidado = useMemo(() => {
     if (!data || !cooperadoSelecionadoId || isCooperado || !mesesPendentesPagamento.length) return null;
     return getResumoPagamentoConsolidadoCooperado(
@@ -972,7 +986,7 @@ function FichaCorridaPageInner() {
         const next = criarValorAvulsoReceber(d, {
           cooperativaId: coopId,
           cooperadoId: cooperadoSelecionadoId,
-          mesReferencia: mesAtivo,
+          mesReferencia: mesLancamentoAvulsoPagar,
           motivo: params.motivo,
           valor: params.valor,
           natureza: params.natureza,
@@ -993,7 +1007,7 @@ function FichaCorridaPageInner() {
       setAvulsoReceberData(new Date().toISOString().split("T")[0]);
       pushOperacional();
     },
-    [user, coopId, cooperadoSelecionadoId, isCooperado, mesAtivo, pushOperacional]
+    [user, coopId, cooperadoSelecionadoId, isCooperado, mesLancamentoAvulsoPagar, pushOperacional]
   );
 
   const handleRemoverAvulsoReceber = useCallback(
@@ -1429,7 +1443,7 @@ function FichaCorridaPageInner() {
       ? resumoExibicao && exibicaoOpts
         ? bicCentralGetValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
         : 0
-      : (financeiroAberto?.valorLiquido ?? 0);
+      : (resumoExibicao?.valorLiquido ?? financeiroAberto?.valorLiquido ?? 0);
 
   const descontosExtrasResumo = useMemo(() => {
     if (isCooperado && paridadeCooperadoMobile) {
@@ -1443,6 +1457,7 @@ function FichaCorridaPageInner() {
       return paridadeCooperadoMobile.descontosExtras;
     }
     if (aba === "pagar") {
+      if (resumoExibicao) return resumoExibicao.descontosExtras ?? [];
       return cooperadoLeituraFinanceiraExibicao(dataPagar ?? data, cooperadoSelecionadoId, coopId)
         .descontosExtras;
     }
@@ -2407,7 +2422,7 @@ function FichaCorridaPageInner() {
         <ValoresAvulsosReceberPanel
           cooperadoId={cooperadoSelecionadoId}
           cooperativaId={coopId}
-          mesReferencia={mesAtivo}
+          mesReferencia={mesLancamentoAvulsoPagar}
           modo={isCooperado ? "cooperado" : "responsavel"}
           filtrarHistoricoPorMes={isCooperado && visualizandoHistorico}
           onLancar={!isCooperado && check("ficha_corrida", "edit") ? handleLancarAvulsoReceber : undefined}

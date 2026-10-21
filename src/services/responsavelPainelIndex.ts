@@ -12,6 +12,7 @@ import {
 import { getDataOperationalTruth, getDataRevision } from "@/services/dataStore";
 import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { valorAPagarCooperadoEmAberto } from "@/lib/responsavel/responsavelGestaoLeitura";
+import { unirValoresAvulsosReceber } from "@/services/valoresAvulsosReceberService";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { listarMesesFichaEmAbertoCooperado } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
 import {
@@ -235,10 +236,17 @@ export function appDataParaPagarCooperadosResponsavel(data: AppData, coopId?: st
     return pagarProjCache.data;
   }
   const leitura = appDataParaLeituraFichaEmAbertoResponsavel(data, coopId);
-  const next = preservarValoresNumericosDaFonte(
+  const projetado = preservarValoresNumericosDaFonte(
     data,
     alinharFichaComPagamentosCooperativa(reconciliarFichaFromNotasConferidas(leitura))
   );
+  const next = {
+    ...projetado,
+    valoresAvulsosReceber: unirValoresAvulsosReceber(
+      projetado.valoresAvulsosReceber,
+      data.valoresAvulsosReceber
+    ),
+  };
   pagarProjCache = { revision, coopId: key, data: next };
   return next;
 }
@@ -417,10 +425,21 @@ function escolherSnapshotMaisCompleto(truth: AppData, data: AppData): AppData {
     base.pagamentosCooperado,
     other.pagamentosCooperado
   );
+  const valoresAvulsosReceber = unirValoresAvulsosReceber(
+    base.valoresAvulsosReceber,
+    other.valoresAvulsosReceber
+  );
   const notasMudou = notasPedido !== base.notasPedido;
   const pixMudou = pagamentosCooperado.length !== (base.pagamentosCooperado?.length ?? 0);
-  if (!notasMudou && !pixMudou) return base;
-  return { ...base, notasPedido, pagamentosCooperado };
+  const baseAvulsos = base.valoresAvulsosReceber ?? [];
+  const avulsosMudou =
+    valoresAvulsosReceber.length !== baseAvulsos.length ||
+    valoresAvulsosReceber.some((v) => {
+      const old = baseAvulsos.find((x) => x.id === v.id);
+      return !old || old.updatedAt !== v.updatedAt;
+    });
+  if (!notasMudou && !pixMudou && !avulsosMudou) return base;
+  return { ...base, notasPedido, pagamentosCooperado, valoresAvulsosReceber };
 }
 
 function aplicarLastroCompletenessConferir(candidato: AppData, key = "_"): AppData {
@@ -443,6 +462,10 @@ function aplicarLastroCompletenessConferir(candidato: AppData, key = "_"): AppDa
     fichaCorrida: [...fichaById.values()],
     notasPedido: mergeNotasPreferindoAtualizacao(prev.notasPedido, candidato.notasPedido),
     pagamentosCooperado,
+    valoresAvulsosReceber: unirValoresAvulsosReceber(
+      prev.valoresAvulsosReceber,
+      candidato.valoresAvulsosReceber
+    ),
   });
   conferirLeituraLatchByKey.set(key, fundido);
   return fundido;

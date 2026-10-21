@@ -13,6 +13,10 @@ import {
   pickResumoStaffFichaPagar,
   valorAPagarCooperadoEmAberto,
 } from "../src/lib/responsavel/responsavelGestaoLeitura.ts";
+import {
+  mesReferenciaLancamentoAvulsoPagar,
+  unirValoresAvulsosReceber,
+} from "../src/services/valoresAvulsosReceberService.ts";
 
 const COOP = "coop-paridade-aberto";
 const MES = "2026-10";
@@ -161,5 +165,54 @@ const pagarAvulso = pickResumoStaffFichaPagar({
 });
 assert.equal(linhasAvulso[0]?.total, 85, "débito avulso entra no Em aberto");
 assert.equal(pagarAvulso?.valorLiquido, 85, "Pagar usa o mesmo líquido com avulso");
+assert.equal(
+  pagarAvulso?.descontosExtras.some((d) => d.motivo === "Adiantamento" && d.valor === 15),
+  true,
+  "débito avulso aparece no resumo do Pagar"
+);
+
+const comAvulsoOutroMes = {
+  ...data,
+  valoresAvulsosReceber: [
+    {
+      id: "av-2",
+      cooperativaId: COOP,
+      cooperadoId: "c-1",
+      mesReferencia: "2026-11",
+      natureza: "debito",
+      valor: 20,
+      motivo: "Vale",
+      status: "pendente",
+      responsavel: "resp",
+      dataLancamento: "2026-10-20",
+      createdAt: "2026-10-20T00:00:00.000Z",
+      updatedAt: "2026-10-20T00:00:00.000Z",
+    },
+  ],
+} as AppData;
+resetResponsavelPainelIndexCache();
+const pagarOrfao = pickResumoStaffFichaPagar({
+  data: comAvulsoOutroMes,
+  cooperadoId: "c-1",
+  cooperativaId: COOP,
+  mesesPendentesPagamento: [MES],
+  resumoPagamentoConsolidado: null,
+  financeiroAberto: null,
+  mesAtivo: "2026-11",
+  fluxoReciboAssinatura: false,
+});
+assert.equal(pagarOrfao?.valorLiquido, 80, "débito no mês do calendário desconta a ficha em aberto");
+assert.equal(
+  pagarOrfao?.descontosExtras.some((d) => d.motivo === "Vale" && d.valor === 20),
+  true,
+  "débito de outro mês aparece no resumo"
+);
+
+assert.equal(mesReferenciaLancamentoAvulsoPagar([MES], "2026-11"), MES);
+assert.equal(
+  unirValoresAvulsosReceber([], comAvulsoOutroMes.valoresAvulsosReceber).map((v) => v.id).join(),
+  "av-2",
+  "lastro vazio não apaga avulso vivo"
+);
 
 console.log("ok: Em aberto e Pagar usam o mesmo valor");

@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v535
+
+- **Pagar cooperados:** débito avulso entra no resumo e desconta o valor a pagar — mesmo se o lançamento cair no mês do calendário e a ficha em aberto for a do mês anterior.
+- **Responsável:** o lastro do Pagar não apaga o avulso recém-lançado; o total da tela é o do resumo, não um número paralelo.
+- **Cooperado:** Início, Entregas, Ficha, Financeiro e A receber iguais ao v534.
+
 ## v534
 
 - **HB Créditos:** cada uso na ficha e no Financeiro mostra o nome do mercado, ou «Crédito para» + o nome do cooperado.

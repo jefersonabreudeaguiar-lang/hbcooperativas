@@ -156,13 +156,9 @@ export function valorAPagarCooperadoEmAberto(
   const porMes: MesValorAPagarEmAberto[] = [];
   let total = 0;
   for (const m of aberto.porMes) {
-    const liq = getResumoPagamentoCooperado(data, cooperadoId, m.mes, cooperativaId).valorLiquido;
-    if (liq <= 0.005) continue;
-    porMes.push({ mes: m.mes, entregas: m.entregas, total: liq });
-    total = round2(total + liq);
-  }
-  if (total <= 0.005) {
-    return valorAPagarDeNotasSemFicha(data, cooperadoId, cooperativaId);
+    const resumoMes = getResumoPagamentoCooperado(data, cooperadoId, m.mes, cooperativaId);
+    porMes.push({ mes: m.mes, entregas: m.entregas, total: resumoMes.valorLiquido });
+    total = round2(total + resumoMes.valorLiquido);
   }
   return { meses: porMes.map((m) => m.mes), porMes, total };
 }
@@ -202,7 +198,7 @@ export function pickResumoStaffFichaPagar(
 
   const coopId = cooperativaId ?? "";
   const abertoPagar = coopId ? valorAPagarCooperadoEmAberto(data, cooperadoId, coopId) : { meses: [], total: 0 };
-  if (abertoPagar.total > 0.005 && abertoPagar.meses.length > 0) {
+  if (abertoPagar.meses.length > 0) {
     const consolidado = getResumoPagamentoConsolidadoCooperado(
       data,
       cooperadoId,
@@ -210,21 +206,27 @@ export function pickResumoStaffFichaPagar(
       cooperativaId,
       resumoAjustes && mesAtivo ? { [mesAtivo]: resumoAjustes } : undefined
     );
-    if (consolidado.valorLiquido > 0.005) {
+    if (
+      consolidado.descontosExtras.length > 0 ||
+      consolidado.valorEntregas > 0.005 ||
+      consolidado.valorLiquido > 0.005
+    ) {
       if (Math.abs(consolidado.valorLiquido - abertoPagar.total) > 0.005) {
         return { ...consolidado, valorLiquido: abertoPagar.total };
       }
       return consolidado;
     }
-    return {
-      valorBruto: abertoPagar.total,
-      descontoCooperativa: 0,
-      descontosExtras: [],
-      valorEntregas: abertoPagar.total,
-      valorLiquido: abertoPagar.total,
-      fichaIds: [],
-      notaPedidoIds: [],
-    };
+    if (abertoPagar.total > 0.005) {
+      return {
+        valorBruto: abertoPagar.total,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorEntregas: abertoPagar.total,
+        valorLiquido: abertoPagar.total,
+        fichaIds: [],
+        notaPedidoIds: [],
+      };
+    }
   }
 
   const ajustesPorMes: Record<string, AjustesResumoPagamento> | undefined =

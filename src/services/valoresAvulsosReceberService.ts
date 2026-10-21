@@ -55,6 +55,59 @@ export function valoresAvulsosPendentesMes(
   );
 }
 
+/** No Pagar, o débito entra no mês da ficha em aberto — não no mês do calendário. */
+export function mesReferenciaLancamentoAvulsoPagar(
+  mesesPendentesPagamento: string[],
+  mesAtivo: string
+): string {
+  if (mesesPendentesPagamento.length > 0) {
+    return [...mesesPendentesPagamento].sort()[mesesPendentesPagamento.length - 1]!;
+  }
+  return mesAtivo;
+}
+
+/** Lastros/projeções não podem apagar avulso recém-lançado. */
+export function unirValoresAvulsosReceber(
+  base: ValorAvulsoReceber[] | undefined,
+  extra: ValorAvulsoReceber[] | undefined
+): ValorAvulsoReceber[] {
+  const byId = new Map<string, ValorAvulsoReceber>();
+  for (const v of base ?? []) {
+    if (v?.id) byId.set(v.id, v);
+  }
+  for (const v of extra ?? []) {
+    if (!v?.id) continue;
+    const prev = byId.get(v.id);
+    if (!prev || String(v.updatedAt ?? "") >= String(prev.updatedAt ?? "")) {
+      byId.set(v.id, v);
+    }
+  }
+  return [...byId.values()];
+}
+
+/**
+ * Avulso pendente no mês da ficha, ou órfão (mês sem ficha em aberto) no último mês a pagar.
+ * Sem isso o responsável lança no mês atual e o resumo da ficha anterior não desconta.
+ */
+export function valoresAvulsosPendentesParaMesPagamento(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  mesesFichaEmAberto: string[],
+  cooperativaId?: string
+): ValorAvulsoReceber[] {
+  const doMes = valoresAvulsosPendentesMes(data, cooperadoId, mesReferencia, cooperativaId);
+  const alvo = mesesFichaEmAberto.length
+    ? [...mesesFichaEmAberto].sort()[mesesFichaEmAberto.length - 1]
+    : undefined;
+  if (!alvo || mesReferencia !== alvo) return doMes;
+  const ja = new Set(doMes.map((v) => v.id));
+  const orfaos = valoresAvulsosDoCooperado(data, cooperadoId, cooperativaId).filter(
+    (v) => v.status === "pendente" && !ja.has(v.id) && !mesesFichaEmAberto.includes(v.mesReferencia)
+  );
+  return orfaos.length ? [...doMes, ...orfaos] : doMes;
+}
+
 export function valoresAvulsosHistoricoCooperado(
   data: AppData,
   cooperadoId: string,
