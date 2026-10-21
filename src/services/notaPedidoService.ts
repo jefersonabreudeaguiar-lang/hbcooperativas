@@ -47,6 +47,10 @@ import {
   mergeContaCoopDescontosFieldSync,
 } from "@/lib/hb-credit/mergeFichaDescontos";
 import {
+  coletarCicloHbLiquidado,
+  filtrarDescontosContaCoopAposLiquidacao,
+} from "@/lib/hb-credit/hbCreditCicloAposLiquidacao";
+import {
   getContaCoopDescontosMemoria,
   hasContaCoopDescontosMemoria,
   resolveDescontosContaCoopMesParaCalculo,
@@ -2419,7 +2423,11 @@ export function getResumoPagamentoCooperado(
       : arquivo?.descontoAvulsoMotivo ?? compartilhado?.descontoAvulsoMotivo;
   const descontosExtras: FichaCorridaDesconto[] = [];
   const mesesPendentes = mesesReferenciaComDebitoAberto(data, cooperadoCanonico, coopIdResolved);
-  const coopBruto = getDescontosContaCoopMesCached(data, cooperadoCanonico, mesReferencia, coopIdResolved);
+  const cicloHb = coletarCicloHbLiquidado(data, cooperadoCanonico, coopIdResolved);
+  const coopBruto = filtrarDescontosContaCoopAposLiquidacao(
+    getDescontosContaCoopMesCached(data, cooperadoCanonico, mesReferencia, coopIdResolved),
+    cicloHb
+  );
   const coopMes = filtrarDescontosContaCoopParaMesReferencia(coopBruto, mesReferencia, mesesPendentes);
   const temContaCoopMes = coopMes.length > 0;
   if (mensalidadeFixa > 0) {
@@ -2439,7 +2447,9 @@ export function getResumoPagamentoCooperado(
   for (const d of descontosDoCooperadoNoMes(data, cooperadoCanonico, mesReferencia)) {
     if (d.valorDescontado <= 0) continue;
     if (mensalidadeFixa > 0 && d.tipo === "mensalidade_aberta") continue;
-    if (temContaCoopMes && descontoManualDuplicaContaCoop(d)) continue;
+    if ((temContaCoopMes || cicloHb.pagamentos.length > 0) && descontoManualDuplicaContaCoop(d)) {
+      continue;
+    }
     descontosExtras.push({
       tipo: "manual",
       motivo: d.motivo,
@@ -2653,8 +2663,12 @@ function aplicarDescontosContaCoopMesNoResumo(
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
   const mesesPendentes = mesesReferenciaComDebitoAberto(data, canonico, coopId);
+  const cicloHb = coletarCicloHbLiquidado(data, canonico, coopId);
   const descontos = filtrarDescontosContaCoopParaMesReferencia(
-    getDescontosContaCoopMesCached(data, canonico, mesReferencia, coopId),
+    filtrarDescontosContaCoopAposLiquidacao(
+      getDescontosContaCoopMesCached(data, canonico, mesReferencia, coopId),
+      cicloHb
+    ),
     mesReferencia,
     mesesPendentes
   );

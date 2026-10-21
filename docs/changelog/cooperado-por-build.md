@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v536
+
+- **Pagar / A receber / Financeiro:** compra HB já descontada no PIX não volta no resumo — só entra compra feita depois da liquidação, como na aba Limites.
+- **HB Créditos:** o ciclo vale para todos os cooperados: compra antiga não cobra de novo; compra nova abate a ficha em aberto.
+- **Cooperado:** Início, Entregas e troca de aba iguais ao v535.
+
 ## v535
 
 - **Pagar cooperados:** débito avulso entra no resumo e desconta o valor a pagar — mesmo se o lançamento cair no mês do calendário e a ficha em aberto for a do mês anterior.
