@@ -32,6 +32,8 @@ function assert(cond: boolean, msg: string) {
 }
 
 assert(isStaffFilaNotasLivePollEnabled(), "live poll default on");
+assert(resolveStaffNotasPullMinIntervalMs(true) === 3_000, "mínimo 3s na fila (não briga com o paint)");
+assert(resolveStaffNotasPollIntervalMs(true) === 5_000, "poll 5s na fila — nota nova em poucos segundos");
 assert(resolveStaffNotasPullMinIntervalMs(true) < resolveStaffNotasPullMinIntervalMs(false), "pull mais rápido na fila");
 assert(resolveStaffNotasPollIntervalMs(true) < resolveStaffNotasPollIntervalMs(false), "intervalo menor na fila");
 assert(resolveStaffFilaBackgroundCatchupMs(true) === 0, "na Conferir o catch-up de fundo fica desligado");

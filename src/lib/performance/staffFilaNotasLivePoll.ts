@@ -30,7 +30,7 @@ export function resolveStaffNotasPullMinIntervalMs(filaConferenciaAtiva: boolean
   if (!filaConferenciaAtiva || !isStaffFilaNotasLivePollEnabled()) {
     return readEnvMs("NEXT_PUBLIC_STAFF_NOTAS_PULL_MIN_MS", 90_000);
   }
-  return readEnvMs("NEXT_PUBLIC_STAFF_FILA_NOTAS_PULL_MIN_MS", 2_000);
+  return readEnvMs("NEXT_PUBLIC_STAFF_FILA_NOTAS_PULL_MIN_MS", 3_000);
 }
 
 /** Timer periódico na aba Notas (staff). */
@@ -38,7 +38,7 @@ export function resolveStaffNotasPollIntervalMs(filaConferenciaAtiva: boolean): 
   if (!filaConferenciaAtiva || !isStaffFilaNotasLivePollEnabled()) {
     return readEnvMs("NEXT_PUBLIC_STAFF_NOTAS_POLL_INTERVAL_MS", 120_000);
   }
-  return readEnvMs("NEXT_PUBLIC_STAFF_FILA_NOTAS_POLL_INTERVAL_MS", 3_000);
+  return readEnvMs("NEXT_PUBLIC_STAFF_FILA_NOTAS_POLL_INTERVAL_MS", 5_000);
 }
 
 /** Poll leve uploadProgress (meta + partes na nuvem). */
@@ -58,10 +58,15 @@ export function resolveStaffFilaBackgroundCatchupMs(conferirPageActive: boolean)
 
 export const STAFF_FILA_UPLOAD_PROGRESS_MAX_NOTAS = 12;
 
-/** Primeiro pull da fila após pintar o lastro — não espera o idle longo do staff. */
+/** Primeiro pull da fila após pintar o lastro — 2 frames, sem idle longo (contrato Conferir). */
 export function scheduleStaffConferirFilaPrimeiroPull(run: () => void): void {
   if (typeof window === "undefined") return;
+  const fire = () => window.setTimeout(run, 0);
+  if (typeof requestAnimationFrame !== "function") {
+    fire();
+    return;
+  }
   requestAnimationFrame(() => {
-    window.setTimeout(run, 0);
+    requestAnimationFrame(fire);
   });
 }

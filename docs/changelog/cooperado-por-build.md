@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v532
+
+- **Responsável:** F5, Conferir, Pagar, Livro e troca de aba pintam o lastro e só depois puxam a nuvem — o arquivo grande não trava o primeiro quadro.
+- **Conferir / Pagar / Livro:** Conferir e Pagar ficam abertos no aparelho; nota nova na fila em cerca de 5 s; Livro não recalcula escondido.
+- **Cooperado:** Início, Entregas, Ficha, Financeiro e A receber iguais ao v531.
+
 ## v531
 
 - **Responsável:** depois do F5 o painel aparece na hora com o lastro do aparelho — não espera o arquivo grande da cooperativa.

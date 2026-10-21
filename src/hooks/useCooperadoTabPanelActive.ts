@@ -14,7 +14,7 @@ import { isStaffMobileTabKeepAliveEnabled } from "@/lib/performance/staffMobileT
 
 /**
  * RQL 8.6 / U4 — painel em keep-alive só roda efeitos pesados quando a aba está visível.
- * Fora do keep-alive (desktop / flag off), retorna true.
+ * Staff: keep-alive também no desktop. Flag off → retorna true.
  */
 export function useCooperadoTabPanelActive(panelHref: CooperadoBottomTabHref | string): boolean {
   const ctx = useCooperadoTabPanelContext();

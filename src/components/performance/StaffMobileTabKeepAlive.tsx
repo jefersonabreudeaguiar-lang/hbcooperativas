@@ -49,7 +49,7 @@ function publishStaffKeepAliveDomState(state: {
 }
 
 /**
- * U4 — cache LRU das abas do rodapé da gestão no celular (mesmo contrato do cooperado).
+ * U4 — cache LRU das abas da gestão (celular e desktop). Conferir e Pagar ficam pinados.
  */
 export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
   const mobile = useMobileViewport();
@@ -72,7 +72,7 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
       panelCount: orderRef.current.length,
     });
 
-    if (!enabled || !mobile || !onTab) return;
+    if (!enabled || !onTab) return;
     if (children == null) return;
     cacheRef.current[tabKey] = children;
     const merged = [tabKey, ...orderRef.current.filter((h) => h !== tabKey)];
@@ -89,7 +89,7 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
     }
   }, [enabled, mobile, onTab, tabKey, pathname, children, cacheLimit, lowMemory]);
 
-  if (!enabled || !mobile) {
+  if (!enabled) {
     return <>{children}</>;
   }
 

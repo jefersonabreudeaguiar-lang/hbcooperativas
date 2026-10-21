@@ -16,7 +16,7 @@ function readKeepAliveEnvDefault(): boolean {
   return !OFF.has(raw.trim().toLowerCase());
 }
 
-/** U4 — LRU de abas montadas no mobile da gestão. Default ligado; `NEXT_PUBLIC_STAFF_TAB_KEEP_ALIVE=false` desliga. */
+/** U4 — LRU de abas da gestão (celular e desktop). Default ligado; `NEXT_PUBLIC_STAFF_TAB_KEEP_ALIVE=false` desliga. */
 export function isStaffMobileTabKeepAliveEnabled(): boolean {
   if (typeof document !== "undefined") {
     const dom = document.documentElement.getAttribute("data-staff-tab-keep-alive");
@@ -27,20 +27,30 @@ export function isStaffMobileTabKeepAliveEnabled(): boolean {
 }
 
 export function getStaffMobileTabCacheLimit(lowMemoryDevice: boolean): number {
-  return lowMemoryDevice ? 2 : 3;
+  return lowMemoryDevice ? 2 : 4;
 }
 
 export const STAFF_TAB_PIN_HREF = "/notas-pedido" as const;
 
+/** Conferir + Pagar ficam montados — troca de aba do dia sem remount. */
+export const STAFF_TAB_PIN_HREFS = ["/notas-pedido", "/ficha-corrida"] as const;
+
 export const STAFF_TAB_HEAVY_HREFS = ["/notas-pedido", "/ficha-corrida", "/relatorios"] as const;
+
+function isStaffTabPinned(href: string): boolean {
+  return (STAFF_TAB_PIN_HREFS as readonly string[]).includes(href);
+}
 
 export function pickStaffTabCacheEviction(
   order: readonly string[],
   activeHref: string,
   lowMemoryDevice: boolean
 ): string | undefined {
-  const candidates = order.filter((h) => h !== activeHref && h !== STAFF_TAB_PIN_HREF);
-  if (candidates.length === 0) return undefined;
+  const candidates = order.filter((h) => h !== activeHref && !isStaffTabPinned(h));
+  if (candidates.length === 0) {
+    const pinExtra = order.filter((h) => h !== activeHref && isStaffTabPinned(h));
+    return pinExtra[pinExtra.length - 1];
+  }
 
   if (lowMemoryDevice) {
     const heavyCached = candidates.filter((h) =>

@@ -3,17 +3,20 @@ import type { CooperadoNavPrefetchRouter } from "@/lib/performance/cooperadoNavP
 import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 import { prefetchStaffTabRouteChunks } from "@/lib/performance/prefetchStaffTabRouteChunks";
 
-/** Rotas mais abertas pelo responsável no celular — bundles grandes. */
+/** Rotas do dia do responsável — Início, Conferir, Pagar, Livro. */
 export const STAFF_NAV_PREFETCH_PRIORITY: readonly string[] = [
   "/dashboard",
   "/notas-pedido",
-  "/cooperados",
+  "/ficha-corrida",
   "/livro-caixa",
+  "/cooperados",
 ];
 
 export const STAFF_MOBILE_PREFETCH_HREFS: readonly string[] = [
   "/dashboard",
   "/notas-pedido",
+  "/ficha-corrida",
+  "/livro-caixa",
   "/cooperados",
   "/financeiro",
   "/relatorios",
@@ -43,7 +46,7 @@ export function scheduleStaffNavPrefetchEarly(router: CooperadoNavPrefetchRouter
   };
   const lowMemory = isLowMemoryDevice();
   const idleHrefs = lowMemory
-    ? (["/dashboard", "/notas-pedido"] as readonly string[])
+    ? (["/dashboard", "/notas-pedido", "/ficha-corrida"] as readonly string[])
     : STAFF_MOBILE_PREFETCH_HREFS;
 
   queueMicrotask(() => {

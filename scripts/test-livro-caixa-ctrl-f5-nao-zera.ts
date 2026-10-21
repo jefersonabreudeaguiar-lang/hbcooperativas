@@ -38,6 +38,8 @@ assert.equal(fin.bidirectionalFull, false);
 const caixa = readFileSync(join(ROOT, "src/app/(app)/livro-caixa/LivroCaixaContent.tsx"), "utf8");
 assert.ok(!caixa.includes("requestAppSyncLight"), "Livro Caixa não dispara sync leve no mount");
 assert.ok(caixa.includes("useReconciliarLivroCaixaGestao"), "só reconcilia caixa com guarda");
+assert.ok(caixa.includes('useCooperadoTabPanelActive("/livro-caixa")'), "Livro não recalcula escondido");
+assert.ok(caixa.includes("coopId && tabActive"), "reconciliar Livro só com a aba visível");
 assert.match(caixa, /resolveGestaoCooperativaId/, "Livro caixa acha a cooperativa pelo CNPJ da sessão");
 assert.match(caixa, /Abrindo o livro da cooperativa/, "não some a tela enquanto o lastro chega");
 assert.ok(caixa.includes("flushStaffGestaoLastGoodNow"), "salvar grava lastro na hora");

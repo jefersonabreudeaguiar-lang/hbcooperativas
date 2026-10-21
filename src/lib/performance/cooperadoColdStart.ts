@@ -113,7 +113,7 @@ export function shouldSkipCooperadoSecondaryMountSync(): boolean {
 function shouldDeferAppDataEagerWarmForSession(session: ReturnType<typeof getSession>): boolean {
   if (!session) return false;
   if (isStaffGestaoRole(session.role)) {
-    // F5 do responsável: lastro no 1º quadro; persist no quadro seguinte.
+    // F5 do responsável: sempre hidrata na hora (lastro no 1º quadro; persist no idle após o paint).
     return false;
   }
   if (

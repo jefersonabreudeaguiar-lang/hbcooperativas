@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, TrendingUp, TrendingDown, Wallet, Send, FileText, Search, Download, Users, BookOpen, FolderOpen, FolderPlus } from "lucide-react";
 import { useAppDataSnapshotForDomains } from "@/hooks/useAppData";
+import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { canUser } from "@/permissions";
@@ -85,6 +86,10 @@ export default function LivroCaixaPage() {
   const permUser = accountUser ?? user;
   const router = useRouter();
   const coopId = resolveGestaoCooperativaId(accountUser ?? user, data);
+  const tabActive = useCooperadoTabPanelActive("/livro-caixa");
+  const dataCaixaLastroRef = useRef<ReturnType<typeof reconciliarLivroCaixaContabilCooperativa> | null>(
+    null
+  );
 
   const check = (resource: Resource, action: Action) => {
     if (!permUser) return false;
@@ -163,15 +168,18 @@ export default function LivroCaixaPage() {
     if (permUser && !check("livro_caixa", "view")) router.replace("/dashboard");
   }, [permUser, router]);
 
-  useReconciliarLivroCaixaGestao(coopId, Boolean(coopId));
+  useReconciliarLivroCaixaGestao(coopId, Boolean(coopId && tabActive));
 
   const dataCaixa = useMemo(() => {
     if (!data || !coopId) return null;
-    return reconciliarLivroCaixaContabilCooperativa(
+    if (!tabActive && dataCaixaLastroRef.current) return dataCaixaLastroRef.current;
+    const next = reconciliarLivroCaixaContabilCooperativa(
       posProcessarIntegridadePagamentosCooperativa(data, { reconciliarLivroCaixa: false }),
       coopId
     );
-  }, [data, coopId]);
+    dataCaixaLastroRef.current = next;
+    return next;
+  }, [data, coopId, tabActive]);
 
   useEffect(() => {
     if (!dataCaixa || !coopId || periodoInicializadoRef.current) return;

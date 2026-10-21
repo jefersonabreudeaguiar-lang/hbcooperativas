@@ -183,6 +183,9 @@ export function reloadStaffGestaoPersistAfterFirstPaint(): void {
   }
 }
 
+/** Teto do idle após o paint — parse do persist não briga com a 1ª pintura nem com o pull da fila. */
+export const STAFF_GESTAO_PERSIST_RELOAD_IDLE_TIMEOUT_MS = 180;
+
 export function scheduleStaffGestaoPersistReloadAfterPaint(): void {
   if (typeof window === "undefined" || staffPersistReloadScheduled) return;
   if (!sessionRoleLooksStaffGestao()) return;
@@ -194,13 +197,20 @@ export function scheduleStaffGestaoPersistReloadAfterPaint(): void {
       staffPersistReloadScheduled = false;
     }
   };
+  const armIdle = () => {
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(run, { timeout: STAFF_GESTAO_PERSIST_RELOAD_IDLE_TIMEOUT_MS });
+      return;
+    }
+    window.setTimeout(run, STAFF_GESTAO_PERSIST_RELOAD_IDLE_TIMEOUT_MS);
+  };
   if (typeof requestAnimationFrame === "function") {
     requestAnimationFrame(() => {
-      requestAnimationFrame(run);
+      requestAnimationFrame(armIdle);
     });
     return;
   }
-  queueMicrotask(run);
+  queueMicrotask(armIdle);
 }
 
 function restoreStaffGestaoFromLastGoodIfNeeded(data: AppData): AppData {
