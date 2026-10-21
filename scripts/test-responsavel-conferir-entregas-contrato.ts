@@ -18,7 +18,9 @@ import {
   staffGestaoLastroPersisteNoAparelho,
 } from "../src/lib/responsavel/responsavelConferirEntregasContrato.ts";
 import {
+  deveRecuperarFilaConferirVazia,
   getRelatorioLancamentosEmAbertoResponsavel,
+  listNotasFilaConferenciaResponsavel,
   resetResponsavelPainelIndexCache,
 } from "../src/services/responsavelPainelIndex.ts";
 import type { FichaCorrida } from "../src/types/index.ts";
@@ -113,6 +115,29 @@ const aposF5ComFicha = buildPendentesEstaveisConferencia(
 );
 assert.equal(aposF5ComFicha.length, 0, "status velho + ficha existente some do Conferir");
 
+const leituraLastro = {
+  ...dataCheia,
+  notasPedido: [{ ...nota, valorLiquido: 180, status: "aguardando_conferencia" as const }],
+} as AppData;
+const liveComFichaEValor = {
+  ...dataCheia,
+  notasPedido: [{ ...lancada, valorLiquido: 180 }],
+  fichaCorrida: [{ notaPedidoId: "n-pendente" } as never],
+} as AppData;
+resetResponsavelPainelIndexCache();
+const filaAposLancamento = listNotasFilaConferenciaResponsavel(liveComFichaEValor, COOP);
+assert.equal(filaAposLancamento.length, 0, "valor já na ficha some da lista do Conferir");
+assert.equal(
+  deveRecuperarFilaConferirVazia(leituraLastro, liveComFichaEValor, COOP),
+  false,
+  "fila vazia depois do lançamento não dispara recuperação da nuvem"
+);
+assert.equal(
+  deveRecuperarFilaConferirVazia(leituraLastro, dataVazio, COOP),
+  true,
+  "lastro com foto sem ficha ainda pode recuperar a fila"
+);
+
 const staff = read("src/app/(app)/notas-pedido/staff/NotasPedidoStaffResponsavelApp.tsx");
 const handler = staff.match(
   /const abrirLancamentosAbertoResponsavel = \(\) => \{[\s\S]*?\n  \};/
@@ -130,6 +155,11 @@ assert.match(
   "Em aberto lê o lastro real, não só a foto do Conferir"
 );
 assert.match(staff, /scheduleStaffConferirFilaPrimeiroPull/, "primeiro pull pinta e busca no primeiro frame");
+assert.match(
+  staff,
+  /deveRecuperarFilaConferirVazia/,
+  "fila vazia após lançar não puxa de volta o valor da nuvem"
+);
 assert.match(staff, /LancamentosEmAbertoPainelView/, "Em aberto pinta a View do lastro na hora");
 assert.match(
   staff,

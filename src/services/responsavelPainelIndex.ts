@@ -30,6 +30,7 @@ import {
   isNotaStatusDowngrade,
   notaElegivelParaFilaConferenciaResponsavel,
   notaLancadaNaFichaCorrida,
+  notaResolvidaForaDaFilaConferir,
   protectNotaAgainstStatusDowngrade,
   sanitizarNotaParaFilaConferencia,
 } from "@/utils/notaStatus";
@@ -549,6 +550,24 @@ export function listNotasFilaConferenciaDeDados(data: AppData, coopId: string): 
   return coletarFilaNotasConferir(data, coopId);
 }
 
+/** Fila vazia depois de lançar ≠ fila perdida. Só recupera se o lastro ainda tem foto sem ficha. */
+export function deveRecuperarFilaConferirVazia(
+  lastro: AppData | null | undefined,
+  live: AppData | null | undefined,
+  coopId: string
+): boolean {
+  if (!coopId) return false;
+  const livePendentes = live ? coletarFilaNotasConferir(live, coopId) : [];
+  if (livePendentes.length > 0) return false;
+  const lastroPendentes = lastro ? coletarFilaNotasConferir(lastro, coopId) : [];
+  const orfas = lastroPendentes.filter(
+    (n) => !notaLancadaNaFichaCorrida(live?.fichaCorrida, n.id)
+  );
+  if (orfas.length > 0) return true;
+  const temFicha = (live?.fichaCorrida?.length ?? 0) > 0 || (lastro?.fichaCorrida?.length ?? 0) > 0;
+  return !temFicha;
+}
+
 function coletarFilaNotasConferir(data: AppData, coopId: string): NotaPedido[] {
   const excluidas = idsNotasPedidoExcluidas(data, coopId);
   const filaNotas: NotaPedido[] = [];
@@ -565,9 +584,19 @@ function coletarFilaNotasConferir(data: AppData, coopId: string): NotaPedido[] {
 }
 
 function buildPainelCache(data: AppData, live: AppData, coopId: string): PainelCache {
-  const byId = new Map(coletarFilaNotasConferir(data, coopId).map((n) => [n.id, n]));
+  const evidencia = {
+    notasPedido: [...(live.notasPedido ?? []), ...(data.notasPedido ?? [])],
+    fichaCorrida: [...(live.fichaCorrida ?? []), ...(data.fichaCorrida ?? [])],
+  };
+  const byId = new Map<string, NotaPedido>();
+  for (const n of coletarFilaNotasConferir(data, coopId)) {
+    if (notaResolvidaForaDaFilaConferir(evidencia, n.id)) continue;
+    byId.set(n.id, n);
+  }
   for (const n of coletarFilaNotasConferir(live, coopId)) {
-    if (!byId.has(n.id)) byId.set(n.id, n);
+    if (byId.has(n.id)) continue;
+    if (notaResolvidaForaDaFilaConferir(evidencia, n.id)) continue;
+    byId.set(n.id, n);
   }
   const filaNotas = [...byId.values()].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()

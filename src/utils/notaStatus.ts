@@ -96,6 +96,20 @@ export function notaLancadaNaFichaCorrida(
   return (fichas ?? []).some((f) => f.notaPedidoId === notaId);
 }
 
+/** Conferida/rejeitada ou já tem linha na ficha — some do Conferir. */
+export function notaResolvidaForaDaFilaConferir(
+  evidencia: {
+    notasPedido?: readonly { id: string; status?: NotaPedidoStatus }[];
+    fichaCorrida?: readonly { notaPedidoId?: string }[];
+  } | null | undefined,
+  notaId: string
+): boolean {
+  if (!evidencia || !notaId) return false;
+  if (notaLancadaNaFichaCorrida(evidencia.fichaCorrida, notaId)) return true;
+  const live = (evidencia.notasPedido ?? []).find((n) => n.id === notaId);
+  return Boolean(live && isNotaSaiuDaFilaConferencia(live.status));
+}
+
 /** Payload típico após re-lançar entrega (fila zerada, aguardando conferência). */
 export function isNotaRelancamentoPayload(nota: NotaPedido): boolean {
   return (

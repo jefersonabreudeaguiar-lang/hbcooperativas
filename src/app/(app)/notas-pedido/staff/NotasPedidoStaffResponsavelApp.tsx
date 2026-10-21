@@ -219,6 +219,7 @@ import { ConferenciaNuvemSyncBanner } from "@/components/notas-pedido/Conferenci
 import { getInstituicoesCatalogo, getProdutosContrato } from "@/services/catalogoContratosService";
 import {
   countNotasFilaConferenciaResponsavel,
+  deveRecuperarFilaConferirVazia,
   listNotasFilaConferenciaDeDados,
 } from "@/services/responsavelPainelIndex";
 import { montarRelatorioEmAbertoConferir } from "@/components/notas/montarRelatorioEmAbertoConferir";
@@ -2286,9 +2287,14 @@ export default function NotasPedidoStaffMain() {
     filaRecuperacaoAutoRef.current = true;
     const t = window.setTimeout(() => {
       const lastro = peekStaffGestaoLastGood();
+      const live = getData();
+      if (!deveRecuperarFilaConferirVazia(lastro, live, coopId)) {
+        filaRecuperacaoAutoRef.current = false;
+        return;
+      }
       if (lastro) {
-        const kept = preservarStaffGestaoContraWipe(lastro, getData());
-        if (kept !== getData()) saveDataSafe(kept);
+        const kept = preservarStaffGestaoContraWipe(lastro, live);
+        if (kept !== live) saveDataSafe(kept);
       }
       recuperarFilaConferencia();
       window.setTimeout(() => {

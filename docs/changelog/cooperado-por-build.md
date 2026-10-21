@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v529
+
+- **Responsável:** valor já lançado na ficha some do Conferir — o lastro não reabre o card com o R$ antigo.
+- **Conferir:** fila vazia depois de lançar não puxa de volta as fotos da nuvem.
+- **Cooperado:** Início, Entregas, Ficha, Financeiro e A receber iguais ao v528.
+
 ## v528
 
 - **Responsável:** foto já lançada na ficha não volta para Conferir entregas no F5.

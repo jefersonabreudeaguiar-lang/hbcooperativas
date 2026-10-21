@@ -105,7 +105,11 @@ export function useResponsavelFilaConferencia(
     const extra = listNotasFilaConferenciaDeDados(lastro, coopId).filter(
       (n) => !isNotaConferenciaDecididaLocalmente(n.id)
     );
-    const evidencia = isAppDataWarm() ? getDataOperationalTruth() : lastro;
+    const truth = isAppDataWarm() ? getDataOperationalTruth() : null;
+    const evidencia = {
+      notasPedido: [...(truth?.notasPedido ?? []), ...(lastro.notasPedido ?? [])],
+      fichaCorrida: [...(truth?.fichaCorrida ?? []), ...(lastro.fichaCorrida ?? [])],
+    };
     return fundirFilaConferirComLastro(base, extra, evidencia);
   }, [pendentesTodasBase, pendingDeleteIds, coopId]);
 
@@ -146,7 +150,7 @@ export function useResponsavelFilaConferencia(
   }, [pendentesEstaveis, coopId, filaDetalhada]);
 
   const lastFilaEstavelCountRef = useRef(0);
-  if (filaDetalhada && subscribeFila && pendentesEstaveis.length > 0) {
+  if (filaDetalhada && subscribeFila) {
     lastEstaveisRef.current = pendentesEstaveis;
   }
   if (filaDetalhada) lastFilaEstavelCountRef.current = pendentesEstaveis.length;
