@@ -92,6 +92,27 @@ assert.equal(aposLancamento.length, 0, "nota lançada na ficha sai da fila");
 const fundido = fundirFilaConferirComLastro([], [nota]);
 assert.equal(fundido.length, 1, "lastro devolve a nota que o live esvaziou");
 
+const evidenciaLancada = {
+  notasPedido: [lancada],
+  fichaCorrida: [{ notaPedidoId: "n-pendente" }],
+};
+const naoVolta = fundirFilaConferirComLastro([], [nota], evidenciaLancada);
+assert.equal(naoVolta.length, 0, "F5/lastro não devolve foto já lançada na ficha");
+
+const stickyF5 = { ids: new Set(["n-pendente"]), snapshot: new Map([["n-pendente", nota]]) };
+const aposF5ComFicha = buildPendentesEstaveisConferencia(
+  {
+    ...dataCheia,
+    notasPedido: [{ ...nota, status: "aguardando_conferencia" }],
+    fichaCorrida: [{ notaPedidoId: "n-pendente" } as never],
+  } as AppData,
+  [nota],
+  new Set(),
+  COOP,
+  stickyF5
+);
+assert.equal(aposF5ComFicha.length, 0, "status velho + ficha existente some do Conferir");
+
 const staff = read("src/app/(app)/notas-pedido/staff/NotasPedidoStaffResponsavelApp.tsx");
 const handler = staff.match(
   /const abrirLancamentosAbertoResponsavel = \(\) => \{[\s\S]*?\n  \};/
@@ -118,6 +139,10 @@ assert.match(
 
 const stickySrc = read("src/utils/filaConferenciaSticky.ts");
 assert.match(stickySrc, /fonte = atual \?\? sticky\.snapshot\.get/, "sticky guarda o card se a nota sumiu");
+assert.match(stickySrc, /notaLancadaNaFichaCorrida/, "lastro não reabre nota já na ficha");
+
+const painel = read("src/services/responsavelPainelIndex.ts");
+assert.match(painel, /notaLancadaNaFichaCorrida\(data\.fichaCorrida/, "fila some quando a ficha já tem a nota");
 
 const guard = read("src/lib/staff/staffGestaoSnapshotGuard.ts");
 assert.match(guard, /localStorage\.setItem\(key, json\)/, "lastro sobrevive fechar o PWA");

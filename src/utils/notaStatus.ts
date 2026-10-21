@@ -87,6 +87,15 @@ export function isNotaSaiuDaFilaConferencia(status: NotaPedidoStatus | undefined
   );
 }
 
+/** Já lançada na ficha — F5 / lastro não pode devolver a foto ao Conferir. */
+export function notaLancadaNaFichaCorrida(
+  fichas: readonly { notaPedidoId?: string }[] | null | undefined,
+  notaId: string
+): boolean {
+  if (!notaId) return false;
+  return (fichas ?? []).some((f) => f.notaPedidoId === notaId);
+}
+
 /** Payload típico após re-lançar entrega (fila zerada, aguardando conferência). */
 export function isNotaRelancamentoPayload(nota: NotaPedido): boolean {
   return (

@@ -103,6 +103,21 @@ assert.equal(
   "exclusão publicada continua valendo"
 );
 
+const lastroFila = {
+  ...lastroComManual,
+  notasPedido: [{ id: "n1", cooperativaId: "coop1", status: "aguardando_conferencia" } as never],
+};
+const incomingConferida = {
+  ...pullSemManual,
+  notasPedido: [{ id: "n1", cooperativaId: "coop1", status: "conferida" } as never],
+};
+const semRebaixar = preservarStaffGestaoContraWipe(lastroFila, incomingConferida);
+assert.equal(
+  semRebaixar.notasPedido.find((n) => n.id === "n1")?.status,
+  "conferida",
+  "lastro do F5 não rebaixa nota já lançada"
+);
+
 resetStaffOperacionalColdHydrateForTests();
 assert.equal(
   deveAdiarReconciliarFichaAposLimpezaCacheStaff(rico as never, "coop1"),

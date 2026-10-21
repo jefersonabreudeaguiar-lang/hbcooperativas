@@ -29,6 +29,8 @@ import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import {
   isNotaStatusDowngrade,
   notaElegivelParaFilaConferenciaResponsavel,
+  notaLancadaNaFichaCorrida,
+  protectNotaAgainstStatusDowngrade,
   sanitizarNotaParaFilaConferencia,
 } from "@/utils/notaStatus";
 import {
@@ -252,7 +254,10 @@ function mergeNotasPedidoParaPainel(truth: NotaPedido[], react: NotaPedido[]): N
   if (truth.length === 0) return react;
   const byId = new Map<string, NotaPedido>();
   for (const n of truth) byId.set(n.id, n);
-  for (const n of react) byId.set(n.id, n);
+  for (const n of react) {
+    const prev = byId.get(n.id);
+    byId.set(n.id, prev ? protectNotaAgainstStatusDowngrade(prev, n) : n);
+  }
   return [...byId.values()];
 }
 
@@ -548,6 +553,7 @@ function coletarFilaNotasConferir(data: AppData, coopId: string): NotaPedido[] {
   const excluidas = idsNotasPedidoExcluidas(data, coopId);
   const filaNotas: NotaPedido[] = [];
   for (const n of data.notasPedido ?? []) {
+    if (notaLancadaNaFichaCorrida(data.fichaCorrida, n.id)) continue;
     const candidata = sanitizarNotaParaFilaConferencia(n);
     if (!notaElegivelParaFilaConferenciaResponsavel(candidata)) continue;
     if (!notaPertenceCooperativa(data, n, coopId)) continue;

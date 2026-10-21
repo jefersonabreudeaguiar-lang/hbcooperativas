@@ -105,7 +105,8 @@ export function useResponsavelFilaConferencia(
     const extra = listNotasFilaConferenciaDeDados(lastro, coopId).filter(
       (n) => !isNotaConferenciaDecididaLocalmente(n.id)
     );
-    return fundirFilaConferirComLastro(base, extra);
+    const evidencia = isAppDataWarm() ? getDataOperationalTruth() : lastro;
+    return fundirFilaConferirComLastro(base, extra, evidencia);
   }, [pendentesTodasBase, pendingDeleteIds, coopId]);
 
   const lastEstaveisRef = useRef<NotaPedido[]>([]);

@@ -3,9 +3,10 @@
  * (cache limpo / pull operacional / pós-processar).
  * Lastro é por CNPJ — uma cooperativa não herda o painel de outra no mesmo aparelho.
  */
-import type { AppData } from "@/types";
+import type { AppData, NotaPedido } from "@/types";
 import { stripBinaryForPersist } from "@/utils/fotoEntrega";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import { protectNotaAgainstStatusDowngrade } from "@/utils/notaStatus";
 
 export type StaffGestaoRiqueza = {
   cooperados: number;
@@ -319,6 +320,19 @@ function uniaoPorId<T extends { id: string }>(prefer: T[], extra: T[]): T[] {
   return [...map.values()];
 }
 
+function uniaoNotasSemRebaixar(lastro: NotaPedido[], incoming: NotaPedido[]): NotaPedido[] {
+  const map = new Map<string, NotaPedido>();
+  for (const n of lastro) {
+    if (n?.id) map.set(n.id, n);
+  }
+  for (const n of incoming) {
+    if (!n?.id) continue;
+    const prev = map.get(n.id);
+    map.set(n.id, prev ? protectNotaAgainstStatusDowngrade(prev, n) : n);
+  }
+  return [...map.values()];
+}
+
 function lastroMesmoTenant(lastro: AppData, incomingCnpj: string): boolean {
   if (incomingCnpj.length !== 14) return false;
   const owner = primaryStaffGestaoCnpjFromData(lastro);
@@ -376,7 +390,7 @@ export function preservarStaffGestaoContraWipe(
   const kept: AppData = {
     ...comLivroLastro,
     cooperados: uniaoPorId(lastro.cooperados ?? [], incoming.cooperados ?? []),
-    notasPedido: uniaoPorId(lastro.notasPedido ?? [], incoming.notasPedido ?? []),
+    notasPedido: uniaoNotasSemRebaixar(lastro.notasPedido ?? [], incoming.notasPedido ?? []),
     fichaCorrida: uniaoPorId(lastro.fichaCorrida ?? [], incoming.fichaCorrida ?? []),
     pagamentosCooperado: uniaoPorId(
       lastro.pagamentosCooperado ?? [],

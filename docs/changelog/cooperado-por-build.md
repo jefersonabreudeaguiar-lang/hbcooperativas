@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v528
+
+- **Responsável:** foto já lançada na ficha não volta para Conferir entregas no F5.
+- **Conferir:** o lastro guarda a fila que ainda não lançou; não reabre o que já está na ficha.
+- **Cooperado:** Início, Entregas, Ficha, Financeiro e A receber iguais ao v527.
+
 ## v527
 
 - **Responsável:** lançamento do Livro caixa não some no F5 — o que já estava no aparelho fica, e o salvar já manda para a nuvem.
