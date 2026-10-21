@@ -15,19 +15,23 @@ assert.equal(staffBottomTabCacheKey("/notas-pedido"), "/notas-pedido");
 assert.equal(staffBottomTabCacheKey("/relatorios/conciliacao"), "/relatorios");
 assert(isStaffBottomTabPath("/ficha-corrida"));
 assert(!isStaffBottomTabPath("/mercado-parceiro/cobrar"));
-assert.equal(getStaffMobileTabCacheLimit(false), 4);
-assert.equal(getStaffMobileTabCacheLimit(true), 2);
-assert.deepEqual([...STAFF_TAB_PIN_HREFS], ["/notas-pedido", "/ficha-corrida"]);
+assert.equal(getStaffMobileTabCacheLimit(false), 6);
+assert.equal(getStaffMobileTabCacheLimit(true), 5);
+assert.deepEqual(
+  [...STAFF_TAB_PIN_HREFS],
+  ["/dashboard", "/notas-pedido", "/ficha-corrida", "/livro-caixa"]
+);
 
 const order = trimStaffTabCacheOrder(
   ["/notas-pedido", "/dashboard", "/ficha-corrida", "/livro-caixa"],
   "/notas-pedido",
-  2,
-  false
+  4,
+  true
 );
-assert.equal(order.length, 2);
+assert.equal(order.length, 4);
 assert.equal(order[0], "/notas-pedido");
-assert.ok(order.includes("/ficha-corrida"), "Pagar fica pinado no limite 2");
+assert.ok(order.includes("/ficha-corrida"), "Pagar fica pinado");
+assert.ok(order.includes("/livro-caixa"), "Livro fica pinado");
 
 const quatro = trimStaffTabCacheOrder(
   ["/dashboard", "/notas-pedido", "/ficha-corrida", "/livro-caixa"],

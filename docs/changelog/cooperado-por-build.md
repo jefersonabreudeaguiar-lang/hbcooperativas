@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v537
+
+- **Responsável:** tocar numa aba já visitada (Início, Conferir, Pagar, Livro) troca na hora — o lastro reaparece, sem montar a tela de novo.
+- **Painel da gestão:** sync e recálculo correm depois do toque; o cooperado não muda.
+- **Cooperado:** Início, Entregas, Ficha, Financeiro e A receber iguais ao v536.
+
 ## v536
 
 - **Pagar / A receber / Financeiro:** compra HB já descontada no PIX não volta no resumo — só entra compra feita depois da liquidação, como na aba Limites.

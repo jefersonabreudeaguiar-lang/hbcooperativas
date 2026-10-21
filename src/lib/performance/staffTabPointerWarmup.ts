@@ -49,3 +49,7 @@ export function staffTabWarmOnPointerDown(href: string): void {
   if (typeof window === "undefined") return;
   deferAfterPointerHandler(() => warmStaffTab(href));
 }
+
+export function staffTabWarmOnTouchStart(href: string): void {
+  staffTabWarmOnPointerDown(href);
+}

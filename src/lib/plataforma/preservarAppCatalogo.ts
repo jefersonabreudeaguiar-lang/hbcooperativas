@@ -12,6 +12,7 @@ import { RESPONSAVEL_CONFERIR_CORRECOES_CONTRATO_VERSION } from "../responsavel/
 import { RESPONSAVEL_CONFERIR_ENTREGAS_CONTRATO_VERSION } from "../responsavel/responsavelConferirEntregasContrato";
 import { RESPONSAVEL_PAGAR_COOPERADOS_CONTRATO_VERSION } from "../responsavel/responsavelPagarCooperadosContrato";
 import { RESPONSAVEL_PAINEL_CONTRATO_VERSION } from "../responsavel/responsavelPainelContrato";
+import { RESPONSAVEL_TROCA_ABAS_RAPIDA_VERSION } from "../responsavel/responsavelTrocaAbasRapida";
 
 export const PRESERVAR_APP_GATE_VERSION = 1;
 
@@ -24,6 +25,7 @@ export const PRESERVAR_APP_CONTRATOS_TRAVADOS = {
   fotosFicha: 2,
   aberturaInstantanea: 1,
   trocaAbas: 1,
+  trocaAbasResponsavel: 1,
 } as const;
 
 export const PRESERVAR_APP_STAFF_LKG_PREFIX = "hb-staff-gestao-lkg-v1";
@@ -37,6 +39,7 @@ export const PRESERVAR_APP_TESTES_CONTRATO = [
   "scripts/test-responsavel-conferir-entregas-contrato.ts",
   "scripts/test-responsavel-pagar-cooperados-contrato.ts",
   "scripts/test-responsavel-conferir-correcoes-contrato.ts",
+  "scripts/test-responsavel-troca-abas-rapida.ts",
   "scripts/test-cooperado-fotos-ficha-contrato.ts",
   "scripts/test-cooperado-abertura-instantanea.ts",
   "scripts/test-cooperado-troca-abas-rapida.ts",
@@ -167,6 +170,11 @@ export function listarDriftContratosTravados(): DriftContratoTravado[] {
       id: "trocaAbas",
       live: COOPERADO_TROCA_ABAS_RAPIDA_VERSION,
       travado: PRESERVAR_APP_CONTRATOS_TRAVADOS.trocaAbas,
+    },
+    {
+      id: "trocaAbasResponsavel",
+      live: RESPONSAVEL_TROCA_ABAS_RAPIDA_VERSION,
+      travado: PRESERVAR_APP_CONTRATOS_TRAVADOS.trocaAbasResponsavel,
     },
   ];
   return pares.filter((p) => p.live !== p.travado);
