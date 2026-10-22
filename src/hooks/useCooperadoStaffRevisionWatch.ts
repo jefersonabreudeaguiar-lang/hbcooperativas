@@ -18,6 +18,10 @@ const MIN_GAP_BETWEEN_CHECKS_MESSENGER_MS = 12_000;
 const MIN_GAP_FOREGROUND_MS = 8_000;
 const MIN_GAP_FOREGROUND_MESSENGER_MS = 5_000;
 const HINT_POLL_MS = 4_000;
+/** Evita pull/revisão repetidos para o mesmo hint enquanto o poll roda a cada 4s. */
+const MIN_GAP_HINT_PROCESS_MS = 12_000;
+/** Hint na nuvem sem sucesso de sync — para de insistir para não travar o app. */
+const HINT_QUARANTINE_MS = 90_000;
 
 function hintAppliedKey(cooperadoId: string): string {
   return `hb-coop-lancamento-hint-at:${cooperadoId}`;
@@ -57,6 +61,10 @@ export function useCooperadoStaffRevisionWatch({
   const lastForegroundAtRef = useRef(0);
   const lastHintAtRef = useRef(0);
   const hintInflightRef = useRef(false);
+  const lastHintProcessAtRef = useRef(0);
+  const lastHintProcessKeyRef = useRef("");
+  const pendingHintFirstSeenAtRef = useRef(0);
+  const pendingHintKeyRef = useRef("");
   const syncingRef = useRef(syncing);
   syncingRef.current = syncing;
 
@@ -95,8 +103,20 @@ export function useCooperadoStaffRevisionWatch({
       });
     };
 
+    const quarantinePendingHint = (atMs: number, reason: "stale" | "give_up") => {
+      if (!cooperadoId || !atMs) return;
+      lastHintAtRef.current = atMs;
+      persistAppliedHintAt(cooperadoId, atMs);
+      pendingHintKeyRef.current = "";
+      pendingHintFirstSeenAtRef.current = 0;
+      if (reason === "give_up" && typeof console !== "undefined") {
+        console.info("[cooperado-hint] hint antigo ignorado para evitar sync em loop");
+      }
+    };
+
     const checkHint = async () => {
       if (cancelled || hintInflightRef.current) return;
+      if (syncingRef.current) return;
       if (!cooperadoId || !cooperativaId) return;
       if (typeof navigator !== "undefined" && !navigator.onLine) return;
       if (typeof document !== "undefined" && document.hidden) return;
@@ -106,17 +126,49 @@ export function useCooperadoStaffRevisionWatch({
         if (cancelled || !hint) return;
         const atMs = Date.parse(hint.at);
         if (!Number.isFinite(atMs) || atMs <= lastHintAtRef.current) return;
+
+        const hintKey = `${hint.notaId}|${atMs}`;
+        const now = Date.now();
+        if (hintKey !== pendingHintKeyRef.current) {
+          pendingHintKeyRef.current = hintKey;
+          pendingHintFirstSeenAtRef.current = now;
+        } else if (now - pendingHintFirstSeenAtRef.current >= HINT_QUARANTINE_MS) {
+          quarantinePendingHint(atMs, "give_up");
+          return;
+        }
+
+        if (
+          hintKey === lastHintProcessKeyRef.current &&
+          now - lastHintProcessAtRef.current < MIN_GAP_HINT_PROCESS_MS
+        ) {
+          return;
+        }
+        lastHintProcessKeyRef.current = hintKey;
+        lastHintProcessAtRef.current = now;
+
         const session = getSession();
         if (!session || session.role !== "cooperado") return;
         const remote = await watchBicCooperativaCloudRevision(digits);
-        if (!remote) return;
+        if (!remote) {
+          if (now - pendingHintFirstSeenAtRef.current >= HINT_QUARANTINE_MS) {
+            quarantinePendingHint(atMs, "stale");
+          }
+          return;
+        }
         const ok = await runCooperadoMessengerOperacionalLightPull({
           cnpj: digits,
           cooperativaId,
           user: session,
           remote,
         });
-        if (!ok) return;
+        if (!ok) {
+          if (Date.now() - pendingHintFirstSeenAtRef.current >= HINT_QUARANTINE_MS) {
+            quarantinePendingHint(atMs, "give_up");
+          }
+          return;
+        }
+        pendingHintKeyRef.current = "";
+        pendingHintFirstSeenAtRef.current = 0;
         lastHintAtRef.current = atMs;
         persistAppliedHintAt(cooperadoId, atMs);
       } catch {
@@ -147,5 +199,5 @@ export function useCooperadoStaffRevisionWatch({
       if (intervalId) window.clearInterval(intervalId);
       if (hintIntervalId) window.clearInterval(hintIntervalId);
     };
-  }, [cnpj, cooperadoId, cooperativaId, enabled, syncing]);
+  }, [cnpj, cooperadoId, cooperativaId, enabled]);
 }
