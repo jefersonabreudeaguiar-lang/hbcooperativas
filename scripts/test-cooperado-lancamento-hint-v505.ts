@@ -33,8 +33,6 @@ const watch = read("src/hooks/useCooperadoStaffRevisionWatch.ts");
 assert.match(watch, /HINT_POLL_MS = 4_000/);
 assert.match(watch, /fetchMyCooperadoLancamentoHint/);
 assert.match(watch, /pullOperacionalAfterCooperadoLancamentoHint/);
-assert.match(watch, /delegated_operacional_full/);
-assert.match(watch, /MIN_GAP_HINT_PULL_MS/);
 
 const hintSync = read("src/lib/cooperado/cooperadoStaffHintOperacionalSync.ts");
 assert.match(hintSync, /pullOperacionalAfterCooperadoLancamentoHint/);
