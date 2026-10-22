@@ -6,7 +6,8 @@ import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooper
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { cooperadoPwaSuppressForegroundStaleCheck } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
 import { fetchMyCooperadoLancamentoHint } from "@/lib/cooperado/cooperadoLancamentoHint";
-import { pullOperacionalAfterCooperadoLancamentoHint } from "@/lib/cooperado/cooperadoStaffHintOperacionalSync";
+import { runCooperadoMessengerOperacionalLightPull } from "@/lib/cooperado/cooperadoMessengerOperacionalLightPull";
+import { watchBicCooperativaCloudRevision } from "@/lib/bic/bicRevisionWatch";
 import { getSession } from "@/services/dataStore";
 
 /** Consulta leve na nuvem enquanto o app está em uso. */
@@ -96,7 +97,6 @@ export function useCooperadoStaffRevisionWatch({
 
     const checkHint = async () => {
       if (cancelled || hintInflightRef.current) return;
-      if (syncingRef.current) return;
       if (!cooperadoId || !cooperativaId) return;
       if (typeof navigator !== "undefined" && !navigator.onLine) return;
       if (typeof document !== "undefined" && document.hidden) return;
@@ -108,12 +108,15 @@ export function useCooperadoStaffRevisionWatch({
         if (!Number.isFinite(atMs) || atMs <= lastHintAtRef.current) return;
         const session = getSession();
         if (!session || session.role !== "cooperado") return;
-        const outcome = await pullOperacionalAfterCooperadoLancamentoHint({
+        const remote = await watchBicCooperativaCloudRevision(digits);
+        if (!remote) return;
+        const ok = await runCooperadoMessengerOperacionalLightPull({
           cnpj: digits,
           cooperativaId,
           user: session,
+          remote,
         });
-        if (cancelled || outcome.status !== "synced") return;
+        if (!ok) return;
         lastHintAtRef.current = atMs;
         persistAppliedHintAt(cooperadoId, atMs);
       } catch {
