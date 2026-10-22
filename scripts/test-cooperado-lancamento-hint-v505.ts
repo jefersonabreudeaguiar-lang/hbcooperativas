@@ -32,7 +32,11 @@ assert.match(nuvem, /publishCooperadoLancamentoHint/);
 const watch = read("src/hooks/useCooperadoStaffRevisionWatch.ts");
 assert.match(watch, /HINT_POLL_MS = 4_000/);
 assert.match(watch, /fetchMyCooperadoLancamentoHint/);
-assert.match(watch, /runCooperadoMessengerOperacionalLightPull/);
+assert.match(watch, /pullOperacionalAfterCooperadoLancamentoHint/);
+
+const hintSync = read("src/lib/cooperado/cooperadoStaffHintOperacionalSync.ts");
+assert.match(hintSync, /pullOperacionalAfterCooperadoLancamentoHint/);
+assert.match(hintSync, /syncCooperadoMessengerOperacionalLightFromCloud/);
 
 const staff = read("src/app/(app)/notas-pedido/staff/NotasPedidoStaffResponsavelApp.tsx");
 assert.match(staff, /publishCooperadoLancamentoHint/);
