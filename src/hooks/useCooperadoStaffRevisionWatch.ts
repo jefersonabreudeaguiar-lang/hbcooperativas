@@ -17,6 +17,8 @@ const MIN_GAP_BETWEEN_CHECKS_MESSENGER_MS = 12_000;
 const MIN_GAP_FOREGROUND_MS = 8_000;
 const MIN_GAP_FOREGROUND_MESSENGER_MS = 5_000;
 const HINT_POLL_MS = 4_000;
+/** Evita reentrar no pull pesado para o mesmo hint a cada poll de 4s. */
+const MIN_GAP_HINT_PULL_MS = 12_000;
 
 function hintAppliedKey(cooperadoId: string): string {
   return `hb-coop-lancamento-hint-at:${cooperadoId}`;
@@ -56,6 +58,8 @@ export function useCooperadoStaffRevisionWatch({
   const lastForegroundAtRef = useRef(0);
   const lastHintAtRef = useRef(0);
   const hintInflightRef = useRef(false);
+  const lastHintPullAtRef = useRef(0);
+  const lastHintPullKeyRef = useRef("");
   const syncingRef = useRef(syncing);
   syncingRef.current = syncing;
 
@@ -106,6 +110,16 @@ export function useCooperadoStaffRevisionWatch({
         if (cancelled || !hint) return;
         const atMs = Date.parse(hint.at);
         if (!Number.isFinite(atMs) || atMs <= lastHintAtRef.current) return;
+        const hintKey = `${hint.notaId}|${atMs}`;
+        const now = Date.now();
+        if (
+          hintKey === lastHintPullKeyRef.current &&
+          now - lastHintPullAtRef.current < MIN_GAP_HINT_PULL_MS
+        ) {
+          return;
+        }
+        lastHintPullKeyRef.current = hintKey;
+        lastHintPullAtRef.current = now;
         const session = getSession();
         if (!session || session.role !== "cooperado") return;
         const outcome = await pullOperacionalAfterCooperadoLancamentoHint({
@@ -113,9 +127,11 @@ export function useCooperadoStaffRevisionWatch({
           cooperativaId,
           user: session,
         });
-        if (cancelled || outcome.status !== "synced") return;
-        lastHintAtRef.current = atMs;
-        persistAppliedHintAt(cooperadoId, atMs);
+        if (cancelled) return;
+        if (outcome.status === "synced" || outcome.status === "delegated_operacional_full") {
+          lastHintAtRef.current = atMs;
+          persistAppliedHintAt(cooperadoId, atMs);
+        }
       } catch {
         /* próximo ciclo de 4s tenta de novo */
       } finally {
@@ -144,5 +160,5 @@ export function useCooperadoStaffRevisionWatch({
       if (intervalId) window.clearInterval(intervalId);
       if (hintIntervalId) window.clearInterval(hintIntervalId);
     };
-  }, [cnpj, cooperadoId, cooperativaId, enabled, syncing]);
+  }, [cnpj, cooperadoId, cooperativaId, enabled]);
 }
