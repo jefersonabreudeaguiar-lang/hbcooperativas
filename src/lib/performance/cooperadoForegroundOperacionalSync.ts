@@ -48,6 +48,7 @@ import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTe
 import { getData, getSession, isAppDataWarm } from "@/services/dataStore";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
+import { cooperadoGaPausaTrabalhoFinanceiroPesado } from "@/lib/cooperado/cooperadoGaPausaTrabalhoPesado";
 
 export type CooperadoForegroundPullReason =
   | "revision_changed"
@@ -186,6 +187,12 @@ export async function runCooperadoForegroundOperacionalCheck(
   }
 ): Promise<boolean> {
   const session = getSession();
+  if (session?.role === "cooperado" && cooperadoGaPausaTrabalhoFinanceiroPesado(session)) {
+    if (opts?.financeiroDesatualizado) {
+      cooperadoRematerializarFinanceiroLocalSePossivel(session);
+    }
+    return false;
+  }
   if (isCooperadoPwaMessengerMode() && cooperadoPwaSuppressForegroundStaleCheck()) {
     return false;
   }

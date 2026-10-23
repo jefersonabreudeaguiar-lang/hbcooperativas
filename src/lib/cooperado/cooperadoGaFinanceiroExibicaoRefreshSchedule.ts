@@ -14,6 +14,7 @@ import { cooperadoPilotForcarRematerializacaoFinanceira } from "@/lib/cooperado/
 import { cooperadoGaDispatchPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
 import { cooperadoPilotAppDataTemFinanceiroLocal } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
 import { requestCooperadoGaFinanceiroExibicaoRecoverySync } from "@/services/syncRequest";
+import { cooperadoGaPausaTrabalhoFinanceiroPesado } from "@/lib/cooperado/cooperadoGaPausaTrabalhoPesado";
 
 /** Delays absolutos desde o início da sessão visível no app. */
 const REFRESH_DELAYS_MS = [20_000, 40_000, 60_000] as const;
@@ -33,6 +34,7 @@ function onRefreshTick(
 ): void {
   if (typeof document !== "undefined" && document.hidden) return;
   if (activeUserId !== user.id) return;
+  if (cooperadoGaPausaTrabalhoFinanceiroPesado(user)) return;
 
   cooperadoPilotForcarRematerializacaoFinanceira(user);
 

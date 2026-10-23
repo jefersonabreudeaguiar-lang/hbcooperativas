@@ -25,6 +25,7 @@ assert.match(hook, /!persistidoJaTemValor/);
 assert.match(hook, /const atualizando = valorJaNaTela/);
 assert.match(garantia, /if \(cooperadoGaValorReceberExibicaoResolvida\(user\)\)[\s\S]{0,120}clearGarantiaTimers/);
 assert.doesNotMatch(garantia, /onGarantiaTick[\s\S]{0,200}cooperadoPilotForcarRematerializacaoFinanceira/);
-assert.match(recovery, /if \(cooperadoGaValorReceberExibicaoResolvida\(user\)\) return;/);
+assert.match(recovery, /if \(cooperadoGaPausaTrabalhoFinanceiroPesado\(user\)\) return;/);
+assert.match(garantia, /cooperadoGaPausaTrabalhoFinanceiroPesado\(user\)\) return/);
 
 console.log("OK test-cooperado-perf-sem-trava-v564");

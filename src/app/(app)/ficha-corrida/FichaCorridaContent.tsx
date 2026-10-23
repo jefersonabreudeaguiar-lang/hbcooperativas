@@ -190,6 +190,7 @@ import {
 import { requestAppSync, requestAppSyncImmediate } from "@/services/syncRequest";
 import { pagamentoIdFromOrigemId } from "@/services/livroCaixaService";
 import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
+import { cooperadoGaPausaTrabalhoFinanceiroPesado } from "@/lib/cooperado/cooperadoGaPausaTrabalhoPesado";
 import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExibirAguardandoAssinatura";
 import { materializarCooperadoPwaAposAssinaturaReciboLocal } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { CooperadoApresentacaoFinanceiraGate } from "@/components/cooperado/CooperadoApresentacaoFinanceiraGate";
@@ -383,7 +384,10 @@ function FichaCorridaPageInner() {
 
   useEffect(() => {
     if (!tabActive || !isCooperado || !user || user.role !== "cooperado") return;
-    const run = () => scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user, { silent: true });
+    const run = () => {
+      if (cooperadoGaPausaTrabalhoFinanceiroPesado(user)) return;
+      scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user, { silent: true });
+    };
     if (typeof requestIdleCallback !== "undefined") {
       const id = requestIdleCallback(run, { timeout: 1_200 });
       return () => cancelIdleCallback(id);
@@ -396,7 +400,10 @@ function FichaCorridaPageInner() {
     if (!tabActive || !(messenger || pilotFinanceiroLeve) || !user || user.role !== "cooperado") {
       return;
     }
-    const run = () => rematerializarCooperadoPwaSnapshotsSeNecessario(user);
+    const run = () => {
+      if (cooperadoGaPausaTrabalhoFinanceiroPesado(user)) return;
+      rematerializarCooperadoPwaSnapshotsSeNecessario(user);
+    };
     if (typeof requestIdleCallback !== "undefined") {
       const id = requestIdleCallback(run, { timeout: 600 });
       return () => cancelIdleCallback(id);
@@ -479,6 +486,9 @@ function FichaCorridaPageInner() {
   useEffect(() => {
     if (!tabActive || messenger) return;
     const run = () => {
+      if (isCooperado && user && cooperadoGaPausaTrabalhoFinanceiroPesado(user)) {
+        return;
+      }
       if (isCooperado && isCooperadoManualOperacionalSync() && user && data && coopIdEarly) {
         void resolveCooperativaCnpj(data, coopIdEarly, user).then((cnpj) => {
           if (cnpj) void runCooperadoForegroundOperacionalCheck(cnpj);

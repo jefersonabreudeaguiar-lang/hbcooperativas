@@ -107,7 +107,7 @@ Confira no header do app o badge **`v564`** (ou superior). Depois responda **SIM
 |------|------|----------|-------|
 | Plano aceito | 23/10/2026 | SIM (Jeferson piloto) | — |
 | Fase 1 | 23/10/2026 | SIM (Jeferson) | v564 |
-| Fase 2 | aguardando piloto | deploy v565 | v565 |
-| Fase 2 | | | |
+| Fase 2 | 23/10/2026 | NÃO (Jeferson — trava ao trocar abas) | v565 |
+| Fase 2 | aguardando piloto | deploy v566 | v566 |
 | Fase 3 | | | |
 | Fase 4 | | | |

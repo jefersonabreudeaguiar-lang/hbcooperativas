@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v566
+
+- **Cooperado (Fase 2 — abas):** 10s após trocar de aba, sync/pulso/garantia e foreground operacional ficam em pausa; com valor já na tela, o pulso BIC no celular **não** rematerializa a ficha quando a nuvem não mudou; Ficha/refresh GA respeitam a mesma pausa.
+
 ## v565
 
 - **Cooperado (Fase 2 — fluidez):** com valor já resolvido na tela, o pulso BIC deixa de rematerializar a ficha a cada minuto (era isso que travava ao trocar abas).

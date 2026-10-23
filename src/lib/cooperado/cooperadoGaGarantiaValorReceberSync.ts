@@ -31,6 +31,7 @@ import {
   cooperadoFinanceiroStaleRecuperavelEmBackground,
 } from "@/services/fichaSyncGuard";
 import { cooperadoMobileSyncTrace } from "@/lib/cooperado/cooperadoMobileSyncTrace";
+import { cooperadoGaPausaTrabalhoFinanceiroPesado } from "@/lib/cooperado/cooperadoGaPausaTrabalhoPesado";
 
 const GARANTIA_DELAYS_MS = [5_000, 15_000, 30_000, 60_000, 120_000, 180_000] as const;
 
@@ -43,6 +44,7 @@ function clearGarantiaTimers(): void {
 }
 
 function pullNuvemFinanceiro(user: Omit<User, "password">, attempt: number): void {
+  if (cooperadoGaPausaTrabalhoFinanceiroPesado(user)) return;
   if (cooperadoGaValorReceberExibicaoResolvida(user)) {
     cooperadoMobileSyncTrace("garantia_resolvida_local", `attempt=${attempt}`);
     clearGarantiaTimers();
@@ -105,6 +107,7 @@ function pullNuvemFinanceiro(user: Omit<User, "password">, attempt: number): voi
 function onGarantiaTick(user: Omit<User, "password">, attempt: number): void {
   if (typeof document !== "undefined" && document.hidden) return;
   if (activeUserId !== user.id) return;
+  if (cooperadoGaPausaTrabalhoFinanceiroPesado(user)) return;
 
   if (cooperadoGaValorReceberExibicaoResolvida(user)) {
     clearGarantiaTimers();

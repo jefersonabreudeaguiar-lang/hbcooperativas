@@ -42,6 +42,7 @@ import {
 } from "@/lib/performance/cooperadoTabPanelCache";
 import { useCooperadoEffectiveTabPath } from "@/hooks/useCooperadoEffectiveTabPath";
 import { CooperadoTabRouteLoading } from "@/components/performance/CooperadoTabRouteLoading";
+import { markCooperadoTabPathChange } from "@/lib/cooperado/cooperadoTabSwitchQuiescence";
 
 function subscribeCooperadoMobileViewport(onChange: () => void): () => void {
   const mq = window.matchMedia("(max-width: 1023px)");
@@ -129,6 +130,8 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   const onTab = isCooperadoBottomTabPath(effectivePath);
 
   useLayoutEffect(() => {
+    markCooperadoTabPathChange(effectivePath);
+
     publishKeepAliveDomState({
       enabled,
       mobile,

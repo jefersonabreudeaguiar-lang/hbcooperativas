@@ -21,7 +21,7 @@ import {
   cooperadoBrowserDesktopFinanceiroEstavel,
 } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
 import { markCooperadoBicFinanceiroFresh } from "@/lib/bic/cooperadoBicSonataSyncUi";
-import { cooperadoGaValorReceberExibicaoResolvida } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
+import { cooperadoGaPausaTrabalhoFinanceiroPesado } from "@/lib/cooperado/cooperadoGaPausaTrabalhoPesado";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
@@ -60,7 +60,7 @@ function pulseIntervalMs(user: Omit<User, "password">): number {
 async function runRevisionPulse(user: Omit<User, "password">): Promise<void> {
   if (inflight) return;
   if (typeof document !== "undefined" && document.hidden) return;
-  if (cooperadoGaValorReceberExibicaoResolvida(user)) return;
+  if (cooperadoGaPausaTrabalhoFinanceiroPesado(user)) return;
   if (Date.now() - lastPulseAt < pulseMinGapMs(user)) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   if (!isAppDataWarm()) return;
@@ -97,8 +97,8 @@ async function runRevisionPulse(user: Omit<User, "password">): Promise<void> {
       }
       return;
     }
-    recordBicParidadePulse("rematerializeOnly");
-    rematerializarSilencioso(user);
+    // Mobile: revisão igual — não rematerializar em loop (~55s); só quando a nuvem mudar.
+    return;
   } finally {
     inflight = false;
   }
@@ -106,7 +106,7 @@ async function runRevisionPulse(user: Omit<User, "password">): Promise<void> {
 
 function onVisibility(user: Omit<User, "password">): void {
   if (document.visibilityState !== "visible") return;
-  if (cooperadoGaValorReceberExibicaoResolvida(user)) return;
+  if (cooperadoGaPausaTrabalhoFinanceiroPesado(user)) return;
   scheduleCooperadoBicHybridIdleTask(() => void runRevisionPulse(user), 2_000);
 }
 
