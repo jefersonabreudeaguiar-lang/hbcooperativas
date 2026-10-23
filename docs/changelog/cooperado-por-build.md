@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v570
+
+- **Responsável (PC — “página não responde”):** no login da gestão não roda mais `preloadAppData` (parse pesado do armazenamento); com lastro já na tela, o merge do persist no PC espera até ~12s ocioso.
+
 ## v569
 
 - **Responsável (PC):** keep-alive de abas só no celular — no computador navegação normal (menos travamento); abertura com notas/ficha local não dispara `financeiro_delta` pesado; pausa de sync ao mudar de menu no desktop.
