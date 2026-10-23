@@ -30,7 +30,7 @@ import {
 import { cooperadoMobileSyncTrace } from "@/lib/cooperado/cooperadoMobileSyncTrace";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { runCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
-import { getSession } from "@/services/dataStore";
+import { getSession, reloadStaffGestaoPersistAfterFirstPaint } from "@/services/dataStore";
 import {
   capStaffConferenciaSyncTierRequest,
   shouldBlockStaffAutoSyncDuringConferencia,
@@ -353,6 +353,7 @@ export function requestAppSyncImmediate(): void {
 
 /** Responsável — Atualizar: puxa a nuvem sem sync bidirecional (não zera o painel). */
 export function requestStaffGestaoAtualizar(): void {
+  reloadStaffGestaoPersistAfterFirstPaint();
   requestSyncTier("operacional_full", { force: true, immediate: true, userInitiated: true });
 }
 

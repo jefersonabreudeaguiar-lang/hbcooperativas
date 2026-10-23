@@ -87,6 +87,7 @@ import { CooperadoPostDeployGate } from "@/components/cooperado/CooperadoPostDep
 import { CooperadoMobilePilotStarBadge } from "@/components/cooperado/CooperadoMobilePilotStarBadge";
 import { CooperadoMobileReleaseBar } from "@/components/cooperado/CooperadoMobileReleaseBar";
 import { StaffMobileReleaseBar } from "@/components/layout/StaffMobileReleaseBar";
+import { StaffGestaoTabEnterSync } from "@/components/staff/StaffGestaoTabEnterSync";
 import type { Resource } from "@/types";
 import {
   shouldShowBaixarAppInCooperadoOverflowMenu,
@@ -633,8 +634,12 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         )
       : routePanels;
 
+  const staffGestaoTabSync =
+    Boolean(navUser) && staffPainelUi && !isCooperadoAppUser(navUser);
+
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden">
+      <StaffGestaoTabEnterSync enabled={staffGestaoTabSync} />
       {navUser && <CooperadoSubtleUpdateNotice />}
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">

@@ -50,6 +50,14 @@
 
 ---
 
+### Fases S1–S4 — Sincronização por aba (antes da R3)
+
+**Objetivo:** cada aba com valores reais e comportamento correto.  
+**Plano detalhado:** `RESPONSAVEL-SINCRONIZACAO-POR-ABA-2026.md`  
+**Bloqueia** Fase R3 até S1–S4 **SIM**.
+
+---
+
 ### Fase R3 — Lançar e refletir (ponte para cooperado Fase 3)
 
 **Objetivo:** responsável confere/lança → cooperado vê valor alinhado (base para reabrir portão Fase 3 cooperado).
@@ -82,7 +90,8 @@ Checklist derivado de `ETAPA-5-homolog-fechamento.md` itens que dependem do resp
 | Fase R1 (portão completo) | 23/10/2026 | NÃO (Jeferson — PC após login) | v570 |
 | Fase R1 (portão completo) | 23/10/2026 | SIM (Jeferson — PC) | v571 |
 | Fase R2 | 23/10/2026 | SIM (Jeferson — PC, menu fluido e conteúdo certo) | v571 |
-| Fase R3 | aguardando piloto | lançar ↔ cooperado | v571+ |
+| Fase R3 | adiada | após S1–S4 (sync por aba) | — |
+| S1–S4 sync | aguardando piloto | ver `RESPONSAVEL-SINCRONIZACAO-POR-ABA-2026.md` | v572+ |
 
 ---
 

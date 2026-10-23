@@ -1,5 +1,6 @@
 /** PC gestão — após login, sync automática fica em espera para o painel responder. */
-const WARMUP_MS = 120_000;
+export const staffGestaoDesktopWarmupMs = 120_000;
+const WARMUP_MS = staffGestaoDesktopWarmupMs;
 
 let sessionStartedAt = 0;
 let marked = false;

@@ -15,6 +15,7 @@ import {
   hydrateStaffGestaoFirstPaintFromLastro,
   isAppDataWarm,
   preloadAppData,
+  reloadStaffGestaoPersistAfterFirstPaint,
   scheduleStaffGestaoPersistReloadAfterPaint,
 } from "@/services/dataStore";
 import {
@@ -31,7 +32,10 @@ import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { cooperadoMobilePilotDeferAppDataEagerWarm } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { shouldDeferAppDataEagerWarmForCooperadoBicHybrid } from "@/lib/cooperado/cooperadoBicHybridLight";
-import { markStaffGestaoDesktopSessionStart } from "@/lib/staff/staffGestaoDesktopWarmup";
+import {
+  markStaffGestaoDesktopSessionStart,
+  staffGestaoDesktopWarmupMs,
+} from "@/lib/staff/staffGestaoDesktopWarmup";
 
 /** Mesma chave que `cooperadoEventDrivenSync` — evita import circular no cold start. */
 const HB_OPERACIONAL_SYNCED_BUILD = "hb-coop-operacional-synced-build";
@@ -143,6 +147,11 @@ export function ensureCooperadoAppDataEagerWarm(): void {
     markStaffGestaoDesktopSessionStart();
     hydrateStaffGestaoFirstPaintFromLastro();
     scheduleStaffGestaoPersistReloadAfterPaint();
+    if (typeof window !== "undefined" && !window.matchMedia("(max-width: 1023px)").matches) {
+      window.setTimeout(() => {
+        reloadStaffGestaoPersistAfterFirstPaint();
+      }, staffGestaoDesktopWarmupMs + 800);
+    }
     return;
   }
   if (!isCooperadoInstantResumeEnabled()) return;

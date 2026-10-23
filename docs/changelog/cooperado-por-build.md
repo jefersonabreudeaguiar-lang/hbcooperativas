@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v572
+
+- **Responsável (sync por aba — S1+):** ao mudar de menu, sync leve da aba; «Atualizar» une armazenamento local + nuvem; no PC merge automático após 2 min. Plano: `docs/plano-mestre/RESPONSAVEL-SINCRONIZACAO-POR-ABA-2026.md`.
+
 ## v571
 
 - **Responsável (PC — uso após login):** 2 min sem sync automática pesada; merge do persist no PC só no «Atualizar» quando já há lastro; reconciliação do livro-caixa no Início adiada (não no 1º frame).
