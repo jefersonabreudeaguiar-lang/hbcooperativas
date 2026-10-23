@@ -133,6 +133,7 @@ import {
 import {
   buildCooperadoPwaInicioDashboardView,
   persistirCooperadoPwaInicioDashboardSnapshot,
+  sanitizeCooperadoPwaInicioDashboardView,
   type CooperadoPwaInicioDashboardView,
 } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
 import { cooperadoPwaInstantPaintReady, lerCooperadoPwaInicioDashboardViewForResume } from "@/lib/cooperado/cooperadoPwaInstantResume";
@@ -438,8 +439,9 @@ function CooperadoDashboard() {
     apresentacaoConsolidada,
   ]);
 
-  const view =
+  const viewRaw =
     messenger || inicioSnapshotFirst ? pwaInicioView ?? pwaInicioViewStickyRef.current : viewLive;
+  const view = sanitizeCooperadoPwaInicioDashboardView(viewRaw);
 
   const mesAtual = getCurrentMesReferencia();
   const nomeFromSnapshot =
@@ -550,9 +552,9 @@ function CooperadoDashboardInicioView({
         <EnviarFotoEntregaInicioCard onEnviar={irEnviarFotoEntrega} />
       </div>
 
-      {pautasAbertas.length > 0 && <VotacaoPautasInicioPanel pautas={pautasAbertas} />}
+      {(pautasAbertas?.length ?? 0) > 0 && <VotacaoPautasInicioPanel pautas={pautasAbertas} />}
 
-      {pautasAbertas.length === 0 && resultadoVotacao && (
+      {(pautasAbertas?.length ?? 0) === 0 && resultadoVotacao && (
         <VotacaoResultadoPanel resumo={resultadoVotacao.resumo} />
       )}
 
@@ -568,9 +570,9 @@ function CooperadoDashboardInicioView({
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Pendências</p>
       )}
 
-      {rejeitadas.length > 0 && (
+      {(rejeitadas?.length ?? 0) > 0 && (
         <AlertBanner variant="error" title="Entrega precisa de correção">
-          Você tem {rejeitadas.length} entrega(s) que a cooperativa pediu para corrigir.{" "}
+          Você tem {rejeitadas!.length} entrega(s) que a cooperativa pediu para corrigir.{" "}
           <Link href="/notas-pedido" className="font-semibold underline">Ver e enviar de novo</Link>
         </AlertBanner>
       )}
@@ -583,7 +585,7 @@ function CooperadoDashboardInicioView({
 
       <CooperadoHbCreditInicioSection
         hbCredit={hbCredit}
-        cnpjDigits={cnpjDigits.length === 14 ? cnpjDigits : cnpjHbFallback}
+        cnpjDigits={(cnpjDigits ?? "").length === 14 ? cnpjDigits : cnpjHbFallback}
       />
 
       <InicioResolvidosPanel itens={resolvidos} />
