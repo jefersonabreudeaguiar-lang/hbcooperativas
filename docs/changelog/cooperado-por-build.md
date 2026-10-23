@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v556
+
+- **Cooperado (browser/app):** login não fica preso no “reparo de perfil”; no Chrome (não ícone) não entra em loop de reload por DPL misturado; após 3s sem conteúdo no painel, botão **Reparar** visível.
+
 ## v555
 
 - **Cooperado (estabilidade):** reverte alterações do v553 que travavam o painel; boot shell some sozinho após alguns segundos se o React não montar (evita tela presa).

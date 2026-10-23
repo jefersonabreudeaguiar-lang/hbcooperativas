@@ -79,6 +79,7 @@ import { applyCooperadoMobilePilotPerfDomFlag } from "@/lib/cooperado/cooperadoM
 import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoMobileTabKeepAlive";
 import { StaffMobileTabKeepAlive } from "@/components/performance/StaffMobileTabKeepAlive";
 import { CooperadoPwaResumeLifecycle } from "@/components/cooperado/CooperadoPwaResumeLifecycle";
+import { CooperadoPainelPaintWatchdog } from "@/components/cooperado/CooperadoPainelPaintWatchdog";
 import { CooperadoPwaMessengerAppDataWarm } from "@/components/cooperado/CooperadoPwaMessengerAppDataWarm";
 import { CooperadoMobileBuildBadge } from "@/components/cooperado/CooperadoMobileBuildBadge";
 import { CooperadoPostDeployGate } from "@/components/cooperado/CooperadoPostDeployGate";
@@ -658,6 +659,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           {navUser && isCooperadoAppUser(navUser) && <CooperadoFinanceiroSyncBanner />}
           {navUser && isCooperadoAppUser(navUser) && <CooperadoPwaMessengerAppDataWarm />}
           {navUser && isCooperadoAppUser(navUser) && <CooperadoPwaResumeLifecycle />}
+          {navUser && isCooperadoAppUser(navUser) && <CooperadoPainelPaintWatchdog />}
           {routePanelsWrapped}
         </main>
       </div>
