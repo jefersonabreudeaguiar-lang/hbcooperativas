@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v576
+
+- **Responsável (S1):** Início e Ficha puxam `financeiro_delta` (operacional na nuvem) + notas no dashboard — R$ a pagar e “Pagar cooperados” deixam de ficar só no cache velho.
+
 ## v575
 
 - **Responsável (S1 — Início):** no PC, após login ainda dentro dos 2 min de warmup, o Início faz merge local + `notas_delta` uma vez (valores/fila alinhados à nuvem); fallback síncrono se o worker de stats falhar.

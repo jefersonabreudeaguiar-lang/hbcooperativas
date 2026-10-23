@@ -3,6 +3,7 @@
  */
 import { scheduleStaffPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
 import { reloadStaffGestaoPersistAfterFirstPaint } from "@/services/dataStore";
+import type { SyncTier } from "@/lib/performance/syncTier";
 import { requestSyncTier } from "@/services/syncRequest";
 import { staffGestaoDesktopWarmupSyncPaused } from "@/lib/staff/staffGestaoDesktopWarmup";
 import { staffResponsavelPausaSyncPesado } from "@/lib/staff/staffResponsavelPausaSyncPesado";
@@ -23,9 +24,17 @@ function isStaffGestaoTabPath(pathname: string): boolean {
   );
 }
 
-function syncTierForTab(pathname: string): "notas_delta" | "pulse" {
-  if (pathname.startsWith("/livro-caixa")) return "pulse";
-  return "notas_delta";
+function syncTiersForTab(pathname: string): SyncTier[] {
+  if (pathname === "/dashboard") return ["financeiro_delta", "notas_delta"];
+  if (pathname.startsWith("/ficha-corrida")) return ["financeiro_delta"];
+  if (pathname.startsWith("/livro-caixa")) return ["pulse"];
+  return ["notas_delta"];
+}
+
+function runTabEnterSyncTiers(path: string, force: boolean): void {
+  for (const tier of syncTiersForTab(path)) {
+    requestSyncTier(tier, { force });
+  }
 }
 
 export function scheduleStaffResponsavelTabEnterSync(pathname: string): void {
@@ -46,10 +55,10 @@ export function scheduleStaffResponsavelTabEnterSync(pathname: string): void {
     if (inicioDuranteWarmupPc) {
       dashboardInicioHydrateDone = true;
       reloadStaffGestaoPersistAfterFirstPaint();
-      requestSyncTier("notas_delta", { force: true });
+      runTabEnterSyncTiers(path, true);
       return;
     }
-    requestSyncTier(syncTierForTab(path), { force: false });
+    runTabEnterSyncTiers(path, false);
   });
 }
 
