@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useDeferredValue, useMemo, useRef } from "react";
 import { useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
 import { useResponsavelFilaConferencia } from "@/hooks/useResponsavelFilaConferencia";
 import {
@@ -48,34 +48,39 @@ export function useConferirProjection(opts: {
     (d) => (coopId ? appDataParaConferirLeitura(d, coopId) : d),
     [coopId]
   );
-  const lastDataRef = useRef<AppData | null>(null);
-  if (dataLeituraRaw) {
-    const prev = lastDataRef.current;
-    if (
-      !prev ||
-      !coopId ||
-      countCooperadosCooperativa(dataLeituraRaw, coopId) >= countCooperadosCooperativa(prev, coopId)
-    ) {
-      lastDataRef.current = dataLeituraRaw;
-    } else {
-      lastDataRef.current = appDataParaConferirLeitura(
-        {
-          ...dataLeituraRaw,
-          cooperados: prev.cooperados ?? dataLeituraRaw.cooperados,
-          users: prev.users ?? dataLeituraRaw.users,
-        },
-        coopId
-      );
+  const lastCadastroRef = useRef<Pick<AppData, "cooperados" | "users"> | null>(null);
+  const dataLeitura = useMemo(() => {
+    const raw = dataLeituraRaw;
+    if (!raw) return null;
+    if (!coopId) return raw;
+    const prevCad = lastCadastroRef.current;
+    const rawN = countCooperadosCooperativa(raw, coopId);
+    const prevN = prevCad ? countCooperadosCooperativa({ ...raw, cooperados: prevCad.cooperados ?? [] }, coopId) : 0;
+    if (rawN >= prevN) {
+      lastCadastroRef.current = { cooperados: raw.cooperados, users: raw.users };
+      return raw;
     }
-  }
-  const dataLeitura = dataLeituraRaw ?? lastDataRef.current;
+    if (!prevCad) return raw;
+    return appDataParaConferirLeitura(
+      {
+        ...raw,
+        cooperados: prevCad.cooperados ?? raw.cooperados,
+        users: prevCad.users ?? raw.users,
+      },
+      coopId
+    );
+  }, [dataLeituraRaw, coopId]);
+  const lastDataRef = useRef<AppData | null>(null);
+  if (dataLeitura) lastDataRef.current = dataLeitura;
+  const dataLeituraStable = dataLeitura ?? lastDataRef.current;
+  const dataLeituraParaEmAberto = useDeferredValue(dataLeituraStable);
 
   const fila = useResponsavelFilaConferencia(
     coopId,
     isCooperado,
     filaDetalhada,
     panelActive,
-    dataLeitura
+    dataLeituraStable
   );
 
   useConferirCadastroHydrate({
@@ -85,13 +90,13 @@ export function useConferirProjection(opts: {
   });
 
   const emAbertoComputed = useMemo((): ConferirEmAbertoProjection => {
-    if (!staffActive || !coopId || conferirModal || !dataLeitura) return EMPTY_EM_ABERTO;
+    if (!staffActive || !coopId || conferirModal || !dataLeituraParaEmAberto) return EMPTY_EM_ABERTO;
     if (!precisaLinhasEmAberto) {
-      const count = countCooperadosLancamentosEmAbertoResponsavel(dataLeitura, coopId);
+      const count = countCooperadosLancamentosEmAbertoResponsavel(dataLeituraParaEmAberto, coopId);
       return { linhas: [], count, total: 0 };
     }
     const linhas = getRelatorioLancamentosEmAbertoDeLeituraConferir(
-      dataLeitura,
+      dataLeituraParaEmAberto,
       coopId,
       cooperadoId
     );
@@ -104,7 +109,7 @@ export function useConferirProjection(opts: {
     staffActive,
     coopId,
     conferirModal,
-    dataLeitura,
+    dataLeituraParaEmAberto,
     precisaLinhasEmAberto,
     cooperadoId,
   ]);
@@ -123,12 +128,12 @@ export function useConferirProjection(opts: {
 
   return {
     filaDetalhada,
-    dataLeitura,
+    dataLeitura: dataLeituraStable,
     ...fila,
     fila,
     emAberto,
-    historico: { data: dataLeitura },
-    correcoes: { data: dataLeitura },
+    historico: { data: dataLeituraStable },
+    correcoes: { data: dataLeituraStable },
     totais: {
       fila: fila.filaNavCount,
       emAbertoCount: emAberto.count,

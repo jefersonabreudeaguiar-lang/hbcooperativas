@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import { syncCooperadosFromCloud } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { getCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { resetResponsavelPainelIndexCache } from "@/services/responsavelPainelIndex";
 import { normalizeCnpj } from "@/utils/cooperativa";
 
 function cooperadosAtivosNaCooperativa(coopId: string): number {
@@ -37,13 +36,16 @@ export function useConferirCadastroHydrate(opts: {
     if (cnpj.length !== 14) return;
 
     inflightRef.current = true;
-    void syncCooperadosFromCloud(cnpj, coopId)
-      .then((importados) => {
-        if (importados > 0) resetResponsavelPainelIndexCache();
-      })
-      .finally(() => {
+    const run = () => {
+      void syncCooperadosFromCloud(cnpj, coopId).finally(() => {
         inflightRef.current = false;
         cooldownRef.current = true;
       });
+    };
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(() => run(), { timeout: 2500 });
+    } else {
+      setTimeout(run, 400);
+    }
   }, [enabled, coopId, filaCount]);
 }
