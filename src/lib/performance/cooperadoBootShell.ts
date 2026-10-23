@@ -13,7 +13,8 @@ export function buildInlineCooperadoBootShellScript(): string {
   const directKey = PWA_DIRECT_ENTRY_SESSION_KEY;
   const cardPrefix = `hb.coop.inicioCard.v${COOPERADO_INICIO_CARD_STORAGE_VERSION}:`;
   const pilotFn = cooperadoMobilePilotInlineSessionHelperJs();
-  return `(function(){try{${pilotFn}
+  const build = APP_BUILD_VERSION;
+  return `(function(){function run(){try{${pilotFn}
 if(typeof document==="undefined")return;
 var el=document.getElementById("hb-coop-boot-shell");
 if(!el)return;
@@ -24,10 +25,14 @@ if(p==="/login"||p==="/cadastro"||p==="/esqueci-senha"||p.startsWith("/register"
   hide();
   return;
 }
-if(typeof localStorage==="undefined"||!localStorage.getItem("${SESSION_KEY}")){hide();return;}
 function sessUser(raw){try{var o=typeof raw==="string"?JSON.parse(raw):raw;if(!o)return null;if(o.role||o.cooperadoId)return o;if(o.user&&(o.user.role||o.user.cooperadoId))return o.user;return o;}catch(e){return null;}}
-var standalone=window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches;
-var mobile=window.matchMedia&&window.matchMedia("(max-width: 1023px)").matches;
+function appMontou(){
+  if(document.querySelector("[data-cooperado-tab-panel-active='1']"))return true;
+  if(document.querySelector("header")&&document.querySelector("main"))return true;
+  var mode=document.documentElement.getAttribute("data-hb-shell-mode");
+  if(mode&&mode!=="loading")return true;
+  return false;
+}
 function brl(n){
   var neg=n<0;n=Math.abs(Number(n)||0);var c=Math.round(n*100);
   var w=String(Math.floor(c/100));var f=String(c%100);if(f.length<2)f="0"+f;
@@ -35,7 +40,7 @@ function brl(n){
   return (neg?"- ":"")+"R$ "+w+","+f;
 }
 function paintInicio(s){
-  var nome=String(s&&s.name||"Cooperado").replace(/[<>&]/g,"").split(/\\s+/)[0]||"Cooperado";
+  var nome=String((s&&(s.name||s.nomeCompleto))||"Cooperado").replace(/[<>&]/g,"").split(/\\s+/)[0]||"Cooperado";
   var valorTxt="";
   try{
     var prefix="${cardPrefix}";
@@ -56,37 +61,38 @@ function paintInicio(s){
     +'<p style="font-size:18px;font-weight:600;color:#111827;margin:0">Olá, '+nome+'</p>'
     +(valorTxt
       ?'<div style="margin-top:16px;border:1px solid #bbf7d0;background:#fff;border-radius:12px;padding:16px"><p style="margin:0;font-size:13px;color:#6b7280">A receber</p><p style="margin:6px 0 0;font-size:28px;font-weight:700;color:#166534">'+valorTxt+"</p></div>"
-      :'<div style="margin-top:16px;height:96px;background:#fff;border-radius:12px;border:1px solid #e5e7eb"></div>')
+      :'<p style="margin:16px 0 0;font-size:14px;color:#6b7280">Abrindo o Início…</p>')
     +"</div>";
   el.style.display="flex";
+  el.style.flexDirection="column";
   el.setAttribute("aria-hidden","false");
+}
+if(typeof localStorage==="undefined"||!localStorage.getItem("${SESSION_KEY}")){
+  setTimeout(function(){if(appMontou())hide();},1200);
+  return;
 }
 try{
   var raw=localStorage.getItem("${SESSION_KEY}");
-  if(raw){
-    var s=sessUser(raw);
-    if(s&&(s.role==="cooperado"||s.cooperadoId)){
-      paintInicio(s);
-      setTimeout(function(){
-        var main=document.querySelector("main");
-        var txt=((main&&main.innerText)||"").replace(/\\s+/g," ").trim();
-        var panel=document.querySelector("[data-cooperado-tab-panel-active='1']");
-        if((txt.length>48)||panel){hide();return;}
-        try{
-          el.innerHTML+='<div style="padding:16px;max-width:32rem;margin:0 auto;width:100%;text-align:center"><p style="font-size:14px;color:#374151;margin:0 0 12px">O painel nao abriu. Toque para reparar.</p><a href="/pwa-rescue.html?auto=1&next='+encodeURIComponent("/login?hb-pwa=${APP_BUILD_VERSION}")+'" style="display:inline-block;background:#15803d;color:#fff;font-weight:600;padding:12px 20px;border-radius:12px;text-decoration:none">Reparar e abrir de novo</a></div>';
-        }catch(e){}
-      },standalone?5000:7000);
-      return;
-    }
+  var s=sessUser(raw);
+  if(s&&(s.role==="cooperado"||s.cooperadoId)){
+    paintInicio(s);
   }
 }catch(e){}
-try{if(sessionStorage.getItem("${directKey}")==="1"){el.style.display="flex";el.setAttribute("aria-hidden","false");return;}}catch(e){}
-setTimeout(function(){
-  var main=document.querySelector("main");
-  var txt=((main&&main.innerText)||"").replace(/\\s+/g," ").trim();
-  if(txt.length>48)hide();
-},standalone||mobile?8000:3000);
-}catch(e){}})();`;
+var ticks=0;
+var iv=setInterval(function(){
+  ticks+=1;
+  if(appMontou()){clearInterval(iv);hide();return;}
+  if(ticks>=20){
+    clearInterval(iv);
+    try{
+      el.innerHTML+='<div style="padding:16px;max-width:32rem;margin:0 auto;width:100%;text-align:center"><a href="/pwa-rescue.html?auto=1&next='+encodeURIComponent("/login?hb-pwa=${build}")+'" style="display:inline-block;background:#15803d;color:#fff;font-weight:600;padding:12px 20px;border-radius:12px;text-decoration:none">Reparar e abrir de novo</a></div>';
+    }catch(x){}
+  }
+},400);
+}catch(e){}}
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",run);
+else run();
+})();`;
 }
 
 export function dismissCooperadoBootShell(): void {

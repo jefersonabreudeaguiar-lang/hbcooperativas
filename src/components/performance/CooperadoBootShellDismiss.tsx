@@ -6,15 +6,10 @@ import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell"
 
 function painelJaTemConteudo(): boolean {
   if (typeof document === "undefined") return false;
-  const main = document.querySelector("main");
-  const text = (main?.innerText ?? "").replace(/\s+/g, " ").trim();
-  const hasPanel = Boolean(document.querySelector("[data-cooperado-tab-panel-active='1']"));
+  if (document.querySelector("[data-cooperado-tab-panel-active='1']")) return true;
+  if (document.querySelector("header") && document.querySelector("main")) return true;
   const shellMode = document.documentElement.getAttribute("data-hb-shell-mode");
-  return (
-    hasPanel ||
-    text.length > 48 ||
-    Boolean(shellMode && shellMode !== "loading" && text.length > 24)
-  );
+  return Boolean(shellMode && shellMode !== "loading");
 }
 
 function rotaPublica(path: string): boolean {

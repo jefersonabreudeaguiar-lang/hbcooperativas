@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v559
+
+- **Cooperado (app):** o texto “HB Cooperativas” era o splash preso — o script rodava antes do HTML. Agora pinta “Olá” + valor e some quando o Início do app monta.
+
 ## v558
 
 - **Cooperado (app):** o splash deixa de ser escondido no login/auth antes do Início pintar — era isso que deixava a página branca. Splash com estilo inline (funciona mesmo sem CSS).
