@@ -3,8 +3,11 @@
  * Operacional (financeiro_delta) no máximo 1× por sessão, atrasado — não trava troca de abas.
  */
 import { scheduleStaffPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
-import { scheduleStaffGestaoPersistReloadAfterPaint } from "@/services/dataStore";
+import { getData, getSession, isAppDataWarm, scheduleStaffGestaoPersistReloadAfterPaint, waitForAppDataWarm } from "@/services/dataStore";
 import { requestSyncTier } from "@/services/syncRequest";
+import { countNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
+import { getCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { getUserCooperativaId } from "@/utils/cooperativa";
 import { staffGestaoDesktopWarmupSyncPaused } from "@/lib/staff/staffGestaoDesktopWarmup";
 import { staffResponsavelPausaSyncPesado } from "@/lib/staff/staffResponsavelPausaSyncPesado";
 import { staffTabSwitchQuiescenceActive } from "@/lib/staff/staffTabSwitchQuiescence";
@@ -19,6 +22,32 @@ let lastAt = 0;
 let dashboardInicioHydrateDone = false;
 let sessionOperacionalHydrateDone = false;
 let operacionalHydrateTimer: number | null = null;
+let conferirFullNotasRecoveryAt = 0;
+
+function pullConferirNotasSeFilaVazia(): void {
+  void (async () => {
+    requestSyncTier("notas_delta", { force: true, userInitiated: true });
+    if (!isAppDataWarm()) {
+      await waitForAppDataWarm();
+    }
+    if (!isAppDataWarm()) return;
+    const user = getSession();
+    if (!user) return;
+    const data = getData();
+    const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
+    if (!coopId) return;
+    if (countNotasFilaConferenciaResponsavel(data, coopId) > 0) return;
+    const now = Date.now();
+    if (now - conferirFullNotasRecoveryAt < 60_000) return;
+    conferirFullNotasRecoveryAt = now;
+    const cnpj = getCooperativaCnpj(data, coopId);
+    if (!cnpj) return;
+    const { recuperarFilaConferenciaResponsavelDaNuvem } = await import(
+      "@/lib/conferencia/recuperarFilaConferenciaResponsavel"
+    );
+    await recuperarFilaConferenciaResponsavelDaNuvem(cnpj);
+  })();
+}
 
 function isStaffGestaoTabPath(pathname: string): boolean {
   const p = pathname || "/";
@@ -81,7 +110,7 @@ export function scheduleStaffResponsavelTabEnterSync(pathname: string): void {
   scheduleStaffPostInteractiveTask(() => {
     /** notas_delta é leve — não pode ficar atrás da quiescence de troca de aba (S2 Conferir). */
     if (path.startsWith("/notas-pedido")) {
-      requestSyncTier("notas_delta", { force: true, userInitiated: true });
+      pullConferirNotasSeFilaVazia();
       return;
     }
 
@@ -112,4 +141,5 @@ export function resetStaffResponsavelTabEnterSyncForTests(): void {
   dashboardInicioHydrateDone = false;
   sessionOperacionalHydrateDone = false;
   clearOperacionalHydrateTimer();
+  conferirFullNotasRecoveryAt = 0;
 }

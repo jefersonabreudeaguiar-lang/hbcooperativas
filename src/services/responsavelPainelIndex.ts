@@ -650,7 +650,16 @@ export function deveRecuperarFilaConferirVazia(
   );
   if (orfas.length > 0) return true;
   const temFicha = (live?.fichaCorrida?.length ?? 0) > 0 || (lastro?.fichaCorrida?.length ?? 0) > 0;
-  return !temFicha;
+  if (!temFicha) return true;
+  const notasNoAparelho = (fonte: AppData | null | undefined) => {
+    if (!fonte) return 0;
+    return (fonte.notasPedido ?? []).filter((n) => notaPertenceCooperativa(fonte, n, coopId)).length;
+  };
+  const liveNotas = notasNoAparelho(live);
+  const lastroNotas = notasNoAparelho(lastro);
+  /** Financeiro hidratou (ficha) mas notas ainda não — fila vazia falsa (S2). */
+  if (liveNotas === 0 && lastroNotas === 0) return true;
+  return false;
 }
 
 function coletarFilaNotasConferir(data: AppData, coopId: string): NotaPedido[] {

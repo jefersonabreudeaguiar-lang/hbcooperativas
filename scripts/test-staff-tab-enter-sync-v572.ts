@@ -14,7 +14,8 @@ const layout = readFileSync(join(ROOT, "src/components/layout/AppLayout.tsx"), "
 assert.match(tab, /scheduleStaffResponsavelTabEnterSync/);
 assert.match(tab, /scheduleSessionOperacionalHydrate/);
 assert.match(tab, /operacional_full/);
-assert.match(tab, /notas_delta[\s\S]*userInitiated:\s*true/);
+assert.match(tab, /pullConferirNotasSeFilaVazia/);
+assert.match(tab, /recuperarFilaConferenciaResponsavelDaNuvem/);
 assert.match(
   tab,
   /scheduleStaffPostInteractiveTask\(\(\) => \{[\s\S]*?path\.startsWith\("\/notas-pedido"\)[\s\S]*?staffResponsavelPausaSyncPesado/
