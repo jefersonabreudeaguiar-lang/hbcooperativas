@@ -163,27 +163,13 @@ export function valorAPagarCooperadoEmAberto(
   return { meses: porMes.map((m) => m.mes), porMes, total };
 }
 
-/**
- * Lista «Em aberto» do Conferir: só entregas (ficha líquida sem PIX ou nota conferida sem ficha).
- * Não infla com mensalidade/HB do motor de pagamento — o card é de lançamento, não do recibo completo.
- */
+/** Lista «Em aberto» do Conferir = mesmo R$ da aba Pagar (ficha, avulso, motor de pagamento). */
 export function valorAPagarCooperadoEmAbertoConferirLista(
   data: AppData,
   cooperadoId: string,
   cooperativaId: string
 ): { meses: string[]; porMes: MesValorAPagarEmAberto[]; total: number } {
-  const aberto = listarMesesFichaEmAbertoCooperado(data, cooperadoId, cooperativaId, {
-    usarLiquido: true,
-  });
-  if (aberto.total > 0.005) {
-    const porMes: MesValorAPagarEmAberto[] = aberto.porMes.map((m) => ({
-      mes: m.mes,
-      entregas: m.entregas,
-      total: m.total,
-    }));
-    return { meses: aberto.meses, porMes, total: aberto.total };
-  }
-  return valorAPagarDeNotasSemFicha(data, cooperadoId, cooperativaId);
+  return valorAPagarCooperadoEmAberto(data, cooperadoId, cooperativaId);
 }
 
 export type PickResumoStaffFichaPagarInput = {

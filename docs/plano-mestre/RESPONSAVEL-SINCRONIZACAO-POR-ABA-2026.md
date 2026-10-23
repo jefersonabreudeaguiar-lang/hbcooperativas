@@ -47,7 +47,7 @@ Responda **SIM** ou **NÃO** por linha, na ordem S1 → S4:
 
 | Fase | Data | Resposta | Build |
 |------|------|----------|-------|
-| S1 Início | 2026-10-23 | NÃO (em aberto 24, livro 0) → v577 | v577 |
-| S2 Conferir | | | |
+| S1 Início | 2026-10-23 | NÃO (23/livro 0/abas) → reteste v581 | v581 |
+| S2 Conferir | 2026-10-23 | entregas/fila SIM (piloto); sub-aba Em aberto em reteste com S3 | v595+ |
 | S3 Pagar | | | |
 | S4 Livro | | | |
