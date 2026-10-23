@@ -3,7 +3,7 @@
 import { useLayoutEffect } from "react";
 import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
 
-/** Igual v552: some o splash assim que o React monta. */
+/** Garante remoção do shell estático mesmo se auth ou chunks atrasarem (ex.: preview estreito no Cursor). */
 export function CooperadoBootShellDismiss() {
   useLayoutEffect(() => {
     dismissCooperadoBootShell();

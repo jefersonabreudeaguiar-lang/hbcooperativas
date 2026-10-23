@@ -6,6 +6,11 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v561
+
+- **Cooperado:** app restaurado ao **v552** (último backup completo estável) — Início, abas, valores e sync como antes da série v553–v560.
+- **Dados:** notas, fichas, pagamentos e cooperados na nuvem **não foram alterados** — só o programa do PWA voltou ao backup.
+
 ## v560
 
 - **Cooperado:** abertura igual ao **v552** (último estável) — splash “Olá” some sozinho em ~1s quando o React monta; não fica preso em “Abrindo o Início…”.

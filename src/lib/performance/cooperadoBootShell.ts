@@ -1,5 +1,6 @@
 /**
- * Shell HTML estático no 1º paint — igual v552: pinta Olá e some quando o React monta.
+ * Shell HTML estático no 1º paint (antes do bundle React) — PWA cooperado com sessão.
+ * Cooperado: pinta o último Início do cache e some quando o React monta.
  */
 import {
   PWA_DIRECT_ENTRY_SESSION_KEY,
@@ -15,7 +16,7 @@ export function buildInlineCooperadoBootShellScript(): string {
   const directKey = PWA_DIRECT_ENTRY_SESSION_KEY;
   const cardPrefix = `hb.coop.inicioCard.v${COOPERADO_INICIO_CARD_STORAGE_VERSION}:`;
   const pilotFn = cooperadoMobilePilotInlineSessionHelperJs();
-  return `(function(){function run(){try{${pilotFn}
+  return `(function(){try{${pilotFn}
 if(typeof document==="undefined")return;
 var el=document.getElementById("hb-coop-boot-shell");
 if(!el)return;
@@ -30,6 +31,7 @@ try{if(sessionStorage.getItem("${PWA_REPAIR_SESSION_KEY}")===${JSON.stringify(PW
 if(typeof localStorage==="undefined"||!localStorage.getItem("${SESSION_KEY}")){hide();return;}
 var standalone=window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches;
 var mobile=window.matchMedia&&window.matchMedia("(max-width: 1023px)").matches;
+if(!standalone&&!mobile){hide();return;}
 function brl(n){
   var neg=n<0;n=Math.abs(Number(n)||0);var c=Math.round(n*100);
   var w=String(Math.floor(c/100));var f=String(c%100);if(f.length<2)f="0"+f;
@@ -61,28 +63,23 @@ function paintInicio(s){
       :'<div style="margin-top:16px;height:96px;background:#fff;border-radius:12px;border:1px solid #e5e7eb"></div>')
     +"</div>";
   el.style.display="flex";
-  el.style.flexDirection="column";
   el.setAttribute("aria-hidden","false");
 }
 try{
   var raw=localStorage.getItem("${SESSION_KEY}");
   if(raw){
     var s=JSON.parse(raw);
-    if(s&&s.user&&!(s.role||s.cooperadoId))s=s.user;
     if(s&&(s.role==="cooperado"||s.cooperadoId)){
       paintInicio(s);
-      setTimeout(hide,standalone?900:1600);
       return;
     }
     if(hbCoopSessPilot(s)&&(standalone||mobile)){hide();return;}
   }
 }catch(e){}
-try{if(sessionStorage.getItem("${directKey}")==="1"){el.style.display="flex";el.setAttribute("aria-hidden","false");setTimeout(hide,1600);return;}}catch(e){}
-setTimeout(hide,standalone?900:2200);
-}catch(e){}}
-if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",run);
-else run();
-})();`;
+try{if(sessionStorage.getItem("${directKey}")==="1"){el.style.display="flex";el.setAttribute("aria-hidden","false");return;}}catch(e){}
+var ms=standalone?900:2200;
+setTimeout(hide,ms);
+}catch(e){}})();`;
 }
 
 export function dismissCooperadoBootShell(): void {
