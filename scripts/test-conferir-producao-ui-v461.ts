@@ -92,4 +92,11 @@ assert.match(
 const sw = read("public/sw.js");
 assert.match(sw, new RegExp(`hb-coop-build-${APP_BUILD_VERSION}`), "SW no mesmo build");
 
+const conferirProj = read("src/hooks/useConferirProjection.ts");
+assert.match(
+  conferirProj,
+  /useConferirCadastroHydrate/,
+  "Conferir puxa cadastro da nuvem quando fila sem nomes"
+);
+
 console.log(`ok: responsável v${APP_BUILD_VERSION} — v438/v461/v463/v474/v476 travados, clique sempre navega`);

@@ -8,8 +8,13 @@ import {
   countCooperadosLancamentosEmAbertoResponsavel,
   getRelatorioLancamentosEmAbertoDeLeituraConferir,
 } from "@/services/responsavelPainelIndex";
+import { useConferirCadastroHydrate } from "@/hooks/useConferirCadastroHydrate";
 import type { AppData } from "@/types";
 import type { LinhaPagarCooperadoEmAberto } from "@/services/relatorioService";
+
+function countCooperadosCooperativa(data: AppData, coopId: string): number {
+  return (data.cooperados ?? []).filter((c) => c.cooperativaId === coopId).length;
+}
 
 export type ConferirVista = "fila" | "cooperado" | "historico" | "correcoes" | "aberto";
 
@@ -44,7 +49,25 @@ export function useConferirProjection(opts: {
     [coopId]
   );
   const lastDataRef = useRef<AppData | null>(null);
-  if (dataLeituraRaw) lastDataRef.current = dataLeituraRaw;
+  if (dataLeituraRaw) {
+    const prev = lastDataRef.current;
+    if (
+      !prev ||
+      !coopId ||
+      countCooperadosCooperativa(dataLeituraRaw, coopId) >= countCooperadosCooperativa(prev, coopId)
+    ) {
+      lastDataRef.current = dataLeituraRaw;
+    } else {
+      lastDataRef.current = appDataParaConferirLeitura(
+        {
+          ...dataLeituraRaw,
+          cooperados: prev.cooperados ?? dataLeituraRaw.cooperados,
+          users: prev.users ?? dataLeituraRaw.users,
+        },
+        coopId
+      );
+    }
+  }
   const dataLeitura = dataLeituraRaw ?? lastDataRef.current;
 
   const fila = useResponsavelFilaConferencia(
@@ -54,6 +77,12 @@ export function useConferirProjection(opts: {
     panelActive,
     dataLeitura
   );
+
+  useConferirCadastroHydrate({
+    enabled: staffActive && filaDetalhada,
+    coopId,
+    filaCount: fila.filaNavCount,
+  });
 
   const emAbertoComputed = useMemo((): ConferirEmAbertoProjection => {
     if (!staffActive || !coopId || conferirModal || !dataLeitura) return EMPTY_EM_ABERTO;
