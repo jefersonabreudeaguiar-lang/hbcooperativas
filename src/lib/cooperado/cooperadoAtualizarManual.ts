@@ -11,6 +11,8 @@ import { runClientReleaseShield } from "@/lib/pwa/clientReleaseShield";
 import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
 import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { getSession } from "@/services/dataStore";
+import { fetchOfficialClientRelease } from "@/lib/pwa/fetchOfficialClientRelease";
+import { ackCooperadoPwaReleaseWhenCanonicalMatch } from "@/lib/cooperado/cooperadoMobileReleaseLocalAck";
 
 /** Mensagem de conforto enquanto o cooperado aguarda a nuvem (piloto / PWA mobile). */
 export const COOPERADO_ATUALIZAR_MENSAGEM_AMOR = "Jesus te ama";
@@ -33,6 +35,10 @@ export async function executarCooperadoAtualizarManual(): Promise<boolean> {
     requestCooperadoManualRefreshSync();
   } else {
     requestAppSyncImmediate();
+  }
+  if (session?.role === "cooperado") {
+    const official = await fetchOfficialClientRelease({ bypassCache: true });
+    ackCooperadoPwaReleaseWhenCanonicalMatch(session, official);
   }
   return true;
 }

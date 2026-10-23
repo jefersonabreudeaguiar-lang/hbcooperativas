@@ -10,6 +10,7 @@ import { cooperadoPostDeployDegraded } from "@/lib/cooperado/cooperadoPostDeploy
 import { fetchOfficialClientRelease } from "@/lib/pwa/fetchOfficialClientRelease";
 import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
 import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
+import { ackCooperadoPwaReleaseWhenCanonicalMatch } from "@/lib/cooperado/cooperadoMobileReleaseLocalAck";
 
 /**
  * Versão do bundle no celular do cooperado + Atualizar sutil (snapshots A receber / Financeiro).
@@ -31,6 +32,9 @@ export function CooperadoMobileBuildBadge() {
     void fetchOfficialClientRelease({ bypassCache: true }).then((info) => {
       if (cancelled || !info) return;
       setCloudBuild(info.build);
+      if (user?.role === "cooperado") {
+        ackCooperadoPwaReleaseWhenCanonicalMatch(user, info);
+      }
     });
     return () => {
       cancelled = true;

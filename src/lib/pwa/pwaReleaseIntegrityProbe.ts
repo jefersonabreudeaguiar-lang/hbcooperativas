@@ -1,5 +1,8 @@
 import { isCooperadoEntregaFlowActive } from "@/lib/cooperado/cooperadoEntregaFlowGuard";
-import { fetchOfficialClientRelease } from "@/lib/pwa/fetchOfficialClientRelease";
+import {
+  fetchOfficialClientRelease,
+  markClientReleaseSeen,
+} from "@/lib/pwa/fetchOfficialClientRelease";
 import { runClientReleaseShield } from "@/lib/pwa/clientReleaseShield";
 import {
   getEmbeddedClientRelease,
@@ -53,5 +56,6 @@ export async function runClientReleaseIntegrityProbe(
     return requestAlign("html_ahead_bundle");
   }
 
+  markClientReleaseSeen(official);
   return false;
 }

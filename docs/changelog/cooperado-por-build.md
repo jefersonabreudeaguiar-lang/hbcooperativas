@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v551
+
+- **Cooperado (Etapa 3):** com bundle igual à nuvem, grava release visto e `operacionalSyncedBuild` — menos fila pós-deploy e probes que parecem travar o PWA.
+
 ## v550
 
 - **Cooperado (Etapa 2):** hint de lançamento do responsável puxa **notas + operacional** — A receber atualiza sem depender só do operacional leve.
