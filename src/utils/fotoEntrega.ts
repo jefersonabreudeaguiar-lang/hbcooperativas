@@ -379,9 +379,10 @@ function nomeCooperadoCadastroParaExibicao(
   const direct = data.cooperados.find(
     (c) => c.id === cooperadoId && (!coopId || c.cooperativaId === coopId)
   );
-  if (direct?.nomeCompleto?.trim()) return direct.nomeCompleto.trim();
+  const nomeDirect = nomeCooperadoSnapshotUtilizavel(direct?.nomeCompleto);
+  if (nomeDirect) return nomeDirect;
   const any = data.cooperados.find((c) => c.id === cooperadoId);
-  return any?.nomeCompleto?.trim() || undefined;
+  return nomeCooperadoSnapshotUtilizavel(any?.nomeCompleto);
 }
 
 /** Nome exibido na conferência — sempre o cooperado que enviou, não o titular da ficha. */

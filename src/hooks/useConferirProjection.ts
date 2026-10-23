@@ -5,6 +5,7 @@ import { useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
 import { useResponsavelFilaConferencia } from "@/hooks/useResponsavelFilaConferencia";
 import {
   appDataParaConferirLeitura,
+  countCooperadosLancamentosEmAbertoResponsavel,
   getRelatorioLancamentosEmAbertoDeLeituraConferir,
 } from "@/services/responsavelPainelIndex";
 import type { AppData } from "@/types";
@@ -56,14 +57,15 @@ export function useConferirProjection(opts: {
 
   const emAbertoComputed = useMemo((): ConferirEmAbertoProjection => {
     if (!staffActive || !coopId || conferirModal || !dataLeitura) return EMPTY_EM_ABERTO;
+    if (!precisaLinhasEmAberto) {
+      const count = countCooperadosLancamentosEmAbertoResponsavel(dataLeitura, coopId);
+      return { linhas: [], count, total: 0 };
+    }
     const linhas = getRelatorioLancamentosEmAbertoDeLeituraConferir(
       dataLeitura,
       coopId,
-      precisaLinhasEmAberto ? cooperadoId : undefined
+      cooperadoId
     );
-    if (!precisaLinhasEmAberto) {
-      return { linhas: [], count: linhas.length, total: 0 };
-    }
     return {
       linhas,
       count: linhas.length,

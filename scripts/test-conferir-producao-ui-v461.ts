@@ -28,10 +28,16 @@ assert.match(chunkGuard, /if\(!standalone\(\)\)return/, "chunk dpl não manda o 
 
 const staffApp = read("src/app/(app)/notas-pedido/staff/NotasPedidoStaffResponsavelApp.tsx");
 assert.doesNotMatch(staffApp, /StaffConferirProducaoBar/, "faixa Ao vivo produção saiu do Conferir");
+const staffPainelRefresh = read("src/lib/staff/staffGestaoPainelRefresh.ts");
 assert.match(
-  staffApp,
-  /resetResponsavelPainelIndexCache\(\);\s*requestAppSyncImmediate\(\);/,
-  "abrir Em aberto zera lastro e puxa PIX da nuvem — v461"
+  staffPainelRefresh,
+  /export function refreshStaffGestaoPainelLeitura[\s\S]{0,120}resetResponsavelPainelIndexCache\(\)/,
+  "pull operacional zera cache do painel (Em aberto / Conferir) — v461+"
+);
+assert.match(
+  staffPainelRefresh,
+  /staffGestaoPainelAposPullOperacional[\s\S]{0,200}refreshStaffGestaoPainelLeitura/,
+  "após operacional, painel recalcula sem latch fantasma"
 );
 
 const staffUpgrade = read("src/lib/pwa/fetchOfficialClientRelease.ts");
@@ -54,8 +60,13 @@ assert.match(pagar, /AbaLastGoodSafeRoot aba="pagar"/, "Pagar não retrocede —
 const painel = read("src/services/responsavelPainelIndex.ts");
 assert.match(
   painel,
-  /aplicarLastroCompletenessConferir\(alinharFichaComPagamentosCooperativa\(merged\)\)/,
+  /const alinhado = alinharFichaComPagamentosCooperativa\(comCadastro\)/,
   "PIX alinha ficha antes do lastro — v476"
+);
+assert.match(
+  painel,
+  /const out = aplicarLastroCompletenessConferir\(alinhado/,
+  "lastro Conferir só depois do alinhamento PIX"
 );
 assert.match(painel, /if \(!old \|\| f\.status === "pago" \|\| old\.status !== "pago"\)/, "pago ganha no merge do lastro");
 assert.match(painel, /function mesPagoDeveSairDoEmAberto/, "mês com PIX sai do Em aberto — v475");

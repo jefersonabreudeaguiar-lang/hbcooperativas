@@ -49,6 +49,6 @@ Responda **SIM** ou **NÃO** por linha, na ordem S1 → S4:
 | Fase | Data | Resposta | Build |
 |------|------|----------|-------|
 | S1 Início | 2026-10-23 | NÃO (23/livro 0/abas) → reteste v581 | v581 |
-| S2 Conferir | 2026-10-23 | entregas/fila SIM; reteste nomes/fluidez build 600 | v600 |
+| S2 Conferir | 2026-10-23 | reteste NÃO (nomes) — **causa:** `nomeCooperadoCadastro` aceitava placeholder `"Cooperado"` antes da conta app (`test-conferir-nomes-cadastro-placeholder` falha em v601, passa v602); perf: badge Em aberto sem montar linhas | v602 (aguardando SIM) |
 | S3 Pagar | 2026-10-23 | em andamento (recibo verificado, perf) | v599+ |
 | S4 Livro | | | |
