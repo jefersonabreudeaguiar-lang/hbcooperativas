@@ -9,7 +9,7 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 
 function cooperadosAtivosNaCooperativa(coopId: string): number {
   if (!isAppDataWarm()) return 0;
-  return getData().cooperados.filter((c) => c.cooperativaId === coopId && c.status !== "inativo").length;
+  return getData().cooperados.filter((c) => c.cooperativaId === coopId).length;
 }
 
 /**
