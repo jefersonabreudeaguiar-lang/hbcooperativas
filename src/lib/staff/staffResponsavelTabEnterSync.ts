@@ -2,6 +2,7 @@
  * Ao entrar numa aba da gestão — sync leve do domínio certo (valores atualizados, sem operacional_full).
  */
 import { scheduleStaffPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
+import { reloadStaffGestaoPersistAfterFirstPaint } from "@/services/dataStore";
 import { requestSyncTier } from "@/services/syncRequest";
 import { staffGestaoDesktopWarmupSyncPaused } from "@/lib/staff/staffGestaoDesktopWarmup";
 import { staffResponsavelPausaSyncPesado } from "@/lib/staff/staffResponsavelPausaSyncPesado";
@@ -10,6 +11,7 @@ const MIN_GAP_MS = 45_000;
 
 let lastPath = "";
 let lastAt = 0;
+let dashboardInicioHydrateDone = false;
 
 function isStaffGestaoTabPath(pathname: string): boolean {
   const p = pathname || "/";
@@ -38,7 +40,15 @@ export function scheduleStaffResponsavelTabEnterSync(pathname: string): void {
 
   scheduleStaffPostInteractiveTask(() => {
     if (staffResponsavelPausaSyncPesado()) return;
-    if (staffGestaoDesktopWarmupSyncPaused()) return;
+    const inicioDuranteWarmupPc =
+      path === "/dashboard" && !dashboardInicioHydrateDone && staffGestaoDesktopWarmupSyncPaused();
+    if (staffGestaoDesktopWarmupSyncPaused() && !inicioDuranteWarmupPc) return;
+    if (inicioDuranteWarmupPc) {
+      dashboardInicioHydrateDone = true;
+      reloadStaffGestaoPersistAfterFirstPaint();
+      requestSyncTier("notas_delta", { force: true });
+      return;
+    }
     requestSyncTier(syncTierForTab(path), { force: false });
   });
 }
@@ -47,4 +57,5 @@ export function scheduleStaffResponsavelTabEnterSync(pathname: string): void {
 export function resetStaffResponsavelTabEnterSyncForTests(): void {
   lastPath = "";
   lastAt = 0;
+  dashboardInicioHydrateDone = false;
 }

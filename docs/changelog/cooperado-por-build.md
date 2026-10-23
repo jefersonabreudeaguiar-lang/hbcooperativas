@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v575
+
+- **Responsável (S1 — Início):** no PC, após login ainda dentro dos 2 min de warmup, o Início faz merge local + `notas_delta` uma vez (valores/fila alinhados à nuvem); fallback síncrono se o worker de stats falhar.
+
 ## v574
 
 - **Responsável (S1 — Início):** fila do dia volta a aparecer no PC (worker de stats não deixava mais o painel preso em “carregando”).

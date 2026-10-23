@@ -720,7 +720,13 @@ function AdminDashboard() {
           if (!cancelled) setWorkerHeavy({ stats, fila });
         })
         .catch(() => {
-          /* totais ficam em “…” */
+          if (cancelled) return;
+          try {
+            const stats = getAdminStatsCached(d, coopScope);
+            setWorkerHeavy({ stats, fila });
+          } catch {
+            /* totais ficam em “…” */
+          }
         });
     } catch {
       /* Início sem fila/totais — não tela branca */
