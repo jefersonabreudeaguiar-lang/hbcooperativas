@@ -8,6 +8,7 @@ import {
   staffGestaoRiquezaTotal,
   staffGestaoSnapshotPoorer,
 } from "@/lib/staff/staffGestaoSnapshotGuard";
+import { staffGestaoDesktopWarmupSyncPaused } from "@/lib/staff/staffGestaoDesktopWarmup";
 
 /** Sem cadastro/ficha/PIX não grava — o mount do Início não pode persistir AppData vazio. */
 export function devePersistirReconciliacaoLivroCaixaGestao(data: ReturnType<typeof getData>): boolean {
@@ -49,6 +50,7 @@ export function useReconciliarLivroCaixaGestao(
 
     const tentar = () => {
       if (cancelled || !isAppDataWarm()) return;
+      if (staffGestaoDesktopWarmupSyncPaused()) return;
       void Promise.all([
         import("@/services/pagamentoIntegridadeService"),
         import("@/services/livroCaixaService"),
@@ -89,10 +91,12 @@ export function useReconciliarLivroCaixaGestao(
 
     const agendar = () => {
       window.clearTimeout(timer);
-      timer = window.setTimeout(tentar, 800);
+      const desktop =
+        typeof window !== "undefined" && !window.matchMedia("(max-width: 1023px)").matches;
+      const delay = desktop ? 5_000 : 800;
+      timer = window.setTimeout(tentar, delay);
     };
 
-    tentar();
     agendar();
     const unsub = subscribe(agendar);
     return () => {

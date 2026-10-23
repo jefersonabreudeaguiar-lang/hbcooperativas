@@ -146,6 +146,7 @@ import {
 import { scheduleStaffGestaoLiveSyncLoop } from "@/lib/performance/staffGestaoLiveSyncLoop";
 import { shouldBlockStaffAutoSyncDuringConferencia } from "@/lib/performance/staffConferenciaSyncTier";
 import { staffResponsavelPausaSyncPesado } from "@/lib/staff/staffResponsavelPausaSyncPesado";
+import { staffGestaoDesktopWarmupSyncPaused } from "@/lib/staff/staffGestaoDesktopWarmup";
 import {
   isStaffFilaNotasLivePollEnabled,
   resolveStaffFilaBackgroundCatchupMs,
@@ -623,6 +624,14 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       opts?.userInitiated !== true &&
       opts?.force !== true &&
       staffResponsavelPausaSyncPesado()
+    ) {
+      return;
+    }
+    if (
+      isStaffGestao &&
+      opts?.userInitiated !== true &&
+      opts?.force !== true &&
+      staffGestaoDesktopWarmupSyncPaused()
     ) {
       return;
     }

@@ -186,6 +186,14 @@ export function reloadStaffGestaoPersistAfterFirstPaint(): void {
 /** Teto do idle após o paint — parse do persist não briga com a 1ª pintura nem com o pull da fila. */
 export const STAFF_GESTAO_PERSIST_RELOAD_IDLE_TIMEOUT_MS = 180;
 
+function staffGestaoSkipAutoPersistMergeOnDesktop(): boolean {
+  if (typeof window === "undefined") return false;
+  if (window.matchMedia("(max-width: 1023px)").matches) return false;
+  return (
+    memoryCache != null && staffGestaoRiquezaTotal(medirRiquezaStaffGestao(memoryCache)) >= 3
+  );
+}
+
 function staffGestaoPersistReloadIdleTimeoutMs(): number {
   const rich =
     memoryCache != null && staffGestaoRiquezaTotal(medirRiquezaStaffGestao(memoryCache)) >= 3;
@@ -200,6 +208,7 @@ function staffGestaoPersistReloadIdleTimeoutMs(): number {
 export function scheduleStaffGestaoPersistReloadAfterPaint(): void {
   if (typeof window === "undefined" || staffPersistReloadScheduled) return;
   if (!sessionRoleLooksStaffGestao()) return;
+  if (staffGestaoSkipAutoPersistMergeOnDesktop()) return;
   staffPersistReloadScheduled = true;
   const run = () => {
     try {

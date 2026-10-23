@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v571
+
+- **Responsável (PC — uso após login):** 2 min sem sync automática pesada; merge do persist no PC só no «Atualizar» quando já há lastro; reconciliação do livro-caixa no Início adiada (não no 1º frame).
+
 ## v570
 
 - **Responsável (PC — “página não responde”):** no login da gestão não roda mais `preloadAppData` (parse pesado do armazenamento); com lastro já na tela, o merge do persist no PC espera até ~12s ocioso.
