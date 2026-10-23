@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v581
+
+- **Responsável (dados reais):** limpa cache de Em aberto ao abrir a vista e após sync; livro reconcilia após operacional; keep-alive só pin Conferir; hidratação 1× com `operacional_full`.
+
 ## v580
 
 - **Responsável (fluidez):** reconciliação do livro só com Início visível + throttle; troca de aba **não** dispara sync — números frescos via **Atualizar agora** ou hidratação única no Início.

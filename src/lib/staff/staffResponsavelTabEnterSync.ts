@@ -42,8 +42,7 @@ function scheduleSessionOperacionalHydrate(reason: "dashboard-warmup" | "deferre
     clearOperacionalHydrateTimer();
     sessionOperacionalHydrateDone = true;
     reloadStaffGestaoPersistAfterFirstPaint();
-    requestSyncTier("financeiro_delta", { force: true });
-    requestSyncTier("notas_delta", { force: true });
+    requestSyncTier("operacional_full", { force: true, userInitiated: true });
     return;
   }
   if (operacionalHydrateTimer != null) return;
@@ -56,8 +55,7 @@ function scheduleSessionOperacionalHydrate(reason: "dashboard-warmup" | "deferre
     }
     sessionOperacionalHydrateDone = true;
     reloadStaffGestaoPersistAfterFirstPaint();
-    requestSyncTier("financeiro_delta", { force: true });
-    requestSyncTier("notas_delta", { force: true });
+    requestSyncTier("operacional_full", { force: true, userInitiated: true });
   }, OPERACIONAL_HYDRATE_DELAY_MS);
 }
 

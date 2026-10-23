@@ -117,6 +117,7 @@ import {
   scheduleCooperadoPostInteractiveTask,
   scheduleStaffPostInteractiveTask,
 } from "@/lib/performance/cooperadoColdStart";
+import { staffGestaoPainelAposPullOperacional } from "@/lib/staff/staffGestaoPainelRefresh";
 import {
   consumeCooperadoEventDrivenSyncGrant,
   cooperadoAppReleaseNeedsOperacionalSync,
@@ -1059,6 +1060,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       setLastSyncedAt(syncedAt);
       if (userRef.current?.role === "cooperado" && completed) {
         persistCooperadoLastOperacionalSyncAt(syncedAt);
+      }
+      if (completed && userRef.current && isStaffGestaoRole(userRef.current.role)) {
+        staffGestaoPainelAposPullOperacional(getUserCooperativaId(userRef.current, getData()));
       }
       if (isH197CaptureEnabled()) {
         h197ObserveLifecycleEvent(

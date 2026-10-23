@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
+import { resetResponsavelPainelIndexCache } from "@/services/responsavelPainelIndex";
 import { useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
 import { useResponsavelFilaConferencia } from "@/hooks/useResponsavelFilaConferencia";
 import {
@@ -65,6 +66,12 @@ export function useConferirProjection(opts: {
   const lastAbertoRef = useRef<ConferirEmAbertoProjection | null>(null);
   if (emAbertoRaw) lastAbertoRef.current = emAbertoRaw;
   const emAberto = emAbertoRaw ?? lastAbertoRef.current ?? EMPTY_EM_ABERTO;
+
+  useEffect(() => {
+    if (!staffActive || vista !== "aberto" || !coopId) return;
+    resetResponsavelPainelIndexCache();
+    lastAbertoRef.current = null;
+  }, [staffActive, vista, coopId]);
 
   return {
     filaDetalhada,

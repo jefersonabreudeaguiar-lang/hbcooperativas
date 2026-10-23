@@ -853,7 +853,11 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
   }
   const motor = motorEmAbertoComNotasSemFicha(dataAberto, coopId);
   const anterior =
-    relatorioAbertoLatch && relatorioAbertoLatch.coopId === coopId ? relatorioAbertoLatch.linhas : [];
+    motor.length === 0 &&
+    relatorioAbertoLatch &&
+    relatorioAbertoLatch.coopId === coopId
+      ? relatorioAbertoLatch.linhas
+      : [];
   const linhas = fundirLinhasEmAbertoEstavel(anterior, motor, dataAberto, coopId);
   relatorioAbertoLatch = { coopId, linhas };
   relatorioAbertoCache = {

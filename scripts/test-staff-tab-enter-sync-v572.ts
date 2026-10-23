@@ -12,8 +12,8 @@ const sync = readFileSync(join(ROOT, "src/services/syncRequest.ts"), "utf8");
 const layout = readFileSync(join(ROOT, "src/components/layout/AppLayout.tsx"), "utf8");
 
 assert.match(tab, /scheduleStaffResponsavelTabEnterSync/);
-assert.match(tab, /notas_delta/);
 assert.match(tab, /scheduleSessionOperacionalHydrate/);
+assert.match(tab, /operacional_full/);
 assert.ok(!tab.includes("lightTierForTab"), "troca de aba não dispara sync leve — só hidratação no Início");
 assert.match(tab, /OPERACIONAL_HYDRATE_DELAY_MS/);
 assert.match(tab, /dashboardInicioHydrateDone/);
