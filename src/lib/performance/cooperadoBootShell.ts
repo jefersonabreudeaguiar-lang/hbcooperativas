@@ -2,11 +2,8 @@
  * Shell HTML estático no 1º paint (antes do bundle React) — PWA cooperado com sessão.
  * Cooperado: pinta o último Início do cache e some quando o React monta.
  */
-import {
-  PWA_DIRECT_ENTRY_SESSION_KEY,
-  PWA_REPAIR_SESSION_KEY,
-  PWA_REPAIR_SESSION_VERSION,
-} from "@/lib/pwa/clientRelease";
+import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { PWA_DIRECT_ENTRY_SESSION_KEY } from "@/lib/pwa/clientRelease";
 import { cooperadoMobilePilotInlineSessionHelperJs } from "@/lib/cooperado/cooperadoMobilePilotInlineSession";
 import { COOPERADO_INICIO_CARD_STORAGE_VERSION } from "@/lib/cooperado/cooperadoAberturaInstantanea";
 
@@ -27,7 +24,6 @@ if(p==="/login"||p==="/cadastro"||p==="/esqueci-senha"||p.startsWith("/register"
   hide();
   return;
 }
-try{if(sessionStorage.getItem("${PWA_REPAIR_SESSION_KEY}")===${JSON.stringify(PWA_REPAIR_SESSION_VERSION)}){hide();return;}}catch(e){}
 if(typeof localStorage==="undefined"||!localStorage.getItem("${SESSION_KEY}")){hide();return;}
 var standalone=window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches;
 var mobile=window.matchMedia&&window.matchMedia("(max-width: 1023px)").matches;
@@ -71,7 +67,15 @@ try{
     var s=JSON.parse(raw);
     if(s&&(s.role==="cooperado"||s.cooperadoId)){
       paintInicio(s);
-      setTimeout(hide,standalone?4000:6000);
+      setTimeout(function(){
+        var main=document.querySelector("main");
+        var txt=((main&&main.innerText)||"").replace(/\\s+/g," ").trim();
+        var panel=document.querySelector("[data-cooperado-tab-panel-active='1']");
+        if((txt.length>48)||panel){hide();return;}
+        try{
+          el.innerHTML+='<div style="padding:16px;max-width:32rem;margin:0 auto;width:100%;text-align:center"><p style="font-size:14px;color:#374151;margin:0 0 12px">O painel nao abriu. Toque para reparar.</p><a href="/pwa-rescue.html?auto=1&next='+encodeURIComponent("/login?hb-pwa=${APP_BUILD_VERSION}")+'" style="display:inline-block;background:#15803d;color:#fff;font-weight:600;padding:12px 20px;border-radius:12px;text-decoration:none">Reparar e abrir de novo</a></div>';
+        }catch(e){}
+      },standalone?5000:7000);
       return;
     }
     if(hbCoopSessPilot(s)&&(standalone||mobile)){hide();return;}

@@ -15,7 +15,7 @@ const watchdog = readFileSync(
 );
 
 assert.match(route, /cooperadoGaSessionInStorage/);
-assert.match(route, /cooperadoGaSessionInStorage\(\) && \(!user \|\| loading/);
+assert.doesNotMatch(route, /cooperadoGaSessionInStorage\(\) && \(!user \|\| loading/);
 assert.match(release, /coopSess&&!standalonePwa\(\)/);
 assert.match(watchdog, /3_000/);
 

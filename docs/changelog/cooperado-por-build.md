@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v557
+
+- **Cooperado (app):** ao entrar, o splash fica até o Início pintar; reparo de cache **recarrega** (não limpava e deixava tela branca); se o painel não abrir, botão Reparar no próprio splash.
+
 ## v556
 
 - **Cooperado (browser/app):** login não fica preso no “reparo de perfil”; no Chrome (não ícone) não entra em loop de reload por DPL misturado; após 3s sem conteúdo no painel, botão **Reparar** visível.

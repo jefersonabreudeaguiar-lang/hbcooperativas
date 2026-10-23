@@ -132,10 +132,6 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  if (cooperadoGaSessionInStorage() && (!user || loading || !profileRepairDone)) {
-    return <>{children}</>;
-  }
-
   if (loading || (user && !profileRepairDone)) {
     return <AppAreaLoadingShell />;
   }
