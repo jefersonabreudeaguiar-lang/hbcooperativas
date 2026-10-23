@@ -27,7 +27,7 @@ import {
   reconciliarFichaFromNotasConferidas,
 } from "@/services/notaPedidoService";
 import { round2 } from "@/utils/calculations";
-import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
+import { notaPertenceCooperativa, repararNomesEnvioNotasParaConferencia } from "@/utils/fotoEntrega";
 import {
   isNotaStatusDowngrade,
   notaElegivelParaFilaConferenciaResponsavel,
@@ -59,8 +59,44 @@ type RelatorioAbertoCache = {
   pix: number;
   fichas: number;
   notas: number;
+  fichasNaoPagas: number;
   linhas: LinhaPagarCooperadoEmAberto[];
 };
+
+function countFichasNaoPagasCooperativa(data: AppData, coopId: string): number {
+  let n = 0;
+  for (const f of data.fichaCorrida ?? []) {
+    if (f.cooperativaId !== coopId) continue;
+    if (f.status === "pago") continue;
+    n += 1;
+  }
+  return n;
+}
+
+function mergeCooperadosCadastroPainel(a: Cooperado[] | undefined, b: Cooperado[] | undefined): Cooperado[] {
+  const byId = new Map<string, Cooperado>();
+  for (const c of a ?? []) {
+    if (c?.id) byId.set(c.id, c);
+  }
+  for (const c of b ?? []) {
+    if (!c?.id) continue;
+    const prev = byId.get(c.id);
+    if (!prev) {
+      byId.set(c.id, c);
+      continue;
+    }
+    const nomeNovo = c.nomeCompleto?.trim();
+    const nomeVelho = prev.nomeCompleto?.trim();
+    if (nomeNovo && !nomeVelho) {
+      byId.set(c.id, { ...prev, ...c, nomeCompleto: nomeNovo });
+      continue;
+    }
+    const tNovo = Date.parse(c.updatedAt ?? "") || 0;
+    const tVelho = Date.parse(prev.updatedAt ?? "") || 0;
+    if (tNovo >= tVelho) byId.set(c.id, { ...prev, ...c });
+  }
+  return [...byId.values()];
+}
 
 let relatorioAbertoCache: RelatorioAbertoCache | null = null;
 let relatorioAbertoLatch: { coopId: string; linhas: LinhaPagarCooperadoEmAberto[] } | null = null;
@@ -429,8 +465,10 @@ function escolherSnapshotMaisCompleto(truth: AppData, data: AppData): AppData {
     base.valoresAvulsosReceber,
     other.valoresAvulsosReceber
   );
+  const cooperados = mergeCooperadosCadastroPainel(base.cooperados, other.cooperados);
   const notasMudou = notasPedido !== base.notasPedido;
   const pixMudou = pagamentosCooperado.length !== (base.pagamentosCooperado?.length ?? 0);
+  const coopMudou = cooperados.length !== (base.cooperados?.length ?? 0);
   const baseAvulsos = base.valoresAvulsosReceber ?? [];
   const avulsosMudou =
     valoresAvulsosReceber.length !== baseAvulsos.length ||
@@ -438,8 +476,8 @@ function escolherSnapshotMaisCompleto(truth: AppData, data: AppData): AppData {
       const old = baseAvulsos.find((x) => x.id === v.id);
       return !old || old.updatedAt !== v.updatedAt;
     });
-  if (!notasMudou && !pixMudou && !avulsosMudou) return base;
-  return { ...base, notasPedido, pagamentosCooperado, valoresAvulsosReceber };
+  if (!notasMudou && !pixMudou && !avulsosMudou && !coopMudou) return base;
+  return { ...base, notasPedido, pagamentosCooperado, valoresAvulsosReceber, cooperados };
 }
 
 function aplicarLastroCompletenessConferir(candidato: AppData, key = "_"): AppData {
@@ -459,6 +497,7 @@ function aplicarLastroCompletenessConferir(candidato: AppData, key = "_"): AppDa
   }
   const fundido = alinharFichaComPagamentosCooperativa({
     ...prev,
+    cooperados: mergeCooperadosCadastroPainel(prev.cooperados, candidato.cooperados),
     fichaCorrida: [...fichaById.values()],
     notasPedido: mergeNotasPreferindoAtualizacao(prev.notasPedido, candidato.notasPedido),
     pagamentosCooperado,
@@ -487,7 +526,11 @@ export function appDataParaConferirLeitura(data: AppData, coopId?: string): AppD
   }
   const truth = getDataOperationalTruth();
   const merged = escolherSnapshotMaisCompleto(truth, data);
-  return aplicarLastroCompletenessConferir(alinharFichaComPagamentosCooperativa(merged), key);
+  const alinhado = alinharFichaComPagamentosCooperativa(merged);
+  const comNomes = coopId
+    ? repararNomesEnvioNotasParaConferencia(alinhado, coopId)
+    : alinhado;
+  return aplicarLastroCompletenessConferir(comNomes, key);
 }
 
 /**
@@ -850,13 +893,15 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
   }
   const revision = getDataRevision();
   const lastro = scoreSnapshotConferir(dataAberto);
+  const fichasNaoPagas = countFichasNaoPagasCooperativa(dataAberto, coopId);
   if (
     relatorioAbertoCache &&
     relatorioAbertoCache.revision === revision &&
     relatorioAbertoCache.coopId === coopId &&
     relatorioAbertoCache.pix === lastro.pix &&
     relatorioAbertoCache.fichas === lastro.fichas &&
-    relatorioAbertoCache.notas === lastro.notas
+    relatorioAbertoCache.notas === lastro.notas &&
+    relatorioAbertoCache.fichasNaoPagas === fichasNaoPagas
   ) {
     return relatorioAbertoCache.linhas;
   }
@@ -875,6 +920,7 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
     pix: lastro.pix,
     fichas: lastro.fichas,
     notas: lastro.notas,
+    fichasNaoPagas,
     linhas,
   };
   return linhas;

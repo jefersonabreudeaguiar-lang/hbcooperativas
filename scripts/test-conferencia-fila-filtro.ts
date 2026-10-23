@@ -9,6 +9,7 @@ import { repararNotasPedidoFilaConferencia } from "../src/services/conferenciaFi
 import {
   agruparPendentesPorCooperado,
   getChaveGrupoConferencia,
+  getNomeEnvioEntregaNota,
   getNomeGrupoConferencia,
   nomeCooperadoSnapshotUtilizavel,
   resolverCooperadoIdGrupoConferencia,
@@ -150,7 +151,17 @@ const notaIdErrado: NotaPedido = {
 assert.equal(resolverCooperadoIdGrupoConferencia(dataEnvio, notaIdErrado, coopId), altonId);
 
 assert.equal(nomeCooperadoSnapshotUtilizavel("Desconhecido"), undefined);
+assert.equal(nomeCooperadoSnapshotUtilizavel("Cooperado"), undefined);
+assert.equal(nomeCooperadoSnapshotUtilizavel("c_alton"), undefined);
 assert.equal(nomeCooperadoSnapshotUtilizavel("Alton Silva"), "Alton Silva");
+
+const notaSoCadastro: NotaPedido = {
+  ...notaNuvem,
+  id: "n-so-cadastro",
+  cooperadoId: altonId,
+  cooperadoNomeSnapshot: "Cooperado",
+};
+assert.equal(getNomeEnvioEntregaNota(notaSoCadastro, data, coopId), "Alton Silva");
 
 const notaSemNome: NotaPedido = {
   ...notaNuvem,

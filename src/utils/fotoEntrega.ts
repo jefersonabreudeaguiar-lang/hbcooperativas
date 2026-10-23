@@ -299,9 +299,18 @@ export interface GrupoConferenciaEntrega {
 /** Placeholder da nuvem — não é nome de cooperado e não pode virar rótulo da fila. */
 const NOME_COOPERADO_GENERICO = /^(desconhecido|cooperado|sem nome|—|-)$/i;
 
+/** cooperado_nome na tabela SQL às vezes vem como id técnico, não como nome de pessoa. */
+export function pareceIdentificadorTecnicoCooperado(nome?: string | null): boolean {
+  const t = nome?.trim();
+  if (!t || NOME_COOPERADO_GENERICO.test(t)) return true;
+  if (/^c_[a-z0-9_-]+$/i.test(t)) return true;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t)) return true;
+  return false;
+}
+
 export function nomeCooperadoSnapshotUtilizavel(nome?: string | null): string | undefined {
   const t = nome?.trim();
-  if (!t || NOME_COOPERADO_GENERICO.test(t)) return undefined;
+  if (!t || pareceIdentificadorTecnicoCooperado(t)) return undefined;
   return t;
 }
 
@@ -351,6 +360,20 @@ export function resolverCooperadoIdGrupoConferencia(
   return canonizarPorTitular(nota.cooperadoId);
 }
 
+function nomeCooperadoCadastroParaExibicao(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): string | undefined {
+  const coopId = cooperativaId;
+  const direct = data.cooperados.find(
+    (c) => c.id === cooperadoId && (!coopId || c.cooperativaId === coopId)
+  );
+  if (direct?.nomeCompleto?.trim()) return direct.nomeCompleto.trim();
+  const any = data.cooperados.find((c) => c.id === cooperadoId);
+  return any?.nomeCompleto?.trim() || undefined;
+}
+
 /** Nome exibido na conferência — sempre o cooperado que enviou, não o titular da ficha. */
 export function getNomeEnvioEntregaNota(
   nota: NotaPedido,
@@ -359,9 +382,38 @@ export function getNomeEnvioEntregaNota(
 ): string {
   const snap = nomeCooperadoSnapshotUtilizavel(nota.cooperadoNomeSnapshot);
   if (snap) return snap;
-  const id = resolverCooperadoIdGrupoConferencia(data, nota, cooperativaId);
-  const cadastro = data.cooperados.find((c) => c.id === id)?.nomeCompleto?.trim();
-  return cadastro || "Cooperado";
+  const coopId = cooperativaId ?? nota.cooperativaId;
+  const id = resolverCooperadoIdGrupoConferencia(data, nota, coopId);
+  const cadastro =
+    nomeCooperadoCadastroParaExibicao(data, id, coopId) ??
+    nomeCooperadoCadastroParaExibicao(data, nota.cooperadoId, coopId);
+  if (cadastro) return cadastro;
+  const ficha = data.fichaCorrida.find((f) => f.notaPedidoId === nota.id);
+  const fichaSnap = nomeCooperadoSnapshotUtilizavel(ficha?.cooperadoNomeSnapshot);
+  if (fichaSnap) return fichaSnap;
+  for (const n of data.notasPedido) {
+    if (n.id === nota.id) continue;
+    if (n.cooperadoId !== id && n.cooperadoId !== nota.cooperadoId) continue;
+    const outro = nomeCooperadoSnapshotUtilizavel(n.cooperadoNomeSnapshot);
+    if (outro) return outro;
+  }
+  return "Cooperado";
+}
+
+/** Preenche cooperadoNomeSnapshot a partir do cadastro quando a nuvem mandou só id/placeholder. */
+export function repararNomesEnvioNotasParaConferencia(data: AppData, cooperativaId?: string): AppData {
+  if (!cooperativaId) return data;
+  let changed = false;
+  const notasPedido = (data.notasPedido ?? []).map((n) => {
+    if (!notaPertenceCooperativa(data, n, cooperativaId)) return n;
+    if (nomeCooperadoSnapshotUtilizavel(n.cooperadoNomeSnapshot)) return n;
+    const nome = getNomeEnvioEntregaNota(n, data, cooperativaId);
+    if (nome === "Cooperado") return n;
+    const id = resolverCooperadoIdGrupoConferencia(data, n, cooperativaId);
+    changed = true;
+    return { ...n, cooperadoNomeSnapshot: nome, cooperadoId: id };
+  });
+  return changed ? { ...data, notasPedido } : data;
 }
 
 /** Agrupa entregas pendentes pelo cooperado (nome salvo na nuvem ou cadastro local). */
