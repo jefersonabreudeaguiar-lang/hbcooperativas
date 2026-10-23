@@ -7,6 +7,12 @@ import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell"
 export function CooperadoBootShellDismiss() {
   useLayoutEffect(() => {
     dismissCooperadoBootShell();
+    const t1 = window.setTimeout(dismissCooperadoBootShell, 500);
+    const t2 = window.setTimeout(dismissCooperadoBootShell, 2500);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
   }, []);
 
   return null;
