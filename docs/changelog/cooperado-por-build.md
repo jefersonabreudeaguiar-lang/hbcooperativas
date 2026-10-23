@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v574
+
+- **Responsável (S1 — Início):** fila do dia volta a aparecer no PC (worker de stats não deixava mais o painel preso em “carregando”).
+
 ## v573
 
 - **Responsável (S1 — PC):** menu lateral alinha URL e conteúdo (sem aba otimista do celular); remonta rota ao trocar Início/Conferir/Pagar/Livro.

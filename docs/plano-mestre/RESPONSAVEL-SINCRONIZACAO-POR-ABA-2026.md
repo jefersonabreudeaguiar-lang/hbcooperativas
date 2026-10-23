@@ -47,7 +47,7 @@ Responda **SIM** ou **NÃO** por linha, na ordem S1 → S4:
 
 | Fase | Data | Resposta | Build |
 |------|------|----------|-------|
-| S1 Início | 2026-10-23 | *(piloto)* auditoria nuvem OK — aguardando SIM | v573 |
+| S1 Início | 2026-10-23 | NÃO (fila presa) → reteste v574 | v574 |
 | S2 Conferir | | | |
 | S3 Pagar | | | |
 | S4 Livro | | | |
