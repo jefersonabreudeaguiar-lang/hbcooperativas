@@ -51,15 +51,16 @@ export function cooperadoGaExibicaoFinanceiraConfiavel(
   if (!coopId) return false;
   const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
   const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, coopId);
+  /** Motor local com fatia mínima — mesmo “desatualizado” de ficha, não reabrir tempestade GA (v538 UX + v547). */
+  if (paridade.valorLiquido > 0.01 && cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId)) {
+    return true;
+  }
   if (
     paridade.valorLiquido > 0.01 &&
     !cooperadoFinanceiroCardCacheTemValor(user) &&
     cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId)
   ) {
     return false;
-  }
-  if (paridade.valorLiquido > 0.01 && cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId)) {
-    return true;
   }
   if (cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId)) return false;
   if (!cooperadoTemReciboAssinadoLocalSemPendenciaUi(data, cooperadoId, coopId)) return false;

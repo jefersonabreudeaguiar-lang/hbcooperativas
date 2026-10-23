@@ -46,6 +46,7 @@ import {
 import { cooperadoRematerializarFinanceiroLocalSePossivel } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import { getData, getSession, isAppDataWarm } from "@/services/dataStore";
+import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 
 export type CooperadoForegroundPullReason =
@@ -114,6 +115,15 @@ export async function evaluateCooperadoForegroundOperacionalPull(
       isCooperadoMobileGaPromoted(gaUser) &&
       cooperadoGaExibicaoFinanceiraAindaZerada(gaUser)
     ) {
+      if (isAppDataWarm() && cooperadoId && cooperativaId) {
+        const dataGa = getData();
+        const canon = resolverCooperadoIdCanonico(dataGa, cooperadoId, cooperativaId);
+        if (cooperadoTemDadosFinanceirosMinimos(dataGa, canon, cooperativaId)) {
+          rematerializarCooperadoPwaSnapshotsSeNecessario(gaUser);
+          cooperadoRematerializarFinanceiroLocalSePossivel(gaUser);
+          return null;
+        }
+      }
       return { reason: "snapshots_ausentes", remote: null };
     }
     if (isAppDataWarm()) {

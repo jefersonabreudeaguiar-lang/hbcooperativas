@@ -6,6 +6,11 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v548
+
+- **Cooperado:** volta a fluir como no **v538** (abas e valores locais) — sem rajada de `operacional_full` quando a ficha está só “desalinhada” no cache PWA mas o motor já tem valor.
+- **PWA:** rematerializa snapshot no aparelho; nuvem só se realmente faltar fatia local.
+
 ## v538
 
 - **Responsável:** Conferir e a fila de notas carregam em segundos — a nuvem lia as notas uma a uma (minutos) e o Atualizar ficava preso.

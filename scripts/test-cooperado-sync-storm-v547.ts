@@ -15,6 +15,14 @@ const foreground = readFileSync(join(ROOT, "src/lib/performance/cooperadoForegro
 const snapshotRefresh = readFileSync(join(ROOT, "src/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh.ts"), "utf8");
 
 assert.match(recovery, /paridade\.valorLiquido > 0\.01 && cooperadoTemDadosFinanceirosMinimos/);
+const minDadosIdx = recovery.indexOf("cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId)");
+const desatIdx = recovery.indexOf("cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId)");
+assert.ok(minDadosIdx > 0 && desatIdx > minDadosIdx, "min dados local antes de desatualizado em confiavel");
+assert.match(bootstrap, /cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem\(user\)/);
+assert.doesNotMatch(
+  bootstrap,
+  /cooperadoPilotAppDataTemFinanceiroLocal\(user\)[\s\S]{0,120}cooperadoGaExibicaoFinanceiraAindaZerada/
+);
 assert.doesNotMatch(
   recovery,
   /paridade\.valorLiquido > 0\.01 && !cooperadoFinanceiroCardCacheTemValor\(user\)\) \{\s*return false/

@@ -57,7 +57,7 @@ export function cooperadoGaAparelhoPrecisaBootstrapNuvem(
   if (cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) return true;
   if (cooperadoFinanceiroCardCacheTemValor(user)) return false;
   if (cooperadoPilotAppDataTemFinanceiroLocal(user)) {
-    if (cooperadoGaExibicaoFinanceiraAindaZerada(user)) return true;
+    if (cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) return true;
     return false;
   }
   if (cooperadoFinanceiroExibicaoCachePronto(user)) return false;
