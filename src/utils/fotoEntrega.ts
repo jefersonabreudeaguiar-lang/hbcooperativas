@@ -360,6 +360,16 @@ export function resolverCooperadoIdGrupoConferencia(
   return canonizarPorTitular(nota.cooperadoId);
 }
 
+function nomeCooperadoContaApp(data: AppData, cooperadoId: string): string | undefined {
+  if (!cooperadoId) return undefined;
+  for (const u of data.users ?? []) {
+    if (!u.active || u.cooperadoId !== cooperadoId) continue;
+    const n = u.name?.trim();
+    if (n && !pareceIdentificadorTecnicoCooperado(n)) return n;
+  }
+  return undefined;
+}
+
 function nomeCooperadoCadastroParaExibicao(
   data: AppData,
   cooperadoId: string,
@@ -388,6 +398,9 @@ export function getNomeEnvioEntregaNota(
     nomeCooperadoCadastroParaExibicao(data, id, coopId) ??
     nomeCooperadoCadastroParaExibicao(data, nota.cooperadoId, coopId);
   if (cadastro) return cadastro;
+  const conta =
+    nomeCooperadoContaApp(data, id) ?? nomeCooperadoContaApp(data, nota.cooperadoId);
+  if (conta) return conta;
   const ficha = data.fichaCorrida.find((f) => f.notaPedidoId === nota.id);
   const fichaSnap = nomeCooperadoSnapshotUtilizavel(ficha?.cooperadoNomeSnapshot);
   if (fichaSnap) return fichaSnap;
@@ -400,10 +413,7 @@ export function repararNomesEnvioNotasParaConferencia(data: AppData, cooperativa
   let changed = false;
   const notasPedido = (data.notasPedido ?? []).map((n) => {
     if (!notaPertenceCooperativa(data, n, cooperativaId)) return n;
-    const naFila = isNotaNaFilaConferenciaResponsavel(n.status);
-    const noHistoricoConferir =
-      n.status === "conferida" || n.status === "rejeitada" || n.status === "pago";
-    if (!naFila && !noHistoricoConferir) return n;
+    if (!isNotaNaFilaConferenciaResponsavel(n.status)) return n;
     if (nomeCooperadoSnapshotUtilizavel(n.cooperadoNomeSnapshot)) return n;
     const nome = getNomeEnvioEntregaNota(n, data, cooperativaId);
     if (nome === "Cooperado") return n;

@@ -5,6 +5,7 @@ import { useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
 import { useResponsavelFilaConferencia } from "@/hooks/useResponsavelFilaConferencia";
 import {
   appDataParaConferirLeitura,
+  countCooperadosLancamentosEmAbertoResponsavel,
   getRelatorioLancamentosEmAbertoResponsavel,
 } from "@/services/responsavelPainelIndex";
 import type { AppData } from "@/types";
@@ -21,8 +22,7 @@ export type ConferirEmAbertoProjection = {
 const EMPTY_EM_ABERTO: ConferirEmAbertoProjection = { linhas: [], count: 0, total: 0 };
 
 /**
- * Hub de leitura da aba Conferir: uma foto, uma fila, um lastro.
- * Em aberto usa o relatório cacheado (sem reset ao trocar sub-aba).
+ * Hub de leitura da aba Conferir — uma leitura compartilhada com a fila (nomes reais).
  */
 export function useConferirProjection(opts: {
   coopId: string | undefined;
@@ -32,11 +32,10 @@ export function useConferirProjection(opts: {
   cooperadoId?: string;
   conferirModal?: boolean;
 }) {
-  const { coopId, panelActive, isCooperado, cooperadoId, conferirModal } = opts;
-  const filaDetalhada = !isCooperado && (opts.vista === "fila" || opts.vista === "cooperado");
+  const { coopId, vista, panelActive, isCooperado, cooperadoId, conferirModal } = opts;
+  const filaDetalhada = !isCooperado && (vista === "fila" || vista === "cooperado");
   const staffActive = panelActive && !isCooperado;
-
-  const fila = useResponsavelFilaConferencia(coopId, isCooperado, filaDetalhada, panelActive);
+  const precisaLinhasEmAberto = vista === "aberto";
 
   const dataLeituraRaw = useAppDataSelectorForDomainsWhenActive(
     staffActive,
@@ -48,11 +47,23 @@ export function useConferirProjection(opts: {
   if (dataLeituraRaw) lastDataRef.current = dataLeituraRaw;
   const dataLeitura = dataLeituraRaw ?? lastDataRef.current;
 
+  const fila = useResponsavelFilaConferencia(
+    coopId,
+    isCooperado,
+    filaDetalhada,
+    panelActive,
+    dataLeitura
+  );
+
   const emAbertoRaw = useAppDataSelectorForDomainsWhenActive(
     staffActive && Boolean(coopId) && !conferirModal,
-    ["financeiro", "notas"],
+    precisaLinhasEmAberto ? ["financeiro", "notas"] : ["financeiro"],
     (d) => {
       if (!coopId) return EMPTY_EM_ABERTO;
+      if (!precisaLinhasEmAberto) {
+        const count = countCooperadosLancamentosEmAbertoResponsavel(d, coopId);
+        return { linhas: [], count, total: 0 };
+      }
       const linhas = getRelatorioLancamentosEmAbertoResponsavel(d, coopId, cooperadoId);
       return {
         linhas,
@@ -60,10 +71,16 @@ export function useConferirProjection(opts: {
         total: linhas.reduce((s, l) => s + l.total, 0),
       };
     },
-    [coopId, cooperadoId, conferirModal]
+    [coopId, cooperadoId, conferirModal, precisaLinhasEmAberto]
   );
   const lastAbertoRef = useRef<ConferirEmAbertoProjection | null>(null);
-  if (emAbertoRaw) lastAbertoRef.current = emAbertoRaw;
+  if (emAbertoRaw) {
+    if (precisaLinhasEmAberto || emAbertoRaw.count > 0) {
+      lastAbertoRef.current = emAbertoRaw;
+    } else if (lastAbertoRef.current && emAbertoRaw.count === 0) {
+      lastAbertoRef.current = { ...lastAbertoRef.current, count: 0, total: 0, linhas: [] };
+    }
+  }
   const emAberto = emAbertoRaw ?? lastAbertoRef.current ?? EMPTY_EM_ABERTO;
 
   return {

@@ -163,6 +163,30 @@ const notaSoCadastro: NotaPedido = {
 };
 assert.equal(getNomeEnvioEntregaNota(notaSoCadastro, data, coopId), "Alton Silva");
 
+const dataComUser = {
+  ...data,
+  users: [
+    {
+      id: "u1",
+      email: "alton@test.com",
+      name: "Alton Silva App",
+      role: "cooperado",
+      active: true,
+      cooperadoId: altonId,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ],
+  cooperados: [],
+} as unknown as AppData;
+const notaSemCadastro: NotaPedido = {
+  ...notaNuvem,
+  id: "n-user",
+  cooperadoId: altonId,
+  cooperadoNomeSnapshot: "Cooperado",
+};
+assert.equal(getNomeEnvioEntregaNota(notaSemCadastro, dataComUser, coopId), "Alton Silva App");
+
 const notaSemNome: NotaPedido = {
   ...notaNuvem,
   id: "n-desconhecido",

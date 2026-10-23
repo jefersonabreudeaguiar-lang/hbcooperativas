@@ -2079,11 +2079,12 @@ export default function NotasPedidoStaffMain() {
     filaNavCount === 0;
 
   const relatorioEmAbertoConferir = useMemo(() => {
-    if (!mostrarPainelLancamentosAberto || !coopId) return null;
-    const fonte =
-      (isAppDataWarm() ? getData() : null) ?? dataLeitura ?? peekStaffGestaoLastGood();
-    if (!fonte) return null;
-    return montarRelatorioEmAbertoConferir(fonte, coopId, filtroCooperadoId || undefined);
+    if (!mostrarPainelLancamentosAberto || !coopId || !dataLeitura) return null;
+    return montarRelatorioEmAbertoConferir(
+      dataLeitura,
+      coopId,
+      filtroCooperadoId || undefined
+    );
   }, [mostrarPainelLancamentosAberto, coopId, dataLeitura, filtroCooperadoId]);
 
   const contratosEntrega =

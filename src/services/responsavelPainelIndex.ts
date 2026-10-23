@@ -11,7 +11,7 @@ import {
 } from "@/services/cooperadoCloudService";
 import { getDataOperationalTruth, getDataRevision } from "@/services/dataStore";
 import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
-import { valorAPagarCooperadoEmAberto } from "@/lib/responsavel/responsavelGestaoLeitura";
+import { valorAPagarCooperadoEmAbertoConferirLista } from "@/lib/responsavel/responsavelGestaoLeitura";
 import { unirValoresAvulsosReceber } from "@/services/valoresAvulsosReceberService";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { listarMesesFichaEmAbertoCooperado } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
@@ -36,10 +36,7 @@ import {
   protectNotaAgainstStatusDowngrade,
   sanitizarNotaParaFilaConferencia,
 } from "@/utils/notaStatus";
-import {
-  getRelatorioPagarCooperadoEmAberto,
-  type LinhaPagarCooperadoEmAberto,
-} from "@/services/relatorioService";
+import type { LinhaPagarCooperadoEmAberto } from "@/services/relatorioService";
 import { formatMesesReferenciaRotulo, formatMesReferencia } from "@/utils/format";
 
 type PainelCache = {
@@ -598,7 +595,7 @@ function linhaEmAbertoSoFichaSemPix(
   data: AppData,
   coopId: string
 ): LinhaPagarCooperadoEmAberto | null {
-  const aberto = valorAPagarCooperadoEmAberto(data, base.cooperadoId, coopId);
+  const aberto = valorAPagarCooperadoEmAbertoConferirLista(data, base.cooperadoId, coopId);
   if (aberto.total <= 0.005) return null;
   return {
     ...base,
@@ -837,45 +834,26 @@ export function countCooperadosPagamentoPendenteResponsavel(data: AppData, coopI
   return listCooperadosPagamentoPendenteResponsavel(data, coopId).length;
 }
 
-function linhaEmAbertoDeNotasSemFicha(
+function linhaMotorEmAbertoConferir(
   data: AppData,
-  cooperadoId: string,
-  coopId: string,
-  nome: string
+  cooperado: Cooperado,
+  coopId: string
 ): LinhaPagarCooperadoEmAberto | null {
-  const notas = listarNotasConferidasSemPixCooperado(data, cooperadoId, coopId);
-  if (!notas.length) return null;
-  const porMesMap = new Map<string, { entregas: number; total: number }>();
-  for (const n of notas) {
-    const mes = n.mesReferencia;
-    if (!mes) continue;
-    const liq = Number(n.valorLiquido);
-    const bruto = Number(n.valorBruto);
-    const valor = liq > 0.005 ? liq : bruto > 0.005 ? bruto : 0;
-    if (valor <= 0.005) continue;
-    const cur = porMesMap.get(mes) ?? { entregas: 0, total: 0 };
-    cur.entregas += 1;
-    cur.total = round2(cur.total + valor);
-    porMesMap.set(mes, cur);
-  }
-  const porMes = [...porMesMap.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([mes, m]) => ({
-      mes,
-      mesLabel: formatMesReferencia(mes),
-      entregas: m.entregas,
-      total: m.total,
-    }));
-  const total = round2(porMes.reduce((s, m) => s + m.total, 0));
-  if (total <= 0.005) return null;
-  const meses = porMes.map((m) => m.mes);
+  const aberto = valorAPagarCooperadoEmAbertoConferirLista(data, cooperado.id, coopId);
+  if (aberto.total <= 0.005) return null;
+  const porMes = aberto.porMes.map((m) => ({
+    mes: m.mes,
+    mesLabel: formatMesReferencia(m.mes),
+    entregas: m.entregas,
+    total: m.total,
+  }));
   return {
-    cooperadoId,
-    cooperado: nome,
-    meses,
-    mesesLabel: formatMesesReferenciaRotulo(meses),
+    cooperadoId: cooperado.id,
+    cooperado: cooperado.nomeCompleto,
+    meses: aberto.meses,
+    mesesLabel: formatMesesReferenciaRotulo(aberto.meses),
     entregas: porMes.reduce((s, m) => s + m.entregas, 0),
-    total,
+    total: aberto.total,
     porMes,
   };
 }
@@ -885,18 +863,13 @@ function motorEmAbertoComNotasSemFicha(
   coopId: string,
   cooperadoId?: string
 ): LinhaPagarCooperadoEmAberto[] {
-  const motor = getRelatorioPagarCooperadoEmAberto(dataAberto, coopId, cooperadoId);
-  const ja = new Set(motor.map((l) => l.cooperadoId));
-  const extras: LinhaPagarCooperadoEmAberto[] = [];
+  const motor: LinhaPagarCooperadoEmAberto[] = [];
   for (const c of listCooperadosDaCooperativa(dataAberto, coopId)) {
     if (cooperadoId && c.id !== cooperadoId) continue;
-    if (ja.has(c.id)) continue;
-    const extra = linhaEmAbertoDeNotasSemFicha(dataAberto, c.id, coopId, c.nomeCompleto);
-    if (extra) extras.push(extra);
+    const linha = linhaMotorEmAbertoConferir(dataAberto, c, coopId);
+    if (linha) motor.push(linha);
   }
-  return extras.length === 0 ? motor : [...motor, ...extras].sort((a, b) =>
-    a.cooperado.localeCompare(b.cooperado, "pt-BR")
-  );
+  return motor.sort((a, b) => a.cooperado.localeCompare(b.cooperado, "pt-BR"));
 }
 
 /**
