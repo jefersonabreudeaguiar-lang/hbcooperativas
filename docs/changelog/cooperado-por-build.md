@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v558
+
+- **Cooperado (app):** o splash deixa de ser escondido no login/auth antes do Início pintar — era isso que deixava a página branca. Splash com estilo inline (funciona mesmo sem CSS).
+
 ## v557
 
 - **Cooperado (app):** ao entrar, o splash fica até o Início pintar; reparo de cache **recarrega** (não limpava e deixava tela branca); se o painel não abrir, botão Reparar no próprio splash.

@@ -34,7 +34,6 @@ import {
 } from "@/lib/cooperado/cooperadoMobilePilotAuthBootstrap";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { scheduleEmpacotarModeloAparelhoJeferson } from "@/lib/cooperado/cooperadoAparelhoJefersonPacote";
-import { cooperadoPwaInstantPaintReady } from "@/lib/cooperado/cooperadoPwaInstantResume";
 import {
   getSession,
   login as doLogin,
@@ -146,12 +145,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   useLayoutEffect(() => {
-    const session = getSession();
+    if (typeof window === "undefined") return;
+    const path = window.location.pathname.toLowerCase();
     if (
-      !loading ||
-      (session &&
-        session.role === "cooperado" &&
-        (cooperadoPwaInstantPaintReady(session) || cooperadoMobilePilotDeferAppDataEagerWarm(session)))
+      path === "/login" ||
+      path === "/cadastro" ||
+      path === "/esqueci-senha" ||
+      path.startsWith("/register")
     ) {
       dismissCooperadoBootShell();
     }

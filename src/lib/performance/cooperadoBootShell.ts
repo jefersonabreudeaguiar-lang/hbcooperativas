@@ -25,9 +25,9 @@ if(p==="/login"||p==="/cadastro"||p==="/esqueci-senha"||p.startsWith("/register"
   return;
 }
 if(typeof localStorage==="undefined"||!localStorage.getItem("${SESSION_KEY}")){hide();return;}
+function sessUser(raw){try{var o=typeof raw==="string"?JSON.parse(raw):raw;if(!o)return null;if(o.role||o.cooperadoId)return o;if(o.user&&(o.user.role||o.user.cooperadoId))return o.user;return o;}catch(e){return null;}}
 var standalone=window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches;
 var mobile=window.matchMedia&&window.matchMedia("(max-width: 1023px)").matches;
-if(!standalone&&!mobile){hide();return;}
 function brl(n){
   var neg=n<0;n=Math.abs(Number(n)||0);var c=Math.round(n*100);
   var w=String(Math.floor(c/100));var f=String(c%100);if(f.length<2)f="0"+f;
@@ -64,7 +64,7 @@ function paintInicio(s){
 try{
   var raw=localStorage.getItem("${SESSION_KEY}");
   if(raw){
-    var s=JSON.parse(raw);
+    var s=sessUser(raw);
     if(s&&(s.role==="cooperado"||s.cooperadoId)){
       paintInicio(s);
       setTimeout(function(){
@@ -78,12 +78,14 @@ try{
       },standalone?5000:7000);
       return;
     }
-    if(hbCoopSessPilot(s)&&(standalone||mobile)){hide();return;}
   }
 }catch(e){}
 try{if(sessionStorage.getItem("${directKey}")==="1"){el.style.display="flex";el.setAttribute("aria-hidden","false");return;}}catch(e){}
-var ms=standalone?900:2200;
-setTimeout(hide,ms);
+setTimeout(function(){
+  var main=document.querySelector("main");
+  var txt=((main&&main.innerText)||"").replace(/\\s+/g," ").trim();
+  if(txt.length>48)hide();
+},standalone||mobile?8000:3000);
 }catch(e){}})();`;
 }
 

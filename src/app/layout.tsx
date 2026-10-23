@@ -111,14 +111,28 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-full antialiased">
         <div
           id="hb-coop-boot-shell"
-          className="fixed inset-0 z-[9999] flex flex-col bg-gray-50"
-          aria-hidden="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            display: "flex",
+            flexDirection: "column",
+            background: "#f9fafb",
+          }}
+          aria-hidden="false"
         >
-          <div className="h-14 bg-green-900/90 animate-pulse shrink-0" />
-          <div className="flex-1 p-4 space-y-3 max-w-lg mx-auto w-full pt-6">
-            <div className="h-8 w-48 bg-gray-200 rounded-lg animate-pulse" />
-            <div className="h-24 bg-white rounded-xl border border-gray-200 animate-pulse" />
-            <div className="h-24 bg-white rounded-xl border border-gray-200 animate-pulse" />
+          <div style={{ height: 56, background: "#14532d", flexShrink: 0 }} />
+          <div style={{ flex: 1, padding: 16, maxWidth: 512, margin: "0 auto", width: "100%" }}>
+            <p style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "#111827" }}>HB Cooperativas</p>
+            <div
+              style={{
+                marginTop: 16,
+                height: 96,
+                background: "#fff",
+                borderRadius: 12,
+                border: "1px solid #e5e7eb",
+              }}
+            />
           </div>
         </div>
         <script dangerouslySetInnerHTML={{ __html: buildInlineCooperadoPwaStealthReloadScript() }} />

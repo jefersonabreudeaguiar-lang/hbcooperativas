@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { cooperadoInstantShellReady } from "@/lib/performance/cooperadoColdStart";
 import { cooperadoPwaInstantPaintReady } from "@/lib/cooperado/cooperadoPwaInstantResume";
-import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import { getSession } from "@/services/dataStore";
 import { repairBrowserProfileIfStale } from "@/lib/pwa/browserProfileRepair";
@@ -61,14 +60,6 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     if (!loading && user) {
       markRqlColdStartPhase("auth_ready");
     }
-    const session = getSession();
-    if (
-      !loading ||
-      cooperadoInstantShellReady(session) ||
-      (session && cooperadoPwaInstantPaintReady(session))
-    ) {
-      dismissCooperadoBootShell();
-    }
   }, [user, loading, router]);
 
   useLayoutEffect(() => {
@@ -116,7 +107,6 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     if (profileRepairDone) return;
     const t = window.setTimeout(() => {
       setProfileRepairDone(true);
-      dismissCooperadoBootShell();
     }, 4_000);
     return () => window.clearTimeout(t);
   }, [loading, user?.id, user?.role, profileRepairDone]);
