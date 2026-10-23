@@ -373,12 +373,14 @@ export function getChaveGrupoConferencia(
   return `id:${resolverCooperadoIdGrupoConferencia(data, nota, cooperativaId)}`;
 }
 
-export function getNomeGrupoConferencia(notas: NotaPedido[], data: AppData): string {
+export function getNomeGrupoConferencia(
+  notas: NotaPedido[],
+  data: AppData,
+  cooperativaId?: string
+): string {
   for (const n of notas) {
-    const snap = nomeCooperadoSnapshotUtilizavel(n.cooperadoNomeSnapshot);
-    if (snap) return snap;
-    const cadastro = data.cooperados.find((c) => c.id === n.cooperadoId)?.nomeCompleto?.trim();
-    if (cadastro) return cadastro;
+    const nome = getNomeEnvioEntregaNota(n, data, cooperativaId ?? n.cooperativaId);
+    if (nome !== "Cooperado") return nome;
   }
   return "Cooperado";
 }
@@ -409,7 +411,7 @@ export function agruparPendentesPorCooperado(
     .map(([chave, notas]) => ({
       chave,
       cooperadoId: resolverCooperadoIdDoGrupo(notas, data, cooperativaId),
-      nome: getNomeGrupoConferencia(notas, data),
+      nome: getNomeGrupoConferencia(notas, data, cooperativaId),
       notas,
     }))
     .sort((a, b) => {

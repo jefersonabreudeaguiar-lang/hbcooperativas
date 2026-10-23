@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NotaPedido } from "@/types";
 import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
 import { protectNotaAgainstStatusDowngrade, isNotaNaFilaConferenciaResponsavel, sanitizarNotaParaFilaConferencia } from "@/utils/notaStatus";
-import { mergeNotaComFotos } from "@/utils/fotoEntrega";
+import { mergeNotaComFotos, nomeCooperadoSnapshotUtilizavel } from "@/utils/fotoEntrega";
 import { isInlineDataUrl } from "@/utils/mediaHelpers";
 
 const BUCKET = "hb-entregas";
@@ -566,7 +566,9 @@ const FILA_CONFERENCIA_SQL_STATUSES = [
 ] as const;
 
 function mapNotasPedidoTableRows(
-  data: { payload: unknown; status: unknown; updated_at: unknown }[] | null
+  data:
+    | { payload: unknown; status: unknown; updated_at: unknown; cooperado_nome?: unknown }[]
+    | null
 ): { notas: Array<NotaPedido & { serverUpdatedAt?: string }>; serverWatermark?: string } {
   let serverWatermark: string | undefined;
   const notas = (data ?? [])
@@ -575,6 +577,8 @@ function mapNotasPedidoTableRows(
       if (!payload?.id) return null;
       const sqlStatus = row.status as NotaPedido["status"] | null;
       const sqlUpdatedAt = typeof row.updated_at === "string" ? row.updated_at : undefined;
+      const sqlNome =
+        typeof row.cooperado_nome === "string" ? row.cooperado_nome.trim() : "";
       if (sqlUpdatedAt) {
         const t = new Date(sqlUpdatedAt).getTime();
         const prev = serverWatermark ? new Date(serverWatermark).getTime() : 0;
@@ -584,8 +588,13 @@ function mapNotasPedidoTableRows(
         sqlStatus && sqlStatus !== "rascunho"
           ? sqlStatus
           : payload.status;
+      const cooperadoNomeSnapshot =
+        nomeCooperadoSnapshotUtilizavel(payload.cooperadoNomeSnapshot) ??
+        nomeCooperadoSnapshotUtilizavel(sqlNome) ??
+        payload.cooperadoNomeSnapshot;
       return {
         ...payload,
+        cooperadoNomeSnapshot,
         status,
         updatedAt: sqlUpdatedAt ?? payload.updatedAt,
         serverUpdatedAt: sqlUpdatedAt,
@@ -602,7 +611,7 @@ export async function fetchFilaConferenciaFromTable(
 ): Promise<{ notas: NotaPedido[]; tableMissing: boolean }> {
   const { data, error } = await supabase
     .from("notas_pedido")
-    .select("payload, status, updated_at")
+    .select("payload, status, updated_at, cooperado_nome")
     .eq("cooperativa_cnpj", cnpj)
     .in("status", [...FILA_CONFERENCIA_SQL_STATUSES])
     .order("updated_at", { ascending: false });
@@ -627,13 +636,13 @@ export async function fetchNotasFromTable(
     const [deltaRes, filaRes] = await Promise.all([
       supabase
         .from("notas_pedido")
-        .select("payload, status, updated_at")
+        .select("payload, status, updated_at, cooperado_nome")
         .eq("cooperativa_cnpj", cnpj)
         .gte("updated_at", since)
         .order("updated_at", { ascending: false }),
       supabase
         .from("notas_pedido")
-        .select("payload, status, updated_at")
+        .select("payload, status, updated_at, cooperado_nome")
         .eq("cooperativa_cnpj", cnpj)
         .in("status", [...FILA_CONFERENCIA_SQL_STATUSES])
         .order("updated_at", { ascending: false }),
@@ -669,7 +678,7 @@ export async function fetchNotasFromTable(
 
   let query = supabase
     .from("notas_pedido")
-    .select("payload, status, updated_at")
+    .select("payload, status, updated_at, cooperado_nome")
     .eq("cooperativa_cnpj", cnpj);
 
   const { data, error } = await query.order("updated_at", { ascending: false });
