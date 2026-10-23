@@ -318,7 +318,6 @@ export function requestCooperadoManualRefreshSync(): void {
     void runCooperadoGaSyncBaseInformacoesFinanceiras(session, {
       force: true,
       userInitiated: true,
-      silent: true,
     });
     return;
   }

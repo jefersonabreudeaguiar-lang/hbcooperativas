@@ -72,7 +72,6 @@ import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/coop
 import { scheduleCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
 import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { cancelCooperadoGarantiaValorReceberSync } from "@/lib/cooperado/cooperadoGaGarantiaValorReceberSync";
-import { cooperadoGaValorReceberExibicaoResolvida } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { cancelCooperadoBicMobileSessionSync } from "@/lib/cooperado/cooperadoBicMobileSessionSync";
 import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoBicMobileAuthority";
 import { CooperadoBicRevisionPulseHost } from "@/components/cooperado/CooperadoBicRevisionPulseHost";
@@ -315,11 +314,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     } else if (aguardandoDadosFinanceiros || syncingForUi) {
       mensagemStatus = "Atualizando dados…";
     }
-  } else if (
-    syncingForUi &&
-    isCooperadoUserSyncVisible() &&
-    !(user && cooperadoGaValorReceberExibicaoResolvida(user))
-  ) {
+  } else if (syncingForUi && isCooperadoUserSyncVisible()) {
     mensagemStatus = "Atualizando dados…";
   }
 

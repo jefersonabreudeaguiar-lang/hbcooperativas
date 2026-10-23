@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v555
+
+- **Cooperado (estabilidade):** reverte alterações do v553 que travavam o painel; boot shell some sozinho após alguns segundos se o React não montar (evita tela presa).
+
 ## v554
 
 - **Cooperado (hotfix):** remove carga automática de script de diagnóstico inexistente no deploy — evitava tela branca / aba travada no browser.

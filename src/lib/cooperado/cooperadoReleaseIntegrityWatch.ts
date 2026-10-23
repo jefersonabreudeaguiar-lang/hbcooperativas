@@ -4,8 +4,6 @@
  */
 import type { User } from "@/types";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
-import { cooperadoGaValorReceberExibicaoResolvida } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
-import { cooperadoAppReleaseNeedsOperacionalSync } from "@/lib/performance/cooperadoEventDrivenSync";
 import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
 import { PWA_RELEASE_INTEGRITY_POLICY } from "@/lib/pwa/pwaReleaseIntegrityStrategy";
 import { runClientReleaseIntegrityProbe } from "@/lib/pwa/pwaReleaseIntegrityProbe";
@@ -35,12 +33,6 @@ export function scheduleCooperadoReleaseIntegrityWatch(
 ): void {
   if (typeof window === "undefined") return;
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return;
-  if (
-    cooperadoGaValorReceberExibicaoResolvida(user) &&
-    !cooperadoAppReleaseNeedsOperacionalSync()
-  ) {
-    return;
-  }
   if (activeUserId === user.id && timerIds.length > 0) return;
 
   clearWatchTimers();

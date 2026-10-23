@@ -71,6 +71,7 @@ try{
     var s=JSON.parse(raw);
     if(s&&(s.role==="cooperado"||s.cooperadoId)){
       paintInicio(s);
+      setTimeout(hide,standalone?4000:6000);
       return;
     }
     if(hbCoopSessPilot(s)&&(standalone||mobile)){hide();return;}

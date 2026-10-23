@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { cooperadoInstantShellReady } from "@/lib/performance/cooperadoColdStart";
@@ -101,6 +101,16 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
   }, [loading, user?.id, accountUser?.id, accountUser?.role]);
+
+  useEffect(() => {
+    if (loading || !user || user.role !== "cooperado") return;
+    if (profileRepairDone) return;
+    const t = window.setTimeout(() => {
+      setProfileRepairDone(true);
+      dismissCooperadoBootShell();
+    }, 4_000);
+    return () => window.clearTimeout(t);
+  }, [loading, user?.id, user?.role, profileRepairDone]);
 
   const sessionForPaint = getSession();
   const cooperadoPaintWhileAuth =

@@ -49,7 +49,7 @@ const hook = readFileSync(
   "utf8"
 );
 const gaWarm = hook.match(
-  /const gaParidadeWarm =\s*tabAtiva &&\s*isCooperadoMobilePilotPerfActive\(\) &&\s*isAppDataWarm\(\) &&\s*Boolean\(input\.cooperadoId\) &&\s*!persistidoJaTemValor;/
+  /const gaParidadeWarm =\s*tabAtiva &&\s*isCooperadoMobilePilotPerfActive\(\) &&\s*isAppDataWarm\(\) &&\s*Boolean\(input\.cooperadoId\);/
 );
 assert.ok(gaWarm, "AppData quente recalcula mesmo com cache do A receber");
 assert.ok(
