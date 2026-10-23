@@ -34,8 +34,7 @@ export function cooperadoApresentacaoFinanceiraConsolidada(
 ): boolean {
   if (input.role !== "cooperado") return true;
   if (input.dadosFinanceirosConsistentes === false) return false;
-  // Cache local utilizável: não bloquear Início/Financeiro enquanto sync silencioso roda.
-  if (input.exibirComDadosLocais) return true;
+  if (input.exibirComDadosLocais) return !input.syncing;
   return input.cooperadoPagamentosHydrated && !input.syncing;
 }
 
