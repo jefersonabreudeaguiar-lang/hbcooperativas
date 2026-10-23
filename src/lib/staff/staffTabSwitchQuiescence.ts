@@ -3,7 +3,8 @@
  */
 const UNTIL_KEY = "hb.staff.tab-hop-quiet-until";
 const LAST_PATH_KEY = "hb.staff.tab-hop-last-path";
-const QUIET_MS = 15_000;
+/** Bloqueia só sync pesado — janela curta para S2/S3 não ficarem 15s sem pull leve. */
+const QUIET_MS = 5_000;
 
 export function markStaffTabPathChange(pathname: string): void {
   if (typeof sessionStorage === "undefined") return;

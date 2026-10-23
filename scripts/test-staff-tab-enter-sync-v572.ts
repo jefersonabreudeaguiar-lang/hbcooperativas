@@ -15,6 +15,10 @@ assert.match(tab, /scheduleStaffResponsavelTabEnterSync/);
 assert.match(tab, /scheduleSessionOperacionalHydrate/);
 assert.match(tab, /operacional_full/);
 assert.match(tab, /notas_delta/);
+assert.match(
+  tab,
+  /scheduleStaffPostInteractiveTask\(\(\) => \{[\s\S]*?path\.startsWith\("\/notas-pedido"\)[\s\S]*?staffResponsavelPausaSyncPesado/
+);
 assert.ok(!tab.includes("lightTierForTab"), "sync por aba só Conferir (notas_delta) + hidratação no Início");
 assert.match(tab, /OPERACIONAL_HYDRATE_DELAY_MS/);
 assert.match(tab, /dashboardInicioHydrateDone/);

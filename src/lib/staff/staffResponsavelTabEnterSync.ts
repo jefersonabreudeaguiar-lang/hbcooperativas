@@ -79,14 +79,13 @@ export function scheduleStaffResponsavelTabEnterSync(pathname: string): void {
   lastAt = now;
 
   scheduleStaffPostInteractiveTask(() => {
-    if (staffResponsavelPausaSyncPesado()) return;
-
+    /** notas_delta é leve — não pode ficar atrás da quiescence de troca de aba (S2 Conferir). */
     if (path.startsWith("/notas-pedido")) {
-      if (!staffTabSwitchQuiescenceActive()) {
-        requestSyncTier("notas_delta", { force: true });
-      }
+      requestSyncTier("notas_delta", { force: true });
       return;
     }
+
+    if (staffResponsavelPausaSyncPesado()) return;
 
     const inicioDuranteWarmupPc =
       path === "/dashboard" && !dashboardInicioHydrateDone && staffGestaoDesktopWarmupSyncPaused();
