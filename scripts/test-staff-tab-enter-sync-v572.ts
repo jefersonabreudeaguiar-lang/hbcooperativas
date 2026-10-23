@@ -18,7 +18,7 @@ assert.ok(!tab.includes("lightTierForTab"), "troca de aba não dispara sync leve
 assert.match(tab, /OPERACIONAL_HYDRATE_DELAY_MS/);
 assert.match(tab, /dashboardInicioHydrateDone/);
 assert.match(tab, /inicioDuranteWarmupPc/);
-assert.match(tab, /reloadStaffGestaoPersistAfterFirstPaint/);
+assert.match(tab, /scheduleStaffGestaoPersistReloadAfterPaint/);
 assert.match(sync, /reloadStaffGestaoPersistAfterFirstPaint\(\)/);
 assert.match(layout, /StaffGestaoTabEnterSync/);
 

@@ -3,7 +3,7 @@
  * Operacional (financeiro_delta) no máximo 1× por sessão, atrasado — não trava troca de abas.
  */
 import { scheduleStaffPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
-import { reloadStaffGestaoPersistAfterFirstPaint } from "@/services/dataStore";
+import { scheduleStaffGestaoPersistReloadAfterPaint } from "@/services/dataStore";
 import { requestSyncTier } from "@/services/syncRequest";
 import { staffGestaoDesktopWarmupSyncPaused } from "@/lib/staff/staffGestaoDesktopWarmup";
 import { staffResponsavelPausaSyncPesado } from "@/lib/staff/staffResponsavelPausaSyncPesado";
@@ -11,6 +11,8 @@ import { staffTabSwitchQuiescenceActive } from "@/lib/staff/staffTabSwitchQuiesc
 
 const MIN_GAP_MS = 45_000;
 const OPERACIONAL_HYDRATE_DELAY_MS = 20_000;
+/** PC logo após login — paint + interação antes do pull pesado (evita «página sem resposta»). */
+const DASHBOARD_WARMUP_HYDRATE_DELAY_MS = 5_000;
 
 let lastPath = "";
 let lastAt = 0;
@@ -35,28 +37,35 @@ function clearOperacionalHydrateTimer(): void {
   }
 }
 
+function runSessionOperacionalHydratePull(): void {
+  if (sessionOperacionalHydrateDone) return;
+  if (staffTabSwitchQuiescenceActive() || staffResponsavelPausaSyncPesado()) {
+    operacionalHydrateTimer = window.setTimeout(runSessionOperacionalHydratePull, 5_000);
+    return;
+  }
+  sessionOperacionalHydrateDone = true;
+  scheduleStaffGestaoPersistReloadAfterPaint();
+  const tier = staffGestaoDesktopWarmupSyncPaused() ? "financeiro_delta" : "operacional_full";
+  requestSyncTier(tier, { force: true, userInitiated: true, silent: true });
+}
+
 /** Uma vez por sessão: merge local + operacional/notas (após paint e fora de quiescence). */
 function scheduleSessionOperacionalHydrate(reason: "dashboard-warmup" | "deferred"): void {
   if (sessionOperacionalHydrateDone) return;
+
   if (reason === "dashboard-warmup") {
-    clearOperacionalHydrateTimer();
-    sessionOperacionalHydrateDone = true;
-    reloadStaffGestaoPersistAfterFirstPaint();
-    requestSyncTier("operacional_full", { force: true, userInitiated: true });
-    return;
+    scheduleStaffGestaoPersistReloadAfterPaint();
   }
+
   if (operacionalHydrateTimer != null) return;
+
+  const delayMs =
+    reason === "dashboard-warmup" ? DASHBOARD_WARMUP_HYDRATE_DELAY_MS : OPERACIONAL_HYDRATE_DELAY_MS;
+
   operacionalHydrateTimer = window.setTimeout(() => {
     operacionalHydrateTimer = null;
-    if (sessionOperacionalHydrateDone) return;
-    if (staffTabSwitchQuiescenceActive() || staffResponsavelPausaSyncPesado()) {
-      scheduleSessionOperacionalHydrate("deferred");
-      return;
-    }
-    sessionOperacionalHydrateDone = true;
-    reloadStaffGestaoPersistAfterFirstPaint();
-    requestSyncTier("operacional_full", { force: true, userInitiated: true });
-  }, OPERACIONAL_HYDRATE_DELAY_MS);
+    runSessionOperacionalHydratePull();
+  }, delayMs);
 }
 
 export function scheduleStaffResponsavelTabEnterSync(pathname: string): void {
