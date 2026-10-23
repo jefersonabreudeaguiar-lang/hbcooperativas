@@ -20,11 +20,17 @@ import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { requestCooperadoGaFinanceiroExibicaoRecoverySync } from "@/services/syncRequest";
 import { getUserCooperativaId } from "@/utils/cooperativa";
-import { cooperadoPwaFichaParidadeSnapshotDivergeDeAppData } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
+import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
+import { cooperadoRematerializarFinanceiroLocalSePossivel } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import { scheduleCooperadoHbCreditLimiteAndAccountWarmup } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
 import { markCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
 import { requestSyncTier } from "@/services/syncRequest";
 import { runCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
+import {
+  cooperadoFinanceiroDesatualizado,
+  cooperadoFinanceiroStaleRecuperavelEmBackground,
+} from "@/services/fichaSyncGuard";
+import { cooperadoMobileSyncTrace } from "@/lib/cooperado/cooperadoMobileSyncTrace";
 
 const GARANTIA_DELAYS_MS = [5_000, 15_000, 30_000, 60_000, 120_000, 180_000] as const;
 
@@ -37,48 +43,60 @@ function clearGarantiaTimers(): void {
 }
 
 function pullNuvemFinanceiro(user: Omit<User, "password">, attempt: number): void {
-  if (cooperadoMobileDeferOperacionalSyncNaAbertura(user)) {
-    cooperadoPilotForcarRematerializacaoFinanceira(user);
+  cooperadoPilotForcarRematerializacaoFinanceira(user);
+  rematerializarCooperadoPwaSnapshotsSeNecessario(user);
+  cooperadoRematerializarFinanceiroLocalSePossivel(user);
+
+  if (cooperadoGaValorReceberExibicaoResolvida(user)) {
+    cooperadoMobileSyncTrace("garantia_resolvida_local", `attempt=${attempt}`);
+    return;
+  }
+
+  if (!cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
+    cooperadoMobileSyncTrace("garantia_skip_nuvem", "recovery_nao_necessario");
     scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
     return;
   }
-  let precisaOperacionalFull = !cooperadoGaValorReceberExibicaoResolvida(user);
-  if (isAppDataWarm() && user.cooperadoId) {
-    const data = getData();
-    const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
-    if (coopId) {
-      const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-      if (cooperadoPwaFichaParidadeSnapshotDivergeDeAppData(data, cooperadoId, coopId)) {
-        precisaOperacionalFull = true;
-      }
-    }
+
+  if (cooperadoMobileDeferOperacionalSyncNaAbertura(user)) {
+    scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
+    return;
   }
-  if (precisaOperacionalFull || cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
-    cooperadoGaDispatchPrimeiraCargaSilenciosa(user, { allowRepeat: true });
-  }
+
+  cooperadoMobileSyncTrace("garantia_pull_nuvem", `attempt=${attempt}`);
+  cooperadoGaDispatchPrimeiraCargaSilenciosa(user, { allowRepeat: attempt > 0 });
+
   if (attempt >= 3) {
     markCooperadoUserSyncVisible();
     requestSyncTier("operacional_full", {
       force: true,
       immediate: true,
-      userInitiated: true,
+      eventDriven: true,
     });
   } else {
     requestCooperadoGaFinanceiroExibicaoRecoverySync({ garantia: true });
   }
   scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
-  void runCooperadoGaSyncBaseInformacoesFinanceiras(user, { force: attempt >= 1 });
+  void runCooperadoGaSyncBaseInformacoesFinanceiras(user, { force: attempt >= 1, silent: true });
+
   if (!isAppDataWarm() || !user.cooperadoId) return;
   const data = getData();
   const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
   if (!coopId) return;
   const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+  const staleRecuperavel = cooperadoFinanceiroStaleRecuperavelEmBackground(
+    data,
+    cooperadoId,
+    coopId
+  );
+  const desatualizado =
+    cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId) && !staleRecuperavel;
   void resolveCooperativaCnpj(data, coopId, user).then((cnpj) => {
     if (!cnpj || (typeof document !== "undefined" && document.hidden)) return;
     void runCooperadoForegroundOperacionalCheck(cnpj, {
       cooperadoId,
       cooperativaId: coopId,
-      financeiroDesatualizado: true,
+      financeiroDesatualizado: desatualizado,
     });
   });
 }

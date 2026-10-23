@@ -6,6 +6,11 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v549
+
+- **Cooperado (Etapa 1):** garantia ao voltar do PWA não dispara `operacional_full` só por snapshot divergente; recovery na nuvem só se faltar fatia local de verdade.
+- **Trace opcional:** `localStorage hb.coop.mobile.trace=1` para suporte ver fila de sync no aparelho.
+
 ## v548
 
 - **Cooperado:** volta a fluir como no **v538** (abas e valores locais) — sem rajada de `operacional_full` quando a ficha está só “desalinhada” no cache PWA mas o motor já tem valor.

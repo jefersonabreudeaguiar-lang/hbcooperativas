@@ -27,6 +27,7 @@ import {
   cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem,
   cooperadoGaValorReceberExibicaoResolvida,
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
+import { cooperadoMobileSyncTrace } from "@/lib/cooperado/cooperadoMobileSyncTrace";
 import { getSession } from "@/services/dataStore";
 import {
   capStaffConferenciaSyncTierRequest,
@@ -139,6 +140,15 @@ export function requestSyncTier(
     forceDefault,
     options?.userInitiated === true
   );
+  const session = getSession();
+  if (capped.tier === "operacional_full" && session?.role === "cooperado") {
+    cooperadoMobileSyncTrace("operacional_full", [
+      options?.userInitiated ? "user" : "",
+      options?.eventDriven ? "event" : "",
+    ]
+      .filter(Boolean)
+      .join("|") || "auto");
+  }
   enqueueAppSyncRequest({
     tier: capped.tier,
     force: capped.force,
@@ -163,10 +173,10 @@ export function requestCooperadoStaffRevisionSync(): void {
 export function requestCooperadoFinanceiroRecoverySync(): void {
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   const session = getSession();
-  if (
-    session?.role === "cooperado" &&
-    cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(session)
-  ) {
+  if (session?.role === "cooperado") {
+    if (!cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(session)) {
+      return;
+    }
     requestCooperadoGaFinanceiroExibicaoRecoverySync();
     return;
   }

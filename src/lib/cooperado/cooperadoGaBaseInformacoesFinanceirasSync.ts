@@ -9,7 +9,6 @@ import {
 } from "@/lib/cooperado/cooperadoMobilePilot";
 import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoBicMobileAuthority";
 import {
-  cooperadoGaExibicaoFinanceiraAindaZerada,
   cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem,
   cooperadoGaValorReceberExibicaoResolvida,
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
@@ -78,7 +77,8 @@ export function cooperadoGaPrecisaSyncBaseInformacoesFinanceiras(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return false;
-  return !cooperadoGaValorReceberExibicaoResolvida(user) || cooperadoGaExibicaoFinanceiraAindaZerada(user);
+  if (cooperadoGaValorReceberExibicaoResolvida(user)) return false;
+  return cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user);
 }
 
 export type CooperadoGaSyncBaseInformacoesOpts = {
