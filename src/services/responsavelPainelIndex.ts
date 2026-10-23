@@ -3,7 +3,10 @@
  * Read-only; não altera lançamentos.
  */
 import type { AppData, Cooperado, NotaPedido, PagamentoCooperadoRegistro } from "@/types";
-import { cooperadoPendentePagamentoResponsavel } from "@/services/cooperadoEntregasService";
+import {
+  cooperadoPendentePagamentoResponsavel,
+  listarMesesEmAbertoPagamentoResponsavel,
+} from "@/services/cooperadoEntregasService";
 import {
   fichaPertenceCooperado,
   listCooperadosDaCooperativa,
@@ -99,8 +102,14 @@ function mergeCooperadosCadastroPainel(a: Cooperado[] | undefined, b: Cooperado[
 }
 
 let relatorioAbertoCache: RelatorioAbertoCache | null = null;
-let relatorioAbertoLatch: { coopId: string; linhas: LinhaPagarCooperadoEmAberto[] } | null = null;
 const conferirLeituraLatchByKey = new Map<string, AppData>();
+let conferirLeituraProjCache: { key: string; data: AppData } | null = null;
+
+function conferirLeituraProjCacheKey(data: AppData, coopId: string): string {
+  const revision = getDataRevision();
+  const s = scoreSnapshotConferir(data);
+  return `${coopId || "_"}:${revision}:${s.pix}:${s.fichas}:${s.notas}:${s.cooperados}`;
+}
 let conferirLatchBuild = APP_BUILD_VERSION;
 
 function garantirCacheDoBuildAtual(): void {
@@ -108,8 +117,8 @@ function garantirCacheDoBuildAtual(): void {
   painelCache = null;
   pagarProjCache = null;
   relatorioAbertoCache = null;
-  relatorioAbertoLatch = null;
   conferirLeituraLatchByKey.clear();
+  conferirLeituraProjCache = null;
   conferirLatchBuild = APP_BUILD_VERSION;
 }
 
@@ -204,13 +213,21 @@ function listarNotasConferidasSemPixCooperado(
  * Leitura da ficha ainda sem PIX — Conferir pode marcar nota/ficha como paga e esvaziar Pagar/Em aberto.
  * Só leitura; não persiste.
  */
-function appDataParaLeituraFichaEmAbertoResponsavel(data: AppData, coopId?: string): AppData {
-  const leituraConferir = appDataParaConferirLeitura(data, coopId);
+/** Ficha em aberto a partir da leitura Conferir já montada — evita duplicar merge/lastro. */
+export function completarLeituraFichaEmAbertoResponsavel(
+  leituraConferir: AppData,
+  _coopId?: string
+): AppData {
   return completarFichaProjetadaComNota(
     alinharFichaComPagamentosCooperativa(
       repararIntegridadePagamentosCooperativa(leituraConferir, { forcar: true })
     )
   );
+}
+
+function appDataParaLeituraFichaEmAbertoResponsavel(data: AppData, coopId?: string): AppData {
+  const leituraConferir = appDataParaConferirLeitura(data, coopId);
+  return completarLeituraFichaEmAbertoResponsavel(leituraConferir, coopId);
 }
 
 /**
@@ -518,6 +535,10 @@ function aplicarLastroCompletenessConferir(candidato: AppData, key = "_"): AppDa
 export function appDataParaConferirLeitura(data: AppData, coopId?: string): AppData {
   garantirCacheDoBuildAtual();
   const key = coopId || "_";
+  const projKey = conferirLeituraProjCacheKey(data, key);
+  if (conferirLeituraProjCache && conferirLeituraProjCache.key === projKey) {
+    return conferirLeituraProjCache.data;
+  }
   if (!conferirLeituraLatchByKey.has(key)) {
     const lkg = peekStaffGestaoLastGood();
     if (lkg && ((lkg.notasPedido?.length ?? 0) > 0 || (lkg.fichaCorrida?.length ?? 0) > 0)) {
@@ -530,7 +551,9 @@ export function appDataParaConferirLeitura(data: AppData, coopId?: string): AppD
   const comNomes = coopId
     ? repararNomesEnvioNotasParaConferencia(alinhado, coopId)
     : alinhado;
-  return aplicarLastroCompletenessConferir(comNomes, key);
+  const out = aplicarLastroCompletenessConferir(comNomes, key);
+  conferirLeituraProjCache = { key: projKey, data: out };
+  return out;
 }
 
 /**
@@ -632,17 +655,65 @@ function recortarLinhaEmAbertoMesesSemPix(
   };
 }
 
+/** Mesma regra da gestão (Pagar/Início): mês quitado por PIX não entra no card Em aberto. */
+function recortarLinhaPelosMesesEmAbertoGestao(
+  linha: LinhaPagarCooperadoEmAberto,
+  data: AppData,
+  coopId: string
+): LinhaPagarCooperadoEmAberto | null {
+  const permitidos = new Set(
+    listarMesesEmAbertoPagamentoResponsavel(data, linha.cooperadoId, coopId)
+  );
+  if (permitidos.size === 0) return null;
+  const porMes = (linha.porMes ?? []).filter((m) => m.mes && permitidos.has(m.mes));
+  if (porMes.length === 0) return null;
+  const meses = porMes.map((m) => m.mes);
+  const total = round2(porMes.reduce((s, m) => s + m.total, 0));
+  if (total <= 0.005) return null;
+  return {
+    ...linha,
+    meses,
+    mesesLabel: formatMesesReferenciaRotulo(meses),
+    entregas: porMes.reduce((s, m) => s + m.entregas, 0),
+    total,
+    porMes,
+  };
+}
+
 /** Lastro sem valor já coberto por PIX — mês pago some; só fica o que ainda não foi pago. */
 function linhaEmAbertoSemValoresPagos(
   base: LinhaPagarCooperadoEmAberto,
   data: AppData,
-  coopId: string
+  coopId: string,
+  opts?: { gateMesesGestao?: boolean }
 ): LinhaPagarCooperadoEmAberto | null {
   const vivo = linhaEmAbertoSoFichaSemPix(base, data, coopId);
-  if (vivo) return recortarLinhaEmAbertoMesesSemPix(vivo, data, coopId);
-  if (cooperadoEmAbertoPodeSair(data, base.cooperadoId, coopId, base.meses)) return null;
-  if (base.total <= 0.005) return null;
-  return recortarLinhaEmAbertoMesesSemPix(base, data, coopId);
+  const recortada = vivo
+    ? recortarLinhaEmAbertoMesesSemPix(vivo, data, coopId)
+    : cooperadoEmAbertoPodeSair(data, base.cooperadoId, coopId, base.meses)
+      ? null
+      : base.total <= 0.005
+        ? null
+        : recortarLinhaEmAbertoMesesSemPix(base, data, coopId);
+  if (!recortada) return null;
+  const gate = opts?.gateMesesGestao ?? true;
+  if (!gate || !deveAplicarGateMesesEmAbertoGestao(data, coopId)) return recortada;
+  return recortarLinhaPelosMesesEmAbertoGestao(recortada, data, coopId);
+}
+
+/** Sync vazio não pode zerar lastro de linhas — gate só com ficha/PIX/nota conferida na cooperativa. */
+function deveAplicarGateMesesEmAbertoGestao(data: AppData, coopId: string): boolean {
+  if (countFichasNaoPagasCooperativa(data, coopId) > 0) return true;
+  for (const p of data.pagamentosCooperado ?? []) {
+    if (p.status !== "confirmado") continue;
+    if (p.cooperativaId && p.cooperativaId !== coopId) continue;
+    return true;
+  }
+  for (const n of data.notasPedido ?? []) {
+    if (n.cooperativaId !== coopId) continue;
+    if (n.status === "conferida" || n.status === "pago") return true;
+  }
+  return false;
 }
 
 /** Lastro só contra lista vazia. Valor já pago não volta; total vem só da ficha sem PIX. */
@@ -653,7 +724,7 @@ export function fundirLinhasEmAbertoEstavel(
   coopId: string
 ): LinhaPagarCooperadoEmAberto[] {
   const motorLimpo = motor
-    .map((l) => linhaEmAbertoSemValoresPagos(l, data, coopId))
+    .map((l) => linhaEmAbertoSemValoresPagos(l, data, coopId, { gateMesesGestao: true }))
     .filter((l): l is LinhaPagarCooperadoEmAberto => l !== null);
 
   if (anterior.length === 0) return motorLimpo;
@@ -666,7 +737,7 @@ export function fundirLinhasEmAbertoEstavel(
   for (const old of anterior) {
     if (byId.has(old.cooperadoId)) continue;
     if (cooperadoEmAbertoPodeSair(data, old.cooperadoId, coopId, old.meses)) continue;
-    const vivo = linhaEmAbertoSemValoresPagos(old, data, coopId);
+    const vivo = linhaEmAbertoSemValoresPagos(old, data, coopId, { gateMesesGestao: false });
     if (vivo) byId.set(old.cooperadoId, vivo);
   }
   return [...byId.values()].sort((a, b) => a.cooperado.localeCompare(b.cooperado, "pt-BR"));
@@ -875,6 +946,20 @@ function motorEmAbertoComNotasSemFicha(
   );
 }
 
+/**
+ * Relatório «Em aberto» a partir da leitura Conferir já calculada (sem recomputar lastro).
+ */
+export function getRelatorioLancamentosEmAbertoDeLeituraConferir(
+  leituraConferir: AppData,
+  coopId: string,
+  cooperadoId?: string
+): LinhaPagarCooperadoEmAberto[] {
+  if (!coopId) return [];
+  const dataAberto = completarLeituraFichaEmAbertoResponsavel(leituraConferir, coopId);
+  const motor = motorEmAbertoComNotasSemFicha(dataAberto, coopId, cooperadoId);
+  return fundirLinhasEmAbertoEstavel([], motor, dataAberto, coopId);
+}
+
 /** Relatório «Em aberto» cacheado por revisão (evita recomputar a cada clique de aba). */
 export function getRelatorioLancamentosEmAbertoResponsavel(
   data: AppData,
@@ -906,14 +991,7 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
     return relatorioAbertoCache.linhas;
   }
   const motor = motorEmAbertoComNotasSemFicha(dataAberto, coopId);
-  const anterior =
-    motor.length === 0 &&
-    relatorioAbertoLatch &&
-    relatorioAbertoLatch.coopId === coopId
-      ? relatorioAbertoLatch.linhas
-      : [];
-  const linhas = fundirLinhasEmAbertoEstavel(anterior, motor, dataAberto, coopId);
-  relatorioAbertoLatch = { coopId, linhas };
+  const linhas = fundirLinhasEmAbertoEstavel([], motor, dataAberto, coopId);
   relatorioAbertoCache = {
     revision,
     coopId,
@@ -935,7 +1013,7 @@ export function resetResponsavelPainelIndexCache(): void {
   painelCache = null;
   pagarProjCache = null;
   relatorioAbertoCache = null;
-  relatorioAbertoLatch = null;
   conferirLeituraLatchByKey.clear();
+  conferirLeituraProjCache = null;
   conferirLatchBuild = APP_BUILD_VERSION;
 }

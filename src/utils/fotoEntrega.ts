@@ -2,7 +2,7 @@ import type { AppData, NotaPedido } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { cpfCooperadoDigits, escolherCooperadoCanonico, nomeNormalizadoCooperado } from "@/utils/cooperadoDedupe";
 import { isInlineDataUrl } from "@/utils/mediaHelpers";
-import { isNotaRelancamentoIntencional } from "@/utils/notaStatus";
+import { isNotaNaFilaConferenciaResponsavel, isNotaRelancamentoIntencional } from "@/utils/notaStatus";
 
 /** Referência leve para foto no IndexedDB — não vai no JSON pesado. */
 export const LOCAL_MEDIA_REF_PREFIX = "idb:";
@@ -391,12 +391,6 @@ export function getNomeEnvioEntregaNota(
   const ficha = data.fichaCorrida.find((f) => f.notaPedidoId === nota.id);
   const fichaSnap = nomeCooperadoSnapshotUtilizavel(ficha?.cooperadoNomeSnapshot);
   if (fichaSnap) return fichaSnap;
-  for (const n of data.notasPedido) {
-    if (n.id === nota.id) continue;
-    if (n.cooperadoId !== id && n.cooperadoId !== nota.cooperadoId) continue;
-    const outro = nomeCooperadoSnapshotUtilizavel(n.cooperadoNomeSnapshot);
-    if (outro) return outro;
-  }
   return "Cooperado";
 }
 
@@ -406,6 +400,7 @@ export function repararNomesEnvioNotasParaConferencia(data: AppData, cooperativa
   let changed = false;
   const notasPedido = (data.notasPedido ?? []).map((n) => {
     if (!notaPertenceCooperativa(data, n, cooperativaId)) return n;
+    if (!isNotaNaFilaConferenciaResponsavel(n.status)) return n;
     if (nomeCooperadoSnapshotUtilizavel(n.cooperadoNomeSnapshot)) return n;
     const nome = getNomeEnvioEntregaNota(n, data, cooperativaId);
     if (nome === "Cooperado") return n;
