@@ -1,6 +1,7 @@
 # Responsável — sincronização por aba (antes da Fase R3)
 
 **Liderança:** agente + piloto Jeferson (SIM/NÃO por aba)  
+**Acordo piloto (2026-10-23):** push main + confirm produção após cada correção; cooperativa piloto até S4; Em aberto Conferir = Pagar (valores); prioridade **dados → fluidez**; CI HB em paralelo (não bloqueia SIM/NÃO do Jeferson).  
 **Pré-requisito:** Fase R1 e R2 **SIM** (v571)  
 **Bloqueia:** Fase R3 responsável e **Fase 3 cooperado** até as quatro abas abaixo estiverem verdes.
 
@@ -48,6 +49,6 @@ Responda **SIM** ou **NÃO** por linha, na ordem S1 → S4:
 | Fase | Data | Resposta | Build |
 |------|------|----------|-------|
 | S1 Início | 2026-10-23 | NÃO (23/livro 0/abas) → reteste v581 | v581 |
-| S2 Conferir | 2026-10-23 | entregas/fila SIM (piloto); sub-aba Em aberto em reteste com S3 | v595+ |
-| S3 Pagar | | | |
+| S2 Conferir | 2026-10-23 | entregas/fila SIM; reteste nomes/fluidez build 600 | v600 |
+| S3 Pagar | 2026-10-23 | em andamento (recibo verificado, perf) | v599+ |
 | S4 Livro | | | |

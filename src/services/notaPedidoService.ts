@@ -2684,6 +2684,23 @@ function aplicarDescontosContaCoopMesNoResumo(
   return mergeDescontosContaCoopNoResumo(resumo, descontos);
 }
 
+/** PIX aguardando assinatura: HB do arquivo ainda abate o «a receber» (ciclo só fecha no confirmado). */
+function aplicarHbArquivoResumoAguardandoPix(
+  resumo: ResumoPagamentoCooperado,
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): ResumoPagamentoCooperado {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  const descontos = dedupeDescontosContaCoopRemotos(
+    getDescontosContaCoopMesCached(data, canonico, mesReferencia, coopId)
+  );
+  if (!descontos.length) return resumo;
+  return mergeDescontosContaCoopNoResumo(resumo, descontos);
+}
+
 /** Resumo com abatimento HB Créditos quando houver compras no mercado no mês. */
 export function getResumoExibicaoCooperadoPilot(
   resumo: ResumoPagamentoCooperado,
@@ -2845,9 +2862,15 @@ export function getResumoPagamentoExibicao(
               !(d.tipo === "credito_avulso" && d.motivo.toLowerCase().includes("estorno"))
           ),
         };
-        return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
+        return aplicarHbArquivoResumoAguardandoPix(
+          getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId),
+          data,
+          cooperadoId,
+          mesReferencia,
+          coopId
+        );
       }
-      return snap;
+      return aplicarHbArquivoResumoAguardandoPix(snap, data, cooperadoId, mesReferencia, coopId);
     }
     const base: ResumoPagamentoCooperado = {
       ...snap,
@@ -2862,7 +2885,13 @@ export function getResumoPagamentoExibicao(
           !(d.tipo === "credito_avulso" && d.motivo.toLowerCase().includes("estorno"))
       ),
     };
-    return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
+    return aplicarHbArquivoResumoAguardandoPix(
+      getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId),
+      data,
+      cooperadoId,
+      mesReferencia,
+      coopId
+    );
   }
   const live = getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId, ajustes);
   return getResumoPagamentoParaRegistro(live, data, cooperadoId, mesReferencia, coopId);

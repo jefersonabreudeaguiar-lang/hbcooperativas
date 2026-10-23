@@ -160,7 +160,7 @@ function baseData(partial: Partial<AppData>): AppData {
 {
   let data = baseData({
     fichaCorrida: [ficha("f1", "n1", 200)],
-    notasPedido: [nota("n1")],
+    notasPedido: [{ ...nota("n1"), valorBruto: 200, valorLiquido: 200 }],
   });
   data = persistDescontosContaCoopNoArquivo(data, COOPERADO, MES, COOP, [
     { motivo: "Compra HB Créditos", valorReais: 50, tipo: "conta_coop", createdAt: "2026-09-11T10:00:00.000Z" },
@@ -199,6 +199,10 @@ function baseData(partial: Partial<AppData>): AppData {
 }
 
 async function cloudJefersonCheck() {
+  if (process.env.GITHUB_ACTIONS === "true") {
+    console.log("(skip nuvem — contrato unitário roda no CI; nuvem só local)");
+    return;
+  }
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     console.log("(skip nuvem — sem .env.local)");
     return;
