@@ -1902,14 +1902,17 @@ function mesComPagamentoCooperativaRegistrado(
   return !!getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia);
 }
 
-/** Só data de entrega — createdAt/conferência refeitos no sync não reabrem o pago. */
+/** Entrega e conferência — createdAt da foto não reabre; conferência após PIX sim. */
 function notaReferenciaTemporalEscopoPagamento(nota: NotaPedido): number {
-  if (nota.dataEntrega) {
-    const raw = nota.dataEntrega.length === 10 ? `${nota.dataEntrega}T00:00:00.000Z` : nota.dataEntrega;
+  const stamps: number[] = [];
+  for (const campo of [nota.dataEntrega, nota.dataConferencia]) {
+    if (!campo) continue;
+    const raw = campo.length === 10 ? `${campo}T00:00:00.000Z` : campo;
     const dia = Date.parse(raw);
-    if (Number.isFinite(dia)) return dia;
+    if (Number.isFinite(dia)) stamps.push(dia);
   }
-  return Number.NaN;
+  if (stamps.length === 0) return Number.NaN;
+  return Math.max(...stamps);
 }
 
 export function notaQuitadaPorPagamentoCooperativaRegistrado(

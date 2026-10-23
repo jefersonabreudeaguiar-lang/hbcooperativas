@@ -197,7 +197,7 @@ import { CooperadoApresentacaoFinanceiraGate } from "@/components/cooperado/Coop
 import { useCooperadoApresentacaoFinanceiraConsolidada } from "@/hooks/useCooperadoApresentacaoFinanceiraConsolidada";
 import { cooperadoBicAutorizaZerarCardInicio } from "@/lib/cooperadoInicioCardPolicy";
 import { formatCurrency, formatDate, formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia, cn } from "@/utils/format";
-import type { PagamentoCooperadoRegistro, FichaCorrida, NotaPedido } from "@/types";
+import type { AppData, PagamentoCooperadoRegistro, FichaCorrida, NotaPedido } from "@/types";
 
 function TabelaResumoItens({
   itens,
