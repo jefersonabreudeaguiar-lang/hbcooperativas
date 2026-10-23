@@ -57,6 +57,8 @@ import {
   setStaffOptimisticTab,
 } from "@/lib/performance/staffOptimisticTabNavigation";
 import { tryStaffCachedInstantTabSwitch } from "@/lib/performance/staffPinnedTabFastPath";
+import { markStaffTabPathChange } from "@/lib/staff/staffTabSwitchQuiescence";
+import { staffBottomTabCacheKey } from "@/lib/performance/staffBottomTabRoutes";
 import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetch";
 import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 import { useMobileBottomTabSwitchFeedback } from "@/lib/performance/tabSwitchFeedback";
@@ -536,6 +538,11 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     Boolean(navUser) &&
     staffPainelUi &&
     !isCooperadoAppUser(navUser);
+
+  useLayoutEffect(() => {
+    if (!staffKeepAliveShell) return;
+    markStaffTabPathChange(staffBottomTabCacheKey(pathname));
+  }, [pathname, staffKeepAliveShell]);
 
   const mobileTabScrollMode: MobileTabScrollMode = cooperadoKeepAliveShell
     ? "cooperado"

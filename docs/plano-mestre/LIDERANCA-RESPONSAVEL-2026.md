@@ -76,7 +76,8 @@ Checklist derivado de `ETAPA-5-homolog-fechamento.md` itens que dependem do resp
 |------|------|----------|-------|
 | Plano aceito | 23/10/2026 | SIM (adiar F3 cooperado até responsável verde) | — |
 | Fase R1 | 23/10/2026 | NÃO (Jeferson — trava / abas dessinc.) | v567 |
-| Fase R1 | aguardando piloto | deploy v568 (1 painel pesado no DOM) | v568 |
+| Fase R1 | 23/10/2026 | NÃO (Jeferson — PC) | v568 |
+| Fase R1 | aguardando piloto | deploy v569 (PC sem keep-alive) | v569 |
 | Fase R2 | | | |
 | Fase R3 | | | |
 

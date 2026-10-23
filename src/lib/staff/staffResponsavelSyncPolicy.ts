@@ -6,7 +6,10 @@
  */
 import type { AppData, UserRole } from "@/types";
 import type { SyncRunOptions } from "@/services/syncRequest";
-import { staffPrecisaHydrateOperacionalPull } from "@/lib/staff/staffOperacionalColdHydrate";
+import {
+  staffGestaoTemFichaOuNotaLocal,
+  staffPrecisaHydrateOperacionalPull,
+} from "@/lib/staff/staffOperacionalColdHydrate";
 
 const STAFF_GESTAO_ROLES: UserRole[] = ["responsavel", "tesoureiro", "admin"];
 
@@ -22,6 +25,9 @@ export function isStaffGestaoRole(role: UserRole | string | undefined | null): b
  */
 export function staffResponsavelOpeningSyncRequest(data?: AppData | null): SyncRunOptions {
   if (staffPrecisaHydrateOperacionalPull(data)) {
+    if (staffGestaoTemFichaOuNotaLocal(data)) {
+      return { silent: true, tier: "notas_delta" };
+    }
     return { silent: true, force: true, tier: "financeiro_delta" };
   }
   return { silent: true, tier: "notas_delta" };

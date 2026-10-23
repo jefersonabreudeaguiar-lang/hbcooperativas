@@ -3,7 +3,7 @@
  * Não puxar operacional nem parsear AppData no mesmo frame da troca.
  */
 
-export const RESPONSAVEL_TROCA_ABAS_RAPIDA_VERSION = 3;
+export const RESPONSAVEL_TROCA_ABAS_RAPIDA_VERSION = 4;
 
 export const RESPONSAVEL_TROCA_ABAS_USA_CACHE_KEEP_ALIVE = true;
 

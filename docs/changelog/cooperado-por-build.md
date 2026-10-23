@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v569
+
+- **Responsável (PC):** keep-alive de abas só no celular — no computador navegação normal (menos travamento); abertura com notas/ficha local não dispara `financeiro_delta` pesado; pausa de sync ao mudar de menu no desktop.
+
 ## v568
 
 - **Responsável:** Conferir/Pagar não ficam mais montados juntos no DOM — só a aba visível (cache nas outras); pausa de sync na troca vale no desktop; troca otimista mostra o cache até o Next alinhar a URL.

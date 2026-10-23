@@ -45,7 +45,9 @@ assert.deepEqual(
 );
 
 const keepAlive = read("src/components/performance/StaffMobileTabKeepAlive.tsx");
-assert.ok(!keepAlive.includes("if (!enabled || !mobile)"), "keep-alive no desktop");
+assert.ok(keepAlive.includes("mobileViewport"), "keep-alive desligado no desktop");
+const layout = read("src/components/layout/AppLayout.tsx");
+assert.ok(layout.includes("markStaffTabPathChange"), "desktop marca quiescence na rota");
 
 const pagar = read("src/app/(app)/ficha-corrida/FichaCorridaContent.tsx");
 assert.ok(pagar.includes("não puxa operacional ao abrir a aba"), "Pagar não puxa operacional");

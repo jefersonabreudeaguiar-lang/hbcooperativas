@@ -5,6 +5,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   useMemo,
   startTransition,
   type ReactNode,
@@ -27,6 +28,10 @@ import {
   staffTabCacheMayWriteForPath,
 } from "@/lib/performance/staffTabPanelCache";
 import { markStaffTabPathChange } from "@/lib/staff/staffTabSwitchQuiescence";
+import {
+  isStaffGestaoMobileViewport,
+  subscribeStaffGestaoMobileViewport,
+} from "@/lib/staff/staffGestaoViewport";
 
 type Props = {
   pathname: string;
@@ -55,6 +60,11 @@ function publishStaffKeepAliveDomState(state: {
  */
 export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
   const enabled = isStaffMobileTabKeepAliveEnabled();
+  const mobileViewport = useSyncExternalStore(
+    subscribeStaffGestaoMobileViewport,
+    isStaffGestaoMobileViewport,
+    () => false
+  );
   const deferredChildren = useDeferredValue(children);
   const effectivePath = useStaffEffectiveTabPath(pathname);
   const cacheRef = useRef<Partial<Record<string, ReactNode>>>({});
@@ -165,7 +175,7 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
     return { panel: undefined, warm: false };
   };
 
-  if (!enabled) {
+  if (!enabled || !mobileViewport) {
     return <>{children}</>;
   }
 

@@ -1257,6 +1257,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (!document.hidden) {
         markUserActivity();
         scheduleStaffPostInteractiveTask(() => {
+          if (staffResponsavelPausaSyncPesado()) return;
           markNextCooperadoSyncSilent();
           void runSync(staffResponsavelOpeningSyncRequest(isAppDataWarm() ? getData() : null));
         });
