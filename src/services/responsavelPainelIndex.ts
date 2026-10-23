@@ -122,9 +122,7 @@ function mergeUsersPainel(a: User[] | undefined, b: User[] | undefined): User[] 
     }
     const nomePrev = nomeCadastroCooperadoUtil(prev.name);
     const nomeNext = nomeCadastroCooperadoUtil(u.name);
-    const tNovo = Date.parse(u.updatedAt ?? "") || 0;
-    const tVelho = Date.parse(prev.updatedAt ?? "") || 0;
-    const base = tNovo >= tVelho ? { ...prev, ...u } : { ...u, ...prev };
+    const base = { ...prev, ...u };
     const name = nomeNext ?? nomePrev ?? base.name;
     byId.set(u.id, name ? { ...base, name } : base);
   }
