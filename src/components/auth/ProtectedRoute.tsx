@@ -1,11 +1,10 @@
 "use client";
 
-import { useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { cooperadoInstantShellReady } from "@/lib/performance/cooperadoColdStart";
 import { cooperadoPwaInstantPaintReady } from "@/lib/cooperado/cooperadoPwaInstantResume";
-import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import { getSession } from "@/services/dataStore";
 import { repairBrowserProfileIfStale } from "@/lib/pwa/browserProfileRepair";
@@ -13,6 +12,14 @@ import { buildCooperadoLoginPath } from "@/lib/cooperado/cooperadoCanonicalEntry
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { evaluateResponsavelIdentidade } from "@/lib/responsavel/responsavelIdentidade";
 import { isMobileCooperativaApp } from "@/lib/mobileExperience";
+
+function cooperadoGaSessionInStorage(): boolean {
+  if (typeof window === "undefined") return false;
+  const session = getSession();
+  return Boolean(
+    session && session.role === "cooperado" && isCooperadoMobileGaPromoted(session)
+  );
+}
 
 function protectedRouteInitialProfileRepairDone(): boolean {
   if (typeof window === "undefined") return false;
@@ -53,18 +60,11 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     if (!loading && user) {
       markRqlColdStartPhase("auth_ready");
     }
-    const session = getSession();
-    if (
-      !loading ||
-      cooperadoInstantShellReady(session) ||
-      (session && cooperadoPwaInstantPaintReady(session))
-    ) {
-      dismissCooperadoBootShell();
-    }
   }, [user, loading, router]);
 
   useLayoutEffect(() => {
     if (loading || !user) {
+      if (cooperadoGaSessionInStorage()) return;
       setProfileRepairDone(false);
       return;
     }
@@ -102,14 +102,25 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     };
   }, [loading, user?.id, accountUser?.id, accountUser?.role]);
 
+  useEffect(() => {
+    if (loading || !user || user.role !== "cooperado") return;
+    if (profileRepairDone) return;
+    const t = window.setTimeout(() => {
+      setProfileRepairDone(true);
+    }, 4_000);
+    return () => window.clearTimeout(t);
+  }, [loading, user?.id, user?.role, profileRepairDone]);
+
   const sessionForPaint = getSession();
+  const gaCoopBootstrap = cooperadoGaSessionInStorage();
   const cooperadoPaintWhileAuth =
     Boolean(user) &&
     user!.role === "cooperado" &&
     (isCooperadoMobileGaPromoted(user!) ||
       cooperadoInstantShellReady(sessionForPaint) ||
       cooperadoPwaInstantPaintReady(user!));
-  if (loading && user && cooperadoPaintWhileAuth && profileRepairDone) {
+
+  if (loading && (gaCoopBootstrap || (user && cooperadoPaintWhileAuth && profileRepairDone))) {
     return <>{children}</>;
   }
 

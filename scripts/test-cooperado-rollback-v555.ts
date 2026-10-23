@@ -20,6 +20,7 @@ const boot = readFileSync(join(ROOT, "src/lib/performance/cooperadoBootShell.ts"
 assert.doesNotMatch(gate, /hb-cooperado-acesso-diag/);
 assert.doesNotMatch(gate, /installCooperadoValorBrowserMobileDiag/);
 assert.doesNotMatch(hook, /syncBloqueiaCard/);
-assert.match(boot, /setTimeout\(hide/);
+assert.match(boot, /function sessUser/);
+assert.doesNotMatch(boot, /setTimeout\(hide,ms\)/);
 
 console.log("OK test-cooperado-rollback-v555");

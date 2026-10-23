@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v562
+
+- **Cooperado (app):** corrige tela branca na entrada — o splash só some quando o Início monta (header/main); cooperado GA abre o painel enquanto o auth termina; sessão aninhada no localStorage volta a pintar o Olá.
+
 ## v561
 
 - **Cooperado:** app restaurado ao **v552** (último backup completo estável) — Início, abas, valores e sync como antes da série v553–v560.
