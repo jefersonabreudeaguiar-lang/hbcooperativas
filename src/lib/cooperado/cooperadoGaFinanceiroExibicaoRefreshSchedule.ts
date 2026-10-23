@@ -8,6 +8,7 @@ import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoB
 import { scheduleCooperadoBicMobileSessionSync } from "@/lib/cooperado/cooperadoBicMobileSessionSync";
 import {
   cooperadoGaExibicaoFinanceiraAindaZerada,
+  cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem,
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { cooperadoPilotForcarRematerializacaoFinanceira } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
 import { cooperadoGaDispatchPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
@@ -42,7 +43,7 @@ function onRefreshTick(
     return;
   }
 
-  if (isLastTick || tickIndex > 0) {
+  if ((isLastTick || tickIndex > 0) && cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
     requestCooperadoGaFinanceiroExibicaoRecoverySync();
   }
 }

@@ -20,6 +20,7 @@ import { getData, isAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
+import { persistOperacionalSyncedAppBuild } from "@/lib/performance/cooperadoEventDrivenSync";
 import { isCooperadoMobilePilotPerfActive } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoBicMobileAuthority";
 import { cooperadoBrowserDesktopBicPerfActive } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
@@ -36,6 +37,7 @@ export function cooperadoRematerializarFinanceiroLocalSePossivel(
   const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
   if (!cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId)) return false;
   cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user, { light: true });
+  persistOperacionalSyncedAppBuild();
   return true;
 }
 

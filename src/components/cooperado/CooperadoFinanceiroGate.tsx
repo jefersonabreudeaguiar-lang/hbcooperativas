@@ -7,6 +7,7 @@ import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
   cooperadoFinanceiroBloqueiaEntradaApp,
   cooperadoFinanceiroDesatualizado,
+  cooperadoFinanceiroStaleRecuperavelEmBackground,
   limparFichaObsoletaCooperado,
 } from "@/services/fichaSyncGuard";
 import { solicitarRecuperacaoFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
@@ -208,10 +209,20 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
           clearCooperadoPostShellSyncStarted();
           return;
         }
-        const desatualizado = cooperadoFinanceiroDesatualizado(getData(), cooperadoId, coopId);
-        void resolveCooperativaCnpj(data, coopId, user).then((cnpj) => {
+        const latest = getData();
+        const desatualizado = cooperadoFinanceiroDesatualizado(latest, cooperadoId, coopId);
+        const staleRecuperavel = cooperadoFinanceiroStaleRecuperavelEmBackground(
+          latest,
+          cooperadoId,
+          coopId
+        );
+        void resolveCooperativaCnpj(latest, coopId, user).then((cnpj) => {
           if (!cnpj) return;
-          void runCooperadoForegroundOperacionalCheck(cnpj, { financeiroDesatualizado: desatualizado });
+          void runCooperadoForegroundOperacionalCheck(cnpj, {
+            financeiroDesatualizado: desatualizado && !staleRecuperavel,
+            cooperadoId,
+            cooperativaId: coopId,
+          });
         });
         clearCooperadoPostShellSyncStarted();
         return;

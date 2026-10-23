@@ -39,7 +39,12 @@ import type { CooperativaCloudRevision } from "@/lib/performance/cooperadoEventD
 import { resolveCooperadoForegroundStaleMs } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { cooperadoGaDeferForegroundRevisionChecks } from "@/lib/cooperado/cooperadoGaSyncPolicy";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
-import { cooperadoTemConferidaAguardandoFicha } from "@/services/fichaSyncGuard";
+import {
+  cooperadoFinanceiroStaleRecuperavelEmBackground,
+  cooperadoTemConferidaAguardandoFicha,
+} from "@/services/fichaSyncGuard";
+import { cooperadoRematerializarFinanceiroLocalSePossivel } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
+import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import { getData, getSession, isAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 
@@ -69,11 +74,38 @@ export async function evaluateCooperadoForegroundOperacionalPull(
   if (digits.length !== 14) return null;
 
   if (opts?.financeiroDesatualizado) {
+    if (opts?.cooperadoId && opts?.cooperativaId && isAppDataWarm()) {
+      if (
+        cooperadoFinanceiroStaleRecuperavelEmBackground(
+          getData(),
+          opts.cooperadoId,
+          opts.cooperativaId
+        )
+      ) {
+        const session = getSession();
+        if (session?.role === "cooperado") {
+          rematerializarCooperadoPwaSnapshotsSeNecessario(session);
+          cooperadoRematerializarFinanceiroLocalSePossivel(session);
+        }
+        return null;
+      }
+    }
     return { reason: "financeiro_desatualizado", remote: null };
   }
 
   if (isCooperadoPwaMessengerMode() && opts?.cooperadoId && opts?.cooperativaId) {
     if (cooperadoPwaFinanceiroSnapshotsAusentes(opts.cooperadoId, opts.cooperativaId)) {
+      const session = getSession();
+      if (session?.role === "cooperado") {
+        rematerializarCooperadoPwaSnapshotsSeNecessario(session);
+        cooperadoRematerializarFinanceiroLocalSePossivel(session);
+      }
+      if (
+        isAppDataWarm() &&
+        cooperadoTemDadosFinanceirosMinimos(getData(), opts.cooperadoId, opts.cooperativaId)
+      ) {
+        return null;
+      }
       return { reason: "snapshots_ausentes", remote: null };
     }
     const gaUser = getSession();

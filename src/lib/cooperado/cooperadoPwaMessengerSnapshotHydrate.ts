@@ -73,6 +73,13 @@ export function cooperadoPwaFinanceiroSnapshotsMaterializados(
   if (isAppDataWarm()) {
     const data = getData();
     if (cooperadoPwaFichaParidadeSnapshotDivergeDeAppData(data, cooperadoId, cooperativaId)) {
+      const live = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId);
+      if (
+        cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, cooperativaId) &&
+        live.valorLiquido > 0.005
+      ) {
+        return true;
+      }
       return false;
     }
   }

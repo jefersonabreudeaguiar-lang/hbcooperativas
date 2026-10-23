@@ -51,8 +51,15 @@ export function cooperadoGaExibicaoFinanceiraConfiavel(
   if (!coopId) return false;
   const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
   const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, coopId);
-  if (paridade.valorLiquido > 0.01 && !cooperadoFinanceiroCardCacheTemValor(user)) {
+  if (
+    paridade.valorLiquido > 0.01 &&
+    !cooperadoFinanceiroCardCacheTemValor(user) &&
+    cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId)
+  ) {
     return false;
+  }
+  if (paridade.valorLiquido > 0.01 && cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId)) {
+    return true;
   }
   if (cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId)) return false;
   if (!cooperadoTemReciboAssinadoLocalSemPendenciaUi(data, cooperadoId, coopId)) return false;
@@ -116,7 +123,9 @@ export function cooperadoGaValorReceberExibicaoResolvida(
   if (cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId)) return false;
   const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, coopId);
   if (paridade.valorLiquido > 0.01) {
-    return cooperadoPilotMotorCardInicioTemValor(data, cooperadoId, coopId);
+    if (cooperadoPilotMotorCardInicioTemValor(data, cooperadoId, coopId)) return true;
+    if (!cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId)) return true;
+    return false;
   }
   if (cooperadoOperacionalSyncStale()) return false;
   return cooperadoPilotMotorCardInicioTemValor(data, cooperadoId, coopId) === false;
