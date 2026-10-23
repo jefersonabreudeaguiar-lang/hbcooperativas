@@ -3,7 +3,7 @@
  */
 const UNTIL_KEY = "hb.staff.tab-hop-quiet-until";
 const LAST_PATH_KEY = "hb.staff.tab-hop-last-path";
-const QUIET_MS = 10_000;
+const QUIET_MS = 15_000;
 
 export function markStaffTabPathChange(pathname: string): void {
   if (typeof sessionStorage === "undefined") return;

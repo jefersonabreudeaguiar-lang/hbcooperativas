@@ -1,5 +1,6 @@
 /**
  * Ao entrar numa aba da gestão — sync leve do domínio certo (valores atualizados, sem operacional_full).
+ * Operacional (financeiro_delta) no máximo 1× por sessão, atrasado — não trava troca de abas.
  */
 import { scheduleStaffPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
 import { reloadStaffGestaoPersistAfterFirstPaint } from "@/services/dataStore";
@@ -7,12 +8,16 @@ import type { SyncTier } from "@/lib/performance/syncTier";
 import { requestSyncTier } from "@/services/syncRequest";
 import { staffGestaoDesktopWarmupSyncPaused } from "@/lib/staff/staffGestaoDesktopWarmup";
 import { staffResponsavelPausaSyncPesado } from "@/lib/staff/staffResponsavelPausaSyncPesado";
+import { staffTabSwitchQuiescenceActive } from "@/lib/staff/staffTabSwitchQuiescence";
 
 const MIN_GAP_MS = 45_000;
+const OPERACIONAL_HYDRATE_DELAY_MS = 8_000;
 
 let lastPath = "";
 let lastAt = 0;
 let dashboardInicioHydrateDone = false;
+let sessionOperacionalHydrateDone = false;
+let operacionalHydrateTimer: ReturnType<typeof setTimeout> | null = null;
 
 function isStaffGestaoTabPath(pathname: string): boolean {
   const p = pathname || "/";
@@ -24,17 +29,42 @@ function isStaffGestaoTabPath(pathname: string): boolean {
   );
 }
 
-function syncTiersForTab(pathname: string): SyncTier[] {
-  if (pathname === "/dashboard") return ["financeiro_delta", "notas_delta"];
-  if (pathname.startsWith("/ficha-corrida")) return ["financeiro_delta"];
-  if (pathname.startsWith("/livro-caixa")) return ["financeiro_delta", "pulse"];
-  return ["notas_delta"];
+function lightTierForTab(pathname: string): SyncTier {
+  if (pathname.startsWith("/livro-caixa")) return "pulse";
+  return "notas_delta";
 }
 
-function runTabEnterSyncTiers(path: string, force: boolean): void {
-  for (const tier of syncTiersForTab(path)) {
-    requestSyncTier(tier, { force });
+function clearOperacionalHydrateTimer(): void {
+  if (operacionalHydrateTimer != null) {
+    clearTimeout(operacionalHydrateTimer);
+    operacionalHydrateTimer = null;
   }
+}
+
+/** Uma vez por sessão: merge local + operacional/notas (após paint e fora de quiescence). */
+function scheduleSessionOperacionalHydrate(reason: "dashboard-warmup" | "deferred"): void {
+  if (sessionOperacionalHydrateDone) return;
+  if (reason === "dashboard-warmup") {
+    clearOperacionalHydrateTimer();
+    sessionOperacionalHydrateDone = true;
+    reloadStaffGestaoPersistAfterFirstPaint();
+    requestSyncTier("financeiro_delta", { force: true });
+    requestSyncTier("notas_delta", { force: true });
+    return;
+  }
+  if (operacionalHydrateTimer != null) return;
+  operacionalHydrateTimer = window.setTimeout(() => {
+    operacionalHydrateTimer = null;
+    if (sessionOperacionalHydrateDone) return;
+    if (staffTabSwitchQuiescenceActive() || staffResponsavelPausaSyncPesado()) {
+      scheduleSessionOperacionalHydrate("deferred");
+      return;
+    }
+    sessionOperacionalHydrateDone = true;
+    reloadStaffGestaoPersistAfterFirstPaint();
+    requestSyncTier("financeiro_delta", { force: true });
+    requestSyncTier("notas_delta", { force: true });
+  }, OPERACIONAL_HYDRATE_DELAY_MS);
 }
 
 export function scheduleStaffResponsavelTabEnterSync(pathname: string): void {
@@ -49,16 +79,22 @@ export function scheduleStaffResponsavelTabEnterSync(pathname: string): void {
 
   scheduleStaffPostInteractiveTask(() => {
     if (staffResponsavelPausaSyncPesado()) return;
+
     const inicioDuranteWarmupPc =
       path === "/dashboard" && !dashboardInicioHydrateDone && staffGestaoDesktopWarmupSyncPaused();
-    if (staffGestaoDesktopWarmupSyncPaused() && !inicioDuranteWarmupPc) return;
     if (inicioDuranteWarmupPc) {
       dashboardInicioHydrateDone = true;
-      reloadStaffGestaoPersistAfterFirstPaint();
-      runTabEnterSyncTiers(path, true);
+      scheduleSessionOperacionalHydrate("dashboard-warmup");
       return;
     }
-    runTabEnterSyncTiers(path, false);
+
+    if (!sessionOperacionalHydrateDone && !staffGestaoDesktopWarmupSyncPaused()) {
+      scheduleSessionOperacionalHydrate("deferred");
+    }
+
+    if (staffGestaoDesktopWarmupSyncPaused()) return;
+
+    requestSyncTier(lightTierForTab(path), { force: false });
   });
 }
 
@@ -67,4 +103,6 @@ export function resetStaffResponsavelTabEnterSyncForTests(): void {
   lastPath = "";
   lastAt = 0;
   dashboardInicioHydrateDone = false;
+  sessionOperacionalHydrateDone = false;
+  clearOperacionalHydrateTimer();
 }

@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v578
+
+- **Responsável (fluidez):** troca de abas no PC deixa de remontar a tela inteira; `financeiro_delta` só 1× por sessão (atrasado), abas usam sync leve — menos travamento.
+
 ## v577
 
 - **Responsável:** Em aberto deixa de inflar (ex. 24) quando o motor já tem a lista certa (12); Livro puxa operacional e reconcilia no warmup se o livro local está vazio.

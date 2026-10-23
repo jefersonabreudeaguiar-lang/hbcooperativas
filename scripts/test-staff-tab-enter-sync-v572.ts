@@ -13,8 +13,9 @@ const layout = readFileSync(join(ROOT, "src/components/layout/AppLayout.tsx"), "
 
 assert.match(tab, /scheduleStaffResponsavelTabEnterSync/);
 assert.match(tab, /notas_delta/);
-assert.match(tab, /financeiro_delta/);
-assert.match(tab, /syncTiersForTab/);
+assert.match(tab, /scheduleSessionOperacionalHydrate/);
+assert.match(tab, /lightTierForTab/);
+assert.match(tab, /OPERACIONAL_HYDRATE_DELAY_MS/);
 assert.match(tab, /dashboardInicioHydrateDone/);
 assert.match(tab, /inicioDuranteWarmupPc/);
 assert.match(tab, /reloadStaffGestaoPersistAfterFirstPaint/);

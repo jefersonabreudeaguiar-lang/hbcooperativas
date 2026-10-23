@@ -84,7 +84,10 @@ const layout = readFileSync(
   join(import.meta.dirname ?? __dirname, "../src/components/layout/AppLayout.tsx"),
   "utf8"
 );
-assert.ok(layout.includes("staffDesktopSidebarNav ? pathname"), "PC remonta rota no menu lateral");
+assert.ok(
+  !layout.includes("staffDesktopSidebarNav ? pathname"),
+  "PC não remonta a árvore inteira a cada clique — evita travar"
+);
 assert.ok(keepAlive.includes("registerStaffTabPanelCacheProbe"), "keep-alive publica o cache");
 assert.ok(!keepAlive.includes("{children ?? <PageSkeleton compact />}\n      {renderInactivePanels()}"));
 assert.ok(layout.includes("tryStaffCachedInstantTabSwitch"), "toque do responsável pinta o lastro");

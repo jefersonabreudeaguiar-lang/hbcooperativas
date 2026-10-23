@@ -8,7 +8,7 @@ import {
   CalendarCheck, LogOut, Menu, X, Building, ClipboardList, Receipt, User, Tag,
   BookOpen, FileCheck, Shield, MessageSquareWarning, Vote, Download, ShoppingCart, Scale, QrCode,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useState, startTransition, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useState, startTransition } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppDataSelector } from "@/hooks/useAppData";
 import {
@@ -88,10 +88,6 @@ import { CooperadoMobilePilotStarBadge } from "@/components/cooperado/CooperadoM
 import { CooperadoMobileReleaseBar } from "@/components/cooperado/CooperadoMobileReleaseBar";
 import { StaffMobileReleaseBar } from "@/components/layout/StaffMobileReleaseBar";
 import { StaffGestaoTabEnterSync } from "@/components/staff/StaffGestaoTabEnterSync";
-import {
-  isStaffGestaoMobileViewport,
-  subscribeStaffGestaoMobileViewport,
-} from "@/lib/staff/staffGestaoViewport";
 import type { Resource } from "@/types";
 import {
   shouldShowBaixarAppInCooperadoOverflowMenu,
@@ -640,12 +636,6 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
   const staffGestaoTabSync =
     Boolean(navUser) && staffPainelUi && !isCooperadoAppUser(navUser);
-  const staffMobileViewport = useSyncExternalStore(
-    subscribeStaffGestaoMobileViewport,
-    isStaffGestaoMobileViewport,
-    () => false
-  );
-  const staffDesktopSidebarNav = staffGestaoTabSync && !staffMobileViewport;
 
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden">
@@ -680,9 +670,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           {navUser && isCooperadoAppUser(navUser) && <CooperadoFinanceiroSyncBanner />}
           {navUser && isCooperadoAppUser(navUser) && <CooperadoPwaMessengerAppDataWarm />}
           {navUser && isCooperadoAppUser(navUser) && <CooperadoPwaResumeLifecycle />}
-          <div key={staffDesktopSidebarNav ? pathname : undefined}>
-            {routePanelsWrapped}
-          </div>
+          {routePanelsWrapped}
         </main>
       </div>
     </div>
