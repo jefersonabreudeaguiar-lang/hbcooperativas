@@ -21,6 +21,7 @@ import {
   cooperadoBrowserDesktopFinanceiroEstavel,
 } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
 import { markCooperadoBicFinanceiroFresh } from "@/lib/bic/cooperadoBicSonataSyncUi";
+import { cooperadoGaValorReceberExibicaoResolvida } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
@@ -59,6 +60,7 @@ function pulseIntervalMs(user: Omit<User, "password">): number {
 async function runRevisionPulse(user: Omit<User, "password">): Promise<void> {
   if (inflight) return;
   if (typeof document !== "undefined" && document.hidden) return;
+  if (cooperadoGaValorReceberExibicaoResolvida(user)) return;
   if (Date.now() - lastPulseAt < pulseMinGapMs(user)) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   if (!isAppDataWarm()) return;
@@ -104,7 +106,8 @@ async function runRevisionPulse(user: Omit<User, "password">): Promise<void> {
 
 function onVisibility(user: Omit<User, "password">): void {
   if (document.visibilityState !== "visible") return;
-  void runRevisionPulse(user);
+  if (cooperadoGaValorReceberExibicaoResolvida(user)) return;
+  scheduleCooperadoBicHybridIdleTask(() => void runRevisionPulse(user), 2_000);
 }
 
 export function scheduleCooperadoBicRevisionPulse(

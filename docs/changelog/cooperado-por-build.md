@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v565
+
+- **Cooperado (Fase 2 — fluidez):** com valor já resolvido na tela, o pulso BIC deixa de rematerializar a ficha a cada minuto (era isso que travava ao trocar abas).
+
 ## v564
 
 - **Cooperado (performance):** diagnóstico real — valor/ficha ok; travamento era sync + motor do Início e garantia GA rematerializando em loop. Com valor na tela, sync em segundo plano não recalcula a ficha nem mostra “Atualizando…” preso.
