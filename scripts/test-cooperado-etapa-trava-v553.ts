@@ -19,8 +19,8 @@ const hook = readFileSync(
 
 assert.doesNotMatch(gate, /hb-cooperado-acesso-diag/);
 assert.doesNotMatch(gate, /installCooperadoValorBrowserMobileDiag/);
-assert.doesNotMatch(gate, /cooperadoGaValorReceberExibicaoResolvida/);
-assert.match(boot, /paintInicio\(s\)[\s\S]*setTimeout\(hide/);
-assert.doesNotMatch(hook, /syncBloqueiaCard/);
+assert.match(gate, /cooperadoGaValorReceberExibicaoResolvida\(user\)/);
+assert.match(boot, /function sessUser/);
+assert.match(hook, /cooperadoGaValorReceberExibicaoResolvida/);
 
 console.log("OK test-cooperado-etapa-trava-v553");

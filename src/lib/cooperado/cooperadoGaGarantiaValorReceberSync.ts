@@ -43,14 +43,15 @@ function clearGarantiaTimers(): void {
 }
 
 function pullNuvemFinanceiro(user: Omit<User, "password">, attempt: number): void {
+  if (cooperadoGaValorReceberExibicaoResolvida(user)) {
+    cooperadoMobileSyncTrace("garantia_resolvida_local", `attempt=${attempt}`);
+    clearGarantiaTimers();
+    return;
+  }
+
   cooperadoPilotForcarRematerializacaoFinanceira(user);
   rematerializarCooperadoPwaSnapshotsSeNecessario(user);
   cooperadoRematerializarFinanceiroLocalSePossivel(user);
-
-  if (cooperadoGaValorReceberExibicaoResolvida(user)) {
-    cooperadoMobileSyncTrace("garantia_resolvida_local", `attempt=${attempt}`);
-    return;
-  }
 
   if (!cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
     cooperadoMobileSyncTrace("garantia_skip_nuvem", "recovery_nao_necessario");
@@ -104,8 +105,6 @@ function pullNuvemFinanceiro(user: Omit<User, "password">, attempt: number): voi
 function onGarantiaTick(user: Omit<User, "password">, attempt: number): void {
   if (typeof document !== "undefined" && document.hidden) return;
   if (activeUserId !== user.id) return;
-
-  cooperadoPilotForcarRematerializacaoFinanceira(user);
 
   if (cooperadoGaValorReceberExibicaoResolvida(user)) {
     clearGarantiaTimers();

@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v564
+
+- **Cooperado (performance):** diagnóstico real — valor/ficha ok; travamento era sync + motor do Início e garantia GA rematerializando em loop. Com valor na tela, sync em segundo plano não recalcula a ficha nem mostra “Atualizando…” preso.
+
 ## v563
 
 - **Cooperado:** depois do “Olá, Orlando” o Início monta por baixo e o splash some quando o app (header + main) aparece — qualquer cooperado com sessão no aparelho, não só piloto GA.

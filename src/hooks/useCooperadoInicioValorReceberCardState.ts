@@ -35,6 +35,7 @@ import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLei
 import { cooperadoPwaFichaParidadeSnapshotDivergeDeAppData } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import {
   cooperadoGaValorReceberExibicaoIndeterminada,
+  cooperadoGaValorReceberExibicaoResolvida,
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { resolverMotorCardInicioParidadeFinanceiro } from "@/lib/cooperado/cooperadoInicioCardParidadeMotor";
 import {
@@ -222,7 +223,13 @@ export function useCooperadoInicioValorReceberCardState(input: {
         persistidoMesmoBuildEarly?.display &&
           cooperadoMotorTemObrigacaoReceber(persistidoMesmoBuildEarly.display)
       );
-      const syncMotorPass = Boolean(input.syncing && isCooperadoUserSyncVisible());
+      const exibicaoGaResolvida =
+        sessionUser?.role === "cooperado" &&
+        cooperadoGaValorReceberExibicaoResolvida(sessionUser);
+      const syncMotorPass =
+        Boolean(input.syncing && isCooperadoUserSyncVisible()) &&
+        !exibicaoGaResolvida &&
+        !persistidoJaTemValor;
       const pilotPrecisaMotorLocal = (() => {
         if (!isCooperadoMobilePilotPerfActive()) return false;
         if (
@@ -246,7 +253,9 @@ export function useCooperadoInicioValorReceberCardState(input: {
         tabAtiva &&
         isCooperadoMobilePilotPerfActive() &&
         isAppDataWarm() &&
-        Boolean(input.cooperadoId);
+        Boolean(input.cooperadoId) &&
+        !persistidoJaTemValor &&
+        !exibicaoGaResolvida;
       const needsMotor =
         syncMotorPass ||
         (!persistidoJaTemValor && persistidoTick > 0) ||
@@ -646,12 +655,13 @@ export function useCooperadoInicioValorReceberCardState(input: {
     sessionUser?.role === "cooperado" &&
     cooperadoGaValorReceberExibicaoIndeterminada(sessionUser, snapshotExibido);
 
-  const atualizando =
-    exibicaoIndeterminada ||
-    resolved.atualizando ||
-    (Boolean(input.carregandoValoresFinanceiros) &&
-      cooperadoMotorTemObrigacaoReceber(snapshotExibido)) ||
-    (input.syncing && !cooperadoMotorTemObrigacaoReceber(snapshotExibido));
+  const valorJaNaTela = cooperadoMotorTemObrigacaoReceber(snapshotExibido);
+  const atualizando = valorJaNaTela
+    ? false
+    : exibicaoIndeterminada ||
+      resolved.atualizando ||
+      Boolean(input.carregandoValoresFinanceiros) ||
+      Boolean(input.syncing);
 
   return {
     snapshot: snapshotExibido,

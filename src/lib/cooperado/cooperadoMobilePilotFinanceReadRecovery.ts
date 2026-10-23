@@ -17,7 +17,10 @@ import {
   cooperadoFinanceiroCardCacheTemValor,
   cooperadoFinanceiroExibicaoCachePronto,
 } from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
-import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
+import {
+  cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem,
+  cooperadoGaValorReceberExibicaoResolvida,
+} from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { scheduleCooperadoHbCreditLimiteAndAccountWarmup } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
 import { requestCooperadoGaFinanceiroExibicaoRecoverySync } from "@/services/syncRequest";
 import {
@@ -78,6 +81,7 @@ export function cooperadoPilotForcarRematerializacaoFinanceira(
 
   const run = () => {
     if (!isAppDataWarm()) return;
+    if (cooperadoGaValorReceberExibicaoResolvida(user)) return;
     if (cooperadoBrowserDesktopFinanceiroEstavel(user)) return;
     rematerializarCooperadoPwaSnapshotsSeNecessario(user);
     tentarCooperadoPilotFinanceiroRematerializacaoLocal(user);
