@@ -121,7 +121,10 @@ export function scheduleCooperadoGarantiaValorReceberUntilResolvido(
 ): void {
   if (typeof window === "undefined") return;
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return;
-  if (cooperadoGaValorReceberExibicaoResolvida(user)) return;
+  if (cooperadoGaValorReceberExibicaoResolvida(user)) {
+    clearGarantiaTimers();
+    return;
+  }
 
   if (activeUserId === user.id && timerIds.length > 0) return;
 

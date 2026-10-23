@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v553
+
+- **Cooperado:** com valor já na tela, sync em segundo plano não prende “Atualizando…” nem recalcula o motor pesado na aba Início; timers de garantia/integridade param quando a exibição está resolvida.
+
 ## v552
 
 - **Cooperado (Etapa 4):** Atualizar com dados locais usa sync base financeira; pós-deploy ack evita segundo `operacional_full`. Diagnóstico: `/hb-cooperado-console-diag.js`.

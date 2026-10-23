@@ -165,8 +165,10 @@ export function useCooperadoInicioValorReceberCardState(input: {
   const apresentacaoConsolidada = input.apresentacaoConsolidada ?? false;
   const apresentacaoCard =
     isCooperadoMobilePilotPerfActive() ? true : apresentacaoConsolidada;
+  const syncBloqueiaCard =
+    Boolean(input.syncing && isCooperadoUserSyncVisible()) && !apresentacaoCard;
   const carregandoFinanceiro =
-    Boolean(input.syncing) ||
+    (Boolean(input.syncing) && !apresentacaoConsolidada) ||
     (!input.dataReady && !cooperadoMotorTemObrigacaoReceber(persistido?.display ?? SNAPSHOT_VAZIO));
 
   useEffect(() => {
@@ -211,7 +213,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
               display: pilotDisplay,
               hadPendencia: true,
             },
-            atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+            atualizando: syncBloqueiaCard,
             gravarPersistencia: isAppDataWarm() && mudou,
           };
         }
@@ -222,7 +224,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
         persistidoMesmoBuildEarly?.display &&
           cooperadoMotorTemObrigacaoReceber(persistidoMesmoBuildEarly.display)
       );
-      const syncMotorPass = Boolean(input.syncing && isCooperadoUserSyncVisible());
+      const syncMotorPass = syncBloqueiaCard;
       const pilotPrecisaMotorLocal = (() => {
         if (!isCooperadoMobilePilotPerfActive()) return false;
         if (
@@ -246,7 +248,8 @@ export function useCooperadoInicioValorReceberCardState(input: {
         tabAtiva &&
         isCooperadoMobilePilotPerfActive() &&
         isAppDataWarm() &&
-        Boolean(input.cooperadoId);
+        Boolean(input.cooperadoId) &&
+        !persistidoJaTemValor;
       const needsMotor =
         syncMotorPass ||
         (!persistidoJaTemValor && persistidoTick > 0) ||
@@ -278,7 +281,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
           cooperativaIdLatch
         );
 
-      const atualizarManual = Boolean(input.syncing && isCooperadoUserSyncVisible());
+      const atualizarManual = syncBloqueiaCard;
       const fromMotor =
         needsMotor && data && input.cooperadoId && cooperativaIdCard
           ? resolverCardInicioEndurecido({
@@ -339,7 +342,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
             display: displayEstavel,
             hadPendencia: true,
           },
-          atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+          atualizando: syncBloqueiaCard,
           gravarPersistencia: false,
         };
       }
@@ -366,7 +369,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
               display: paridadeMotor.motor,
               hadPendencia: true,
             },
-            atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+            atualizando: syncBloqueiaCard,
             gravarPersistencia: true,
           };
         }
@@ -402,7 +405,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
                 display,
                 hadPendencia: true,
               },
-              atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+              atualizando: syncBloqueiaCard,
               gravarPersistencia: true,
             };
           }
@@ -438,7 +441,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
             display,
             hadPendencia: true,
           },
-          atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+          atualizando: syncBloqueiaCard,
           gravarPersistencia: false,
         };
       }
@@ -456,7 +459,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
             display: SNAPSHOT_VAZIO,
             hadPendencia: false,
           },
-          atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+          atualizando: syncBloqueiaCard,
           gravarPersistencia: false,
         };
       }
@@ -481,7 +484,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
               display,
               hadPendencia: true,
             },
-            atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+            atualizando: syncBloqueiaCard,
             gravarPersistencia: true,
           };
         }
@@ -537,6 +540,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
     sessionUser?.id,
     sessionUser?.cooperativaId,
     apresentacaoCard,
+    syncBloqueiaCard,
     ...(leituraSomentePwa ? [] : [hbDescontosRevision]),
   ]);
 
