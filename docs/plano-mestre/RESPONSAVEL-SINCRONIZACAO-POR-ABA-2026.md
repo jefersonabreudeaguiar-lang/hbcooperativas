@@ -22,6 +22,23 @@ Cada fase: correção técnica → build `v{N}` → você testa no **PC** (e cel
 
 ---
 
+## Anti-travamento — Conferir (agente, v604+)
+
+**Objetivo:** o Chrome não pode mostrar “página não responde” na gestão.
+
+| Camada | O quê | Comando / artefato |
+|--------|--------|-------------------|
+| **Lei** | Sem leitura pesada no render; hydrate em idle; Em aberto diferido | `src/lib/conferencia/conferirUiResponsividadeContrato.ts` |
+| **Contrato CI** | Grep nos hooks — falha o merge se voltar o padrão v603 | `npm run test:conferir-ui-nao-travar` |
+| **Gate campo** | Passo 0 preservar-app roda o contrato junto com troca de abas | `npm run gate:preservar-app` |
+| **Deploy** | Hotfix responsável → bump build + `confirm:production:wait` | build **604** (incidente v603) |
+| **Piloto** | Só reteste SIM/NÃO em Conferir após build confirmado em produção | esta tabela S2 |
+
+**Checklist do agente antes de push em `useConferir*` / `responsavelPainelIndex` (Conferir):**  
+(1) `test:conferir-ui-nao-travar` (2) `test-conferencia-fila-filtro` + nomes (3) `gate:preservar-app` (4) push + confirm produção.
+
+---
+
 ## Regras técnicas (todas as abas)
 
 1. **Atualizar agora** (header): merge do armazenamento local no PC + sync `operacional_full` **só** manual — não zera painel (`requestStaffGestaoAtualizar`).
