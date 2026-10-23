@@ -81,10 +81,8 @@ Checklist derivado de `ETAPA-5-homolog-fechamento.md` itens que dependem do resp
 | Fase R1 (entrada PC) | 23/10/2026 | SIM (Jeferson — sem “página não responde” no login) | v570 |
 | Fase R1 (portão completo) | 23/10/2026 | NÃO (Jeferson — PC após login) | v570 |
 | Fase R1 (portão completo) | 23/10/2026 | SIM (Jeferson — PC) | v571 |
-| Fase R2 | 23/10/2026 | item 3 falhou (conteúdo ≠ menu no PC) | v571 |
-| Fase R2 | aguardando piloto | deploy v572 (sync menu/conteúdo PC) | v572 |
-| Fase R2 | | | |
-| Fase R3 | | | |
+| Fase R2 | 23/10/2026 | SIM (Jeferson — PC, menu fluido e conteúdo certo) | v571 |
+| Fase R3 | aguardando piloto | lançar ↔ cooperado | v571+ |
 
 ---
 
