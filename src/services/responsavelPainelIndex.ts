@@ -2,7 +2,7 @@
  * Índices cacheados por revisão do AppData — painel responsável (fila, dashboard).
  * Read-only; não altera lançamentos.
  */
-import type { AppData, Cooperado, NotaPedido, PagamentoCooperadoRegistro } from "@/types";
+import type { AppData, Cooperado, NotaPedido, PagamentoCooperadoRegistro, User } from "@/types";
 import { cooperadoPendentePagamentoResponsavel } from "@/services/cooperadoEntregasService";
 import {
   fichaPertenceCooperado,
@@ -27,7 +27,11 @@ import {
   reconciliarFichaFromNotasConferidas,
 } from "@/services/notaPedidoService";
 import { round2 } from "@/utils/calculations";
-import { notaPertenceCooperativa, repararNomesEnvioNotasParaConferencia } from "@/utils/fotoEntrega";
+import {
+  notaPertenceCooperativa,
+  pareceIdentificadorTecnicoCooperado,
+  repararNomesEnvioNotasParaConferencia,
+} from "@/utils/fotoEntrega";
 import {
   isNotaStatusDowngrade,
   notaElegivelParaFilaConferenciaResponsavel,
@@ -70,6 +74,23 @@ function countFichasNaoPagasCooperativa(data: AppData, coopId: string): number {
   return n;
 }
 
+function nomeCadastroCooperadoUtil(nome?: string | null): string | undefined {
+  const t = nome?.trim();
+  if (!t || pareceIdentificadorTecnicoCooperado(t)) return undefined;
+  return t;
+}
+
+function fundirCooperadoCadastroPainel(prev: Cooperado, next: Cooperado): Cooperado {
+  const tNovo = Date.parse(next.updatedAt ?? "") || 0;
+  const tVelho = Date.parse(prev.updatedAt ?? "") || 0;
+  const base = tNovo >= tVelho ? { ...prev, ...next } : { ...next, ...prev };
+  const nome =
+    nomeCadastroCooperadoUtil(next.nomeCompleto) ??
+    nomeCadastroCooperadoUtil(prev.nomeCompleto) ??
+    base.nomeCompleto;
+  return nome ? { ...base, nomeCompleto: nome } : base;
+}
+
 function mergeCooperadosCadastroPainel(a: Cooperado[] | undefined, b: Cooperado[] | undefined): Cooperado[] {
   const byId = new Map<string, Cooperado>();
   for (const c of a ?? []) {
@@ -82,15 +103,30 @@ function mergeCooperadosCadastroPainel(a: Cooperado[] | undefined, b: Cooperado[
       byId.set(c.id, c);
       continue;
     }
-    const nomeNovo = c.nomeCompleto?.trim();
-    const nomeVelho = prev.nomeCompleto?.trim();
-    if (nomeNovo && !nomeVelho) {
-      byId.set(c.id, { ...prev, ...c, nomeCompleto: nomeNovo });
+    byId.set(c.id, fundirCooperadoCadastroPainel(prev, c));
+  }
+  return [...byId.values()];
+}
+
+function mergeUsersPainel(a: User[] | undefined, b: User[] | undefined): User[] {
+  const byId = new Map<string, User>();
+  for (const u of a ?? []) {
+    if (u?.id) byId.set(u.id, u);
+  }
+  for (const u of b ?? []) {
+    if (!u?.id) continue;
+    const prev = byId.get(u.id);
+    if (!prev) {
+      byId.set(u.id, u);
       continue;
     }
-    const tNovo = Date.parse(c.updatedAt ?? "") || 0;
+    const nomePrev = nomeCadastroCooperadoUtil(prev.name);
+    const nomeNext = nomeCadastroCooperadoUtil(u.name);
+    const tNovo = Date.parse(u.updatedAt ?? "") || 0;
     const tVelho = Date.parse(prev.updatedAt ?? "") || 0;
-    if (tNovo >= tVelho) byId.set(c.id, { ...prev, ...c });
+    const base = tNovo >= tVelho ? { ...prev, ...u } : { ...u, ...prev };
+    const name = nomeNext ?? nomePrev ?? base.name;
+    byId.set(u.id, name ? { ...base, name } : base);
   }
   return [...byId.values()];
 }
@@ -483,9 +519,11 @@ function escolherSnapshotMaisCompleto(truth: AppData, data: AppData): AppData {
     other.valoresAvulsosReceber
   );
   const cooperados = mergeCooperadosCadastroPainel(base.cooperados, other.cooperados);
+  const users = mergeUsersPainel(base.users, other.users);
   const notasMudou = notasPedido !== base.notasPedido;
   const pixMudou = pagamentosCooperado.length !== (base.pagamentosCooperado?.length ?? 0);
   const coopMudou = cooperados.length !== (base.cooperados?.length ?? 0);
+  const usersMudou = users.length !== (base.users?.length ?? 0);
   const baseAvulsos = base.valoresAvulsosReceber ?? [];
   const avulsosMudou =
     valoresAvulsosReceber.length !== baseAvulsos.length ||
@@ -493,8 +531,8 @@ function escolherSnapshotMaisCompleto(truth: AppData, data: AppData): AppData {
       const old = baseAvulsos.find((x) => x.id === v.id);
       return !old || old.updatedAt !== v.updatedAt;
     });
-  if (!notasMudou && !pixMudou && !avulsosMudou && !coopMudou) return base;
-  return { ...base, notasPedido, pagamentosCooperado, valoresAvulsosReceber, cooperados };
+  if (!notasMudou && !pixMudou && !avulsosMudou && !coopMudou && !usersMudou) return base;
+  return { ...base, notasPedido, pagamentosCooperado, valoresAvulsosReceber, cooperados, users };
 }
 
 function aplicarLastroCompletenessConferir(candidato: AppData, key = "_"): AppData {
@@ -515,6 +553,7 @@ function aplicarLastroCompletenessConferir(candidato: AppData, key = "_"): AppDa
   const fundido = alinharFichaComPagamentosCooperativa({
     ...prev,
     cooperados: mergeCooperadosCadastroPainel(prev.cooperados, candidato.cooperados),
+    users: mergeUsersPainel(prev.users, candidato.users),
     fichaCorrida: [...fichaById.values()],
     notasPedido: mergeNotasPreferindoAtualizacao(prev.notasPedido, candidato.notasPedido),
     pagamentosCooperado,
@@ -553,6 +592,10 @@ export function appDataParaConferirLeitura(data: AppData, coopId?: string): AppD
     cooperados: mergeCooperadosCadastroPainel(
       mergeCooperadosCadastroPainel(merged.cooperados, data.cooperados),
       lkg?.cooperados
+    ),
+    users: mergeUsersPainel(
+      mergeUsersPainel(mergeUsersPainel(merged.users, data.users), truth.users),
+      lkg?.users
     ),
     notasPedido: mergeNotasPedidoParaPainel(merged.notasPedido, data.notasPedido),
   };

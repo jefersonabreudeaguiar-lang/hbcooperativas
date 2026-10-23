@@ -151,8 +151,7 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
     const cached = cacheRef.current[href];
     const last = lastCommitRef.current;
     const childrenStaleForPath = last.path !== pathname && last.child === children;
-    const liveNode =
-      active && pathname === href && !childrenStaleForPath ? children : deferredChildren;
+    const liveNode = active ? children : deferredChildren;
     const liveForHref =
       tabKey === href &&
       pathname === href &&

@@ -1,12 +1,11 @@
 "use client";
 
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
 import { useResponsavelFilaConferencia } from "@/hooks/useResponsavelFilaConferencia";
 import {
   appDataParaConferirLeitura,
-  countCooperadosLancamentosEmAbertoResponsavel,
-  getRelatorioLancamentosEmAbertoResponsavel,
+  getRelatorioLancamentosEmAbertoDeLeituraConferir,
 } from "@/services/responsavelPainelIndex";
 import type { AppData } from "@/types";
 import type { LinhaPagarCooperadoEmAberto } from "@/services/relatorioService";
@@ -55,33 +54,41 @@ export function useConferirProjection(opts: {
     dataLeitura
   );
 
-  const emAbertoRaw = useAppDataSelectorForDomainsWhenActive(
-    staffActive && Boolean(coopId) && !conferirModal,
-    precisaLinhasEmAberto ? ["financeiro", "notas"] : ["financeiro"],
-    (d) => {
-      if (!coopId) return EMPTY_EM_ABERTO;
-      if (!precisaLinhasEmAberto) {
-        const count = countCooperadosLancamentosEmAbertoResponsavel(d, coopId);
-        return { linhas: [], count, total: 0 };
-      }
-      const linhas = getRelatorioLancamentosEmAbertoResponsavel(d, coopId, cooperadoId);
-      return {
-        linhas,
-        count: linhas.length,
-        total: linhas.reduce((s, l) => s + l.total, 0),
-      };
-    },
-    [coopId, cooperadoId, conferirModal, precisaLinhasEmAberto]
-  );
+  const emAbertoComputed = useMemo((): ConferirEmAbertoProjection => {
+    if (!staffActive || !coopId || conferirModal || !dataLeitura) return EMPTY_EM_ABERTO;
+    const linhas = getRelatorioLancamentosEmAbertoDeLeituraConferir(
+      dataLeitura,
+      coopId,
+      precisaLinhasEmAberto ? cooperadoId : undefined
+    );
+    if (!precisaLinhasEmAberto) {
+      return { linhas: [], count: linhas.length, total: 0 };
+    }
+    return {
+      linhas,
+      count: linhas.length,
+      total: linhas.reduce((s, l) => s + l.total, 0),
+    };
+  }, [
+    staffActive,
+    coopId,
+    conferirModal,
+    dataLeitura,
+    precisaLinhasEmAberto,
+    cooperadoId,
+  ]);
+
   const lastAbertoRef = useRef<ConferirEmAbertoProjection | null>(null);
-  if (emAbertoRaw) {
-    if (precisaLinhasEmAberto || emAbertoRaw.count > 0) {
-      lastAbertoRef.current = emAbertoRaw;
-    } else if (lastAbertoRef.current && emAbertoRaw.count === 0) {
+  if (staffActive && coopId && !conferirModal) {
+    if (precisaLinhasEmAberto || emAbertoComputed.count > 0) {
+      lastAbertoRef.current = emAbertoComputed;
+    } else if (lastAbertoRef.current && emAbertoComputed.count === 0) {
       lastAbertoRef.current = { ...lastAbertoRef.current, count: 0, total: 0, linhas: [] };
     }
   }
-  const emAberto = emAbertoRaw ?? lastAbertoRef.current ?? EMPTY_EM_ABERTO;
+  const emAberto = staffActive && coopId && !conferirModal
+    ? emAbertoComputed
+    : lastAbertoRef.current ?? EMPTY_EM_ABERTO;
 
   return {
     filaDetalhada,
