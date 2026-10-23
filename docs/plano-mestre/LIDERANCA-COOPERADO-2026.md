@@ -5,7 +5,7 @@
 **Produção:** https://hbcooperativas.vercel.app — cada entrega: build `v{N}`, `confirm:production:wait`, changelog.  
 **Dados:** notas, fichas e pagamentos na nuvem **não** são restaurados de backup JSON sem pedido explícito.
 
-**Linha de base (23/10/2026):** build **v564** — entrada corrigida (v562–563), performance com valor na tela (v564). Homologação formal (Etapa 5) **ainda não fechada**.
+**Linha de base (23/10/2026):** build **v566** — entrada (Fase 1), abas fluidas com valor na tela (Fase 2). Homologação formal (Etapa 5) **ainda não fechada**.
 
 ---
 
@@ -90,14 +90,15 @@ Responsável, HB, painel gestão — **somente** após Fase 4 **SIM**. Escopo de
 
 ---
 
-## Portão Fase 1 (Jeferson — celular aberto agora)
+## Portão Fase 3 (Jeferson — celular, badge **v566** ou superior)
 
-Confira no header do app o badge **`v564`** (ou superior). Depois responda **SIM** ou **NÃO**:
+Responda **SIM** ou **NÃO**:
 
-1. Abriu o Início (não ficou branco nem preso só no “Olá”)?
-2. Consigo usar o app por 1 minuto sem travar na primeira abertura?
+1. O **A receber** no Início bate com o que a cooperativa espera (caso Orlando / seu caso)?
+2. Depois que o responsável lança algo novo, você vê em ~2 min **ou** ao tocar **Atualizar** uma vez?
+3. **Atualizar** uma vez — o valor **não** some nem zera errado?
 
-**SIM** = Fase 1 aceita → seguimos Fase 2. **NÃO** = corrijo só no piloto primeiro, novo build, você testa de novo.
+**SIM** = Fase 3 aceita → homologação Etapa 5 (Fase 4). **NÃO** = ajusto sync/valor no piloto, novo build, você testa de novo.
 
 ---
 
@@ -108,6 +109,6 @@ Confira no header do app o badge **`v564`** (ou superior). Depois responda **SIM
 | Plano aceito | 23/10/2026 | SIM (Jeferson piloto) | — |
 | Fase 1 | 23/10/2026 | SIM (Jeferson) | v564 |
 | Fase 2 | 23/10/2026 | NÃO (Jeferson — trava ao trocar abas) | v565 |
-| Fase 2 | aguardando piloto | deploy v566 | v566 |
-| Fase 3 | | | |
+| Fase 2 | 23/10/2026 | SIM (Jeferson) | v566 |
+| Fase 3 | aguardando piloto | — | v566+ |
 | Fase 4 | | | |
