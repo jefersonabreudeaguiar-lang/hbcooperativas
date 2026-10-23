@@ -187,7 +187,7 @@ import {
   isCooperadoInstantResumeEnabled,
   isCooperadoManualOperacionalSync,
 } from "@/lib/performance/cooperadoColdStart";
-import { requestAppSync, requestAppSyncImmediate } from "@/services/syncRequest";
+import { requestAppSync, requestAppSyncImmediate, requestAppSyncLight } from "@/services/syncRequest";
 import { pagamentoIdFromOrigemId } from "@/services/livroCaixaService";
 import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
 import { cooperadoGaPausaTrabalhoFinanceiroPesado } from "@/lib/cooperado/cooperadoGaPausaTrabalhoPesado";
@@ -198,6 +198,13 @@ import { useCooperadoApresentacaoFinanceiraConsolidada } from "@/hooks/useCooper
 import { cooperadoBicAutorizaZerarCardInicio } from "@/lib/cooperadoInicioCardPolicy";
 import { formatCurrency, formatDate, formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia, cn } from "@/utils/format";
 import type { AppData, PagamentoCooperadoRegistro, FichaCorrida, NotaPedido } from "@/types";
+
+/** Push pós-ação em Pagar — sem fila de POST por cooperado; nuvem já recebe o operacional. */
+const PAGAR_OPERACIONAL_PUSH = {
+  authoritative: true,
+  forceOperacionalPush: true,
+  skipBulkCooperadosCloudPush: true,
+} as const;
 
 function TabelaResumoItens({
   itens,
@@ -1943,17 +1950,18 @@ function FichaCorridaPageInner() {
     setReciboSucessoOpen(true);
   };
 
-  const syncPagamentoOperacional = async (snapshot?: AppData) => {
+  const syncPagamentoOperacional = async (
+    snapshot?: AppData,
+    afterPush: "light" | "full" = "full"
+  ) => {
     if (!user || !coopId) return;
     const fonte = snapshot ?? getData();
     const cnpj = await resolveCooperativaCnpj(fonte, coopId, user);
     if (!cnpj) return;
     clearOperacionalPushFingerprint(cnpj, true);
-    await pushOperacionalToCloud(cnpj, fonte, coopId, {
-      authoritative: true,
-      forceOperacionalPush: true,
-    });
-    requestAppSync();
+    await pushOperacionalToCloud(cnpj, fonte, coopId, PAGAR_OPERACIONAL_PUSH);
+    if (afterPush === "light") requestAppSyncLight();
+    else requestAppSync();
   };
 
   const handleReenviarAssinaturaRecibo = (pagamento: PagamentoCooperadoRegistro) => {
@@ -1992,7 +2000,6 @@ function FichaCorridaPageInner() {
 
   const handleVerificarReciboAssinado = (pagamento: PagamentoCooperadoRegistro) => {
     if (!user || !coopId || !data) return;
-    setAssinaturaBusyId(pagamento.id);
     const next = updateData((d) => {
       const marcado = marcarReciboPagamentoVerificadoResponsavel(d, pagamento.id, user.id, user.name);
       return addAuditEntry(marcado, {
@@ -2004,7 +2011,7 @@ function FichaCorridaPageInner() {
         changes: "Recibo assinado conferido pelo responsável",
       });
     });
-    void syncPagamentoOperacional(next).finally(() => setAssinaturaBusyId(null));
+    void syncPagamentoOperacional(next, "light").catch(() => {});
   };
 
   const reciboAtual = pagamentoConfirmado ?? pagamentoConfirmadoMes;
