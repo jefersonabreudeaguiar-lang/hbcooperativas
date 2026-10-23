@@ -122,8 +122,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           <div style={{ height: 56, background: "#14532d", flexShrink: 0 }} />
           <div style={{ flex: 1, padding: 16, maxWidth: 512, margin: "0 auto", width: "100%" }}>
-            <p style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "#111827" }}>HB Cooperativas</p>
-            <p style={{ margin: "12px 0 0", fontSize: 14, color: "#6b7280" }}>Abrindo o Início…</p>
+            <div style={{ height: 32, width: 192, background: "#e5e7eb", borderRadius: 8 }} />
+            <div
+              style={{
+                marginTop: 16,
+                height: 96,
+                background: "#fff",
+                borderRadius: 12,
+                border: "1px solid #e5e7eb",
+              }}
+            />
           </div>
         </div>
         <script dangerouslySetInnerHTML={{ __html: buildInlineCooperadoBootShellScript() }} />

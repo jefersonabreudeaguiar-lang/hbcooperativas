@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v560
+
+- **Cooperado:** abertura igual ao **v552** (último estável) — splash “Olá” some sozinho em ~1s quando o React monta; não fica preso em “Abrindo o Início…”.
+
 ## v559
 
 - **Cooperado (app):** o texto “HB Cooperativas” era o splash preso — o script rodava antes do HTML. Agora pinta “Olá” + valor e some quando o Início do app monta.
