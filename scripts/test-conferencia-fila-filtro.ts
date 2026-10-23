@@ -114,6 +114,41 @@ const notaNuvem: NotaPedido = {
 assert.equal(resolverCooperadoIdGrupoConferencia(data, notaNuvem, coopId), altonId);
 assert.equal(getChaveGrupoConferencia(notaNuvem, data, coopId), `id:${altonId}`);
 
+const outroId = "c_outro";
+const dataEnvio = {
+  ...data,
+  cooperados: [
+    ...data.cooperados,
+    {
+      id: outroId,
+      cooperativaId: coopId,
+      nomeCompleto: "Cleones Silva",
+      cpfCnpj: "99999999999",
+      telefone: "",
+      endereco: "",
+      comunidade: "",
+      cafDap: "",
+      chavePix: "",
+      banco: "",
+      agencia: "",
+      conta: "",
+      status: "ativo",
+      produtos: [],
+      observacoes: "",
+      createdAt: "",
+      updatedAt: "",
+    },
+  ],
+} as unknown as AppData;
+const notaIdErrado: NotaPedido = {
+  ...notaNuvem,
+  id: "n-id-errado",
+  cooperadoId: outroId,
+  cooperadoNomeSnapshot: "Alton Silva",
+  status: "aguardando_conferencia",
+};
+assert.equal(resolverCooperadoIdGrupoConferencia(dataEnvio, notaIdErrado, coopId), altonId);
+
 assert.equal(nomeCooperadoSnapshotUtilizavel("Desconhecido"), undefined);
 assert.equal(nomeCooperadoSnapshotUtilizavel("Alton Silva"), "Alton Silva");
 

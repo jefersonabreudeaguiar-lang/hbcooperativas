@@ -5,7 +5,8 @@ import type {
   PagamentoCooperadoRegistro,
 } from "@/types";
 import { findCooperativaByCnpj, getCooperativaById, normalizeCnpj } from "@/utils/cooperativa";
-import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
+import { notaPertenceCooperativa, resolverCooperadoIdGrupoConferencia } from "@/utils/fotoEntrega";
+import type { NotaPedido } from "@/types";
 import { getData, refreshStoredSession, saveDataSafe } from "@/services/dataStore";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeAppInstallFields } from "@/services/cooperadoAppInstallService";
@@ -765,15 +766,19 @@ export function notaPertenceCooperado(
   nota: {
     cooperadoId: string;
     cooperadoNomeSnapshot?: string;
+    status?: NotaPedido["status"];
     divisaoEntrega?: { participantes: { cooperadoId: string; cooperadoNome: string }[] };
   },
   cooperadoId: string,
   cooperativaId?: string
 ): boolean {
-  if (nota.cooperadoId === cooperadoId) return true;
   const alvo = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
-  const dono = resolverCooperadoIdCanonico(data, nota.cooperadoId, cooperativaId, nota.cooperadoNomeSnapshot);
+  const dono =
+    nota.status === "aguardando_conferencia" || nota.status === "entregue"
+      ? resolverCooperadoIdGrupoConferencia(data, nota as NotaPedido, cooperativaId)
+      : resolverCooperadoIdCanonico(data, nota.cooperadoId, cooperativaId, nota.cooperadoNomeSnapshot);
   if (alvo === dono) return true;
+  if (nota.cooperadoId === cooperadoId) return true;
   const nomeAlvo = nomeNormalizado(getCooperadoNomeResolvido(data, cooperadoId, cooperativaId));
   const nomeDono = nomeNormalizado(
     nota.cooperadoNomeSnapshot?.trim() || getCooperadoNomeResolvido(data, nota.cooperadoId, cooperativaId)

@@ -317,6 +317,7 @@ import {
   liberarEspacoArmazenamento,
   agruparPendentesPorCooperado,
   getChaveGrupoConferencia,
+  resolverCooperadoIdGrupoConferencia,
   notaPertenceGrupoConferencia,
   contarFotosEnviadasNota,
   contarFotosEnviadasNotas,
@@ -3285,7 +3286,7 @@ export default function NotasPedidoCooperadoMain() {
     setConferenciaDescontoPct(d?.config.descontoPadraoCooperativa ?? 5);
     const coopDonoId =
       d && coopId
-        ? resolverCooperadoIdCanonico(d, nota.cooperadoId, coopId, nota.cooperadoNomeSnapshot)
+        ? resolverCooperadoIdGrupoConferencia(d, nota, coopId)
         : nota.cooperadoId;
     setConferenciaCooperadoId(coopDonoId);
     setConferenciaDivisaoQtd(0);

@@ -335,9 +335,7 @@ export function resolverCooperadoIdGrupoConferencia(
     return cooperadoId;
   };
 
-  const direct = data.cooperados.find((c) => c.id === nota.cooperadoId && c.cooperativaId === coopId);
-  if (direct) return canonizarPorTitular(direct.id);
-
+  /** Quem enviou a foto (snapshot) prevalece sobre cooperadoId titular errado na nuvem. */
   const snapshot = nomeCooperadoSnapshotUtilizavel(nota.cooperadoNomeSnapshot);
   if (snapshot) {
     const snapNorm = nomeNormalizadoCooperado(snapshot);
@@ -347,7 +345,23 @@ export function resolverCooperadoIdGrupoConferencia(
     if (byName) return canonizarPorTitular(byName.id);
   }
 
+  const direct = data.cooperados.find((c) => c.id === nota.cooperadoId && c.cooperativaId === coopId);
+  if (direct) return canonizarPorTitular(direct.id);
+
   return canonizarPorTitular(nota.cooperadoId);
+}
+
+/** Nome exibido na conferência — sempre o cooperado que enviou, não o titular da ficha. */
+export function getNomeEnvioEntregaNota(
+  nota: NotaPedido,
+  data: AppData,
+  cooperativaId?: string
+): string {
+  const snap = nomeCooperadoSnapshotUtilizavel(nota.cooperadoNomeSnapshot);
+  if (snap) return snap;
+  const id = resolverCooperadoIdGrupoConferencia(data, nota, cooperativaId);
+  const cadastro = data.cooperados.find((c) => c.id === id)?.nomeCompleto?.trim();
+  return cadastro || "Cooperado";
 }
 
 /** Agrupa entregas pendentes pelo cooperado (nome salvo na nuvem ou cadastro local). */

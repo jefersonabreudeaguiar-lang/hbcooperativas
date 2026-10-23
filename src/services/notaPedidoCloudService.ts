@@ -2,7 +2,16 @@ import type { AppData, NotaPedido, User } from "@/types";
 import { normalizeCnpj, findCooperativaByCnpj } from "@/utils/cooperativa";
 import { fetchCooperativaByCnpjFromCloud } from "@/services/cooperativaCloudService";
 import { notaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos, contarFotosEnviadasNota, notaTemFotoArmazenadaNaNuvem, nomeCooperadoSnapshotUtilizavel, FOTOS_UPLOAD_LOTE } from "@/utils/fotoEntrega";
+import {
+  getNotaCooperativaCnpj,
+  getFotosExibicaoNota,
+  mergeNotaComFotos,
+  contarFotosEnviadasNota,
+  notaTemFotoArmazenadaNaNuvem,
+  nomeCooperadoSnapshotUtilizavel,
+  FOTOS_UPLOAD_LOTE,
+} from "@/utils/fotoEntrega";
+import { nomeNormalizadoCooperado } from "@/utils/cooperadoDedupe";
 import { getCooperadoNome } from "@/utils/calculations";
 import { getData, saveDataSafe } from "@/services/dataStore";
 import {
@@ -199,28 +208,26 @@ export function normalizeCloudNotaForLocal(
 
   let cooperadoId = nota.cooperadoId;
   let cooperadoNomeSnapshot = nota.cooperadoNomeSnapshot;
-  const existeLocal = data.cooperados.some(
-    (c) => c.id === cooperadoId && c.cooperativaId === coop.id
-  );
+
+  const snapInicial = nomeCooperadoSnapshotUtilizavel(nota.cooperadoNomeSnapshot);
+  if (snapInicial && coop) {
+    const snapNorm = nomeNormalizadoCooperado(snapInicial);
+    const porEnvio = data.cooperados.find(
+      (c) => c.cooperativaId === coop.id && nomeNormalizadoCooperado(c.nomeCompleto) === snapNorm
+    );
+    if (porEnvio) {
+      cooperadoId = porEnvio.id;
+      cooperadoNomeSnapshot = porEnvio.nomeCompleto;
+    } else {
+      cooperadoNomeSnapshot = snapInicial;
+    }
+  }
 
   const localPorId = data.cooperados.find(
     (c) => c.id === cooperadoId && c.cooperativaId === coop.id
   );
   if (localPorId && !nomeCooperadoSnapshotUtilizavel(cooperadoNomeSnapshot)) {
     cooperadoNomeSnapshot = localPorId.nomeCompleto;
-  }
-
-  if (!existeLocal && nomeCooperadoSnapshotUtilizavel(nota.cooperadoNomeSnapshot)) {
-    const nome = nota.cooperadoNomeSnapshot!.trim().toLowerCase();
-    const match = data.cooperados.find(
-      (c) =>
-        c.cooperativaId === coop.id &&
-        c.nomeCompleto.trim().toLowerCase() === nome
-    );
-    if (match) {
-      cooperadoId = match.id;
-      cooperadoNomeSnapshot = match.nomeCompleto;
-    }
   }
 
   return {
