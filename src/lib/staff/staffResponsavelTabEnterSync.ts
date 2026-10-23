@@ -17,7 +17,7 @@ let lastPath = "";
 let lastAt = 0;
 let dashboardInicioHydrateDone = false;
 let sessionOperacionalHydrateDone = false;
-let operacionalHydrateTimer: ReturnType<typeof setTimeout> | null = null;
+let operacionalHydrateTimer: number | null = null;
 
 function isStaffGestaoTabPath(pathname: string): boolean {
   const p = pathname || "/";

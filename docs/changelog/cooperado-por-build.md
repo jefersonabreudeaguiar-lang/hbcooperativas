@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v579
+
+- **Deploy:** corrige typecheck do timer no sync por aba (v578 não chegou à Vercel por isso).
+
 ## v578
 
 - **Responsável (fluidez):** troca de abas no PC deixa de remontar a tela inteira; `financeiro_delta` só 1× por sessão (atrasado), abas usam sync leve — menos travamento.
