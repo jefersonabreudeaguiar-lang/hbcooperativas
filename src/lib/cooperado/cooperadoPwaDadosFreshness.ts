@@ -14,7 +14,7 @@ export const COOPERADO_PWA_DADOS_STALE_EVENT = "hb-cooperado-pwa-dados-stale";
 export const COOPERADO_PWA_DADOS_FRESH_EVENT = "hb-cooperado-pwa-dados-fresh";
 
 /** Evita re-marcar stale logo após sync manual/materialização bem-sucedida. */
-const FOREGROUND_STALE_SUPPRESS_MS = 45_000;
+const FOREGROUND_STALE_SUPPRESS_MS = 18_000;
 let suppressForegroundStaleUntil = 0;
 
 export function clearCooperadoPwaDadosDesatualizados(): void {

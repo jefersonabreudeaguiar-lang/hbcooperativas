@@ -164,10 +164,7 @@ import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { isCooperadoMobilePilotPerfActive } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
-import {
-  cooperadoPwaMessengerPrecisaSyncOperacionalInicial,
-  rematerializarCooperadoPwaSnapshotsSeNecessario,
-} from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
+import { cooperadoPwaMessengerPrecisaSyncOperacionalInicial } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import {
   cooperadoMobileDeferOperacionalSyncNaAbertura,
   isCooperadoMobileGaPromoted,
@@ -749,23 +746,13 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
                 currentCoopId
               )
             : true);
-        const temFatiaFinanceiraLocal = Boolean(
-          cooperadoCanonicoHydration &&
-            cooperadoTemDadosFinanceirosMinimos(
-              getData(),
-              cooperadoCanonicoHydration,
-              currentCoopId
-            )
-        );
         const preserveHydration =
           cooperadoSyncEmSegundoPlano ||
-          cooperadoPreserveHydrationOnSilentSync(currentUser, cooperadoPagamentosHydratedRef.current) ||
-          (opts?.userInitiated === true && temFatiaFinanceiraLocal);
+          cooperadoPreserveHydrationOnSilentSync(currentUser, cooperadoPagamentosHydratedRef.current);
         const limparHydrationFinanceira =
           mustClearFinancePresentation &&
           !preserveHydration &&
-          (!isCooperadoManualOperacionalSync() ||
-            (opts?.userInitiated === true && !temFatiaFinanceiraLocal));
+          (!isCooperadoManualOperacionalSync() || opts?.userInitiated === true);
         if (limparHydrationFinanceira) {
           setCooperadoPagamentosHydrated(false);
         }
