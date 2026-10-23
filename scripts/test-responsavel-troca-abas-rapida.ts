@@ -74,13 +74,19 @@ assert.ok(keepAlive.includes("markStaffTabPathChange"), "keep-alive marca quiesc
 assert.ok(keepAlive.includes("STAFF_TAB_HEAVY_HREFS"), "keep-alive limita painéis pesados no DOM");
 assert.ok(keepAlive.includes("useDeferredValue"), "keep-alive adia commit pesado do Next");
 assert.ok(keepAlive.includes("mobileViewport"), "keep-alive só no mobile — desktop navega direto");
-assert.ok(keepAlive.includes("registerStaffTabPanelCacheProbe"), "keep-alive publica o cache");
-assert.ok(!keepAlive.includes("{children ?? <PageSkeleton compact />}\n      {renderInactivePanels()}"));
 
+const staffPath = readFileSync(
+  join(import.meta.dirname ?? __dirname, "../src/hooks/useStaffEffectiveTabPath.ts"),
+  "utf8"
+);
+assert.match(staffPath, /isStaffGestaoMobileViewport\(\)\) return canonical/);
 const layout = readFileSync(
   join(import.meta.dirname ?? __dirname, "../src/components/layout/AppLayout.tsx"),
   "utf8"
 );
+assert.ok(layout.includes("staffDesktopSidebarNav ? pathname"), "PC remonta rota no menu lateral");
+assert.ok(keepAlive.includes("registerStaffTabPanelCacheProbe"), "keep-alive publica o cache");
+assert.ok(!keepAlive.includes("{children ?? <PageSkeleton compact />}\n      {renderInactivePanels()}"));
 assert.ok(layout.includes("tryStaffCachedInstantTabSwitch"), "toque do responsável pinta o lastro");
 assert.ok(layout.includes("setStaffOptimisticTab"), "otimista só no ramo staff");
 assert.ok(layout.includes("tryCooperadoPinnedInstantTabSwitch"), "ramo cooperado intacto");

@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v573
+
+- **Responsável (S1 — PC):** menu lateral alinha URL e conteúdo (sem aba otimista do celular); remonta rota ao trocar Início/Conferir/Pagar/Livro.
+
 ## v572
 
 - **Responsável (sync por aba — S1+):** ao mudar de menu, sync leve da aba; «Atualizar» une armazenamento local + nuvem; no PC merge automático após 2 min. Plano: `docs/plano-mestre/RESPONSAVEL-SINCRONIZACAO-POR-ABA-2026.md`.
