@@ -69,6 +69,17 @@ export async function runCooperadoPostDeployQueue(opts: {
   const { user, policy } = opts;
   setCooperadoPostDeployQueueActive(true);
   try {
+    if (
+      cooperadoPostDeployAckMatches(APP_BUILD_VERSION, policy.releaseEpoch) &&
+      !cooperadoAppReleaseNeedsOperacionalSync() &&
+      !cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)
+    ) {
+      persistOperacionalSyncedAppBuild();
+      clearCooperadoPostDeployDegraded();
+      opts.onPhase?.("done");
+      return { ok: true };
+    }
+
     opts.onPhase?.("sync_operacional");
     markCooperadoPrimeiraCargaSyncPending();
     grantCooperadoEventDrivenSync();

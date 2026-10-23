@@ -28,6 +28,8 @@ import {
   cooperadoGaValorReceberExibicaoResolvida,
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { cooperadoMobileSyncTrace } from "@/lib/cooperado/cooperadoMobileSyncTrace";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { runCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
 import { getSession } from "@/services/dataStore";
 import {
   capStaffConferenciaSyncTierRequest,
@@ -297,10 +299,29 @@ export function requestAppSyncLight(): void {
   requestSyncTier("notas_delta", { force: false });
 }
 
+/** GA com fatia local: Atualizar usa sync base (operacional+notas) em vez de fila operacional_full pesada. */
+export function cooperadoManualPrefereSyncBaseInformacoes(
+  user: ReturnType<typeof getSession>
+): boolean {
+  if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return false;
+  if (cooperadoAppReleaseNeedsOperacionalSync()) return false;
+  return !cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user);
+}
+
 /** Botão Atualizar: força checagem + sync (ação explícita do cooperado). */
 export function requestCooperadoManualRefreshSync(): void {
   markCooperadoUserSyncVisible();
   grantCooperadoEventDrivenSync();
+  const session = getSession();
+  if (session && cooperadoManualPrefereSyncBaseInformacoes(session)) {
+    cooperadoMobileSyncTrace("manual_atualizar", "sync_base_financeira");
+    void runCooperadoGaSyncBaseInformacoesFinanceiras(session, {
+      force: true,
+      userInitiated: true,
+    });
+    return;
+  }
+  cooperadoMobileSyncTrace("manual_atualizar", "operacional_full");
   requestSyncTier("operacional_full", { force: true, immediate: true, userInitiated: true });
 }
 

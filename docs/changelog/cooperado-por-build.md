@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v552
+
+- **Cooperado (Etapa 4):** Atualizar com dados locais usa sync base financeira; pós-deploy ack evita segundo `operacional_full`. Diagnóstico: `/hb-cooperado-console-diag.js`.
+
 ## v551
 
 - **Cooperado (Etapa 3):** com bundle igual à nuvem, grava release visto e `operacionalSyncedBuild` — menos fila pós-deploy e probes que parecem travar o PWA.
