@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v568
+
+- **Responsável:** Conferir/Pagar não ficam mais montados juntos no DOM — só a aba visível (cache nas outras); pausa de sync na troca vale no desktop; troca otimista mostra o cache até o Next alinhar a URL.
+
 ## v567
 
 - **Responsável (Fase R1/R2):** 10s após trocar de aba no celular, sync automática, loop da fila e pull de notas ficam em pausa — mesma ideia da v566 cooperado; «Atualizar agora» continua manual.

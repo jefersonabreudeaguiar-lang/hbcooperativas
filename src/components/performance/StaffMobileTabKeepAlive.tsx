@@ -1,6 +1,14 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, useMemo, type ReactNode } from "react";
+import {
+  useDeferredValue,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useMemo,
+  startTransition,
+  type ReactNode,
+} from "react";
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
 import { CooperadoTabPanelProvider } from "@/lib/performance/cooperadoTabPanelContext";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
@@ -10,6 +18,7 @@ import {
   isStaffBottomTabPath,
   isStaffMobileTabKeepAliveEnabled,
   staffBottomTabCacheKey,
+  STAFF_TAB_HEAVY_HREFS,
   trimStaffTabCacheOrder,
 } from "@/lib/performance/staffMobileTabKeepAlive";
 import { registerStaffTabPanelCacheProbe } from "@/lib/performance/staffPinnedTabFastPath";
@@ -46,6 +55,7 @@ function publishStaffKeepAliveDomState(state: {
  */
 export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
   const enabled = isStaffMobileTabKeepAliveEnabled();
+  const deferredChildren = useDeferredValue(children);
   const effectivePath = useStaffEffectiveTabPath(pathname);
   const cacheRef = useRef<Partial<Record<string, ReactNode>>>({});
   const orderRef = useRef<string[]>([]);
@@ -82,7 +92,7 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
       if (!orderRef.current.includes(href)) delete cacheRef.current[href];
     }
     if (orderChanged || !prevOrder.includes(activeKey) || !prevOrder.includes(tabKey)) {
-      setCacheVersion((n) => n + 1);
+      startTransition(() => setCacheVersion((n) => n + 1));
     }
   }, [enabled, onTab, activeKey, tabKey, cacheLimit, lowMemory]);
 
@@ -115,10 +125,15 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
     if (!onTab || !enabled) {
       return [...new Set([...orderRef.current, ...Object.keys(cacheRef.current)])];
     }
-    const mounted = new Set<string>([activeKey]);
-    for (const h of orderRef.current) mounted.add(h);
-    for (const h of Object.keys(cacheRef.current)) mounted.add(h);
-    return [...mounted];
+    const active = activeKey;
+    if (
+      active === "/notas-pedido" ||
+      active === "/ficha-corrida" ||
+      (STAFF_TAB_HEAVY_HREFS as readonly string[]).includes(active)
+    ) {
+      return [active];
+    }
+    return [active];
   }, [cacheVersion, onTab, enabled, activeKey]);
 
   const resolvePanel = (href: string): { panel: ReactNode | undefined; warm: boolean } => {
@@ -126,14 +141,20 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
     const cached = cacheRef.current[href];
     const last = lastCommitRef.current;
     const childrenStaleForPath = last.path !== pathname && last.child === children;
+    const liveNode =
+      active && pathname === href && !childrenStaleForPath ? children : deferredChildren;
     const liveForHref =
       tabKey === href &&
+      pathname === href &&
       !childrenStaleForPath &&
-      !isStaffTabRouteLoadingElement(children) &&
-      children != null;
+      !isStaffTabRouteLoadingElement(liveNode) &&
+      liveNode != null;
 
     if (active && liveForHref) {
-      return { panel: children, warm: false };
+      return { panel: liveNode, warm: false };
+    }
+    if (active && cached !== undefined && tabKey !== href) {
+      return { panel: cached, warm: true };
     }
     if (cached !== undefined) {
       return { panel: cached, warm: !active || tabKey !== href };

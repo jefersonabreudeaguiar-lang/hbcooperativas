@@ -2320,7 +2320,7 @@ export default function NotasPedidoStaffMain() {
     if (isCooperado || !coopId || !tabActive) return;
     if (!isStaffFilaNotasLivePollEnabled()) return;
     const pollMs = resolveStaffNotasPollIntervalMs(true);
-    puxarFilaLiveResponsavel();
+    if (!staffResponsavelPausaSyncPesado()) puxarFilaLiveResponsavel();
     return scheduleStaffResponsavelNotasPollLoop({
       pollIntervalMs: pollMs,
       onPoll: () => puxarFilaLiveResponsavel(),
