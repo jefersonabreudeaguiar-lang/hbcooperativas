@@ -22,9 +22,12 @@ import { reconciliarFichaFromNotasConferidas } from "../src/services/notaPedidoS
 import { getAdminStats } from "../src/services/dashboardService";
 import { getFilaDoDia } from "../src/services/filaDoDiaService";
 import {
+  countCooperadosLancamentosEmAbertoResponsavel,
   countCooperadosPagamentoPendenteResponsavel,
   countNotasFilaConferenciaResponsavel,
+  getRelatorioLancamentosEmAbertoResponsavel,
 } from "../src/services/responsavelPainelIndex";
+import { resumoLivroCaixa } from "../src/services/livroCaixaService";
 
 function loadEnvFile(path: string) {
   if (!existsSync(path)) return;
@@ -114,6 +117,10 @@ async function main() {
   const fila = getFilaDoDia(data, coopId, mes);
   const conferir = countNotasFilaConferenciaResponsavel(data, coopId);
   const pagarCoops = countCooperadosPagamentoPendenteResponsavel(data, coopId);
+  const emAbertoCount = countCooperadosLancamentosEmAbertoResponsavel(data, coopId);
+  const emAbertoLinhas = getRelatorioLancamentosEmAbertoResponsavel(data, coopId);
+  const livro = data.livroCaixa?.filter((l) => l.cooperativaId === coopId) ?? [];
+  const resumoLivro = resumoLivroCaixa(data, coopId, mes);
 
   console.log(`\n=== S1 Início (UI esperada) | ${CNPJ} ===\n`);
   console.log("Cards:");
@@ -122,6 +129,10 @@ async function main() {
   console.log(`  Cooperados ativos:      ${admin.cooperadosAtivos}`);
   console.log(`  Fichas pendentes (stat interno): ${admin.pagamentosPendentes}`);
   console.log(`  Cooperados prontos PIX: ${pagarCoops}`);
+  console.log(`  Aba Em aberto (cooperados): ${emAbertoCount} (${emAbertoLinhas.length} linhas)`);
+  console.log(
+    `  Livro caixa lançamentos (coop): ${livro.length} · saldo: R$ ${resumoLivro.saldo.toFixed(2)}`
+  );
   console.log("\nFila do dia:");
   if (fila.length === 0) console.log("  (vazia — mensagem 'Fila do dia limpa')");
   for (const item of fila) {

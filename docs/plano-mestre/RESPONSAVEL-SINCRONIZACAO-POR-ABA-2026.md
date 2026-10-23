@@ -47,7 +47,7 @@ Responda **SIM** ou **NÃO** por linha, na ordem S1 → S4:
 
 | Fase | Data | Resposta | Build |
 |------|------|----------|-------|
-| S1 Início | 2026-10-23 | NÃO → reteste v576 (financeiro_delta) | v576 |
+| S1 Início | 2026-10-23 | NÃO (em aberto 24, livro 0) → v577 | v577 |
 | S2 Conferir | | | |
 | S3 Pagar | | | |
 | S4 Livro | | | |

@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v577
+
+- **Responsável:** Em aberto deixa de inflar (ex. 24) quando o motor já tem a lista certa (12); Livro puxa operacional e reconcilia no warmup se o livro local está vazio.
+
 ## v576
 
 - **Responsável (S1):** Início e Ficha puxam `financeiro_delta` (operacional na nuvem) + notas no dashboard — R$ a pagar e “Pagar cooperados” deixam de ficar só no cache velho.

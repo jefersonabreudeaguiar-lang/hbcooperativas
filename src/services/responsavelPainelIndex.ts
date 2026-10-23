@@ -614,6 +614,10 @@ export function fundirLinhasEmAbertoEstavel(
     .filter((l): l is LinhaPagarCooperadoEmAberto => l !== null);
 
   if (anterior.length === 0) return motorLimpo;
+  /** Motor com linhas = leitura atual; não reidrata cooperados fantasmas do latch (ex.: 24 vs 12). */
+  if (motorLimpo.length > 0) {
+    return motorLimpo.sort((a, b) => a.cooperado.localeCompare(b.cooperado, "pt-BR"));
+  }
 
   const byId = new Map(motorLimpo.map((l) => [l.cooperadoId, l]));
   for (const old of anterior) {

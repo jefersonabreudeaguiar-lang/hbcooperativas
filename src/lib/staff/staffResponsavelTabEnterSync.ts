@@ -27,7 +27,7 @@ function isStaffGestaoTabPath(pathname: string): boolean {
 function syncTiersForTab(pathname: string): SyncTier[] {
   if (pathname === "/dashboard") return ["financeiro_delta", "notas_delta"];
   if (pathname.startsWith("/ficha-corrida")) return ["financeiro_delta"];
-  if (pathname.startsWith("/livro-caixa")) return ["pulse"];
+  if (pathname.startsWith("/livro-caixa")) return ["financeiro_delta", "pulse"];
   return ["notas_delta"];
 }
 

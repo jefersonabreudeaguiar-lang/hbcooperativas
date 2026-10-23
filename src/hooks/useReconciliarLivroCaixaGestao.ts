@@ -50,7 +50,15 @@ export function useReconciliarLivroCaixaGestao(
 
     const tentar = () => {
       if (cancelled || !isAppDataWarm()) return;
-      if (staffGestaoDesktopWarmupSyncPaused()) return;
+      if (staffGestaoDesktopWarmupSyncPaused()) {
+        const snap = getData();
+        const livroCoop = (snap.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId).length;
+        const precisaLivro =
+          temPagamentoParaLivroCaixa(snap) &&
+          livroCoop === 0 &&
+          devePersistirReconciliacaoLivroCaixaGestao(snap);
+        if (!precisaLivro) return;
+      }
       void Promise.all([
         import("@/services/pagamentoIntegridadeService"),
         import("@/services/livroCaixaService"),
