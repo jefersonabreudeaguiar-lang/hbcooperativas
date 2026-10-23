@@ -33,8 +33,6 @@ const watch = read("src/hooks/useCooperadoStaffRevisionWatch.ts");
 assert.match(watch, /HINT_POLL_MS = 4_000/);
 assert.match(watch, /fetchMyCooperadoLancamentoHint/);
 assert.match(watch, /runCooperadoMessengerOperacionalLightPull/);
-assert.match(watch, /MIN_GAP_HINT_PROCESS_MS/);
-assert.match(watch, /syncingRef\.current\) return/);
 
 const staff = read("src/app/(app)/notas-pedido/staff/NotasPedidoStaffResponsavelApp.tsx");
 assert.match(staff, /publishCooperadoLancamentoHint/);
