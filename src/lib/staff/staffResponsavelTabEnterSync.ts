@@ -46,7 +46,7 @@ function runSessionOperacionalHydratePull(): void {
   sessionOperacionalHydrateDone = true;
   scheduleStaffGestaoPersistReloadAfterPaint();
   const tier = staffGestaoDesktopWarmupSyncPaused() ? "financeiro_delta" : "operacional_full";
-  requestSyncTier(tier, { force: true, userInitiated: true, silent: true });
+  requestSyncTier(tier, { force: true, userInitiated: true });
 }
 
 /** Uma vez por sessão: merge local + operacional/notas (após paint e fora de quiescence). */
