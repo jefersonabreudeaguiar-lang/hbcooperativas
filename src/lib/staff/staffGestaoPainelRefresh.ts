@@ -15,6 +15,7 @@ import {
   staffLocalOperacionalVazio,
 } from "@/lib/staff/staffOperacionalColdHydrate";
 import { isStaffGestaoRole } from "@/lib/staff/staffResponsavelSyncPolicy";
+import { staffTabSwitchQuiescenceActive } from "@/lib/staff/staffTabSwitchQuiescence";
 import { requestSyncTier } from "@/services/syncRequest";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import {
@@ -46,29 +47,57 @@ export async function staffGestaoRestaurarLastroSeLivePobre(): Promise<boolean> 
 }
 
 export function staffGestaoPrecisaHidratarOperacional(): boolean {
-  if (!isAppDataWarm()) return true;
+  if (!isAppDataWarm()) return false;
   const user = getSession();
   if (!user || !isStaffGestaoRole(user.role)) return false;
   const data = getData();
   const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
   const rich = staffGestaoRiquezaTotal(medirRiquezaStaffGestao(data, coopId));
-  if (rich < 5) return true;
+  if (staffGestaoTemFichaOuNotaLocal(data, coopId) && rich >= 5) return false;
+  if (rich < 3) return true;
   return (
-    staffLocalOperacionalVazio(data, coopId) || !staffGestaoTemFichaOuNotaLocal(data, coopId)
+    staffLocalOperacionalVazio(data, coopId) && !staffGestaoTemFichaOuNotaLocal(data, coopId)
   );
 }
 
+let hidratacaoPesadaTimer: number | null = null;
+let lastHidratacaoPesadaAt = 0;
+const HIDRATACAO_PESADA_MIN_GAP_MS = 120_000;
+
 export function requestStaffGestaoOperacionalFullSePreciso(): void {
   if (!staffGestaoPrecisaHidratarOperacional()) return;
-  requestSyncTier("operacional_full", { force: true, userInitiated: true });
+  requestSyncTier("operacional_full", {
+    force: true,
+    userInitiated: false,
+    eventDriven: true,
+  });
 }
 
-/** Qualquer aba da gestão — lastro + operacional_full se painel vazio. */
+/** Só aparelho frio — adiado e em idle; nunca em cada toque de aba. */
 export function scheduleStaffGestaoPainelHidratacaoSeVazio(): void {
-  void (async () => {
-    await staffGestaoRestaurarLastroSeLivePobre();
-    requestStaffGestaoOperacionalFullSePreciso();
-  })();
+  if (typeof window === "undefined") return;
+  if (!staffGestaoPrecisaHidratarOperacional()) return;
+  const now = Date.now();
+  if (now - lastHidratacaoPesadaAt < HIDRATACAO_PESADA_MIN_GAP_MS) return;
+  if (hidratacaoPesadaTimer != null) return;
+
+  const delayMs = staffTabSwitchQuiescenceActive() ? 10_000 : 6_000;
+  hidratacaoPesadaTimer = window.setTimeout(() => {
+    hidratacaoPesadaTimer = null;
+    if (!staffGestaoPrecisaHidratarOperacional()) return;
+    const run = () => {
+      void staffGestaoRestaurarLastroSeLivePobre().then(() => {
+        if (!staffGestaoPrecisaHidratarOperacional()) return;
+        lastHidratacaoPesadaAt = Date.now();
+        requestStaffGestaoOperacionalFullSePreciso();
+      });
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      requestIdleCallback(run, { timeout: 12_000 });
+    } else {
+      window.setTimeout(run, 500);
+    }
+  }, delayMs);
 }
 
 /** Gera lançamentos do livro a partir de PIX confirmados (quando operacional já está na memória). */

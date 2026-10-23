@@ -8,6 +8,7 @@ import { join } from "node:path";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const tab = readFileSync(join(ROOT, "src/lib/staff/staffResponsavelTabEnterSync.ts"), "utf8");
+const refresh = readFileSync(join(ROOT, "src/lib/staff/staffGestaoPainelRefresh.ts"), "utf8");
 const sync = readFileSync(join(ROOT, "src/services/syncRequest.ts"), "utf8");
 const layout = readFileSync(join(ROOT, "src/components/layout/AppLayout.tsx"), "utf8");
 
@@ -27,6 +28,16 @@ assert.match(tab, /inicioDuranteWarmupPc/);
 assert.match(tab, /scheduleStaffGestaoPersistReloadAfterPaint/);
 assert.match(tab, /scheduleStaffGestaoPainelHidratacaoSeVazio/);
 assert.match(tab, /staffGestaoRestaurarLastroSeLivePobre/);
+{
+  const conferirIdx = tab.indexOf('if (path.startsWith("/notas-pedido"))');
+  assert.ok(conferirIdx >= 0);
+  const conferirEnd = tab.indexOf("return;", conferirIdx);
+  const conferirBlock = tab.slice(conferirIdx, conferirEnd);
+  assert.ok(!conferirBlock.includes("operacional_full"));
+  assert.ok(!conferirBlock.includes("scheduleStaffGestaoPainelHidratacaoSeVazio"));
+}
+assert.match(refresh, /HIDRATACAO_PESADA_MIN_GAP_MS/);
+assert.match(refresh, /staffGestaoTemFichaOuNotaLocal\(data, coopId\) && rich >= 5/);
 assert.doesNotMatch(
   tab,
   /runSessionOperacionalHydratePull[\s\S]*?if \(sessionOperacionalHydrateDone\) return/

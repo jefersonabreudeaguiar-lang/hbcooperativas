@@ -9,7 +9,6 @@ import { countNotasFilaConferenciaResponsavel } from "@/services/responsavelPain
 import { getCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import {
-  requestStaffGestaoOperacionalFullSePreciso,
   scheduleStaffGestaoPainelHidratacaoSeVazio,
   staffGestaoPrecisaHidratarOperacional,
   staffGestaoRestaurarLastroSeLivePobre,
@@ -92,8 +91,18 @@ function runSessionOperacionalHydratePull(): void {
     !staffGestaoTemFichaOuNotaLocal(data, coopId) ||
     staffGestaoPrecisaHidratarOperacional();
   if (sessionOperacionalHydrateDone && !precisa) return;
-  requestSyncTier("operacional_full", { force: true, userInitiated: true });
-  if (!precisa) sessionOperacionalHydrateDone = true;
+  void staffGestaoRestaurarLastroSeLivePobre().then(() => {
+    if (!staffGestaoPrecisaHidratarOperacional()) {
+      sessionOperacionalHydrateDone = true;
+      return;
+    }
+    requestSyncTier("operacional_full", {
+      force: true,
+      userInitiated: false,
+      eventDriven: true,
+    });
+    if (!precisa) sessionOperacionalHydrateDone = true;
+  });
 }
 
 /** Uma vez por sessão: merge local + operacional/notas (após paint e fora de quiescence). */
@@ -126,14 +135,9 @@ export function scheduleStaffResponsavelTabEnterSync(pathname: string): void {
   lastAt = now;
 
   scheduleStaffPostInteractiveTask(() => {
-    scheduleStaffGestaoPainelHidratacaoSeVazio();
-
     /** notas_delta é leve — não pode ficar atrás da quiescence de troca de aba (S2 Conferir). */
     if (path.startsWith("/notas-pedido")) {
-      void staffGestaoRestaurarLastroSeLivePobre().then(() => {
-        requestStaffGestaoOperacionalFullSePreciso();
-        pullConferirNotasSeFilaVazia();
-      });
+      pullConferirNotasSeFilaVazia();
       return;
     }
 
@@ -144,6 +148,7 @@ export function scheduleStaffResponsavelTabEnterSync(pathname: string): void {
     if (inicioDuranteWarmupPc) {
       dashboardInicioHydrateDone = true;
       scheduleSessionOperacionalHydrate("dashboard-warmup");
+      scheduleStaffGestaoPainelHidratacaoSeVazio();
       return;
     }
 
@@ -153,6 +158,7 @@ export function scheduleStaffResponsavelTabEnterSync(pathname: string): void {
       !staffGestaoDesktopWarmupSyncPaused()
     ) {
       scheduleSessionOperacionalHydrate("deferred");
+      scheduleStaffGestaoPainelHidratacaoSeVazio();
     }
   });
 }
