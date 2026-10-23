@@ -1942,6 +1942,11 @@ export function notaQuitadaPorPagamentoCooperativaRegistrado(
       return true;
     }
 
+    /** PIX com ficha/nota explícitas não quita lançamento novo do mesmo mês. */
+    const escopoExplicito =
+      (p.fichaIds?.length ?? 0) > 0 || (p.notaPedidoIds?.length ?? 0) > 0;
+    if (escopoExplicito) continue;
+
     const notaTs = notaReferenciaTemporalEscopoPagamento(nota);
     const pagoTs = Date.parse(p.pagoEm ?? p.createdAt ?? "");
     if (!Number.isNaN(notaTs) && !Number.isNaN(pagoTs) && notaTs > pagoTs) continue;

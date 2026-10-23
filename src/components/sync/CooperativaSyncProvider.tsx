@@ -375,6 +375,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
   const syncingRef = useRef(false);
   const cooperadoUserRefreshQueuedRef = useRef(false);
+  const lastQueuedRefreshAtRef = useRef(0);
   const lastSyncStartedAtRef = useRef(0);
   const cooperadoSilentRetryAtRef = useRef(0);
   const scheduleCooperadoSilentSyncRetry = useCallback(() => {
@@ -1022,7 +1023,14 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       const queuedCooperadoRefresh = cooperadoUserRefreshQueuedRef.current;
       cooperadoUserRefreshQueuedRef.current = false;
       syncingRef.current = false;
-      if (!(queuedCooperadoRefresh && userRef.current?.role === "cooperado")) {
+      const nowEnd = Date.now();
+      const chainQueuedRefresh =
+        queuedCooperadoRefresh &&
+        userRef.current?.role === "cooperado" &&
+        nowEnd - lastQueuedRefreshAtRef.current >= 12_000;
+      if (chainQueuedRefresh) {
+        lastQueuedRefreshAtRef.current = nowEnd;
+      } else {
         setSyncing(false);
         if (userRef.current?.role === "cooperado") {
           resetCooperadoUserSyncVisible();
@@ -1123,7 +1131,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           }
         }
       }
-      if (queuedCooperadoRefresh && userRef.current?.role === "cooperado") {
+      if (chainQueuedRefresh) {
         queueMicrotask(() => {
           void runSync({ force: true, userInitiated: true });
         });

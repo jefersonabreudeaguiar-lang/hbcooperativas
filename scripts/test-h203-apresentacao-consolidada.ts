@@ -127,6 +127,7 @@ assert.equal(
     syncing: true,
     cooperadoPagamentosHydrated: false,
     exibirComDadosLocais: true,
+    dadosFinanceirosConsistentes: false,
   }),
   true
 );

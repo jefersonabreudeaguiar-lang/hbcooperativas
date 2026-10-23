@@ -33,8 +33,8 @@ export function cooperadoApresentacaoFinanceiraConsolidada(
   input: CooperadoSyncPresentationInput
 ): boolean {
   if (input.role !== "cooperado") return true;
-  if (input.dadosFinanceirosConsistentes === false) return false;
   if (input.exibirComDadosLocais) return true;
+  if (input.dadosFinanceirosConsistentes === false) return false;
   return input.cooperadoPagamentosHydrated && !input.syncing;
 }
 
