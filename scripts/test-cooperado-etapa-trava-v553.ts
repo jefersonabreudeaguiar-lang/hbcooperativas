@@ -16,6 +16,8 @@ const gate = readFileSync(
   join(ROOT, "src/components/cooperado/CooperadoFinanceiroGate.tsx"),
   "utf8",
 );
+assert.doesNotMatch(gate, /hb-cooperado-acesso-diag/);
+assert.doesNotMatch(gate, /installCooperadoValorBrowserMobileDiag/);
 const garantia = readFileSync(
   join(ROOT, "src/lib/cooperado/cooperadoGaGarantiaValorReceberSync.ts"),
   "utf8",

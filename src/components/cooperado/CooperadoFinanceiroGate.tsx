@@ -82,8 +82,6 @@ import {
   cooperadoPilotFinanceiroExibirComSnapshotsLocais,
   scheduleCooperadoPilotFinanceReadRecovery,
 } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
-import { installCooperadoValorBrowserMobileDiag } from "@/lib/cooperado/cooperadoValorBrowserMobileDiag";
-import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 
 /** Após este tempo, o conteúdo pode seguir mesmo sem sync (shell já navegável). */
 const SYNC_HINT_MAX_MS = 18_000;
@@ -117,20 +115,6 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
     return cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, coopId);
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role, padraoJeferson]);
-
-  useEffect(() => {
-    if (user?.role !== "cooperado") return;
-    const cleanupDiag = installCooperadoValorBrowserMobileDiag(user);
-    const scriptId = "hb-cooperado-acesso-diag";
-    if (!document.getElementById(scriptId)) {
-      const script = document.createElement("script");
-      script.id = scriptId;
-      script.src = `/hb-cooperado-acesso-diag.js?_=${APP_BUILD_VERSION}`;
-      script.async = true;
-      document.head.appendChild(script);
-    }
-    return () => cleanupDiag();
-  }, [user?.id, user?.role, user?.cooperadoId]);
 
   useEffect(() => {
     if (user?.role !== "cooperado" || !user.cooperadoId) return;

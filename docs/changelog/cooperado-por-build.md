@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v554
+
+- **Cooperado (hotfix):** remove carga automática de script de diagnóstico inexistente no deploy — evitava tela branca / aba travada no browser.
+
 ## v553
 
 - **Cooperado:** com valor já na tela, sync em segundo plano não prende “Atualizando…” nem recalcula o motor pesado na aba Início; timers de garantia/integridade param quando a exibição está resolvida.
