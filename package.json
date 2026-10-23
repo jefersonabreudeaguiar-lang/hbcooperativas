@@ -14,6 +14,7 @@
     "gate:melhor-performance": "npm run baseline:melhor-performance",
     "gate:preservar-app": "npx tsx scripts/test-preservar-app-gate.ts",
     "test:conferir-ui-nao-travar": "npx tsx scripts/test-conferir-ui-nao-travar-contrato-v604.ts",
+    "test:cooperado-experiencia-jeferson": "npx tsx scripts/test-cooperado-experiencia-jeferson-ga-paridade.ts",
     "test:image-pipeline": "npx tsx scripts/test-image-pipeline.ts",
     "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs",
     "probe:pwa-crash": "npx tsx scripts/pwa-crash-forensics-probe-once.ts",

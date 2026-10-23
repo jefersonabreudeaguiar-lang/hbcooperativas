@@ -14,7 +14,7 @@ import { dispatchCooperadoPwaLeveUiSnapshotRefresh } from "@/lib/cooperado/coope
 import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
 import { scheduleCooperadoHbCreditLimiteAndAccountWarmup } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
 import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
-import { isAppDataWarm, preloadAppData } from "@/services/dataStore";
+import { isAppDataWarm, preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
 
 /** Materializa caches locais (idempotente). */
 export function empacotarModeloAparelhoJeferson(
@@ -27,6 +27,9 @@ export function empacotarModeloAparelhoJeferson(
   if (!isAppDataWarm()) {
     preloadAppData();
     scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
+    void waitForAppDataWarm(18_000).then((warm) => {
+      if (warm) empacotarModeloAparelhoJeferson(user);
+    });
     return;
   }
 

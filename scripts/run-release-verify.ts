@@ -94,6 +94,12 @@ const PHASE_BIC: Step[] = [
     cmd: "npx",
     stepArgs: ["tsx", "scripts/test-cooperado-inicio-card-bic-recibo-legado.ts"],
   },
+  {
+    phase: "1",
+    title: "Cooperado GA = experiência Jeferson (mobile)",
+    cmd: "npx",
+    stepArgs: ["tsx", "scripts/test-cooperado-experiencia-jeferson-ga-paridade.ts"],
+  },
 ];
 
 const PHASE_HB: Step[] = [
