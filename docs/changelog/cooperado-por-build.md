@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v567
+
+- **Responsável (Fase R1/R2):** 10s após trocar de aba no celular, sync automática, loop da fila e pull de notas ficam em pausa — mesma ideia da v566 cooperado; «Atualizar agora» continua manual.
+
 ## v566
 
 - **Cooperado (Fase 2 — abas):** 10s após trocar de aba, sync/pulso/garantia e foreground operacional ficam em pausa; com valor já na tela, o pulso BIC no celular **não** rematerializa a ficha quando a nuvem não mudou; Ficha/refresh GA respeitam a mesma pausa.

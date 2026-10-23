@@ -17,6 +17,7 @@ import {
   isStaffTabRouteLoadingElement,
   staffTabCacheMayWriteForPath,
 } from "@/lib/performance/staffTabPanelCache";
+import { markStaffTabPathChange } from "@/lib/staff/staffTabSwitchQuiescence";
 
 type Props = {
   pathname: string;
@@ -61,6 +62,8 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
   const onTab = isStaffBottomTabPath(effectivePath);
 
   useLayoutEffect(() => {
+    markStaffTabPathChange(activeKey);
+
     publishStaffKeepAliveDomState({
       enabled,
       onTab,

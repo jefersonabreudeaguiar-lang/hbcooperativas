@@ -25,6 +25,7 @@ import {
 import { listarPendentesConferenciaResponsavel } from "@/lib/conferencia/responsavelConferenciaFilaNav";
 import { resolveStaffNotasPedidoNotifyDomains } from "@/lib/performance/staffNotasPedidoNotifyDomains";
 import { scheduleStaffResponsavelNotasPollLoop } from "@/lib/performance/staffResponsavelNotasPullBoot";
+import { staffResponsavelPausaSyncPesado } from "@/lib/staff/staffResponsavelPausaSyncPesado";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { useConferirProjection } from "@/hooks/useConferirProjection";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -2194,6 +2195,7 @@ export default function NotasPedidoStaffMain() {
   );
 
   const puxarFilaLiveResponsavel = useCallback(() => {
+    if (staffResponsavelPausaSyncPesado()) return;
     if (isCooperado || !coopId) return;
     const d = getData();
     if (!d) return;

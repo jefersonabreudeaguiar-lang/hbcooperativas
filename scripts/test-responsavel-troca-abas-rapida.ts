@@ -24,7 +24,7 @@ import {
 import { tryStaffCachedInstantTabSwitch } from "../src/lib/performance/staffPinnedTabFastPath.ts";
 import { staffTabCacheMayWriteForPath } from "../src/lib/performance/staffTabPanelCache.ts";
 
-assert.equal(RESPONSAVEL_TROCA_ABAS_RAPIDA_VERSION, 1);
+assert.equal(RESPONSAVEL_TROCA_ABAS_RAPIDA_VERSION, 2);
 assert.equal(RESPONSAVEL_TROCA_ABAS_USA_CACHE_KEEP_ALIVE, true);
 assert.equal(RESPONSAVEL_TROCA_ABAS_TRABALHO_PESADO_NO_IDLE, true);
 assert.deepEqual([...RESPONSAVEL_TROCA_ABAS_PIN_DO_DIA], [...STAFF_TAB_PIN_HREFS]);
@@ -70,6 +70,7 @@ const keepAlive = readFileSync(
   "utf8"
 );
 assert.ok(keepAlive.includes("useStaffEffectiveTabPath"), "keep-alive usa caminho otimista");
+assert.ok(keepAlive.includes("markStaffTabPathChange"), "keep-alive marca quiescence na troca");
 assert.ok(keepAlive.includes("registerStaffTabPanelCacheProbe"), "keep-alive publica o cache");
 assert.ok(!keepAlive.includes("{children ?? <PageSkeleton compact />}\n      {renderInactivePanels()}"));
 
