@@ -6,8 +6,6 @@ import { markRqlInteractionPhase } from "@/lib/performance/rqlMarks";
 import { getData, getSession, isAppDataWarm } from "@/services/dataStore";
 import type { UserRole } from "@/types";
 import { staffLocalOperacionalVazio } from "@/lib/staff/staffOperacionalColdHydrate";
-import { staffResponsavelPausaSyncPesado } from "@/lib/staff/staffResponsavelPausaSyncPesado";
-
 const TIER_RANK: Record<SyncTier, number> = {
   pulse: 0,
   notas_delta: 1,
@@ -70,7 +68,6 @@ export function isStaffConferenciaSyncTierCapActive(): boolean {
 export function shouldBlockStaffAutoSyncDuringConferencia(userInitiated?: boolean): boolean {
   if (userInitiated) return false;
   if (!staffSessionActive()) return false;
-  if (staffResponsavelPausaSyncPesado()) return true;
   if (staffLocalOperacionalVazio(isAppDataWarm() ? getData() : null)) return false;
   return conferenciaModalOpen || conferenciaLancamentoDepth > 0;
 }

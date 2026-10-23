@@ -81,7 +81,7 @@ export function scheduleStaffResponsavelTabEnterSync(pathname: string): void {
   scheduleStaffPostInteractiveTask(() => {
     /** notas_delta é leve — não pode ficar atrás da quiescence de troca de aba (S2 Conferir). */
     if (path.startsWith("/notas-pedido")) {
-      requestSyncTier("notas_delta", { force: true });
+      requestSyncTier("notas_delta", { force: true, userInitiated: true });
       return;
     }
 
