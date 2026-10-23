@@ -8,7 +8,8 @@ import { useCooperadoPwaDadosDesatualizados } from "@/hooks/useCooperadoPwaDados
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { cooperadoPostDeployDegraded } from "@/lib/cooperado/cooperadoPostDeploySession";
 import { fetchOfficialClientRelease } from "@/lib/pwa/fetchOfficialClientRelease";
-import { runClientReleaseShield } from "@/lib/pwa/clientReleaseShield";
+import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
+import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 
 /**
  * Versão do bundle no celular do cooperado + Atualizar sutil (snapshots A receber / Financeiro).
@@ -23,13 +24,13 @@ export function CooperadoMobileBuildBadge() {
 
   useEffect(() => {
     if (user?.role !== "cooperado") return;
+    if (rematerializarCooperadoPwaSnapshotsSeNecessario(user)) {
+      clearCooperadoPwaDadosDesatualizados();
+    }
     let cancelled = false;
     void fetchOfficialClientRelease({ bypassCache: true }).then((info) => {
       if (cancelled || !info) return;
       setCloudBuild(info.build);
-      if (info.build > APP_BUILD_VERSION) {
-        void runClientReleaseShield("cooperado_build_behind_cloud");
-      }
     });
     return () => {
       cancelled = true;

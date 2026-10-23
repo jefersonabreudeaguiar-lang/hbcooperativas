@@ -121,6 +121,15 @@ assert.equal(
   }),
   true
 );
+assert.equal(
+  cooperadoApresentacaoFinanceiraConsolidada({
+    role: "cooperado",
+    syncing: true,
+    cooperadoPagamentosHydrated: false,
+    exibirComDadosLocais: true,
+  }),
+  true
+);
 
 const orlandoData = base({
   notasPedido: [

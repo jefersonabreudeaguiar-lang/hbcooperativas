@@ -30,7 +30,10 @@ assert.match(nuvem, /dispararHintCooperadosAfetados/);
 assert.match(nuvem, /publishCooperadoLancamentoHint/);
 
 const watch = read("src/hooks/useCooperadoStaffRevisionWatch.ts");
-assert.match(watch, /HINT_POLL_MS = 4_000/);
+assert.doesNotMatch(watch, /setInterval\([^)]*checkHint/);
+assert.match(watch, /HINT_QUARANTINE_MS/);
+assert.match(watch, /syncingRef\.current/);
+assert.doesNotMatch(watch, /\[cnpj, cooperadoId, cooperativaId, enabled, syncing\]/);
 assert.match(watch, /fetchMyCooperadoLancamentoHint/);
 assert.match(watch, /runCooperadoMessengerOperacionalLightPull/);
 

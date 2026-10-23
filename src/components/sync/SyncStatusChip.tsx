@@ -11,6 +11,7 @@ import {
 } from "@/lib/cooperado/cooperadoAtualizarManual";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { cooperadoPwaMaterializarSnapshotsFinanceirosPosSync } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
+import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
 import { cn } from "@/utils/format";
 import {
   formatRelativoSync,
@@ -170,6 +171,7 @@ export function CooperadoAtualizarButton({
     }
     if (sawSyncUiRef.current && !syncingForUi) {
       cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user);
+      clearCooperadoPwaDadosDesatualizados();
       setBusy(false);
       sawSyncUiRef.current = false;
       return;
