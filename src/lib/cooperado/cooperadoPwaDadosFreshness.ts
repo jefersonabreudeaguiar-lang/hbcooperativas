@@ -7,6 +7,7 @@ import { cooperadoPwaFinanceiroSnapshotsAusentes } from "@/lib/cooperado/coopera
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
+import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import type { CooperativaCloudRevision } from "@/lib/performance/cooperadoEventDrivenSync";
 import { readAppliedCooperativaCloudRevision } from "@/lib/performance/cooperadoEventDrivenSync";
 
@@ -64,10 +65,45 @@ export function cooperadoPwaFinanceiroSnapshotsAusentesForUser(
   return cooperadoPwaFinanceiroSnapshotsAusentes(canon, coopId);
 }
 
+/**
+ * Badge “desatualizado” só quando não há fatia local útil.
+ * Snapshot PWA ausente/divergente com AppData já carregado NÃO alarma nem trava o Atualizar.
+ */
+export function cooperadoPwaDeveMostrarBadgeDesatualizado(input: {
+  messenger: boolean;
+  role?: string;
+  suppress: boolean;
+  appDataWarm: boolean;
+  temDadosFinanceirosLocais: boolean;
+  snapshotsAusentes: boolean;
+}): boolean {
+  if (!input.messenger || input.role !== "cooperado") return false;
+  if (input.suppress) return false;
+  if (!input.appDataWarm) return false;
+  if (input.temDadosFinanceirosLocais) return false;
+  return input.snapshotsAusentes;
+}
+
 export function cooperadoPwaMostraDadosDesatualizados(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   if (!isCooperadoPwaMessengerMode() || !user || user.role !== "cooperado") return false;
-  if (cooperadoPwaSuppressForegroundStaleCheck()) return false;
-  return cooperadoPwaFinanceiroSnapshotsAusentesForUser(user);
+  const warm = isAppDataWarm();
+  let temLocais = false;
+  if (warm && user.cooperadoId) {
+    const data = getData();
+    const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
+    if (coopId) {
+      const canon = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+      temLocais = cooperadoTemDadosFinanceirosMinimos(data, canon, coopId);
+    }
+  }
+  return cooperadoPwaDeveMostrarBadgeDesatualizado({
+    messenger: true,
+    role: user.role,
+    suppress: cooperadoPwaSuppressForegroundStaleCheck(),
+    appDataWarm: warm,
+    temDadosFinanceirosLocais: temLocais,
+    snapshotsAusentes: cooperadoPwaFinanceiroSnapshotsAusentesForUser(user),
+  });
 }

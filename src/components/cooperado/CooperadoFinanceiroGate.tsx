@@ -227,7 +227,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     };
 
     scheduleCooperadoPostShellSync(runFinanceBootstrap);
-  }, [user?.id, user?.cooperadoId, user?.role, lastSyncedAt, syncingForUi]);
+  }, [user?.id, user?.cooperadoId, user?.role]);
 
   const cooperadoAtivo = user?.role === "cooperado" && Boolean(user?.cooperadoId);
   const aguardandoSyncInicial =

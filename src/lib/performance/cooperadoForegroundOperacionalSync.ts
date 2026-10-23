@@ -93,7 +93,11 @@ export async function evaluateCooperadoForegroundOperacionalPull(
           opts.cooperativaId
         )
       ) {
-        return { reason: "financeiro_desatualizado", remote: null };
+        const session = getSession();
+        if (session?.role === "cooperado") {
+          rematerializarCooperadoPwaSnapshotsSeNecessario(session);
+        }
+        return null;
       }
     }
   }

@@ -155,6 +155,9 @@ export function cooperadoPwaMessengerPrecisaSyncOperacionalInicial(
   const canon = data
     ? resolverCooperadoIdCanonico(data, user.cooperadoId, coopId)
     : user.cooperadoId;
+  if (data && cooperadoTemDadosFinanceirosMinimos(data, canon, coopId)) {
+    return false;
+  }
   if (cooperadoPwaFinanceiroSnapshotsAusentes(canon, coopId)) return true;
   if (!isAppDataWarm()) return true;
   return cooperadoPwaFichaSnapshotPrecisaRematerializar(canon, coopId);

@@ -74,30 +74,23 @@ export function cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(
   const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
   if (!coopId || !user.cooperadoId) return false;
   const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+  if (cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId)) {
+    return false;
+  }
   if (cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId)) return true;
   if (cooperadoPwaFinanceiroSnapshotsAusentes(cooperadoId, coopId)) {
-    if (cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId)) return true;
     const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, coopId);
-    if (paridade.valorLiquido > 0.01) return true;
+    if (paridade.valorLiquido > 0.01) return false;
+    return true;
   }
   const card = lerInicioCardFinanceiroExibicao(cooperadoId, coopId);
   const cardSemValor =
     !card?.display || !cooperadoMotorTemObrigacaoReceber(card.display);
   if (
     cardSemValor &&
-    (cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId) ||
-      cooperadoLeituraFinanceiraExibicao(data, cooperadoId, coopId).valorLiquido > 0.01)
-  ) {
-    return true;
-  }
-  if (
-    cardSemValor &&
     !cooperadoFinanceiroCardCacheTemValor(user) &&
     !cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId)
   ) {
-    return true;
-  }
-  if (cardSemValor && cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId)) {
     return true;
   }
   return cooperadoGaExibicaoFinanceiraAindaZerada(user);
