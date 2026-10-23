@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { resetResponsavelPainelIndexCache } from "@/services/responsavelPainelIndex";
+import { useRef } from "react";
 import { useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
 import { useResponsavelFilaConferencia } from "@/hooks/useResponsavelFilaConferencia";
 import {
   appDataParaConferirLeitura,
-  getRelatorioLancamentosEmAbertoDeLeituraConferir,
+  getRelatorioLancamentosEmAbertoResponsavel,
 } from "@/services/responsavelPainelIndex";
 import type { AppData } from "@/types";
 import type { LinhaPagarCooperadoEmAberto } from "@/services/relatorioService";
@@ -21,14 +20,9 @@ export type ConferirEmAbertoProjection = {
 
 const EMPTY_EM_ABERTO: ConferirEmAbertoProjection = { linhas: [], count: 0, total: 0 };
 
-type ConferirLeituraBundle = {
-  leitura: AppData;
-  emAberto: ConferirEmAbertoProjection;
-};
-
 /**
  * Hub de leitura da aba Conferir: uma foto, uma fila, um lastro.
- * A App só consome — não recalcula listas nem badges.
+ * Em aberto usa o relatório cacheado (sem reset ao trocar sub-aba).
  */
 export function useConferirProjection(opts: {
   coopId: string | undefined;
@@ -38,61 +32,48 @@ export function useConferirProjection(opts: {
   cooperadoId?: string;
   conferirModal?: boolean;
 }) {
-  const { coopId, vista, panelActive, isCooperado, cooperadoId, conferirModal } = opts;
-  const filaDetalhada = !isCooperado && (vista === "fila" || vista === "cooperado");
+  const { coopId, panelActive, isCooperado, cooperadoId, conferirModal } = opts;
+  const filaDetalhada = !isCooperado && (opts.vista === "fila" || opts.vista === "cooperado");
   const staffActive = panelActive && !isCooperado;
 
   const fila = useResponsavelFilaConferencia(coopId, isCooperado, filaDetalhada, panelActive);
 
-  const bundleRaw = useAppDataSelectorForDomainsWhenActive(
+  const dataLeituraRaw = useAppDataSelectorForDomainsWhenActive(
     staffActive,
     ["shell", "notas", "financeiro"],
-    (d): ConferirLeituraBundle => {
-      if (!coopId) {
-        return { leitura: d, emAberto: EMPTY_EM_ABERTO };
-      }
-      const leitura = appDataParaConferirLeitura(d, coopId);
-      if (conferirModal) {
-        return { leitura, emAberto: EMPTY_EM_ABERTO };
-      }
-      const linhas = getRelatorioLancamentosEmAbertoDeLeituraConferir(
-        leitura,
-        coopId,
-        cooperadoId
-      );
-      const emAberto: ConferirEmAbertoProjection = {
+    (d) => (coopId ? appDataParaConferirLeitura(d, coopId) : d),
+    [coopId]
+  );
+  const lastDataRef = useRef<AppData | null>(null);
+  if (dataLeituraRaw) lastDataRef.current = dataLeituraRaw;
+  const dataLeitura = dataLeituraRaw ?? lastDataRef.current;
+
+  const emAbertoRaw = useAppDataSelectorForDomainsWhenActive(
+    staffActive && Boolean(coopId) && !conferirModal,
+    ["financeiro", "notas"],
+    (d) => {
+      if (!coopId) return EMPTY_EM_ABERTO;
+      const linhas = getRelatorioLancamentosEmAbertoResponsavel(d, coopId, cooperadoId);
+      return {
         linhas,
         count: linhas.length,
         total: linhas.reduce((s, l) => s + l.total, 0),
       };
-      return { leitura, emAberto };
     },
     [coopId, cooperadoId, conferirModal]
   );
-
-  const lastBundleRef = useRef<ConferirLeituraBundle | null>(null);
-  if (bundleRaw) lastBundleRef.current = bundleRaw;
-  const bundle = bundleRaw ?? lastBundleRef.current;
-  const dataLeitura = bundle?.leitura ?? null;
-  const emAberto = bundle?.emAberto ?? EMPTY_EM_ABERTO;
-
-  const lastDataRef = useRef<AppData | null>(null);
-  if (dataLeitura) lastDataRef.current = dataLeitura;
-
-  useEffect(() => {
-    if (!staffActive || vista !== "aberto" || !coopId) return;
-    resetResponsavelPainelIndexCache();
-    lastBundleRef.current = null;
-  }, [staffActive, vista, coopId]);
+  const lastAbertoRef = useRef<ConferirEmAbertoProjection | null>(null);
+  if (emAbertoRaw) lastAbertoRef.current = emAbertoRaw;
+  const emAberto = emAbertoRaw ?? lastAbertoRef.current ?? EMPTY_EM_ABERTO;
 
   return {
     filaDetalhada,
-    dataLeitura: dataLeitura ?? lastDataRef.current,
+    dataLeitura,
     ...fila,
     fila,
     emAberto,
-    historico: { data: dataLeitura ?? lastDataRef.current },
-    correcoes: { data: dataLeitura ?? lastDataRef.current },
+    historico: { data: dataLeitura },
+    correcoes: { data: dataLeitura },
     totais: {
       fila: fila.filaNavCount,
       emAbertoCount: emAberto.count,

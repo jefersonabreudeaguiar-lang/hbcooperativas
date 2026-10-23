@@ -400,7 +400,10 @@ export function repararNomesEnvioNotasParaConferencia(data: AppData, cooperativa
   let changed = false;
   const notasPedido = (data.notasPedido ?? []).map((n) => {
     if (!notaPertenceCooperativa(data, n, cooperativaId)) return n;
-    if (!isNotaNaFilaConferenciaResponsavel(n.status)) return n;
+    const naFila = isNotaNaFilaConferenciaResponsavel(n.status);
+    const noHistoricoConferir =
+      n.status === "conferida" || n.status === "rejeitada" || n.status === "pago";
+    if (!naFila && !noHistoricoConferir) return n;
     if (nomeCooperadoSnapshotUtilizavel(n.cooperadoNomeSnapshot)) return n;
     const nome = getNomeEnvioEntregaNota(n, data, cooperativaId);
     if (nome === "Cooperado") return n;

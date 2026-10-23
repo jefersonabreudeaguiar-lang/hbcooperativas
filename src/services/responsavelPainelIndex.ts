@@ -3,10 +3,7 @@
  * Read-only; não altera lançamentos.
  */
 import type { AppData, Cooperado, NotaPedido, PagamentoCooperadoRegistro } from "@/types";
-import {
-  cooperadoPendentePagamentoResponsavel,
-  listarMesesEmAbertoPagamentoResponsavel,
-} from "@/services/cooperadoEntregasService";
+import { cooperadoPendentePagamentoResponsavel } from "@/services/cooperadoEntregasService";
 import {
   fichaPertenceCooperado,
   listCooperadosDaCooperativa,
@@ -102,6 +99,11 @@ function mergeCooperadosCadastroPainel(a: Cooperado[] | undefined, b: Cooperado[
 }
 
 let relatorioAbertoCache: RelatorioAbertoCache | null = null;
+let relatorioAbertoLatch: {
+  coopId: string;
+  pix: number;
+  linhas: LinhaPagarCooperadoEmAberto[];
+} | null = null;
 const conferirLeituraLatchByKey = new Map<string, AppData>();
 let conferirLeituraProjCache: { key: string; data: AppData } | null = null;
 
@@ -117,6 +119,7 @@ function garantirCacheDoBuildAtual(): void {
   painelCache = null;
   pagarProjCache = null;
   relatorioAbertoCache = null;
+  relatorioAbertoLatch = null;
   conferirLeituraLatchByKey.clear();
   conferirLeituraProjCache = null;
   conferirLatchBuild = APP_BUILD_VERSION;
@@ -547,13 +550,20 @@ export function appDataParaConferirLeitura(data: AppData, coopId?: string): AppD
   }
   const truth = getDataOperationalTruth();
   const merged = escolherSnapshotMaisCompleto(truth, data);
-  const alinhado = alinharFichaComPagamentosCooperativa(merged);
-  const comNomes = coopId
-    ? repararNomesEnvioNotasParaConferencia(alinhado, coopId)
-    : alinhado;
-  const out = aplicarLastroCompletenessConferir(comNomes, key);
-  conferirLeituraProjCache = { key: projKey, data: out };
-  return out;
+  const lkg = peekStaffGestaoLastGood();
+  const comCadastro = {
+    ...merged,
+    cooperados: mergeCooperadosCadastroPainel(
+      mergeCooperadosCadastroPainel(merged.cooperados, data.cooperados),
+      lkg?.cooperados
+    ),
+    notasPedido: mergeNotasPedidoParaPainel(merged.notasPedido, data.notasPedido),
+  };
+  const alinhado = alinharFichaComPagamentosCooperativa(comCadastro);
+  const out = aplicarLastroCompletenessConferir(alinhado, key);
+  const comNomes = coopId ? repararNomesEnvioNotasParaConferencia(out, coopId) : out;
+  conferirLeituraProjCache = { key: projKey, data: comNomes };
+  return comNomes;
 }
 
 /**
@@ -655,65 +665,17 @@ function recortarLinhaEmAbertoMesesSemPix(
   };
 }
 
-/** Mesma regra da gestão (Pagar/Início): mês quitado por PIX não entra no card Em aberto. */
-function recortarLinhaPelosMesesEmAbertoGestao(
-  linha: LinhaPagarCooperadoEmAberto,
-  data: AppData,
-  coopId: string
-): LinhaPagarCooperadoEmAberto | null {
-  const permitidos = new Set(
-    listarMesesEmAbertoPagamentoResponsavel(data, linha.cooperadoId, coopId)
-  );
-  if (permitidos.size === 0) return null;
-  const porMes = (linha.porMes ?? []).filter((m) => m.mes && permitidos.has(m.mes));
-  if (porMes.length === 0) return null;
-  const meses = porMes.map((m) => m.mes);
-  const total = round2(porMes.reduce((s, m) => s + m.total, 0));
-  if (total <= 0.005) return null;
-  return {
-    ...linha,
-    meses,
-    mesesLabel: formatMesesReferenciaRotulo(meses),
-    entregas: porMes.reduce((s, m) => s + m.entregas, 0),
-    total,
-    porMes,
-  };
-}
-
 /** Lastro sem valor já coberto por PIX — mês pago some; só fica o que ainda não foi pago. */
 function linhaEmAbertoSemValoresPagos(
   base: LinhaPagarCooperadoEmAberto,
   data: AppData,
-  coopId: string,
-  opts?: { gateMesesGestao?: boolean }
+  coopId: string
 ): LinhaPagarCooperadoEmAberto | null {
   const vivo = linhaEmAbertoSoFichaSemPix(base, data, coopId);
-  const recortada = vivo
-    ? recortarLinhaEmAbertoMesesSemPix(vivo, data, coopId)
-    : cooperadoEmAbertoPodeSair(data, base.cooperadoId, coopId, base.meses)
-      ? null
-      : base.total <= 0.005
-        ? null
-        : recortarLinhaEmAbertoMesesSemPix(base, data, coopId);
-  if (!recortada) return null;
-  const gate = opts?.gateMesesGestao ?? true;
-  if (!gate || !deveAplicarGateMesesEmAbertoGestao(data, coopId)) return recortada;
-  return recortarLinhaPelosMesesEmAbertoGestao(recortada, data, coopId);
-}
-
-/** Sync vazio não pode zerar lastro de linhas — gate só com ficha/PIX/nota conferida na cooperativa. */
-function deveAplicarGateMesesEmAbertoGestao(data: AppData, coopId: string): boolean {
-  if (countFichasNaoPagasCooperativa(data, coopId) > 0) return true;
-  for (const p of data.pagamentosCooperado ?? []) {
-    if (p.status !== "confirmado") continue;
-    if (p.cooperativaId && p.cooperativaId !== coopId) continue;
-    return true;
-  }
-  for (const n of data.notasPedido ?? []) {
-    if (n.cooperativaId !== coopId) continue;
-    if (n.status === "conferida" || n.status === "pago") return true;
-  }
-  return false;
+  if (vivo) return recortarLinhaEmAbertoMesesSemPix(vivo, data, coopId);
+  if (cooperadoEmAbertoPodeSair(data, base.cooperadoId, coopId, base.meses)) return null;
+  if (base.total <= 0.005) return null;
+  return recortarLinhaEmAbertoMesesSemPix(base, data, coopId);
 }
 
 /** Lastro só contra lista vazia. Valor já pago não volta; total vem só da ficha sem PIX. */
@@ -724,7 +686,7 @@ export function fundirLinhasEmAbertoEstavel(
   coopId: string
 ): LinhaPagarCooperadoEmAberto[] {
   const motorLimpo = motor
-    .map((l) => linhaEmAbertoSemValoresPagos(l, data, coopId, { gateMesesGestao: true }))
+    .map((l) => linhaEmAbertoSemValoresPagos(l, data, coopId))
     .filter((l): l is LinhaPagarCooperadoEmAberto => l !== null);
 
   if (anterior.length === 0) return motorLimpo;
@@ -737,7 +699,7 @@ export function fundirLinhasEmAbertoEstavel(
   for (const old of anterior) {
     if (byId.has(old.cooperadoId)) continue;
     if (cooperadoEmAbertoPodeSair(data, old.cooperadoId, coopId, old.meses)) continue;
-    const vivo = linhaEmAbertoSemValoresPagos(old, data, coopId, { gateMesesGestao: false });
+    const vivo = linhaEmAbertoSemValoresPagos(old, data, coopId);
     if (vivo) byId.set(old.cooperadoId, vivo);
   }
   return [...byId.values()].sort((a, b) => a.cooperado.localeCompare(b.cooperado, "pt-BR"));
@@ -791,26 +753,16 @@ function coletarFilaNotasConferir(data: AppData, coopId: string): NotaPedido[] {
   return filaNotas;
 }
 
-function buildPainelCache(data: AppData, live: AppData, coopId: string): PainelCache {
+function buildPainelCache(leitura: AppData, coopId: string): PainelCache {
   const evidencia = {
-    notasPedido: [...(live.notasPedido ?? []), ...(data.notasPedido ?? [])],
-    fichaCorrida: [...(live.fichaCorrida ?? []), ...(data.fichaCorrida ?? [])],
+    notasPedido: leitura.notasPedido ?? [],
+    fichaCorrida: leitura.fichaCorrida ?? [],
   };
-  const byId = new Map<string, NotaPedido>();
-  for (const n of coletarFilaNotasConferir(data, coopId)) {
-    if (notaResolvidaForaDaFilaConferir(evidencia, n.id)) continue;
-    byId.set(n.id, n);
-  }
-  for (const n of coletarFilaNotasConferir(live, coopId)) {
-    if (byId.has(n.id)) continue;
-    if (notaResolvidaForaDaFilaConferir(evidencia, n.id)) continue;
-    byId.set(n.id, n);
-  }
-  const filaNotas = [...byId.values()].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  const filaNotas = coletarFilaNotasConferir(leitura, coopId).filter(
+    (n) => !notaResolvidaForaDaFilaConferir(evidencia, n.id)
   );
 
-  const dataPagar = appDataParaLeituraFichaEmAbertoResponsavel(live, coopId);
+  const dataPagar = appDataParaLeituraFichaEmAbertoResponsavel(leitura, coopId);
   const candidatos = candidatosCooperadoPagamento(dataPagar, coopId);
   const cooperadosPagar: Cooperado[] = [];
   if (candidatos.size > 0) {
@@ -839,7 +791,8 @@ function getPainelCache(data: AppData, coopId: string): PainelCache {
   if (painelCache && painelCache.revision === revision && painelCache.coopId === coopId) {
     return painelCache;
   }
-  painelCache = buildPainelCache(appDataParaConferirLeitura(data, coopId), data, coopId);
+  const leitura = appDataParaConferirLeitura(data, coopId);
+  painelCache = buildPainelCache(leitura, coopId);
   return painelCache;
 }
 
@@ -991,7 +944,15 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
     return relatorioAbertoCache.linhas;
   }
   const motor = motorEmAbertoComNotasSemFicha(dataAberto, coopId);
-  const linhas = fundirLinhasEmAbertoEstavel([], motor, dataAberto, coopId);
+  const anterior =
+    motor.length === 0 &&
+    relatorioAbertoLatch &&
+    relatorioAbertoLatch.coopId === coopId &&
+    relatorioAbertoLatch.pix === lastro.pix
+      ? relatorioAbertoLatch.linhas
+      : [];
+  const linhas = fundirLinhasEmAbertoEstavel(anterior, motor, dataAberto, coopId);
+  relatorioAbertoLatch = { coopId, pix: lastro.pix, linhas };
   relatorioAbertoCache = {
     revision,
     coopId,
@@ -1013,6 +974,7 @@ export function resetResponsavelPainelIndexCache(): void {
   painelCache = null;
   pagarProjCache = null;
   relatorioAbertoCache = null;
+  relatorioAbertoLatch = null;
   conferirLeituraLatchByKey.clear();
   conferirLeituraProjCache = null;
   conferirLatchBuild = APP_BUILD_VERSION;
