@@ -4,14 +4,13 @@
  */
 import { scheduleStaffPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
 import { reloadStaffGestaoPersistAfterFirstPaint } from "@/services/dataStore";
-import type { SyncTier } from "@/lib/performance/syncTier";
 import { requestSyncTier } from "@/services/syncRequest";
 import { staffGestaoDesktopWarmupSyncPaused } from "@/lib/staff/staffGestaoDesktopWarmup";
 import { staffResponsavelPausaSyncPesado } from "@/lib/staff/staffResponsavelPausaSyncPesado";
 import { staffTabSwitchQuiescenceActive } from "@/lib/staff/staffTabSwitchQuiescence";
 
 const MIN_GAP_MS = 45_000;
-const OPERACIONAL_HYDRATE_DELAY_MS = 8_000;
+const OPERACIONAL_HYDRATE_DELAY_MS = 20_000;
 
 let lastPath = "";
 let lastAt = 0;
@@ -27,11 +26,6 @@ function isStaffGestaoTabPath(pathname: string): boolean {
     p.startsWith("/ficha-corrida") ||
     p.startsWith("/livro-caixa")
   );
-}
-
-function lightTierForTab(pathname: string): SyncTier {
-  if (pathname.startsWith("/livro-caixa")) return "pulse";
-  return "notas_delta";
 }
 
 function clearOperacionalHydrateTimer(): void {
@@ -88,13 +82,13 @@ export function scheduleStaffResponsavelTabEnterSync(pathname: string): void {
       return;
     }
 
-    if (!sessionOperacionalHydrateDone && !staffGestaoDesktopWarmupSyncPaused()) {
+    if (
+      path === "/dashboard" &&
+      !sessionOperacionalHydrateDone &&
+      !staffGestaoDesktopWarmupSyncPaused()
+    ) {
       scheduleSessionOperacionalHydrate("deferred");
     }
-
-    if (staffGestaoDesktopWarmupSyncPaused()) return;
-
-    requestSyncTier(lightTierForTab(path), { force: false });
   });
 }
 

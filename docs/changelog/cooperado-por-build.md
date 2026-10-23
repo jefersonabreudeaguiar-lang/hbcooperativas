@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v580
+
+- **Responsável (fluidez):** reconciliação do livro só com Início visível + throttle; troca de aba **não** dispara sync — números frescos via **Atualizar agora** ou hidratação única no Início.
+
 ## v579
 
 - **Deploy:** corrige typecheck do timer no sync por aba (v578 não chegou à Vercel por isso).

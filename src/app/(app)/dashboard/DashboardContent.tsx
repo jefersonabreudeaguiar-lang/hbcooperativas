@@ -669,7 +669,11 @@ function AdminDashboard() {
       return false;
     }
   }, [navUser?.id, navUser?.role, navUser?.cooperativaId, adminDataRevision]);
-  useReconciliarLivroCaixaGestao(meta?.coopId, Boolean(navUser && meta?.coopId));
+  const inicioTabActive = useCooperadoTabPanelActive("/dashboard");
+  useReconciliarLivroCaixaGestao(
+    meta?.coopId,
+    Boolean(navUser && meta?.coopId && inicioTabActive)
+  );
 
   const dataRevision = adminDataRevision;
   const deferredRevision = useDeferredValue(dataRevision ?? -1);
