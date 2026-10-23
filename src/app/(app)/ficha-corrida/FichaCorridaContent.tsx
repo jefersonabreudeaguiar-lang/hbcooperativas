@@ -1943,12 +1943,16 @@ function FichaCorridaPageInner() {
     setReciboSucessoOpen(true);
   };
 
-  const syncPagamentoOperacional = async () => {
+  const syncPagamentoOperacional = async (snapshot?: AppData) => {
     if (!user || !coopId) return;
-    const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
+    const fonte = snapshot ?? getData();
+    const cnpj = await resolveCooperativaCnpj(fonte, coopId, user);
     if (!cnpj) return;
     clearOperacionalPushFingerprint(cnpj, true);
-    await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true, forceOperacionalPush: true });
+    await pushOperacionalToCloud(cnpj, fonte, coopId, {
+      authoritative: true,
+      forceOperacionalPush: true,
+    });
     requestAppSync();
   };
 
@@ -1989,9 +1993,9 @@ function FichaCorridaPageInner() {
   const handleVerificarReciboAssinado = (pagamento: PagamentoCooperadoRegistro) => {
     if (!user || !coopId || !data) return;
     setAssinaturaBusyId(pagamento.id);
-    updateData((d) => {
-      const next = marcarReciboPagamentoVerificadoResponsavel(d, pagamento.id, user.id, user.name);
-      return addAuditEntry(next, {
+    const next = updateData((d) => {
+      const marcado = marcarReciboPagamentoVerificadoResponsavel(d, pagamento.id, user.id, user.name);
+      return addAuditEntry(marcado, {
         entityType: "pagamento",
         entityId: pagamento.id,
         action: "aprovar",
@@ -2000,7 +2004,7 @@ function FichaCorridaPageInner() {
         changes: "Recibo assinado conferido pelo responsável",
       });
     });
-    void syncPagamentoOperacional().finally(() => setAssinaturaBusyId(null));
+    void syncPagamentoOperacional(next).finally(() => setAssinaturaBusyId(null));
   };
 
   const reciboAtual = pagamentoConfirmado ?? pagamentoConfirmadoMes;
