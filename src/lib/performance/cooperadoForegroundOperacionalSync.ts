@@ -115,10 +115,10 @@ export async function evaluateCooperadoForegroundOperacionalPull(
       isCooperadoMobileGaPromoted(gaUser) &&
       cooperadoGaExibicaoFinanceiraAindaZerada(gaUser)
     ) {
-      if (isAppDataWarm() && cooperadoId && cooperativaId) {
+      if (isAppDataWarm() && opts.cooperadoId && opts.cooperativaId) {
         const dataGa = getData();
-        const canon = resolverCooperadoIdCanonico(dataGa, cooperadoId, cooperativaId);
-        if (cooperadoTemDadosFinanceirosMinimos(dataGa, canon, cooperativaId)) {
+        const canon = resolverCooperadoIdCanonico(dataGa, opts.cooperadoId, opts.cooperativaId);
+        if (cooperadoTemDadosFinanceirosMinimos(dataGa, canon, opts.cooperativaId)) {
           rematerializarCooperadoPwaSnapshotsSeNecessario(gaUser);
           cooperadoRematerializarFinanceiroLocalSePossivel(gaUser);
           return null;
