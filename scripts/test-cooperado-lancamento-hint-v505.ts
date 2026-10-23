@@ -35,7 +35,7 @@ assert.match(watch, /HINT_QUARANTINE_MS/);
 assert.match(watch, /syncingRef\.current/);
 assert.doesNotMatch(watch, /\[cnpj, cooperadoId, cooperativaId, enabled, syncing\]/);
 assert.match(watch, /fetchMyCooperadoLancamentoHint/);
-assert.match(watch, /runCooperadoMessengerOperacionalLightPull/);
+assert.match(watch, /runCooperadoLancamentoHintPull/);
 
 const staff = read("src/app/(app)/notas-pedido/staff/NotasPedidoStaffResponsavelApp.tsx");
 assert.match(staff, /publishCooperadoLancamentoHint/);

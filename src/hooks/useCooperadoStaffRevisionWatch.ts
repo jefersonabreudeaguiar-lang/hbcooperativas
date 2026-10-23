@@ -6,7 +6,7 @@ import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooper
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { cooperadoPwaSuppressForegroundStaleCheck } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
 import { fetchMyCooperadoLancamentoHint } from "@/lib/cooperado/cooperadoLancamentoHint";
-import { runCooperadoMessengerOperacionalLightPull } from "@/lib/cooperado/cooperadoMessengerOperacionalLightPull";
+import { runCooperadoLancamentoHintPull } from "@/lib/cooperado/cooperadoLancamentoHintPull";
 import { watchBicCooperativaCloudRevision } from "@/lib/bic/bicRevisionWatch";
 import { getSession } from "@/services/dataStore";
 
@@ -150,11 +150,12 @@ export function useCooperadoStaffRevisionWatch({
           }
           return;
         }
-        const ok = await runCooperadoMessengerOperacionalLightPull({
+        const ok = await runCooperadoLancamentoHintPull({
           cnpj: digits,
           cooperativaId,
           user: session,
           remote,
+          notaId: hint.notaId,
         });
         if (!ok) {
           if (Date.now() - pendingHintFirstSeenAtRef.current >= HINT_QUARANTINE_MS) {

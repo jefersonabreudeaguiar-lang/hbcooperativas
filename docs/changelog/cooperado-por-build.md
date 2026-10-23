@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v550
+
+- **Cooperado (Etapa 2):** hint de lançamento do responsável puxa **notas + operacional** — A receber atualiza sem depender só do operacional leve.
+
 ## v549
 
 - **Cooperado (Etapa 1):** garantia ao voltar do PWA não dispara `operacional_full` só por snapshot divergente; recovery na nuvem só se faltar fatia local de verdade.
