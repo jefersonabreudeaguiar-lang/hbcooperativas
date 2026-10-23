@@ -30,7 +30,7 @@ assert.match(nuvem, /dispararHintCooperadosAfetados/);
 assert.match(nuvem, /publishCooperadoLancamentoHint/);
 
 const watch = read("src/hooks/useCooperadoStaffRevisionWatch.ts");
-assert.match(watch, /HINT_POLL_MS = 4_000/);
+assert.match(watch, /HINT_POLL_MS = 4_000|hintBootTimer/);
 assert.match(watch, /fetchMyCooperadoLancamentoHint/);
 assert.match(watch, /runCooperadoMessengerOperacionalLightPull/);
 assert.match(watch, /MIN_GAP_HINT_PROCESS_MS/);

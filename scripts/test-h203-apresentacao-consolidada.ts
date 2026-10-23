@@ -115,6 +115,16 @@ assert.equal(
 );
 assert.equal(
   cooperadoApresentacaoFinanceiraConsolidada({
+    role: "cooperado",
+    syncing: true,
+    cooperadoPagamentosHydrated: false,
+    exibirComDadosLocais: true,
+  }),
+  true,
+  "cache local não deve travar UI durante sync"
+);
+assert.equal(
+  cooperadoApresentacaoFinanceiraConsolidada({
     role: "responsavel",
     syncing: true,
     cooperadoPagamentosHydrated: false,

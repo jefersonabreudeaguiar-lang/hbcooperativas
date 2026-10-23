@@ -75,7 +75,6 @@ export function useCooperadoStaffRevisionWatch({
 
     let cancelled = false;
     let intervalId = 0;
-    let hintIntervalId = 0;
 
     const messenger = isCooperadoPwaMessengerMode();
     const pollMs = messenger ? REVISION_POLL_MESSENGER_MS : REVISION_POLL_MS;
@@ -188,8 +187,7 @@ export function useCooperadoStaffRevisionWatch({
     const bootDelay = messenger ? 90_000 : 25_000;
     const bootTimer = window.setTimeout(() => void check(true), bootDelay);
     intervalId = window.setInterval(() => void check(false), pollMs);
-    hintIntervalId = window.setInterval(() => void checkHint(), HINT_POLL_MS);
-    void checkHint();
+    const hintBootTimer = window.setTimeout(() => void checkHint(), 20_000);
     document.addEventListener("visibilitychange", onVisible);
 
     return () => {
@@ -197,7 +195,7 @@ export function useCooperadoStaffRevisionWatch({
       document.removeEventListener("visibilitychange", onVisible);
       window.clearTimeout(bootTimer);
       if (intervalId) window.clearInterval(intervalId);
-      if (hintIntervalId) window.clearInterval(hintIntervalId);
+      window.clearTimeout(hintBootTimer);
     };
   }, [cnpj, cooperadoId, cooperativaId, enabled]);
 }
