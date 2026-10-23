@@ -8,7 +8,17 @@ import { requestSyncTier } from "@/services/syncRequest";
 import { countNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
 import { getCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
+import {
+  requestStaffGestaoOperacionalFullSePreciso,
+  scheduleStaffGestaoPainelHidratacaoSeVazio,
+  staffGestaoPrecisaHidratarOperacional,
+  staffGestaoRestaurarLastroSeLivePobre,
+} from "@/lib/staff/staffGestaoPainelRefresh";
 import { staffGestaoDesktopWarmupSyncPaused } from "@/lib/staff/staffGestaoDesktopWarmup";
+import {
+  staffGestaoTemFichaOuNotaLocal,
+  staffLocalOperacionalVazio,
+} from "@/lib/staff/staffOperacionalColdHydrate";
 import { staffResponsavelPausaSyncPesado } from "@/lib/staff/staffResponsavelPausaSyncPesado";
 import { staffTabSwitchQuiescenceActive } from "@/lib/staff/staffTabSwitchQuiescence";
 
@@ -67,20 +77,28 @@ function clearOperacionalHydrateTimer(): void {
 }
 
 function runSessionOperacionalHydratePull(): void {
-  if (sessionOperacionalHydrateDone) return;
   if (staffTabSwitchQuiescenceActive() || staffResponsavelPausaSyncPesado()) {
     operacionalHydrateTimer = window.setTimeout(runSessionOperacionalHydratePull, 5_000);
     return;
   }
-  sessionOperacionalHydrateDone = true;
   scheduleStaffGestaoPersistReloadAfterPaint();
-  const tier = staffGestaoDesktopWarmupSyncPaused() ? "financeiro_delta" : "operacional_full";
-  requestSyncTier(tier, { force: true, userInitiated: true });
+  const data = isAppDataWarm() ? getData() : null;
+  const user = getSession();
+  const coopId =
+    user && data ? getUserCooperativaId(user, data) ?? user.cooperativaId : user?.cooperativaId;
+  const precisa =
+    !data ||
+    staffLocalOperacionalVazio(data, coopId) ||
+    !staffGestaoTemFichaOuNotaLocal(data, coopId) ||
+    staffGestaoPrecisaHidratarOperacional();
+  if (sessionOperacionalHydrateDone && !precisa) return;
+  requestSyncTier("operacional_full", { force: true, userInitiated: true });
+  if (!precisa) sessionOperacionalHydrateDone = true;
 }
 
 /** Uma vez por sessão: merge local + operacional/notas (após paint e fora de quiescence). */
 function scheduleSessionOperacionalHydrate(reason: "dashboard-warmup" | "deferred"): void {
-  if (sessionOperacionalHydrateDone) return;
+  if (sessionOperacionalHydrateDone && !staffGestaoPrecisaHidratarOperacional()) return;
 
   if (reason === "dashboard-warmup") {
     scheduleStaffGestaoPersistReloadAfterPaint();
@@ -108,9 +126,14 @@ export function scheduleStaffResponsavelTabEnterSync(pathname: string): void {
   lastAt = now;
 
   scheduleStaffPostInteractiveTask(() => {
+    scheduleStaffGestaoPainelHidratacaoSeVazio();
+
     /** notas_delta é leve — não pode ficar atrás da quiescence de troca de aba (S2 Conferir). */
     if (path.startsWith("/notas-pedido")) {
-      pullConferirNotasSeFilaVazia();
+      void staffGestaoRestaurarLastroSeLivePobre().then(() => {
+        requestStaffGestaoOperacionalFullSePreciso();
+        pullConferirNotasSeFilaVazia();
+      });
       return;
     }
 

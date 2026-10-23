@@ -25,6 +25,12 @@ assert.match(tab, /OPERACIONAL_HYDRATE_DELAY_MS/);
 assert.match(tab, /dashboardInicioHydrateDone/);
 assert.match(tab, /inicioDuranteWarmupPc/);
 assert.match(tab, /scheduleStaffGestaoPersistReloadAfterPaint/);
+assert.match(tab, /scheduleStaffGestaoPainelHidratacaoSeVazio/);
+assert.match(tab, /staffGestaoRestaurarLastroSeLivePobre/);
+assert.doesNotMatch(
+  tab,
+  /runSessionOperacionalHydratePull[\s\S]*?if \(sessionOperacionalHydrateDone\) return/
+);
 assert.match(sync, /reloadStaffGestaoPersistAfterFirstPaint\(\)/);
 assert.match(layout, /StaffGestaoTabEnterSync/);
 
