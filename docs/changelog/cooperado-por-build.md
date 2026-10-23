@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v563
+
+- **Cooperado:** depois do “Olá, Orlando” o Início monta por baixo e o splash some quando o app (header + main) aparece — qualquer cooperado com sessão no aparelho, não só piloto GA.
+
 ## v562
 
 - **Cooperado (app):** corrige tela branca na entrada — o splash só some quando o Início monta (header/main); cooperado GA abre o painel enquanto o auth termina; sessão aninhada no localStorage volta a pintar o Olá.

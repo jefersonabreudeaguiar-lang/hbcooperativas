@@ -13,6 +13,12 @@ import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilo
 import { evaluateResponsavelIdentidade } from "@/lib/responsavel/responsavelIdentidade";
 import { isMobileCooperativaApp } from "@/lib/mobileExperience";
 
+function cooperadoSessionInStorage(): boolean {
+  if (typeof window === "undefined") return false;
+  const session = getSession();
+  return Boolean(session && session.role === "cooperado");
+}
+
 function cooperadoGaSessionInStorage(): boolean {
   if (typeof window === "undefined") return false;
   const session = getSession();
@@ -112,7 +118,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }, [loading, user?.id, user?.role, profileRepairDone]);
 
   const sessionForPaint = getSession();
-  const gaCoopBootstrap = cooperadoGaSessionInStorage();
+  const coopBootstrap = cooperadoSessionInStorage();
   const cooperadoPaintWhileAuth =
     Boolean(user) &&
     user!.role === "cooperado" &&
@@ -120,7 +126,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       cooperadoInstantShellReady(sessionForPaint) ||
       cooperadoPwaInstantPaintReady(user!));
 
-  if (loading && (gaCoopBootstrap || (user && cooperadoPaintWhileAuth && profileRepairDone))) {
+  if (loading && (coopBootstrap || (user && cooperadoPaintWhileAuth && profileRepairDone))) {
     return <>{children}</>;
   }
 

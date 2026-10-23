@@ -20,7 +20,9 @@ assert.doesNotMatch(dismiss, /useLayoutEffect\(\(\) => \{\s*dismissCooperadoBoot
 assert.match(auth, /path === "\/login"/);
 assert.doesNotMatch(auth, /cooperadoPwaInstantPaintReady\(session\)[\s\S]{0,120}dismissCooperadoBootShell/);
 assert.match(route, /cooperadoGaSessionInStorage/);
-assert.match(route, /loading && \(gaCoopBootstrap/);
+assert.match(route, /cooperadoSessionInStorage/);
+assert.match(route, /loading && \(coopBootstrap/);
+assert.match(dismiss, /if \(header && main\) return true/);
 assert.doesNotMatch(route, /dismissCooperadoBootShell/);
 assert.match(boot, /function sessUser/);
 assert.doesNotMatch(boot, /setTimeout\(hide,ms\)/);

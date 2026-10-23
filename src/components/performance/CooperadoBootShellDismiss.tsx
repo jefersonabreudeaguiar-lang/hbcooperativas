@@ -9,11 +9,7 @@ function painelJaTemConteudo(): boolean {
   if (document.querySelector("[data-cooperado-tab-panel-active='1']")) return true;
   const header = document.querySelector("header");
   const main = document.querySelector("main");
-  if (header && main) {
-    const text = (main.innerText ?? "").replace(/\s+/g, " ").trim();
-    if (text.length > 24) return true;
-    if (main.querySelector("button, a, [role='tab'], nav")) return true;
-  }
+  if (header && main) return true;
   const shellMode = document.documentElement.getAttribute("data-hb-shell-mode");
   return Boolean(shellMode && shellMode !== "loading");
 }
