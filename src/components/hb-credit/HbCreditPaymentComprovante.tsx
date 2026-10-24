@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Loader2, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import type { HbCreditPaymentReceipt } from "@/lib/hb-credit/hbCreditPaymentReceipt";
 import {
-  renderHbCreditReceiptPngBlob,
-  shareHbCreditReceiptPng,
+  ensureHbCreditReceiptShareRuntime,
+  isHbCreditReceiptShareStaleError,
+  shareHbCreditPaymentReceipt,
 } from "@/lib/hb-credit/hbCreditReceiptShareImage";
 import { hbCooperadoPrimaryBtn } from "@/lib/hb-credit/hbCreditCooperadoUi";
 import { cn } from "@/utils/format";
@@ -21,6 +22,10 @@ type Props = {
 export function HbCreditPaymentComprovante({ receipt, onConcluir, className }: Props) {
   const [sharing, setSharing] = useState(false);
 
+  useEffect(() => {
+    void ensureHbCreditReceiptShareRuntime();
+  }, []);
+
   const paidLabel = useMemo(
     () => new Date(receipt.paidAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }),
     [receipt.paidAt]
@@ -30,13 +35,17 @@ export function HbCreditPaymentComprovante({ receipt, onConcluir, className }: P
     if (sharing) return;
     setSharing(true);
     try {
-      const blob = await renderHbCreditReceiptPngBlob(receipt);
-      const mode = await shareHbCreditReceiptPng(blob, receipt.receiptCode);
+      const mode = await shareHbCreditPaymentReceipt(receipt);
       if (mode === "downloaded") {
         alert("Imagem do comprovante salva. Envie pelo WhatsApp ou galeria.");
       }
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return;
+      const msg = e instanceof Error ? e.message : "";
+      if (isHbCreditReceiptShareStaleError(msg)) {
+        alert("O app estava desatualizado. Feche e abra de novo; na próxima vez a imagem deve sair normalmente.");
+        return;
+      }
       alert(e instanceof Error ? e.message : "Não foi possível compartilhar a imagem.");
     } finally {
       setSharing(false);

@@ -1,173 +1,105 @@
-/** Gera PNG do comprovante HB para compartilhar (Canvas — evita oklab/oklch do Tailwind no html2canvas). */
-
 import type { HbCreditPaymentReceipt } from "@/lib/hb-credit/hbCreditPaymentReceipt";
-import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
+import { formatHbCreditReceiptShareText } from "@/lib/hb-credit/hbCreditPaymentReceipt";
+import {
+  HB_CREDIT_RECEIPT_SHARE_IMPL,
+  buildHbCreditReceiptSvg,
+  hbCreditReceiptSvgDimensions,
+} from "@/lib/hb-credit/hbCreditReceiptSvg";
+import {
+  fetchOfficialClientRelease,
+  requestManualCooperadoReleaseUpgrade,
+} from "@/lib/pwa/fetchOfficialClientRelease";
+import {
+  alignClientRuntimeToRelease,
+  collectLoadedDeploymentIdsFromDom,
+  evaluateClientReleaseAlignment,
+  getEmbeddedClientRelease,
+  getPageEmbeddedReleaseFromDom,
+  releaseFingerprint,
+} from "@/lib/pwa/clientRelease";
 
-const CARD_W = 360;
-const PAD = 22;
 const SCALE = 2;
 
-function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
-  const words = text.split(/\s+/).filter(Boolean);
-  if (!words.length) return [""];
-  const lines: string[] = [];
-  let line = words[0];
-  for (let i = 1; i < words.length; i++) {
-    const test = `${line} ${words[i]}`;
-    if (ctx.measureText(test).width <= maxWidth) line = test;
-    else {
-      lines.push(line);
-      line = words[i];
-    }
-  }
-  lines.push(line);
-  return lines;
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Não foi possível montar a imagem do comprovante."));
+    img.src = url;
+  });
 }
 
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number
-) {
-  const rr = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + rr, y);
-  ctx.arcTo(x + w, y, x + w, y + h, rr);
-  ctx.arcTo(x + w, y + h, x, y + h, rr);
-  ctx.arcTo(x, y + h, x, y, rr);
-  ctx.arcTo(x, y, x + w, y, rr);
-  ctx.closePath();
-}
-
-/** Comprovante em PNG — cores só hex/rgb (compatível com qualquer share). */
-export async function renderHbCreditReceiptPngBlob(receipt: HbCreditPaymentReceipt): Promise<Blob> {
+async function rasterizeSvgToPngBlob(svg: string, width: number, height: number): Promise<Blob> {
   if (typeof document === "undefined") {
     throw new Error("Comprovante em imagem só no navegador.");
   }
+  const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+  try {
+    const img = await loadImage(url);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(width * SCALE);
+    canvas.height = Math.round(height * SCALE);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas indisponível.");
+    ctx.scale(SCALE, SCALE);
+    ctx.fillStyle = "#ecfdf5";
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(img, 0, 0, width, height);
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((b) => resolve(b), "image/png", 1);
+    });
+    if (!blob) throw new Error("Não foi possível gerar a imagem do comprovante.");
+    return blob;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
-  const paidLabel = new Date(receipt.paidAt).toLocaleString("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
+/** Garante bundle atual antes de compartilhar (PWA com chunk antigo + html2canvas). */
+export async function ensureHbCreditReceiptShareRuntime(): Promise<void> {
+  if (typeof window === "undefined") return;
+  const canonical = await fetchOfficialClientRelease({ bypassCache: true });
+  if (!canonical) return;
+
+  const pageRelease = getPageEmbeddedReleaseFromDom();
+  const loaded = collectLoadedDeploymentIdsFromDom();
+  const decision = evaluateClientReleaseAlignment({
+    canonical,
+    pageRelease,
+    loadedDeploymentIds: loaded,
   });
-  const valor = formatCentsBRL(receipt.amountCents);
-
-  type Row = { label: string; value: string; mono?: boolean; highlight?: boolean };
-  const rows: Row[] = [
-    { label: "Beneficiário", value: receipt.parceiroNome },
-    { label: "Pagador", value: receipt.cooperadoNome },
-    { label: "Forma", value: "HB Crédito" },
-    { label: "Data e hora", value: paidLabel },
-    { label: "Comprovante", value: receipt.receiptCode, mono: true },
-    { label: "Transação", value: receipt.transacaoId, mono: true },
-  ];
-  if (typeof receipt.saldoAposCents === "number") {
-    rows.push({
-      label: "Saldo HB após",
-      value: formatCentsBRL(receipt.saldoAposCents),
-      highlight: true,
+  if (decision.action === "align") {
+    await alignClientRuntimeToRelease(`hb_receipt_share:${decision.reason}`, canonical.deploymentId, {
+      hard: true,
+      urgentUpgrade: true,
+      targetBuild: canonical.build,
+      targetFingerprint: releaseFingerprint(canonical),
     });
   }
 
-  const measure = document.createElement("canvas").getContext("2d");
-  if (!measure) throw new Error("Canvas indisponível.");
-  measure.font = "13px system-ui, -apple-system, Segoe UI, sans-serif";
-  const valueMaxW = CARD_W - PAD * 2 - 110;
-  let bodyH = 0;
-  for (const row of rows) {
-    measure.font = row.mono
-      ? "11px ui-monospace, SFMono-Regular, Menlo, monospace"
-      : "13px system-ui, -apple-system, Segoe UI, sans-serif";
-    const lines = wrapText(measure, row.value, valueMaxW);
-    bodyH += 14 + lines.length * (row.mono ? 15 : 17) + 10;
+  const embedded = getEmbeddedClientRelease();
+  if (embedded.build > 0 && embedded.build < canonical.build) {
+    await alignClientRuntimeToRelease("hb_receipt_share:embedded_behind", canonical.deploymentId, {
+      hard: true,
+      urgentUpgrade: true,
+      targetBuild: canonical.build,
+      targetFingerprint: releaseFingerprint(canonical),
+    });
   }
-  const headerH = 128;
-  const footerH = 44;
-  const cardH = headerH + bodyH + footerH;
+}
 
-  const canvas = document.createElement("canvas");
-  canvas.width = CARD_W * SCALE;
-  canvas.height = cardH * SCALE;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas indisponível.");
-  ctx.scale(SCALE, SCALE);
+export function isHbCreditReceiptShareStaleError(message: string): boolean {
+  return /oklab|oklch|html2canvas|unsupported color function/i.test(message);
+}
 
-  ctx.fillStyle = "#ecfdf5";
-  ctx.fillRect(0, 0, CARD_W, cardH);
-
-  roundRect(ctx, 0, 0, CARD_W, cardH, 24);
-  ctx.save();
-  ctx.clip();
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, CARD_W, cardH);
-
-  const grd = ctx.createLinearGradient(0, 0, CARD_W, headerH);
-  grd.addColorStop(0, "#047857");
-  grd.addColorStop(0.5, "#15803d");
-  grd.addColorStop(1, "#065f46");
-  ctx.fillStyle = grd;
-  ctx.fillRect(0, 0, CARD_W, headerH);
-
-  ctx.fillStyle = "rgba(209, 250, 229, 0.95)";
-  ctx.font = "600 10px system-ui, -apple-system, Segoe UI, sans-serif";
-  ctx.fillText("HB CRÉDITOS", PAD, 28);
-
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "600 18px system-ui, -apple-system, Segoe UI, sans-serif";
-  ctx.fillText("Pagamento realizado", PAD, 54);
-
-  ctx.font = "700 34px system-ui, -apple-system, Segoe UI, sans-serif";
-  ctx.fillText(valor, PAD, 98);
-
-  let y = headerH + 8;
-  for (const row of rows) {
-    ctx.strokeStyle = "#f3f4f6";
-    ctx.beginPath();
-    ctx.moveTo(PAD, y);
-    ctx.lineTo(CARD_W - PAD, y);
-    ctx.stroke();
-
-    ctx.fillStyle = "#6b7280";
-    ctx.font = "13px system-ui, -apple-system, Segoe UI, sans-serif";
-    ctx.fillText(row.label, PAD, y + 22);
-
-    ctx.fillStyle = row.highlight ? "#047857" : "#111827";
-    ctx.font = row.mono
-      ? "600 11px ui-monospace, SFMono-Regular, Menlo, monospace"
-      : "600 13px system-ui, -apple-system, Segoe UI, sans-serif";
-    const lines = wrapText(ctx, row.value, valueMaxW);
-    let vy = y + 22;
-    for (const line of lines) {
-      ctx.fillText(line, CARD_W - PAD - ctx.measureText(line).width, vy);
-      vy += row.mono ? 15 : 17;
-    }
-    y += Math.max(44, 14 + lines.length * (row.mono ? 15 : 17) + 10);
+/** Comprovante em PNG — SVG + rasterização (sem captura do DOM). */
+export async function renderHbCreditReceiptPngBlob(receipt: HbCreditPaymentReceipt): Promise<Blob> {
+  if (HB_CREDIT_RECEIPT_SHARE_IMPL < 4) {
+    throw new Error("Atualize o app para compartilhar o comprovante.");
   }
-
-  ctx.strokeStyle = "#f3f4f6";
-  ctx.beginPath();
-  ctx.moveTo(PAD, y);
-  ctx.lineTo(CARD_W - PAD, y);
-  ctx.stroke();
-
-  ctx.fillStyle = "#6b7280";
-  ctx.font = "11px system-ui, -apple-system, Segoe UI, sans-serif";
-  const foot = "O mercado foi notificado. Guarde este comprovante.";
-  ctx.fillText(foot, (CARD_W - ctx.measureText(foot).width) / 2, y + 28);
-
-  ctx.restore();
-  ctx.strokeStyle = "#a7f3d0";
-  ctx.lineWidth = 2;
-  roundRect(ctx, 1, 1, CARD_W - 2, cardH - 2, 24);
-  ctx.stroke();
-
-  const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob((b) => resolve(b), "image/png", 1);
-  });
-  if (!blob) throw new Error("Não foi possível gerar a imagem do comprovante.");
-  return blob;
+  const svg = buildHbCreditReceiptSvg(receipt);
+  const { width, height } = hbCreditReceiptSvgDimensions(receipt);
+  return rasterizeSvgToPngBlob(svg, width, height);
 }
 
 export function hbCreditReceiptPngFileName(receiptCode: string): string {
@@ -175,7 +107,29 @@ export function hbCreditReceiptPngFileName(receiptCode: string): string {
   return `hb-credit-${safe}.png`;
 }
 
-export async function shareHbCreditReceiptPng(blob: Blob, receiptCode: string): Promise<"shared" | "downloaded"> {
+async function shareReceiptAsText(receipt: HbCreditPaymentReceipt): Promise<"shared"> {
+  const text = formatHbCreditReceiptShareText(receipt);
+  if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+    await navigator.share({ title: "Comprovante HB Créditos", text });
+    return "shared";
+  }
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = hbCreditReceiptPngFileName(receipt.receiptCode).replace(/\.png$/, ".txt");
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+  return "shared";
+}
+
+export async function shareHbCreditReceiptPng(
+  blob: Blob,
+  receiptCode: string,
+  receipt?: HbCreditPaymentReceipt
+): Promise<"shared" | "downloaded"> {
   const fileName = hbCreditReceiptPngFileName(receiptCode);
   const file = new File([blob], fileName, { type: "image/png" });
 
@@ -190,6 +144,10 @@ export async function shareHbCreditReceiptPng(blob: Blob, receiptCode: string): 
       return "shared";
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") throw e;
+      if (receipt) {
+        await shareReceiptAsText(receipt);
+        return "shared";
+      }
     }
   }
 
@@ -203,4 +161,21 @@ export async function shareHbCreditReceiptPng(blob: Blob, receiptCode: string): 
   anchor.remove();
   URL.revokeObjectURL(url);
   return "downloaded";
+}
+
+/** Compartilhar comprovante com recuperação de PWA desatualizado. */
+export async function shareHbCreditPaymentReceipt(receipt: HbCreditPaymentReceipt): Promise<"shared" | "downloaded"> {
+  await ensureHbCreditReceiptShareRuntime();
+  try {
+    const blob = await renderHbCreditReceiptPngBlob(receipt);
+    return await shareHbCreditReceiptPng(blob, receipt.receiptCode, receipt);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (isHbCreditReceiptShareStaleError(msg)) {
+      const upgraded = await requestManualCooperadoReleaseUpgrade();
+      if (upgraded) throw new DOMException("Atualizando app…", "AbortError");
+      return await shareReceiptAsText(receipt);
+    }
+    throw e;
+  }
 }
