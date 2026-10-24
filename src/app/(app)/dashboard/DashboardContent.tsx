@@ -815,10 +815,11 @@ function AdminDashboard() {
   if (!navUser || !meta) return <PageSkeleton />;
 
   const { coopNome, mes, instalacao, assinatura, cnpj, coopId } = meta;
-  const stats = workerHeavy?.stats ?? heavy?.stats ?? quickStats;
+  const statsComValores = workerHeavy?.stats ?? heavy?.stats;
+  const stats = statsComValores ?? quickStats;
   const fila = workerHeavy?.fila ?? heavy?.fila ?? [];
   const totaisFinanceirosPendentes =
-    adminStatsWorker ? !workerHeavy?.stats : !heavy?.stats && Boolean(quickStats);
+    adminStatsWorker ? !workerHeavy?.stats : !statsComValores && Boolean(quickStats);
 
   const primeiroDiaOpts = {
     role: navUser.role,

@@ -29,7 +29,7 @@ const atualizar = expandStaffTierPlanIfOperacionalVazio(
   { staffUserInitiated: true }
 );
 assert.equal(atualizar.bidirectionalFull, false, "Atualizar não empurra snapshot local");
-assert.equal(atualizar.pullOperacional, false, "painel com PIX: Atualizar não puxa operacional");
+assert.equal(atualizar.pullOperacional, true, "Atualizar puxa operacional com skipDestructiveReset");
 assert.equal(atualizar.pullNotas, true, "Atualizar puxa notas");
 assert.equal(atualizar.pullContratos, true, "Atualizar puxa contratos");
 

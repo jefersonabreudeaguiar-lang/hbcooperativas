@@ -87,7 +87,7 @@ const atualizarQuente = expandStaffTierPlanIfOperacionalVazio(fullPlan, comPix, 
   staffUserInitiated: true,
 });
 assert.equal(atualizarQuente.bidirectionalFull, false, "Atualizar nunca empurra o aparelho");
-assert.equal(atualizarQuente.pullOperacional, false, "painel quente: Atualizar não puxa operacional (não zera ficha)");
+assert.equal(atualizarQuente.pullOperacional, true, "Atualizar puxa operacional com skipDestructiveReset");
 assert.equal(atualizarQuente.pullNotas, true, "Atualizar puxa notas");
 assert.equal(atualizarQuente.pullContratos, true, "Atualizar puxa contratos");
 

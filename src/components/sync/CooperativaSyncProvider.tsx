@@ -851,6 +851,10 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
                 staffUserInitiated,
               });
             }
+            const { resetResponsavelPainelIndexCache } = await import(
+              "@/services/responsavelPainelIndex"
+            );
+            resetResponsavelPainelIndexCache();
           }
 
           if (currentUser.role === "cooperado" && currentUser.cooperadoId) {

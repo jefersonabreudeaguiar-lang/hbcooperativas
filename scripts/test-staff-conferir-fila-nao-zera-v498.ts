@@ -33,8 +33,8 @@ assert.equal(atualizarQuente.bidirectionalFull, false);
 assert.equal(atualizarQuente.pullNotas, true, "Atualizar puxa notas da fila");
 assert.equal(
   atualizarQuente.pullOperacional,
-  false,
-  "painel com PIX/ficha: Atualizar não puxa operacional (não zera Em aberto)"
+  true,
+  "Atualizar puxa operacional com skipDestructiveReset (não zera Em aberto)"
 );
 
 const atualizarFrio = expandStaffTierPlanIfOperacionalVazio(

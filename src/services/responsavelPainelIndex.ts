@@ -848,8 +848,18 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
     return relatorioAbertoCache.linhas;
   }
   const motor = motorEmAbertoComNotasSemFicha(dataAberto, coopId);
+  // Não fundir com latch após mudança de lastro — evita Em aberto ≠ Pagar/Início após sync ou Atualizar.
   const anterior =
-    relatorioAbertoLatch && relatorioAbertoLatch.coopId === coopId ? relatorioAbertoLatch.linhas : [];
+    relatorioAbertoCache &&
+    relatorioAbertoCache.coopId === coopId &&
+    relatorioAbertoCache.revision === revision &&
+    relatorioAbertoCache.pix === lastro.pix &&
+    relatorioAbertoCache.fichas === lastro.fichas &&
+    relatorioAbertoCache.notas === lastro.notas &&
+    relatorioAbertoLatch &&
+    relatorioAbertoLatch.coopId === coopId
+      ? relatorioAbertoLatch.linhas
+      : [];
   const linhas = fundirLinhasEmAbertoEstavel(anterior, motor, dataAberto, coopId);
   relatorioAbertoLatch = { coopId, linhas };
   relatorioAbertoCache = {

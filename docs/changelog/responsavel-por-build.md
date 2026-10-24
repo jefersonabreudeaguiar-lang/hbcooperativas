@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v647
+
+- **R3/R4:** «Em aberto» deixa de reutilizar latch antigo após PIX/sync; cache do painel gestão zera ao terminar sync staff.
+- **Atualizar:** puxa operacional com `skipDestructiveReset` (não só notas) — alinha totais com a nuvem sem zerar lastro local.
+- **Início gestão:** card «A pagar» não usa placeholder com valor 0 enquanto os totais pesados carregam.
+
 ## v646 (programa Fase R — base técnica)
 
 - **Gate ampliado:** `npm run responsavel:verify:fase-r` (lançamento + desempenho U4 + homolog operacional read-only).
