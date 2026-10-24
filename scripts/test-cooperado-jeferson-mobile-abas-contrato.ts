@@ -25,6 +25,7 @@ const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 assert.ok(APP_BUILD_VERSION >= 635, "build 635+ inicio keep-alive + safe root");
 
 const forbidden = [
+  "CooperadoInicioJefersonPilotoView",
   "useCooperadoParidadeExibicaoJeferson",
   "cooperadoJefersonPilotoFinanceiroAtivo",
   "cooperadoAReceberParidadeUnificadaPilotoJeferson",
