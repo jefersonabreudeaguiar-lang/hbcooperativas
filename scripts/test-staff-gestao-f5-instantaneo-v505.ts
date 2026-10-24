@@ -34,10 +34,11 @@ assert.match(guard, /pagehide/);
 assert.match(guard, /stripBinaryForPersist/);
 
 const staff = read("src/app/(app)/notas-pedido/staff/NotasPedidoStaffResponsavelApp.tsx");
-assert.match(staff, /mostrarFilaResponsavelConteudo && data === null/);
-assert.doesNotMatch(
+assert.match(staff, /dadosCarregandoFilaConferencia/);
+assert.match(
   staff,
-  /mostrarFilaResponsavelConteudo && \(data === null \|\| !isAppDataWarm\(\)\)/
+  /mostrarFilaResponsavelConteudo[\s\S]{0,120}data === null/
 );
+assert.match(staff, /peekStaffGestaoLastGood/);
 
 console.log("ok: gestão F5 instantâneo v505");
