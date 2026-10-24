@@ -3,7 +3,7 @@
 import { Suspense, useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { QrCode, Copy, CheckCircle2, Info, AlertCircle, Paperclip, ImagePlus, Eye } from "lucide-react";
-import { useAppDataReady, useAppDataSelector } from "@/hooks/useAppData";
+import { useAppDataReady, useAppDataSelector, useAppDataSelectorWhenActive } from "@/hooks/useAppData";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { useCooperadoPanelAppData } from "@/hooks/useCooperadoPanelAppData";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
@@ -84,7 +84,8 @@ function MensalidadesContent() {
   const shareHandledRef = useRef(false);
 
   const cooperadoPanelData = useCooperadoPanelAppData(isCooperado && tabActive, MENSALIDADES_COOP_DOMAINS);
-  const coopIdSelStaff = useAppDataSelector(
+  const coopIdSelStaff = useAppDataSelectorWhenActive(
+    tabActive && !isCooperado,
     (d) => {
       if (!user) return undefined;
       return getUserCooperativaId(user, d) ?? undefined;
@@ -95,11 +96,13 @@ function MensalidadesContent() {
     (isCooperado && cooperadoPanelData && user
       ? getUserCooperativaId(user, cooperadoPanelData)
       : coopIdSelStaff) ?? undefined;
-  const cooperativa = useAppDataSelector(
+  const cooperativa = useAppDataSelectorWhenActive(
+    tabActive,
     (d) => (coopId ? d.cooperativas.find((c) => c.id === coopId) : undefined),
     [coopId]
   );
-  const chavePixCoop = useAppDataSelector(
+  const chavePixCoop = useAppDataSelectorWhenActive(
+    tabActive,
     (d) => (coopId ? getChavePixMensalidadeCooperativa(d, coopId) : null),
     [coopId]
   );
@@ -113,7 +116,8 @@ function MensalidadesContent() {
     })();
   };
 
-  const mensalidades = useAppDataSelector(
+  const mensalidades = useAppDataSelectorWhenActive(
+    tabActive,
     (data) => {
       const base = isCooperado && cooperadoId
         ? listarMensalidadesExibicaoCooperado(data, cooperadoId ?? undefined, coopId)
@@ -140,7 +144,8 @@ function MensalidadesContent() {
     [mensalidades]
   );
 
-  const aguardandoConfirmacao = useAppDataSelector(
+  const aguardandoConfirmacao = useAppDataSelectorWhenActive(
+    tabActive,
     (data) => {
       const base = isCooperado && cooperadoId
         ? listarMensalidadesCooperado(data, cooperadoId ?? undefined, coopId)
@@ -156,7 +161,8 @@ function MensalidadesContent() {
     [coopId, isCooperado, cooperadoId]
   ) ?? [];
 
-  const meses = useAppDataSelector(
+  const meses = useAppDataSelectorWhenActive(
+    tabActive,
     (data) => {
       const set = new Set<string>();
       const base = isCooperado && cooperadoId
@@ -177,7 +183,8 @@ function MensalidadesContent() {
     [coopId, isCooperado, cooperadoId]
   ) ?? [getCurrentMesReferencia()];
 
-  const resumoCooperado = useAppDataSelector(
+  const resumoCooperado = useAppDataSelectorWhenActive(
+    tabActive && isCooperado,
     (data) => {
       if (!isCooperado || !cooperadoId) return null;
       const todas = listarMensalidadesExibicaoCooperado(data, cooperadoId ?? undefined, coopId);
@@ -191,7 +198,7 @@ function MensalidadesContent() {
     [isCooperado, cooperadoId, coopId]
   );
 
-  const cooperados = useAppDataSelector((d) => d.cooperados, []) ?? [];
+  const cooperados = useAppDataSelectorWhenActive(tabActive && !isCooperado, (d) => d.cooperados, []) ?? [];
 
   const abrirPix = (m: Mensalidade) => {
     setMensalidadePix(m);

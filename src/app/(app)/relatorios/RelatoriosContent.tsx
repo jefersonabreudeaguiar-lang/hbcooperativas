@@ -175,7 +175,7 @@ export default function RelatoriosPage() {
 
   useSyncContaCoopValorReceberCooperativa(
     coopId && user && relatorioUsaContaCoop
-      ? { cooperativaId: coopId, user, enabled: Boolean(data) }
+      ? { cooperativaId: coopId, user, enabled: Boolean(data && tabActive) }
       : undefined
   );
 

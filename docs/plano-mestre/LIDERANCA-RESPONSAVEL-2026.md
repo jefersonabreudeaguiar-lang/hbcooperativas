@@ -110,6 +110,7 @@ Checklist humano: `docs/plano-mestre/FASE-R-RESPONSAVEL-CHECKLIST.md`.
 | Fase | Data | Resposta | Build |
 |------|------|----------|-------|
 | Plano aceito | 24/10/2026 | SIM (agente) | 646 |
+| Onda perf abas (651) | 24/10/2026 | deploy agente | 651 |
 | R1 | | | |
 | R2 | | | |
 | R3 | | | |

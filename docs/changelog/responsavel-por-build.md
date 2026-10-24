@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v651
+
+- **Perf R2+:** Cooperados, Conta HB, Mensalidades (staff) e efeitos da Conferir só com aba visível; abas pesadas incluem Cooperados/Conta no keep-alive.
+
 ## v650
 
 - **Troca de abas (R2):** quiescência 3,5s (sync/fila), `useDeferredValue` no keep-alive, só uma aba pesada (Conferir/Pagar) no DOM; Início gestão não recalcula stats em background.

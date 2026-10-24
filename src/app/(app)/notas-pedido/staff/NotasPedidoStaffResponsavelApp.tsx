@@ -1787,7 +1787,7 @@ export default function NotasPedidoStaffMain() {
   }, [isCooperado, searchParams, trocarVistaResponsavel]);
 
   useEffect(() => {
-    if (isCooperado) return;
+    if (isCooperado || !tabActive) return;
     const run = () => prefetchStaffNotasPedidoRouteBundle();
     if (typeof requestIdleCallback === "function") {
       const id = requestIdleCallback(run, { timeout: 2500 });
@@ -1795,7 +1795,7 @@ export default function NotasPedidoStaffMain() {
     }
     const t = window.setTimeout(run, 500);
     return () => window.clearTimeout(t);
-  }, [isCooperado]);
+  }, [isCooperado, tabActive]);
 
   useEffect(() => {
     if (!anexarModal || !isCooperado) {
@@ -1880,14 +1880,14 @@ export default function NotasPedidoStaffMain() {
   });
 
   useEffect(() => {
-    if (!filaDetalhada) return;
+    if (!filaDetalhada || !tabActive) return;
     if (typeof requestIdleCallback === "function") {
       const id = requestIdleCallback(() => aquecerUiConferencia(), { timeout: 3500 });
       return () => cancelIdleCallback(id);
     }
     const t = window.setTimeout(() => aquecerUiConferencia(), 800);
     return () => window.clearTimeout(t);
-  }, [filaDetalhada, aquecerUiConferencia]);
+  }, [filaDetalhada, tabActive, aquecerUiConferencia]);
 
   useEffect(() => {
     if (isCooperado || vistaResponsavel !== "cooperado" || !filtroCooperadoId) return;
@@ -2249,7 +2249,7 @@ export default function NotasPedidoStaffMain() {
 
   // Responsável: pinta lastro e puxa notas no primeiro frame — não espera idle longo.
   useEffect(() => {
-    if (isCooperado || !data || !coopId) return;
+    if (isCooperado || !data || !coopId || !tabActive) return;
     if (responsavelMountSyncRef.current) return;
     responsavelMountSyncRef.current = true;
     responsavelPrimeiroPullAgendadoRef.current = true;
@@ -2273,11 +2273,11 @@ export default function NotasPedidoStaffMain() {
       }
       responsavelPrimeiroPullAgendadoRef.current = false;
     });
-  }, [isCooperado, data, coopId, puxarNotasResponsavelDaNuvem, recuperarFilaConferencia]);
+  }, [isCooperado, data, coopId, tabActive, puxarNotasResponsavelDaNuvem, recuperarFilaConferencia]);
 
   const filaRecuperacaoAutoRef = useRef(false);
   useEffect(() => {
-    if (isCooperado || !coopId || !mostrarFilaResponsavelConteudo) return;
+    if (isCooperado || !coopId || !tabActive || !mostrarFilaResponsavelConteudo) return;
     if (data === null) return;
     if (pendentesEstaveis.length > 0 || filaNavCount > 0) {
       filaRecuperacaoAutoRef.current = false;
@@ -2306,6 +2306,7 @@ export default function NotasPedidoStaffMain() {
   }, [
     isCooperado,
     coopId,
+    tabActive,
     mostrarFilaResponsavelConteudo,
     data,
     pendentesEstaveis.length,
@@ -2410,6 +2411,7 @@ export default function NotasPedidoStaffMain() {
       void sincronizarContratosEmBackground();
       return;
     }
+    if (!tabActive) return;
     if (getInstituicoesCatalogo(getData(), coopId).length > 0) return;
     void (async () => {
       const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
@@ -2422,7 +2424,7 @@ export default function NotasPedidoStaffMain() {
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCooperado, user?.id, coopId]);
+  }, [isCooperado, user?.id, coopId, tabActive]);
 
   useEffect(() => {
     if (!anexarModal || !data || !coopId) return;

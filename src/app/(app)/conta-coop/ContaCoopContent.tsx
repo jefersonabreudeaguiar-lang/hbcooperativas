@@ -13,7 +13,8 @@ import { Card, StatCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Form";
 import { AlertBanner } from "@/components/ui/AlertBanner";
-import { useAppDataSelector } from "@/hooks/useAppData";
+import { useAppDataSelectorWhenActive } from "@/hooks/useAppData";
+import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import {
@@ -245,6 +246,7 @@ export default function ContaCoopPage() {
 }
 
 function ContaCoopContent() {
+  const tabActive = useCooperadoTabPanelActive("/conta-coop");
   const { user } = usePermissions();
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab");
@@ -300,13 +302,17 @@ function ContaCoopContent() {
   );
 
   const cnpjFromData =
-    useAppDataSelector((data) => {
-      if (!user) return "";
-      if (user.cooperativaCnpj) return normalizeCnpj(user.cooperativaCnpj);
-      const coopId = getUserCooperativaId(user, data);
-      const coop = data.cooperativas.find((c) => c.id === coopId);
-      return coop?.cnpj ? normalizeCnpj(coop.cnpj) : "";
-    }, [user?.id, user?.cooperativaCnpj, user?.cooperativaId]) ?? "";
+    useAppDataSelectorWhenActive(
+      tabActive,
+      (data) => {
+        if (!user) return "";
+        if (user.cooperativaCnpj) return normalizeCnpj(user.cooperativaCnpj);
+        const coopId = getUserCooperativaId(user, data);
+        const coop = data.cooperativas.find((c) => c.id === coopId);
+        return coop?.cnpj ? normalizeCnpj(coop.cnpj) : "";
+      },
+      [user?.id, user?.cooperativaCnpj, user?.cooperativaId]
+    ) ?? "";
 
   const [cnpjResolved, setCnpjResolved] = useState("");
   const [cnpjResolving, setCnpjResolving] = useState(false);
@@ -337,10 +343,15 @@ function ContaCoopContent() {
 
   const cnpj = cnpjFromData.length === 14 ? cnpjFromData : cnpjResolved;
 
-  const cooperadosAtivos = useAppDataSelector((data) => {
-    if (!user?.cooperativaId) return [];
-    return data.cooperados.filter((c) => c.cooperativaId === user.cooperativaId && c.status === "ativo");
-  }, [user?.cooperativaId]) ?? [];
+  const cooperadosAtivos =
+    useAppDataSelectorWhenActive(
+      tabActive,
+      (data) => {
+        if (!user?.cooperativaId) return [];
+        return data.cooperados.filter((c) => c.cooperativaId === user.cooperativaId && c.status === "ativo");
+      },
+      [user?.cooperativaId]
+    ) ?? [];
 
   const cooperadoIdsKey = useMemo(
     () => cooperadosAtivos.map((c) => c.id).join("\u001f"),
@@ -805,7 +816,7 @@ function ContaCoopContent() {
   reloadRef.current = reload;
 
   useEffect(() => {
-    if (!cnpj) return;
+    if (!cnpj || !tabActive) return;
     const snapDash = lerHbCreditDashboardPersistido(cnpj);
     const snapLimites = lerHbCreditLimitesPersistidos(cnpj);
     let background = false;
@@ -831,17 +842,17 @@ function ContaCoopContent() {
       setPercentualColetivo(s);
     }
     void reloadRef.current({ background });
-  }, [cnpj]);
+  }, [cnpj, tabActive]);
 
   const parceirosTabs: Tab[] = ["mercados", "conferir_nf", "liquidar", "estornos"];
   useEffect(() => {
-    if (!cnpj || !parceirosTabs.includes(tab)) return;
+    if (!tabActive || !cnpj || !parceirosTabs.includes(tab)) return;
     if (parceirosLoaded && !parceirosLoading) return;
     void loadParceiros();
   }, [tab, cnpj, loadParceiros, parceirosLoaded, parceirosLoading]);
 
   useEffect(() => {
-    if (!cnpj) return;
+    if (!tabActive || !cnpj) return;
     if (tab !== "painel" && tab !== "mercados") return;
     const cancelIdle = scheduleContaCoopAuxSync(() => void loadPinAndPixRequests(), {
       idleTimeoutMs: 6_000,
@@ -852,7 +863,7 @@ function ContaCoopContent() {
 
   /** GET /limites — aba Limites: paint com cache, depois nuvem (sem persist em massa). */
   useEffect(() => {
-    if (tab !== "limites") return;
+    if (!tabActive || tab !== "limites") return;
     if (!cnpj) return;
     if (!cooperadoIdsAtivos.length) return;
     let cancelled = false;
@@ -1198,11 +1209,16 @@ function ContaCoopContent() {
     }
   };
 
-  const cooperativaNome = useAppDataSelector((data) => {
-    if (!user) return "Cooperativa";
-    const coopId = getUserCooperativaId(user, data);
-    return data.cooperativas.find((c) => c.id === coopId)?.nome ?? "Cooperativa";
-  }, [user?.id, user?.cooperativaId]) ?? "Cooperativa";
+  const cooperativaNome =
+    useAppDataSelectorWhenActive(
+      tabActive,
+      (data) => {
+        if (!user) return "Cooperativa";
+        const coopId = getUserCooperativaId(user, data);
+        return data.cooperativas.find((c) => c.id === coopId)?.nome ?? "Cooperativa";
+      },
+      [user?.id, user?.cooperativaId]
+    ) ?? "Cooperativa";
 
   const statusMercadoLabel = (status: string) => {
     if (status === "ativo") return "Ativo";

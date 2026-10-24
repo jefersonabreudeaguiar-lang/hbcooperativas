@@ -40,7 +40,13 @@ export const STAFF_TAB_PIN_HREFS = [
   "/livro-caixa",
 ] as const;
 
-export const STAFF_TAB_HEAVY_HREFS = ["/notas-pedido", "/ficha-corrida", "/relatorios"] as const;
+export const STAFF_TAB_HEAVY_HREFS = [
+  "/notas-pedido",
+  "/ficha-corrida",
+  "/relatorios",
+  "/cooperados",
+  "/conta-coop",
+] as const;
 
 function isStaffTabPinned(href: string): boolean {
   return (STAFF_TAB_PIN_HREFS as readonly string[]).includes(href);

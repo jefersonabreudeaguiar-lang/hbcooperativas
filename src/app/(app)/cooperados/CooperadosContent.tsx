@@ -4,7 +4,9 @@ import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, ShoppingCart, UserCircle, Pencil, Download, Smartphone, PenLine } from "lucide-react";
-import { useAppData } from "@/hooks/useAppData";
+import { useStaffPanelAppData } from "@/hooks/useCooperadoPanelAppData";
+import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
+import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PageHeader, DataTable, FilterBar, Modal } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
@@ -30,8 +32,11 @@ import { AssinaturaCadastroGestaoPanel } from "@/components/cooperado/Assinatura
 import type { Cooperado, CooperadoStatus } from "@/types";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
+const COOPERADOS_STAFF_DOMAINS: AppDataNotifyDomain[] = ["shell", "operacional"];
+
 export default function CooperadosPage() {
-  const data = useAppData();
+  const tabActive = useCooperadoTabPanelActive("/cooperados");
+  const data = useStaffPanelAppData(tabActive, COOPERADOS_STAFF_DOMAINS);
   const { check, user } = usePermissions();
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -72,7 +77,7 @@ export default function CooperadosPage() {
   }, [data, search, statusFilter, appFilter, user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !tabActive) return;
     const run = () => {
       const d = getData();
       const coopId = getUserCooperativaId(user, d);
@@ -86,7 +91,7 @@ export default function CooperadosPage() {
     }
     const t = window.setTimeout(run, 150);
     return () => window.clearTimeout(t);
-  }, [user?.id]);
+  }, [user?.id, tabActive]);
 
   const openNew = () => {
     setEditing(null);

@@ -56,4 +56,17 @@ assert.ok(pagar.includes("não puxa operacional ao abrir a aba"), "Pagar não pu
 const livro = read("src/app/(app)/livro-caixa/LivroCaixaContent.tsx");
 assert.ok(livro.includes("tabActive"), "Livro respeita aba visível");
 
+const cooperados = read("src/app/(app)/cooperados/CooperadosContent.tsx");
+assert.ok(cooperados.includes('useCooperadoTabPanelActive("/cooperados")'), "Cooperados pausa em background");
+assert.ok(cooperados.includes("useStaffPanelAppData"), "Cooperados assina domínios estreitos");
+
+const contaCoop = read("src/app/(app)/conta-coop/ContaCoopContent.tsx");
+assert.ok(contaCoop.includes('useCooperadoTabPanelActive("/conta-coop")'), "Conta HB pausa em background");
+
+const staffNotas = read("src/app/(app)/notas-pedido/staff/NotasPedidoStaffResponsavelApp.tsx");
+assert.ok(staffNotas.includes("if (isCooperado || !tabActive) return"), "prefetch Conferir só com aba visível");
+
+const heavy = read("src/lib/performance/staffMobileTabKeepAlive.ts");
+assert.ok(heavy.includes('"/cooperados"'), "Cooperados é aba pesada no DOM");
+
 console.log("OK — test-staff-responsavel-desempenho");
