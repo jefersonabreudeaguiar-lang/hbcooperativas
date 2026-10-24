@@ -159,6 +159,12 @@ const PHASE_HB: Step[] = [
   },
   {
     phase: "2",
+    title: "Cooperado mobile — paridade valor A receber",
+    cmd: "npx",
+    stepArgs: ["tsx", "scripts/test-cooperado-mobile-valor-paridade-contrato.ts"],
+  },
+  {
+    phase: "2",
     title: "HB pagar — comprovante e UX",
     cmd: "npx",
     stepArgs: ["tsx", "scripts/test-hb-credit-pagar-ux-contrato.ts"],
