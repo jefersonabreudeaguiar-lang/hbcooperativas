@@ -2747,7 +2747,31 @@ export async function prepareHbCreditPaymentAuthorize(
   cooperadoId: string,
   actorUserId: string
 ): Promise<HbCreditPrepareAuthorizeResult> {
-  return ensureHbCreditLimiteAutoritativoPersistido(supabase, cnpj, cooperadoId, actorUserId);
+  const prepared = await ensureHbCreditLimiteAutoritativoPersistido(
+    supabase,
+    cnpj,
+    cooperadoId,
+    actorUserId
+  );
+  if (!prepared.ok) return prepared;
+
+  const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
+  if (!found) return { ok: true };
+
+  const { runHbCreditPhaseAPaymentGuard } = await import(
+    "@/modules/hb-credit/security/phaseAOperationsGuard"
+  );
+  const phaseA = await runHbCreditPhaseAPaymentGuard(
+    supabase,
+    cnpj,
+    cooperadoId,
+    found.row,
+    found.accountCooperadoId
+  );
+  if (!phaseA.ok) {
+    return { ok: false, error: phaseA.error, code: phaseA.code };
+  }
+  return { ok: true };
 }
 
 export async function authorizePayment(

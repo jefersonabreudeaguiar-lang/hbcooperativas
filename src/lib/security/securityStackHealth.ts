@@ -33,6 +33,14 @@ export function buildSecurityStackHealth(env: NodeJS.ProcessEnv = process.env): 
   if (!env.HB_RECONCILIATION_COOP_CNPJ?.trim() && !env.HB_HOBELISCO_PROBE_COOP_CNPJ?.trim()) {
     recommendations.push("Defina HB_RECONCILIATION_COOP_CNPJ para cron diário de crédito.");
   }
+  const phaseA = env.HB_CREDIT_PHASE_A_SHADOW;
+  if (phaseA != null && ["false", "0", "off"].includes(phaseA.trim().toLowerCase())) {
+    if (!["true", "1", "on"].includes(String(env.HB_CREDIT_PHASE_A_BLOCK_DIVERGENT ?? "").trim().toLowerCase())) {
+      recommendations.push(
+        "Fase A HB: sombra desligada sem HB_CREDIT_PHASE_A_BLOCK_DIVERGENT — confirme se é intencional."
+      );
+    }
+  }
   if (!env.FIELD_ENCRYPTION_KEY?.trim() && isStaffMfaFeatureEnabled()) {
     recommendations.push("Defina FIELD_ENCRYPTION_KEY (32+ chars) para cifrar segredos MFA.");
   }

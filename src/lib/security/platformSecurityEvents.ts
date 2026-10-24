@@ -9,7 +9,8 @@ export type PlatformSecurityAction =
   | "auth.cross_tenant_blocked"
   | "admin.access"
   | "credit.reconciliation_alert"
-  | "credit.post_payment_hb_sync";
+  | "credit.post_payment_hb_sync"
+  | "credit.phase_a_guard";
 
 export async function recordPlatformSecurityEvent(input: {
   action: PlatformSecurityAction;
@@ -61,6 +62,30 @@ export async function recordCreditReconciliationAlerts(
     metadata: {
       count: findings.length,
       findings: findings.slice(0, 20),
+    },
+  });
+}
+
+export async function recordHbCreditPhaseAGuardAudit(
+  supabase: SupabaseClient,
+  cooperativeCnpj: string,
+  payload: {
+    cooperadoId: string;
+    requestedCooperadoId: string;
+    assessmentStatus: string;
+    wouldBlock: boolean;
+    shadow: boolean;
+    reasons: string[];
+    operationalIssueKinds: string[];
+    accountIntegrityEvents: string[];
+  }
+): Promise<void> {
+  await logSecurityEvent(supabase, {
+    action: "credit.phase_a_guard",
+    cooperativaCnpj: cooperativeCnpj,
+    metadata: {
+      priority: payload.wouldBlock ? "high" : "info",
+      ...payload,
     },
   });
 }

@@ -135,6 +135,12 @@ const PHASE_HB: Step[] = [
   },
   {
     phase: "2",
+    title: "HB Créditos Fase A (sombra/bloqueio)",
+    cmd: "npx",
+    stepArgs: ["tsx", "scripts/test-hb-credit-phase-a.ts"],
+  },
+  {
+    phase: "2",
     title: "HB base × valor a receber",
     cmd: "npx",
     stepArgs: ["tsx", "scripts/test-hb-credit-base-alignment.ts"],
