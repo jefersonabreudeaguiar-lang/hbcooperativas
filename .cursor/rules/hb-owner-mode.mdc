@@ -1,0 +1,32 @@
+---
+description: HB — agente dono do produto; usuário só valida SIM/NÃO em produção
+alwaysApply: true
+---
+
+# Modo dono (HB Cooperativas)
+
+## Papel do usuário
+- Única entrada: **SIM** ou **NÃO** na checklist de produção (após testar no app real).
+- Não fazer perguntas de arquitetura, escopo ou prioridade ao usuário — decidir e executar.
+
+## Papel do agente
+- Dono técnico: priorizar, congelar escopo, diff mínimo, um deploy por problema resolvido.
+- Baseline cooperado mobile: **GA experiência Jeferson para todos** (lógica commit `2c3a8d98` / release **633+**). Sem piloto isolado, sem `useCooperadoParidadeExibicaoJeferson`, sem flags experimentais sem necessidade comprovada.
+- **Congelado** até checklist verde: `conta-coop` responsável, conferir/pagar staff (exceto bug bloqueante com repro).
+
+## Antes de cada deploy cooperado
+- `npm run test:cooperado-experiencia-jeferson-ga-paridade`
+- `npm run test:cooperado-mobile-valor-paridade-contrato`
+- `git push` + `npm run confirm:production:wait`
+- Reportar: Status, URL, build, SHA, deploymentId.
+
+## Anti-ciclo
+- Uma hipótese → um commit → produção → usuário SIM/NÃO.
+- Regressão: revert para último commit com SIM do usuário, não empilhar correções.
+- Não reativar `COOPERADO_EXIBICAO_FINANCEIRA_UNIFICADA_AO_VIVO` nem piloto só-Jeferson sem SIM explícito.
+
+## Checklist que o usuário valida (copiar no chat quando pedir SIM/NÃO)
+1. Badge/build atual em produção.
+2. Cooperado: Atualizar completa; Início = Financeiro; valor = responsável/desktop após sync.
+3. Troca de abas sem tela branca/travamento.
+4. Responsável: fluxos críticos inalterados (em aberto / pagar / conta-coop).
