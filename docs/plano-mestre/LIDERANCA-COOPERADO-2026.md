@@ -90,13 +90,7 @@ Responsável, HB, painel gestão — **somente** após Fase 4 **SIM**. Escopo de
 
 ---
 
-## Fase 3 cooperado — adiada (acordo 23/10/2026)
-
-Critério da Fase 3 exige lançamento do **responsável** e paridade cooperado ↔ gestão. O portão **Fase 3** do cooperado fica **em espera** até as fases **S1–S4** (sync por aba) do responsável — ver `RESPONSAVEL-SINCRONIZACAO-POR-ABA-2026.md` e `LIDERANCA-RESPONSAVEL-2026.md`.
-
----
-
-## Portão Fase 3 (Jeferson — só depois do responsável verde)
+## Portão Fase 3 (Jeferson — celular, badge **v566** ou superior)
 
 Responda **SIM** ou **NÃO**:
 
@@ -116,5 +110,5 @@ Responda **SIM** ou **NÃO**:
 | Fase 1 | 23/10/2026 | SIM (Jeferson) | v564 |
 | Fase 2 | 23/10/2026 | NÃO (Jeferson — trava ao trocar abas) | v565 |
 | Fase 2 | 23/10/2026 | SIM (Jeferson) | v566 |
-| Fase 3 | 23/10/2026 | **adiada** (piloto: responsável trava + abas dessinc.; validar cooperado depois do responsável verde) | — |
+| Fase 3 | aguardando piloto | — | v566+ |
 | Fase 4 | | | |

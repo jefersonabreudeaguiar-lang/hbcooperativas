@@ -2,7 +2,7 @@ import type { AppData, NotaPedido } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { cpfCooperadoDigits, escolherCooperadoCanonico, nomeNormalizadoCooperado } from "@/utils/cooperadoDedupe";
 import { isInlineDataUrl } from "@/utils/mediaHelpers";
-import { isNotaNaFilaConferenciaResponsavel, isNotaRelancamentoIntencional } from "@/utils/notaStatus";
+import { isNotaRelancamentoIntencional } from "@/utils/notaStatus";
 
 /** Referência leve para foto no IndexedDB — não vai no JSON pesado. */
 export const LOCAL_MEDIA_REF_PREFIX = "idb:";
@@ -299,18 +299,9 @@ export interface GrupoConferenciaEntrega {
 /** Placeholder da nuvem — não é nome de cooperado e não pode virar rótulo da fila. */
 const NOME_COOPERADO_GENERICO = /^(desconhecido|cooperado|sem nome|—|-)$/i;
 
-/** cooperado_nome na tabela SQL às vezes vem como id técnico, não como nome de pessoa. */
-export function pareceIdentificadorTecnicoCooperado(nome?: string | null): boolean {
-  const t = nome?.trim();
-  if (!t || NOME_COOPERADO_GENERICO.test(t)) return true;
-  if (/^c_[a-z0-9_-]+$/i.test(t)) return true;
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t)) return true;
-  return false;
-}
-
 export function nomeCooperadoSnapshotUtilizavel(nome?: string | null): string | undefined {
   const t = nome?.trim();
-  if (!t || pareceIdentificadorTecnicoCooperado(t)) return undefined;
+  if (!t || NOME_COOPERADO_GENERICO.test(t)) return undefined;
   return t;
 }
 
@@ -344,7 +335,9 @@ export function resolverCooperadoIdGrupoConferencia(
     return cooperadoId;
   };
 
-  /** Quem enviou a foto (snapshot) prevalece sobre cooperadoId titular errado na nuvem. */
+  const direct = data.cooperados.find((c) => c.id === nota.cooperadoId && c.cooperativaId === coopId);
+  if (direct) return canonizarPorTitular(direct.id);
+
   const snapshot = nomeCooperadoSnapshotUtilizavel(nota.cooperadoNomeSnapshot);
   if (snapshot) {
     const snapNorm = nomeNormalizadoCooperado(snapshot);
@@ -354,75 +347,7 @@ export function resolverCooperadoIdGrupoConferencia(
     if (byName) return canonizarPorTitular(byName.id);
   }
 
-  const direct = data.cooperados.find((c) => c.id === nota.cooperadoId && c.cooperativaId === coopId);
-  if (direct) return canonizarPorTitular(direct.id);
-
   return canonizarPorTitular(nota.cooperadoId);
-}
-
-function nomeCooperadoContaApp(data: AppData, cooperadoId: string): string | undefined {
-  if (!cooperadoId) return undefined;
-  for (const u of data.users ?? []) {
-    if (!u.active || u.cooperadoId !== cooperadoId) continue;
-    const n = u.name?.trim();
-    if (n && !pareceIdentificadorTecnicoCooperado(n)) return n;
-  }
-  return undefined;
-}
-
-function nomeCooperadoCadastroParaExibicao(
-  data: AppData,
-  cooperadoId: string,
-  cooperativaId?: string
-): string | undefined {
-  const coopId = cooperativaId;
-  const direct = data.cooperados.find(
-    (c) => c.id === cooperadoId && (!coopId || c.cooperativaId === coopId)
-  );
-  const nomeDirect = nomeCooperadoSnapshotUtilizavel(direct?.nomeCompleto);
-  if (nomeDirect) return nomeDirect;
-  const any = data.cooperados.find((c) => c.id === cooperadoId);
-  return nomeCooperadoSnapshotUtilizavel(any?.nomeCompleto);
-}
-
-/** Nome exibido na conferência — sempre o cooperado que enviou, não o titular da ficha. */
-export function getNomeEnvioEntregaNota(
-  nota: NotaPedido,
-  data: AppData,
-  cooperativaId?: string
-): string {
-  const snap = nomeCooperadoSnapshotUtilizavel(nota.cooperadoNomeSnapshot);
-  if (snap) return snap;
-  const coopId = cooperativaId ?? nota.cooperativaId;
-  const id = resolverCooperadoIdGrupoConferencia(data, nota, coopId);
-  const cadastro =
-    nomeCooperadoCadastroParaExibicao(data, id, coopId) ??
-    nomeCooperadoCadastroParaExibicao(data, nota.cooperadoId, coopId);
-  if (cadastro) return cadastro;
-  const conta =
-    nomeCooperadoContaApp(data, id) ?? nomeCooperadoContaApp(data, nota.cooperadoId);
-  if (conta) return conta;
-  const ficha = data.fichaCorrida.find((f) => f.notaPedidoId === nota.id);
-  const fichaSnap = nomeCooperadoSnapshotUtilizavel(ficha?.cooperadoNomeSnapshot);
-  if (fichaSnap) return fichaSnap;
-  return "Cooperado";
-}
-
-/** Preenche cooperadoNomeSnapshot a partir do cadastro quando a nuvem mandou só id/placeholder. */
-export function repararNomesEnvioNotasParaConferencia(data: AppData, cooperativaId?: string): AppData {
-  if (!cooperativaId) return data;
-  let changed = false;
-  const notasPedido = (data.notasPedido ?? []).map((n) => {
-    if (!notaPertenceCooperativa(data, n, cooperativaId)) return n;
-    if (!isNotaNaFilaConferenciaResponsavel(n.status)) return n;
-    if (nomeCooperadoSnapshotUtilizavel(n.cooperadoNomeSnapshot)) return n;
-    const nome = getNomeEnvioEntregaNota(n, data, cooperativaId);
-    if (nome === "Cooperado") return n;
-    const id = resolverCooperadoIdGrupoConferencia(data, n, cooperativaId);
-    changed = true;
-    return { ...n, cooperadoNomeSnapshot: nome, cooperadoId: id };
-  });
-  return changed ? { ...data, notasPedido } : data;
 }
 
 /** Agrupa entregas pendentes pelo cooperado (nome salvo na nuvem ou cadastro local). */
@@ -434,14 +359,12 @@ export function getChaveGrupoConferencia(
   return `id:${resolverCooperadoIdGrupoConferencia(data, nota, cooperativaId)}`;
 }
 
-export function getNomeGrupoConferencia(
-  notas: NotaPedido[],
-  data: AppData,
-  cooperativaId?: string
-): string {
+export function getNomeGrupoConferencia(notas: NotaPedido[], data: AppData): string {
   for (const n of notas) {
-    const nome = getNomeEnvioEntregaNota(n, data, cooperativaId ?? n.cooperativaId);
-    if (nome !== "Cooperado") return nome;
+    const snap = nomeCooperadoSnapshotUtilizavel(n.cooperadoNomeSnapshot);
+    if (snap) return snap;
+    const cadastro = data.cooperados.find((c) => c.id === n.cooperadoId)?.nomeCompleto?.trim();
+    if (cadastro) return cadastro;
   }
   return "Cooperado";
 }
@@ -472,7 +395,7 @@ export function agruparPendentesPorCooperado(
     .map(([chave, notas]) => ({
       chave,
       cooperadoId: resolverCooperadoIdDoGrupo(notas, data, cooperativaId),
-      nome: getNomeGrupoConferencia(notas, data, cooperativaId),
+      nome: getNomeGrupoConferencia(notas, data),
       notas,
     }))
     .sort((a, b) => {

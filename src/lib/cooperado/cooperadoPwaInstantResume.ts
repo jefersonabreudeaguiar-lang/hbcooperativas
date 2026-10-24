@@ -12,7 +12,6 @@ import { filtrarInicioCardPersistidoLeituraBic } from "@/lib/cooperadoInicioCard
 import {
   COOPERADO_PWA_INICIO_DASHBOARD_SNAPSHOT_VERSION,
   lerCooperadoPwaInicioDashboardSnapshot,
-  sanitizeCooperadoPwaInicioDashboardView,
   type CooperadoPwaInicioDashboardView,
 } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
 import {
@@ -97,8 +96,7 @@ export function lerCooperadoPwaInicioDashboardViewForResume(
   if (!cooperativaId) return null;
   const fresh = lerCooperadoPwaInicioDashboardSnapshot(cooperadoId, cooperativaId);
   if (fresh?.view) return fresh.view;
-  const raw = lerPwaInicioDashRaw(cooperadoId, cooperativaId)?.view ?? null;
-  return sanitizeCooperadoPwaInicioDashboardView(raw);
+  return lerPwaInicioDashRaw(cooperadoId, cooperativaId)?.view ?? null;
 }
 
 function lerEntregasResumosRaw(

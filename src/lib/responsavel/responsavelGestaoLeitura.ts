@@ -163,15 +163,6 @@ export function valorAPagarCooperadoEmAberto(
   return { meses: porMes.map((m) => m.mes), porMes, total };
 }
 
-/** Lista «Em aberto» do Conferir = mesmo R$ da aba Pagar (ficha, avulso, motor de pagamento). */
-export function valorAPagarCooperadoEmAbertoConferirLista(
-  data: AppData,
-  cooperadoId: string,
-  cooperativaId: string
-): { meses: string[]; porMes: MesValorAPagarEmAberto[]; total: number } {
-  return valorAPagarCooperadoEmAberto(data, cooperadoId, cooperativaId);
-}
-
 export type PickResumoStaffFichaPagarInput = {
   data: AppData;
   cooperadoId: string;

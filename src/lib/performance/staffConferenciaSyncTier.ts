@@ -6,6 +6,7 @@ import { markRqlInteractionPhase } from "@/lib/performance/rqlMarks";
 import { getData, getSession, isAppDataWarm } from "@/services/dataStore";
 import type { UserRole } from "@/types";
 import { staffLocalOperacionalVazio } from "@/lib/staff/staffOperacionalColdHydrate";
+
 const TIER_RANK: Record<SyncTier, number> = {
   pulse: 0,
   notas_delta: 1,

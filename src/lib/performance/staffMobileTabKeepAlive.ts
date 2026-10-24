@@ -32,8 +32,13 @@ export function getStaffMobileTabCacheLimit(lowMemoryDevice: boolean): number {
 
 export const STAFF_TAB_PIN_HREF = "/notas-pedido" as const;
 
-/** Só Conferir pinado — demais abas desmontam ao sair (fluidez no celular). */
-export const STAFF_TAB_PIN_HREFS = ["/notas-pedido"] as const;
+/** Início, Conferir, Pagar e Livro ficam pinados — troca do dia sem remount. */
+export const STAFF_TAB_PIN_HREFS = [
+  "/dashboard",
+  "/notas-pedido",
+  "/ficha-corrida",
+  "/livro-caixa",
+] as const;
 
 export const STAFF_TAB_HEAVY_HREFS = ["/notas-pedido", "/ficha-corrida", "/relatorios"] as const;
 

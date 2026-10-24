@@ -370,6 +370,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         preloadAppData();
       } else if (gestaoLogin) {
         ensureCooperadoAppDataEagerWarm();
+        preloadAppData();
       } else {
         await waitForAppDataWarm(4000);
       }

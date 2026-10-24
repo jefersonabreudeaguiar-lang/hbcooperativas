@@ -94,9 +94,6 @@ export interface ContaCoopParceiro {
   partnerTermsAcceptedAt?: string | null;
   partnerTermsAcceptedBy?: string | null;
   partnerTermsDiscountSnapshot?: number | null;
-  /** Comunicado NF dispensada (20/10/2026) — versão aceita pelo mercado. */
-  partnerNfAvisoAckVersion?: string | null;
-  partnerNfAvisoAckAt?: string | null;
   /** PIN numérico cadastrado pelo mercado para solicitar estornos. */
   hasFinancialPin?: boolean;
   /** Bloqueio temporário após tentativas incorretas (ISO). */

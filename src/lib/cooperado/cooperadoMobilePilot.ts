@@ -80,14 +80,6 @@ export function cooperadoMobileDeferOperacionalSyncNaAbertura(
   return isCooperadoMobileGaPromoted(user);
 }
 
-/** Financeiro cooperado GA — AppData ao vivo (atualiza na hora; snapshots só cache). */
-export function cooperadoFinanceiroMobileLeituraAoVivo(
-  user: Omit<User, "password"> | null | undefined
-): boolean {
-  if (!user || user.role !== "cooperado") return false;
-  return isCooperadoMobileGaPromoted(user);
-}
-
 /**
  * Abertura cooperado: operacional/notas só no «Atualizar».
  * `force` / sessão BIC não furam isto — era o que travava o celular no 1º segundo.

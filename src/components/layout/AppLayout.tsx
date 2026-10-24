@@ -57,8 +57,6 @@ import {
   setStaffOptimisticTab,
 } from "@/lib/performance/staffOptimisticTabNavigation";
 import { tryStaffCachedInstantTabSwitch } from "@/lib/performance/staffPinnedTabFastPath";
-import { markStaffTabPathChange } from "@/lib/staff/staffTabSwitchQuiescence";
-import { staffBottomTabCacheKey } from "@/lib/performance/staffBottomTabRoutes";
 import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetch";
 import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 import { useMobileBottomTabSwitchFeedback } from "@/lib/performance/tabSwitchFeedback";
@@ -87,7 +85,6 @@ import { CooperadoPostDeployGate } from "@/components/cooperado/CooperadoPostDep
 import { CooperadoMobilePilotStarBadge } from "@/components/cooperado/CooperadoMobilePilotStarBadge";
 import { CooperadoMobileReleaseBar } from "@/components/cooperado/CooperadoMobileReleaseBar";
 import { StaffMobileReleaseBar } from "@/components/layout/StaffMobileReleaseBar";
-import { StaffGestaoTabEnterSync } from "@/components/staff/StaffGestaoTabEnterSync";
 import type { Resource } from "@/types";
 import {
   shouldShowBaixarAppInCooperadoOverflowMenu,
@@ -540,11 +537,6 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     staffPainelUi &&
     !isCooperadoAppUser(navUser);
 
-  useLayoutEffect(() => {
-    if (!staffKeepAliveShell) return;
-    markStaffTabPathChange(staffBottomTabCacheKey(pathname));
-  }, [pathname, staffKeepAliveShell]);
-
   const mobileTabScrollMode: MobileTabScrollMode = cooperadoKeepAliveShell
     ? "cooperado"
     : staffKeepAliveShell
@@ -634,12 +626,8 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         )
       : routePanels;
 
-  const staffGestaoTabSync =
-    Boolean(navUser) && staffPainelUi && !isCooperadoAppUser(navUser);
-
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden">
-      <StaffGestaoTabEnterSync enabled={staffGestaoTabSync} />
       {navUser && <CooperadoSubtleUpdateNotice />}
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">

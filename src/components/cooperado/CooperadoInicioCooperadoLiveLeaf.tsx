@@ -67,7 +67,7 @@ export function CooperadoInicioOláTitulo({
   const cooperadoLive = useCooperadoInicioLiveCooperado();
   const nome =
     nomeFromView ??
-    cooperadoLive?.nomeCompleto?.split(" ")[0] ??
+    cooperadoLive?.nomeCompleto.split(" ")[0] ??
     user?.name?.split(" ")[0] ??
     "Cooperado";
   return <>Olá, {nome}!</>;

@@ -72,18 +72,6 @@ Aparelho **frio** (pós-instalação, purge época 3, ou deploy): sem snapshots 
 - Instalar PWA: `https://hbcooperativas.vercel.app/pwa-launch.html?next=%2Flogin%3Fhb-pwa%3D<build>%26next%3D%2Fdashboard` (ou `start_url` do manifest após deploy)
 - Resgate cache: `https://hbcooperativas.vercel.app/pwa-rescue.html`
 
-## Estratégia do agente (paridade financeira mobile)
-
-| Camada | O quê |
-|--------|--------|
-| **Padrão** | `isCooperadoMobileGaPromoted` = experiência Jeferson; Jeferson só tem estrela + diag |
-| **Pacote local** | `empacotarModeloAparelhoJeferson` após login/sync; **605+** reempacota quando AppData aquece |
-| **Aparelho frio** | `scheduleCooperadoGaPrimeiraCargaSilenciosa` + recovery financeiro **repete** se valor zerado |
-| **Contrato CI** | `npm run test:cooperado-experiencia-jeferson-ga-paridade` + `test:cooperado-financeiro` |
-| **Portão piloto** | SIM/NÃO: Início card + Financeiro (valores = Jeferson no mesmo build) |
-
-Checklist antes de push em `cooperado*Finance*` / `empacotarModelo*`: testes acima + `release:verify:fast` fase 1.
-
 ## Validar no celular
 
 1. Header: `v<build>` atual.

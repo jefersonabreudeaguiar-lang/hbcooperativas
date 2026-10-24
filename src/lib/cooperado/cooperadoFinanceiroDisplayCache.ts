@@ -14,7 +14,6 @@ import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilo
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
-import { cooperadoFinanceiroExibicaoDivergeDeAppDataLive } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 
 export function lerInicioCardFinanceiroExibicao(
   cooperadoId: string,
@@ -42,20 +41,6 @@ function financeTenant(user: Omit<User, "password">) {
 }
 
 /** Card “A receber” legível no storage — mesmo build ou cross-build com valor (padrão HB cache). */
-/** Cache local do card diverge do motor BIC/AppData — tratar como não resolvido no mobile. */
-export function cooperadoFinanceiroExibicaoDivergeDoMotorLocal(
-  user: Omit<User, "password"> | null | undefined
-): boolean {
-  if (!user || user.role !== "cooperado" || !isAppDataWarm()) return false;
-  const tenant = financeTenant(user);
-  if (!tenant) return false;
-  return cooperadoFinanceiroExibicaoDivergeDeAppDataLive(
-    getData(),
-    tenant.cooperadoId,
-    tenant.cooperativaId
-  );
-}
-
 export function cooperadoFinanceiroCardCacheTemValor(
   user: Omit<User, "password"> | null | undefined
 ): boolean {

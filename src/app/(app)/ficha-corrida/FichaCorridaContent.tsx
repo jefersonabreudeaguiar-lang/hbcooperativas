@@ -29,9 +29,7 @@ import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/coopera
 import {
   cooperadoPilotAppDataTemFinanceiroLocal,
   cooperadoPilotFinanceiroExibirComSnapshotsLocais,
-  cooperadoPilotForcarRematerializacaoFinanceira,
 } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
-import { cooperadoFinanceiroMobileLeituraAoVivo } from "@/lib/cooperado/cooperadoMobilePilot";
 import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import {
   cooperadoPwaUiSubscribesAppData,
@@ -189,7 +187,7 @@ import {
   isCooperadoInstantResumeEnabled,
   isCooperadoManualOperacionalSync,
 } from "@/lib/performance/cooperadoColdStart";
-import { requestAppSync, requestAppSyncImmediate, requestAppSyncLight } from "@/services/syncRequest";
+import { requestAppSync, requestAppSyncImmediate } from "@/services/syncRequest";
 import { pagamentoIdFromOrigemId } from "@/services/livroCaixaService";
 import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
 import { cooperadoGaPausaTrabalhoFinanceiroPesado } from "@/lib/cooperado/cooperadoGaPausaTrabalhoPesado";
@@ -199,14 +197,7 @@ import { CooperadoApresentacaoFinanceiraGate } from "@/components/cooperado/Coop
 import { useCooperadoApresentacaoFinanceiraConsolidada } from "@/hooks/useCooperadoApresentacaoFinanceiraConsolidada";
 import { cooperadoBicAutorizaZerarCardInicio } from "@/lib/cooperadoInicioCardPolicy";
 import { formatCurrency, formatDate, formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia, cn } from "@/utils/format";
-import type { AppData, PagamentoCooperadoRegistro, FichaCorrida, NotaPedido } from "@/types";
-
-/** Push pós-ação em Pagar — sem fila de POST por cooperado; nuvem já recebe o operacional. */
-const PAGAR_OPERACIONAL_PUSH = {
-  authoritative: true,
-  forceOperacionalPush: true,
-  skipBulkCooperadosCloudPush: true,
-} as const;
+import type { PagamentoCooperadoRegistro, FichaCorrida, NotaPedido } from "@/types";
 
 function TabelaResumoItens({
   itens,
@@ -290,7 +281,6 @@ function FichaCorridaPageInner() {
   /** Celular/PWA: Financeiro com resumo de entregas e mês pago como antes da separação desktop. */
   const messenger = isCooperadoPwaMessengerMode();
   const pilotFinanceiroLeve = cooperadoMobilePilotSnapshotFirstInicio(user);
-  const financeiroAppDataAoVivo = cooperadoFinanceiroMobileLeituraAoVivo(user);
   const readModelsRevision = useCooperadoMessengerReadModelRevision();
   const [fichaResumoSnap, setFichaResumoSnap] = useState<CooperadoPwaFichaResumoSnapshot | null>(
     () => {
@@ -299,17 +289,16 @@ function FichaCorridaPageInner() {
       return lerCooperadoPwaFichaResumoSnapshot(user.cooperadoId, user.cooperativaId);
     }
   );
-  /** Cooperado — Financeiro sempre ao vivo (como antes); não congelar em snapshot dormant. */
+  /** Piloto: dados ao vivo na aba Financeiro (snapshot vazio/stale congelava R$ 0). Mensageiro PWA mantém dormant. */
   const financeiroDormant = useMemo(() => {
     if (!isCooperado) return false;
+    if (messenger) return true;
+    if (pilotFinanceiroLeve) return false;
     return false;
-  }, [isCooperado]);
+  }, [isCooperado, messenger, pilotFinanceiroLeve]);
   /** PWA leve só desliga subscribe do AppData para cooperado; responsável continua com dados ao vivo. */
   const appDataPanelActive =
-    tabActive &&
-    (isCooperado
-      ? cooperadoPwaUiSubscribesAppData() || financeiroAppDataAoVivo
-      : true);
+    tabActive && (isCooperado ? cooperadoPwaUiSubscribesAppData() : true);
   const dataLive = useAppDataSelectorForDomainsWhenActive(
     appDataPanelActive,
     fichaAppDataDomains,
@@ -324,13 +313,7 @@ function FichaCorridaPageInner() {
   const data = financeiroDormant
     ? dataDormant
     : dataLive ??
-      (isCooperado && tabActive && isAppDataWarm()
-        ? getData()
-        : !isCooperado
-          ? isAppDataWarm()
-            ? getData()
-            : peekStaffGestaoLastGood()
-          : null);
+      (!isCooperado ? (isAppDataWarm() ? getData() : peekStaffGestaoLastGood()) : null);
   const hbDescontosRevision = useContaCoopDescontosRevisionWhenLive(!financeiroDormant);
   const financeiroUiEpoch = financeiroDormant ? readModelsRevision : hbDescontosRevision;
   const searchParams = useSearchParams();
@@ -375,12 +358,7 @@ function FichaCorridaPageInner() {
     }
     const t = window.setTimeout(run, 0);
     return () => window.clearTimeout(t);
-  }, [tabActive, messenger, pilotFinanceiroLeve, isCooperado, financeiroAppDataAoVivo]);
-
-  useEffect(() => {
-    if (!tabActive || !financeiroAppDataAoVivo || !user) return;
-    cooperadoPilotForcarRematerializacaoFinanceira(user);
-  }, [tabActive, financeiroAppDataAoVivo, user?.id, user?.cooperadoId]);
+  }, [tabActive, messenger, pilotFinanceiroLeve, isCooperado]);
 
   useEffect(() => {
     if (!(messenger || pilotFinanceiroLeve) || !cooperadoId || !coopIdEarly) {
@@ -629,8 +607,6 @@ function FichaCorridaPageInner() {
     fichaResumoSnap,
     apresentacaoFinanceiroUi,
     appDataWarmTick,
-    financeiroAppDataAoVivo,
-    user?.id,
   ]);
 
   const mesEmAberto = useMemo(() => {
@@ -1967,18 +1943,13 @@ function FichaCorridaPageInner() {
     setReciboSucessoOpen(true);
   };
 
-  const syncPagamentoOperacional = async (
-    snapshot?: AppData,
-    afterPush: "light" | "full" = "full"
-  ) => {
+  const syncPagamentoOperacional = async () => {
     if (!user || !coopId) return;
-    const fonte = snapshot ?? getData();
-    const cnpj = await resolveCooperativaCnpj(fonte, coopId, user);
+    const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
     if (!cnpj) return;
     clearOperacionalPushFingerprint(cnpj, true);
-    await pushOperacionalToCloud(cnpj, fonte, coopId, PAGAR_OPERACIONAL_PUSH);
-    if (afterPush === "light") requestAppSyncLight();
-    else requestAppSync();
+    await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true, forceOperacionalPush: true });
+    requestAppSync();
   };
 
   const handleReenviarAssinaturaRecibo = (pagamento: PagamentoCooperadoRegistro) => {
@@ -2017,9 +1988,10 @@ function FichaCorridaPageInner() {
 
   const handleVerificarReciboAssinado = (pagamento: PagamentoCooperadoRegistro) => {
     if (!user || !coopId || !data) return;
-    const next = updateData((d) => {
-      const marcado = marcarReciboPagamentoVerificadoResponsavel(d, pagamento.id, user.id, user.name);
-      return addAuditEntry(marcado, {
+    setAssinaturaBusyId(pagamento.id);
+    updateData((d) => {
+      const next = marcarReciboPagamentoVerificadoResponsavel(d, pagamento.id, user.id, user.name);
+      return addAuditEntry(next, {
         entityType: "pagamento",
         entityId: pagamento.id,
         action: "aprovar",
@@ -2028,7 +2000,7 @@ function FichaCorridaPageInner() {
         changes: "Recibo assinado conferido pelo responsável",
       });
     });
-    void syncPagamentoOperacional(next, "light").catch(() => {});
+    void syncPagamentoOperacional().finally(() => setAssinaturaBusyId(null));
   };
 
   const reciboAtual = pagamentoConfirmado ?? pagamentoConfirmadoMes;

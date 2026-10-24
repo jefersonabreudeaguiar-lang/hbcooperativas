@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Store, Users } from "lucide-react";
-import { HbCreditPaymentComprovante } from "@/components/hb-credit/HbCreditPaymentComprovante";
+import { ArrowLeft, CheckCircle2, Loader2, Store, Users } from "lucide-react";
 import { isCooperadoTransferIntentId } from "@/config/cooperadoTransferenciaCredito";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
@@ -31,11 +30,6 @@ import {
   peekHbCreditPendingQrScan,
   type HbCreditPaymentDraft,
 } from "@/lib/hb-credit/hbCreditPaymentDraft";
-import {
-  clearHbCreditPaymentReceipt,
-  storeHbCreditPaymentReceipt,
-  type HbCreditPaymentReceipt,
-} from "@/lib/hb-credit/hbCreditPaymentReceipt";
 import {
   gravarHbCreditAccountPersistido,
   HB_CREDIT_ACCOUNT_STORAGE_VERSION,
@@ -80,8 +74,7 @@ function HbCreditPagarContent() {
   const [payPin, setPayPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState<HbCreditPaymentReceipt | null>(null);
-  const [phaseBStepUpPending, setPhaseBStepUpPending] = useState(false);
+  const [success, setSuccess] = useState<{ receiptCode: string } | null>(null);
   const [contaLimite, setContaLimite] = useState<ContaCoopLimiteCooperado | null>(null);
   const [limiteContaRefreshing, setLimiteContaRefreshing] = useState(false);
   const autoPayPinRef = useRef("");
@@ -254,10 +247,7 @@ function HbCreditPagarContent() {
       return;
     }
     if (busy || payInFlightRef.current) return;
-    if (!canAffordHbPaymentScanPreview(limite, intent.amountCents)) {
-      setError("Saldo insuficiente ou saldo ainda atualizando. Aguarde alguns segundos e tente de novo.");
-      return;
-    }
+    if (!canAffordHbPaymentScanPreview(limite, intent.amountCents)) return;
     payInFlightRef.current = true;
     setBusy(true);
     setError("");
@@ -275,7 +265,6 @@ function HbCreditPagarContent() {
         pin: payPin,
         idempotencyKey: `pay:${intent.id}:${hbApiCooperadoId}`,
         useCashback: pagamentoCooperado ? false : useCashbackOnPay,
-        phaseBStepUp: phaseBStepUpPending,
       });
 
       if (typeof res.disponivelAposCents === "number") {
@@ -299,36 +288,9 @@ function HbCreditPagarContent() {
         notifyHbCreditAccountCacheUpdated();
       }
 
-      const paidAt = new Date().toISOString();
-      const receipt: HbCreditPaymentReceipt = {
-        v: 1,
-        receiptCode: res.receiptCode ?? "—",
-        transacaoId: res.transacaoId ?? intent.id,
-        amountCents: intent.amountCents,
-        debitoCents: debito,
-        parceiroNome: draft.parceiroNome,
-        cooperadoNome,
-        cnpj,
-        cooperadoId: hbApiCooperadoId,
-        paidAt,
-        saldoAposCents: res.disponivelAposCents,
-        pagamentoCooperado,
-      };
-      storeHbCreditPaymentReceipt(receipt);
       clearHbCreditPaymentDraft();
-      setPayPin("");
-      autoPayPinRef.current = "";
-      setPhaseBStepUpPending(false);
-      setSuccess(receipt);
+      setSuccess({ receiptCode: res.receiptCode ?? "—" });
     } catch (e) {
-      const code = (e as { code?: string }).code;
-      if (code === "HB_CREDIT_STEP_UP_REQUIRED") {
-        setPhaseBStepUpPending(true);
-        setPayPin("");
-        autoPayPinRef.current = "";
-        setError(e instanceof Error ? e.message : "Digite o PIN novamente para confirmar.");
-        return;
-      }
       setError(e instanceof Error ? e.message : "Não foi possível concluir o pagamento.");
     } finally {
       payInFlightRef.current = false;
@@ -350,7 +312,6 @@ function HbCreditPagarContent() {
     payPin,
     useCashbackOnPay,
     cashbackAvail,
-    phaseBStepUpPending,
   ]);
 
   const affordOk = limite && intent ? canAffordHbPaymentScanPreview(limite, intent.amountCents) : false;
@@ -450,13 +411,23 @@ function HbCreditPagarContent() {
   if (success) {
     return (
       <div className={hbCooperadoFlowPage}>
-        <HbCreditPaymentComprovante
-          receipt={success}
-          onConcluir={() => {
-            clearHbCreditPaymentReceipt();
-            router.replace("/minha-conta-coop");
-          }}
-        />
+        <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
+          <CheckCircle2 className="h-16 w-16 text-emerald-600" strokeWidth={1.5} />
+          <h1 className="mt-6 text-2xl font-semibold tracking-tight text-gray-900">Pagamento confirmado</h1>
+          <p className="mt-2 text-4xl font-bold tabular-nums text-gray-900">
+            {formatCentsBRL(intent.amountCents)}
+          </p>
+          <p className="mt-1 text-sm text-gray-600">{draft.parceiroNome}</p>
+          <p className="mt-6 rounded-full bg-emerald-100 px-4 py-2 text-sm font-medium text-emerald-900">
+            Comprovante {success.receiptCode}
+          </p>
+          <p className="mt-3 text-xs text-gray-500">O mercado já foi avisado na hora.</p>
+        </div>
+        <div className="p-6 pb-10">
+          <Button className={hbCooperadoPrimaryBtn} onClick={() => router.replace("/minha-conta-coop")}>
+            Concluir
+          </Button>
+        </div>
       </div>
     );
   }
@@ -469,21 +440,6 @@ function HbCreditPagarContent() {
 
   return (
     <div className={hbCooperadoFlowPage}>
-      {busy && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-950/40 px-8 backdrop-blur-sm"
-          role="status"
-          aria-live="polite"
-        >
-          <div className="w-full max-w-sm rounded-3xl bg-white p-6 text-center shadow-xl">
-            <Loader2 className="mx-auto h-10 w-10 animate-spin text-emerald-600" />
-            <p className="mt-4 text-lg font-semibold text-gray-900">Confirmando pagamento</p>
-            <p className="mt-2 text-sm text-gray-600">
-              Não feche o app. Em alguns segundos você verá o comprovante.
-            </p>
-          </div>
-        </div>
-      )}
       <header className="flex items-center gap-3 px-4 py-3">
         <button
           type="button"
@@ -529,13 +485,7 @@ function HbCreditPagarContent() {
             disabled={busy || hasPin === false}
             autoFocus
             label="Digite seu PIN"
-            hint={
-              busy
-                ? "Confirmando na nuvem…"
-                : phaseBStepUpPending
-                  ? "Confirmação extra de segurança — digite o PIN de novo"
-                  : "Confirma automaticamente ao completar"
-            }
+            hint={busy ? "Confirmando na nuvem…" : "Confirma automaticamente ao completar"}
           />
         </div>
 

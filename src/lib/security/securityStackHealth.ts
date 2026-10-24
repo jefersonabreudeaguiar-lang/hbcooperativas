@@ -33,25 +33,6 @@ export function buildSecurityStackHealth(env: NodeJS.ProcessEnv = process.env): 
   if (!env.HB_RECONCILIATION_COOP_CNPJ?.trim() && !env.HB_HOBELISCO_PROBE_COOP_CNPJ?.trim()) {
     recommendations.push("Defina HB_RECONCILIATION_COOP_CNPJ para cron diário de crédito.");
   }
-  const phaseA = env.HB_CREDIT_PHASE_A_SHADOW;
-  if (phaseA != null && ["false", "0", "off"].includes(phaseA.trim().toLowerCase())) {
-    if (!["true", "1", "on"].includes(String(env.HB_CREDIT_PHASE_A_BLOCK_DIVERGENT ?? "").trim().toLowerCase())) {
-      recommendations.push(
-        "Fase A HB: sombra desligada sem HB_CREDIT_PHASE_A_BLOCK_DIVERGENT — confirme se é intencional."
-      );
-    }
-  }
-  const phaseBShadow = env.HB_CREDIT_PHASE_B_SHADOW;
-  const phaseBEnforce = env.HB_CREDIT_PHASE_B_ENFORCE;
-  if (
-    phaseBShadow != null &&
-    ["false", "0", "off"].includes(phaseBShadow.trim().toLowerCase()) &&
-    ["true", "1", "on"].includes(String(phaseBEnforce ?? "").trim().toLowerCase())
-  ) {
-    recommendations.push(
-      "Fase B HB: enforce ativo — confirme limites HB_CREDIT_PHASE_B_* e monitore credit.phase_b_guard."
-    );
-  }
   if (!env.FIELD_ENCRYPTION_KEY?.trim() && isStaffMfaFeatureEnabled()) {
     recommendations.push("Defina FIELD_ENCRYPTION_KEY (32+ chars) para cifrar segredos MFA.");
   }

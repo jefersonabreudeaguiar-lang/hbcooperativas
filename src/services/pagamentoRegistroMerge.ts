@@ -123,38 +123,10 @@ export function mergePagamentoCooperadoRecord(
       local.valorBruto !== cloud.valorBruto ||
       local.descontoCooperativa !== cloud.descontoCooperativa
     ) {
-      return unirReciboConferidoResponsavelNoPagamento(local, cloud, local);
+      return local;
     }
   }
-  const base =
-    pagamentoRecordTime(local) >= pagamentoRecordTime(cloud) ? local : cloud;
-  const other = base === local ? cloud : local;
-  return unirReciboConferidoResponsavelNoPagamento(base, local, other);
-}
-
-/** Marcação «recibo verificado» não pode sumir no pull se a nuvem ainda não tem o campo. */
-function unirReciboConferidoResponsavelNoPagamento(
-  base: PagamentoCooperadoRegistro,
-  local: PagamentoCooperadoRegistro,
-  cloud: PagamentoCooperadoRegistro
-): PagamentoCooperadoRegistro {
-  const localTs = local.reciboConferidoPorResponsavelEm;
-  const cloudTs = cloud.reciboConferidoPorResponsavelEm;
-  if (!localTs && !cloudTs) return base;
-  const pick =
-    localTs && cloudTs
-      ? new Date(localTs).getTime() >= new Date(cloudTs).getTime()
-        ? local
-        : cloud
-      : localTs
-        ? local
-        : cloud;
-  return {
-    ...base,
-    reciboConferidoPorResponsavelEm: pick.reciboConferidoPorResponsavelEm,
-    reciboConferidoPorId: pick.reciboConferidoPorId,
-    reciboConferidoPorNome: pick.reciboConferidoPorNome,
-  };
+  return pagamentoRecordTime(local) >= pagamentoRecordTime(cloud) ? local : cloud;
 }
 
 /**

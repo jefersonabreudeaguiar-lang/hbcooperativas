@@ -1902,17 +1902,14 @@ function mesComPagamentoCooperativaRegistrado(
   return !!getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia);
 }
 
-/** Entrega e conferência — createdAt da foto não reabre; conferência após PIX sim. */
+/** Só data de entrega — createdAt/conferência refeitos no sync não reabrem o pago. */
 function notaReferenciaTemporalEscopoPagamento(nota: NotaPedido): number {
-  const stamps: number[] = [];
-  for (const campo of [nota.dataEntrega, nota.dataConferencia]) {
-    if (!campo) continue;
-    const raw = campo.length === 10 ? `${campo}T00:00:00.000Z` : campo;
+  if (nota.dataEntrega) {
+    const raw = nota.dataEntrega.length === 10 ? `${nota.dataEntrega}T00:00:00.000Z` : nota.dataEntrega;
     const dia = Date.parse(raw);
-    if (Number.isFinite(dia)) stamps.push(dia);
+    if (Number.isFinite(dia)) return dia;
   }
-  if (stamps.length === 0) return Number.NaN;
-  return Math.max(...stamps);
+  return Number.NaN;
 }
 
 export function notaQuitadaPorPagamentoCooperativaRegistrado(
@@ -2684,23 +2681,6 @@ function aplicarDescontosContaCoopMesNoResumo(
   return mergeDescontosContaCoopNoResumo(resumo, descontos);
 }
 
-/** PIX aguardando assinatura: HB do arquivo ainda abate o «a receber» (ciclo só fecha no confirmado). */
-function aplicarHbArquivoResumoAguardandoPix(
-  resumo: ResumoPagamentoCooperado,
-  data: AppData,
-  cooperadoId: string,
-  mesReferencia: string,
-  cooperativaId?: string
-): ResumoPagamentoCooperado {
-  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
-  const descontos = dedupeDescontosContaCoopRemotos(
-    getDescontosContaCoopMesCached(data, canonico, mesReferencia, coopId)
-  );
-  if (!descontos.length) return resumo;
-  return mergeDescontosContaCoopNoResumo(resumo, descontos);
-}
-
 /** Resumo com abatimento HB Créditos quando houver compras no mercado no mês. */
 export function getResumoExibicaoCooperadoPilot(
   resumo: ResumoPagamentoCooperado,
@@ -2862,15 +2842,9 @@ export function getResumoPagamentoExibicao(
               !(d.tipo === "credito_avulso" && d.motivo.toLowerCase().includes("estorno"))
           ),
         };
-        return aplicarHbArquivoResumoAguardandoPix(
-          getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId),
-          data,
-          cooperadoId,
-          mesReferencia,
-          coopId
-        );
+        return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
       }
-      return aplicarHbArquivoResumoAguardandoPix(snap, data, cooperadoId, mesReferencia, coopId);
+      return snap;
     }
     const base: ResumoPagamentoCooperado = {
       ...snap,
@@ -2885,13 +2859,7 @@ export function getResumoPagamentoExibicao(
           !(d.tipo === "credito_avulso" && d.motivo.toLowerCase().includes("estorno"))
       ),
     };
-    return aplicarHbArquivoResumoAguardandoPix(
-      getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId),
-      data,
-      cooperadoId,
-      mesReferencia,
-      coopId
-    );
+    return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
   }
   const live = getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId, ajustes);
   return getResumoPagamentoParaRegistro(live, data, cooperadoId, mesReferencia, coopId);

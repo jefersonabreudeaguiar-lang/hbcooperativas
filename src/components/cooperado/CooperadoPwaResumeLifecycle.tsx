@@ -58,7 +58,7 @@ export function CooperadoPwaResumeLifecycle() {
     };
 
     const onVisibility = () => {
-      if (document.visibilityState === "visible" && isCooperadoMobileGaPromoted(user)) {
+      if (document.visibilityState === "visible" && cooperadoMobilePilotSnapshotFirstInicio(user)) {
         cooperadoPilotFinanceRecoveryOnForeground(user);
       }
       if (document.visibilityState === "hidden") flush();

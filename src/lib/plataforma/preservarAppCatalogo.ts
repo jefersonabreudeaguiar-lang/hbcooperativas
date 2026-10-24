@@ -25,7 +25,7 @@ export const PRESERVAR_APP_CONTRATOS_TRAVADOS = {
   fotosFicha: 2,
   aberturaInstantanea: 1,
   trocaAbas: 1,
-  trocaAbasResponsavel: 4,
+  trocaAbasResponsavel: 1,
 } as const;
 
 export const PRESERVAR_APP_STAFF_LKG_PREFIX = "hb-staff-gestao-lkg-v1";
@@ -40,7 +40,6 @@ export const PRESERVAR_APP_TESTES_CONTRATO = [
   "scripts/test-responsavel-pagar-cooperados-contrato.ts",
   "scripts/test-responsavel-conferir-correcoes-contrato.ts",
   "scripts/test-responsavel-troca-abas-rapida.ts",
-  "scripts/test-conferir-ui-nao-travar-contrato-v604.ts",
   "scripts/test-cooperado-fotos-ficha-contrato.ts",
   "scripts/test-cooperado-abertura-instantanea.ts",
   "scripts/test-cooperado-troca-abas-rapida.ts",

@@ -6,13 +6,9 @@ import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { NotaFotoImg } from "@/components/ui/NotaFotoImg";
 import { FOTO_ENTREGA_THUMB_IMG } from "@/components/notas/fotoEntregaDisplay";
 import { useAppDataSelector } from "@/hooks/useAppData";
+import { getCooperadoNome } from "@/utils/calculations";
 import { formatCurrency, formatDate } from "@/utils/format";
-import {
-  getFotoExibicaoNota,
-  getNomeEnvioEntregaNota,
-  notaPertenceCooperativa,
-  notaPertenceGrupoConferencia,
-} from "@/utils/fotoEntrega";
+import { getFotoExibicaoNota, notaPertenceCooperativa, notaPertenceGrupoConferencia } from "@/utils/fotoEntrega";
 import {
   notaElegivelParaFilaConferenciaResponsavel,
   notaPassaFiltroStatusListaConferencia,
@@ -50,8 +46,6 @@ function NotasPedidoHistoricoResponsavelInner({
   onConferir,
   onDelete,
 }: Props) {
-  const dataLeitura = useAppDataSelector((d) => appDataParaConferirLeitura(d), [coopId]);
-
   const notas = useAppDataSelector(
     (d) => {
       const leitura = appDataParaConferirLeitura(d);
@@ -73,23 +67,18 @@ function NotasPedidoHistoricoResponsavelInner({
   );
 
   const instituicoes = useAppDataSelector((d) => appDataParaConferirLeitura(d).instituicoes, []);
+  const cooperados = useAppDataSelector((d) => appDataParaConferirLeitura(d).cooperados, []);
 
   const lastNotasRef = useRef(notas);
   if (notas) lastNotasRef.current = notas;
   const lastInstituicoesRef = useRef(instituicoes);
   if (instituicoes) lastInstituicoesRef.current = instituicoes;
-  const lastDataLeituraRef = useRef(dataLeitura);
-  if (dataLeitura) lastDataLeituraRef.current = dataLeitura;
+  const lastCooperadosRef = useRef(cooperados);
+  if (cooperados) lastCooperadosRef.current = cooperados;
 
   const notasDeferred = useDeferredValue(notas ?? lastNotasRef.current ?? []);
   const instituicoesEstaveis = instituicoes ?? lastInstituicoesRef.current ?? [];
-  const leituraEstavel = dataLeitura ?? lastDataLeituraRef.current;
-
-  const nomeEnvioNaNota = useCallback(
-    (n: NotaPedido) =>
-      leituraEstavel ? getNomeEnvioEntregaNota(n, leituraEstavel, coopId) : "Cooperado",
-    [leituraEstavel, coopId]
-  );
+  const cooperadosEstaveis = cooperados ?? lastCooperadosRef.current ?? [];
 
   const columns = useMemo(
     () => [
@@ -98,7 +87,7 @@ function NotasPedidoHistoricoResponsavelInner({
       {
         key: "coop",
         label: "Cooperado",
-        render: (n: NotaPedido) => nomeEnvioNaNota(n),
+        render: (n: NotaPedido) => getCooperadoNome(cooperadosEstaveis, n.cooperadoId),
       },
       {
         key: "escola",
@@ -118,7 +107,7 @@ function NotasPedidoHistoricoResponsavelInner({
       },
       { key: "status", label: "Status", render: (n: NotaPedido) => <NotaStatusBadge status={n.status} /> },
     ],
-    [nomeEnvioNaNota, instituicoesEstaveis]
+    [cooperadosEstaveis, instituicoesEstaveis]
   );
 
   const handleRowView = useCallback(
@@ -161,7 +150,7 @@ function NotasPedidoHistoricoResponsavelInner({
                 {formatDate(n.dataEntrega)} · {n.numeroNota}
               </p>
               {n.lancamentoDireto && <p className="text-xs text-amber-700 mt-0.5">Avulso · sem nota</p>}
-              <p className="text-xs text-gray-600 mt-0.5">{nomeEnvioNaNota(n)}</p>
+              <p className="text-xs text-gray-600 mt-0.5">{getCooperadoNome(cooperadosEstaveis, n.cooperadoId)}</p>
               {n.valorLiquido > 0 && (
                 <p className="text-sm font-semibold text-green-700 mt-1">{formatCurrency(n.valorLiquido)}</p>
               )}
@@ -171,7 +160,7 @@ function NotasPedidoHistoricoResponsavelInner({
         </button>
       );
     },
-    [nomeEnvioNaNota, instituicoesEstaveis, handleRowView]
+    [cooperadosEstaveis, instituicoesEstaveis, handleRowView]
   );
 
   return (

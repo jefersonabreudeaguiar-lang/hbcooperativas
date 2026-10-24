@@ -26,10 +26,8 @@ import {
 import { lerInicioCardFinanceiroExibicao } from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
 import { lerInicioCardPersistidoFlex } from "@/lib/cooperadoInicioCardPersistencia";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
-import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 
-export const COOPERADO_FINANCEIRO_EXIBICAO_DRIFT_EPS = 0.02;
-const PARIDADE_SNAP_DRIFT_EPS = COOPERADO_FINANCEIRO_EXIBICAO_DRIFT_EPS;
+const PARIDADE_SNAP_DRIFT_EPS = 0.02;
 
 /** Snapshot de ficha com paridade zerada enquanto AppData local tem valor — trava Financeiro/Início. */
 export function cooperadoPwaFichaParidadeSnapshotDivergeDeAppData(
@@ -50,26 +48,6 @@ export function cooperadoPwaFichaParidadeSnapshotDivergeDeAppData(
   return false;
 }
 
-/** Card/ficha local ≠ motor BIC com AppData warm — mobile não pode “congelar” valor antigo. */
-export function cooperadoFinanceiroExibicaoDivergeDeAppDataLive(
-  data: AppData,
-  cooperadoId: string,
-  cooperativaId: string
-): boolean {
-  if (cooperadoPwaFichaParidadeSnapshotDivergeDeAppData(data, cooperadoId, cooperativaId)) {
-    return true;
-  }
-  if (!cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, cooperativaId)) return false;
-  if (cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId)) return false;
-  const card = lerInicioCardFinanceiroExibicao(cooperadoId, cooperativaId);
-  if (!card?.display || !cooperadoMotorTemObrigacaoReceber(card.display)) return false;
-  const live = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId);
-  const cardVal = card.display.valor ?? 0;
-  const liveVal = live.valorLiquido ?? 0;
-  if (liveVal <= 0.005 && cardVal <= 0.005) return false;
-  return Math.abs(cardVal - liveVal) > PARIDADE_SNAP_DRIFT_EPS;
-}
-
 /** Snapshots v2 gravados após sync — inclusive saldo zerado (não exige “a receber” > 0). */
 export function cooperadoPwaFinanceiroSnapshotsMaterializados(
   cooperadoId: string,
@@ -81,12 +59,6 @@ export function cooperadoPwaFinanceiroSnapshotsMaterializados(
       lerInicioCardPersistidoFlex(cooperadoId, cooperativaId)
     );
   if (card?.display && cooperadoMotorTemObrigacaoReceber(card.display)) {
-    if (cooperativaId && isAppDataWarm()) {
-      const data = getData();
-      if (cooperadoFinanceiroExibicaoDivergeDeAppDataLive(data, cooperadoId, cooperativaId)) {
-        return false;
-      }
-    }
     return true;
   }
   if (!cooperativaId) return false;
@@ -101,6 +73,13 @@ export function cooperadoPwaFinanceiroSnapshotsMaterializados(
   if (isAppDataWarm()) {
     const data = getData();
     if (cooperadoPwaFichaParidadeSnapshotDivergeDeAppData(data, cooperadoId, cooperativaId)) {
+      const live = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId);
+      if (
+        cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, cooperativaId) &&
+        live.valorLiquido > 0.005
+      ) {
+        return true;
+      }
       return false;
     }
   }

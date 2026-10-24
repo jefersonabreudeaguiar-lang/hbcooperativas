@@ -94,12 +94,6 @@ const PHASE_BIC: Step[] = [
     cmd: "npx",
     stepArgs: ["tsx", "scripts/test-cooperado-inicio-card-bic-recibo-legado.ts"],
   },
-  {
-    phase: "1",
-    title: "Cooperado GA = experiência Jeferson (mobile)",
-    cmd: "npx",
-    stepArgs: ["tsx", "scripts/test-cooperado-experiencia-jeferson-ga-paridade.ts"],
-  },
 ];
 
 const PHASE_HB: Step[] = [
@@ -132,42 +126,6 @@ const PHASE_HB: Step[] = [
     title: "HB Créditos P0 segurança",
     cmd: "npx",
     stepArgs: ["tsx", "scripts/test-hb-credit-p0-security.ts"],
-  },
-  {
-    phase: "2",
-    title: "HB Créditos Fase A (sombra/bloqueio)",
-    cmd: "npx",
-    stepArgs: ["tsx", "scripts/test-hb-credit-phase-a.ts"],
-  },
-  {
-    phase: "2",
-    title: "HB Créditos Fase B (antifraude)",
-    cmd: "npx",
-    stepArgs: ["tsx", "scripts/test-hb-credit-phase-b.ts"],
-  },
-  {
-    phase: "2",
-    title: "HB Créditos Fase C (ops / saúde)",
-    cmd: "npx",
-    stepArgs: ["tsx", "scripts/test-hb-credit-phase-c.ts"],
-  },
-  {
-    phase: "2",
-    title: "Conta-coop responsável — UX e desempenho",
-    cmd: "npx",
-    stepArgs: ["tsx", "scripts/test-conta-coop-staff-ux-contrato.ts"],
-  },
-  {
-    phase: "2",
-    title: "Cooperado mobile — paridade valor A receber",
-    cmd: "npx",
-    stepArgs: ["tsx", "scripts/test-cooperado-mobile-valor-paridade-contrato.ts"],
-  },
-  {
-    phase: "2",
-    title: "HB pagar — comprovante e UX",
-    cmd: "npx",
-    stepArgs: ["tsx", "scripts/test-hb-credit-pagar-ux-contrato.ts"],
   },
   {
     phase: "2",

@@ -6,7 +6,6 @@ import {
 import { cooperadoPilotMotorCardInicioTemValor } from "@/lib/cooperado/cooperadoMobilePilotInicioValorLocal";
 import {
   cooperadoFinanceiroCardCacheTemValor,
-  cooperadoFinanceiroExibicaoDivergeDoMotorLocal,
   lerInicioCardFinanceiroExibicao,
 } from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
 import { cooperadoTemReciboAssinadoLocalSemPendenciaUi } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
@@ -44,7 +43,6 @@ export function cooperadoGaExibicaoFinanceiraConfiavel(
 ): boolean {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return false;
   if (cooperadoFinanceiroCardCacheTemValor(user) || cooperadoHbCreditCacheTemValor(user)) {
-    if (cooperadoFinanceiroExibicaoDivergeDoMotorLocal(user)) return false;
     return true;
   }
   if (!isAppDataWarm() || !user.cooperadoId) return false;
@@ -112,7 +110,6 @@ export function cooperadoGaValorReceberExibicaoResolvida(
 ): boolean {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return true;
   if (cooperadoFinanceiroCardCacheTemValor(user) || cooperadoHbCreditCacheTemValor(user)) {
-    if (cooperadoFinanceiroExibicaoDivergeDoMotorLocal(user)) return false;
     return true;
   }
   if (cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) return false;

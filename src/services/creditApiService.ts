@@ -100,22 +100,6 @@ export async function fetchCreditDashboard(
   return data.dashboard ?? null;
 }
 
-export async function fetchCreditOpsHealth(cnpj: string) {
-  const res = await secureApiFetch(
-    `/api/credit/ops-health?cnpj=${encodeURIComponent(cnpj)}`,
-    { cache: "no-store" }
-  );
-  const data = await parseJson<{
-    ok?: boolean;
-    error?: string;
-    snapshot?: import("@/lib/hb-credit/security/hbCreditOpsHealth").HbCreditOpsHealthSnapshot;
-  }>(res);
-  if (!res.ok || !data.ok || !data.snapshot) {
-    throw new Error(data.error ?? "Erro ao carregar saúde HB.");
-  }
-  return data.snapshot;
-}
-
 export function buildCreditLimitesRequestQuery(
   cnpj: string,
   opts?: {
@@ -435,8 +419,6 @@ export async function authorizeCreditPayment(input: {
   pin: string;
   idempotencyKey: string;
   useCashback?: boolean;
-  /** Confirmação reforçada (Fase B — 2º PIN em pagamento de risco). */
-  phaseBStepUp?: boolean;
 }): Promise<AuthorizeCreditPaymentResult> {
   const body = JSON.stringify(input);
   const postAuthorize = () =>
@@ -501,9 +483,7 @@ export async function authorizeCreditPayment(input: {
         attempt < maxAuthorizeAttempts - 1 &&
         (res.status === 503 || (data.code && AUTHORIZE_RETRY_CODES.has(data.code)));
       if (!retryable) {
-        const err = new Error(mensagemErroAuthApi(res.status, serverMsg)) as Error & { code?: string };
-        err.code = data.code;
-        throw err;
+        throw new Error(mensagemErroAuthApi(res.status, serverMsg));
       }
       await sleepMs(400 + attempt * 200);
       continue;
@@ -519,11 +499,7 @@ export async function authorizeCreditPayment(input: {
     await sleepMs(400 + attempt * 200);
   }
 
-  if (!res || !res.ok || !data.ok) {
-    const err = new Error(data.error ?? "Pagamento recusado.") as Error & { code?: string };
-    err.code = data.code;
-    throw err;
-  }
+  if (!res || !res.ok || !data.ok) throw new Error(data.error ?? "Pagamento recusado.");
 
   notifyHbCreditLimiteSynced({ immediate: true });
 
@@ -535,10 +511,11 @@ export async function authorizeCreditPayment(input: {
     input.cooperativaId ??
     local.cooperados.find((c) => c.id === input.cooperadoId)?.cooperativaId;
 
-  let syncContaCoop: AuthorizeCreditPaymentResult["syncContaCoop"] = "pending";
+  let syncContaCoop: AuthorizeCreditPaymentResult["syncContaCoop"];
   let syncContaCoopError: string | undefined;
 
   if (coopId && input.cnpj) {
+    syncContaCoop = "pending";
     const canonico = resolverCooperadoIdCanonico(
       local,
       input.cooperadoId,
@@ -577,8 +554,22 @@ export async function authorizeCreditPayment(input: {
       });
     }
 
-    void runAuthorizeCreditPaymentLocalRefreshInBackground(refreshOpts, Boolean(data.projecaoPendente));
+    const maxAttempts = data.projecaoPendente ? 3 : 2;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (attempt > 0) {
+        await sleepMs(HB_REFRESH_RETRY_MS);
+      }
+      try {
+        await refreshContaCoopValorReceberAfterHbTransaction(refreshOpts);
+        notifyHbCreditLimiteSynced({ immediate: true });
+        syncContaCoop = "ok";
+        break;
+      } catch {
+        /* ficha local já tem o débito — pagamento HB confirmado na nuvem */
+      }
+    }
   } else {
+    syncContaCoop = "pending";
     syncContaCoopError = "refresh_not_executed_missing_cooperativa_or_cnpj";
   }
 
@@ -587,32 +578,6 @@ export async function authorizeCreditPayment(input: {
     syncContaCoop,
     ...(syncContaCoopError ? { syncContaCoopError } : {}),
   };
-}
-
-/** Não bloqueia a tela de comprovante — pagamento já confirmado na nuvem. */
-async function runAuthorizeCreditPaymentLocalRefreshInBackground(
-  refreshOpts: {
-    cnpj: string;
-    cooperadoId: string;
-    mesReferencia: string;
-    cooperativaId: string;
-    cooperadoNome?: string;
-  },
-  projecaoPendente: boolean
-): Promise<void> {
-  const maxAttempts = projecaoPendente ? 3 : 2;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    if (attempt > 0) {
-      await sleepMs(HB_REFRESH_RETRY_MS);
-    }
-    try {
-      await refreshContaCoopValorReceberAfterHbTransaction(refreshOpts);
-      notifyHbCreditLimiteSynced({ immediate: true });
-      return;
-    } catch {
-      /* débito otimista já aplicado */
-    }
-  }
 }
 
 export async function createCreditIntent(
@@ -759,7 +724,6 @@ export async function fetchMercadoParceiroData() {
     fiscalPendentes?: number;
     cooperativaNome?: string;
     needsTermsAcceptance?: boolean;
-    needsMercadoNfAvisoAck?: boolean;
     pixChange?: {
       pending: boolean;
       unlocked: boolean;
@@ -768,17 +732,6 @@ export async function fetchMercadoParceiroData() {
     };
   }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar mercado.");
-  return data;
-}
-
-export async function acceptMercadoNfAvisoComunicado() {
-  const res = await secureApiFetch("/api/credit/mercado", {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "accept_nf_aviso" }),
-  });
-  const data = await parseJson<{ ok?: boolean; error?: string; needsMercadoNfAvisoAck?: boolean }>(res);
-  if (!res.ok || !data.ok) throw new Error(data.error ?? "Não foi possível registrar a confirmação.");
   return data;
 }
 

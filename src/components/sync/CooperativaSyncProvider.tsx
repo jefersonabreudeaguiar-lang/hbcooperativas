@@ -117,7 +117,6 @@ import {
   scheduleCooperadoPostInteractiveTask,
   scheduleStaffPostInteractiveTask,
 } from "@/lib/performance/cooperadoColdStart";
-import { staffGestaoPainelAposPullOperacional } from "@/lib/staff/staffGestaoPainelRefresh";
 import {
   consumeCooperadoEventDrivenSyncGrant,
   cooperadoAppReleaseNeedsOperacionalSync,
@@ -146,8 +145,6 @@ import {
 } from "@/lib/staff/staffResponsavelLiveSyncPolicy";
 import { scheduleStaffGestaoLiveSyncLoop } from "@/lib/performance/staffGestaoLiveSyncLoop";
 import { shouldBlockStaffAutoSyncDuringConferencia } from "@/lib/performance/staffConferenciaSyncTier";
-import { staffResponsavelPausaSyncPesado } from "@/lib/staff/staffResponsavelPausaSyncPesado";
-import { staffGestaoDesktopWarmupSyncPaused } from "@/lib/staff/staffGestaoDesktopWarmup";
 import {
   isStaffFilaNotasLivePollEnabled,
   resolveStaffFilaBackgroundCatchupMs,
@@ -620,23 +617,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       currentUser.role === "tesoureiro" ||
       currentUser.role === "admin";
 
-    if (
-      isStaffGestao &&
-      opts?.userInitiated !== true &&
-      opts?.force !== true &&
-      staffResponsavelPausaSyncPesado()
-    ) {
-      return;
-    }
-    if (
-      isStaffGestao &&
-      opts?.userInitiated !== true &&
-      opts?.force !== true &&
-      staffGestaoDesktopWarmupSyncPaused()
-    ) {
-      return;
-    }
-
     if (!opts?.force && isAppIdle() && !isStaffGestao) return;
 
     let warm = await waitForAppDataWarm();
@@ -1061,9 +1041,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (userRef.current?.role === "cooperado" && completed) {
         persistCooperadoLastOperacionalSyncAt(syncedAt);
       }
-      if (completed && userRef.current && isStaffGestaoRole(userRef.current.role)) {
-        staffGestaoPainelAposPullOperacional(getUserCooperativaId(userRef.current, getData()));
-      }
       if (isH197CaptureEnabled()) {
         h197ObserveLifecycleEvent(
           "run_sync_end",
@@ -1270,7 +1247,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (!document.hidden) {
         markUserActivity();
         scheduleStaffPostInteractiveTask(() => {
-          if (staffResponsavelPausaSyncPesado()) return;
           markNextCooperadoSyncSilent();
           void runSync(staffResponsavelOpeningSyncRequest(isAppDataWarm() ? getData() : null));
         });
@@ -1296,7 +1272,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (document.hidden) return;
       if (cooperadoSemAutoSync) return;
       if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
-      if (staff && staffResponsavelPausaSyncPesado()) return;
       if (staff && Date.now() - lastSyncStartedAtRef.current < getSyncMinGapMs(user?.role ?? "cooperado")) {
         return;
       }
@@ -1317,7 +1292,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       }
       markUserActivity();
       if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
-      if (staff && staffResponsavelPausaSyncPesado()) return;
       if (staff && Date.now() - lastSyncStartedAtRef.current < getSyncMinGapMs(user?.role ?? "cooperado")) {
         return;
       }
@@ -1339,7 +1313,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       }
       markUserActivity();
       if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
-      if (staff && staffResponsavelPausaSyncPesado()) return;
       const staffOpts = staff
         ? staffResponsavelLifecycleSyncRequestLive(isAppDataWarm() ? getData() : null)
         : undefined;
@@ -1369,7 +1342,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     const tick = () => {
       if (document.hidden) return;
-      if (staffResponsavelPausaSyncPesado()) return;
       if (shouldBlockStaffAutoSyncDuringConferencia()) return;
       void runSync(staffResponsavelLiveSyncTickRequest(pathname ?? "", getData()));
     };
@@ -1390,7 +1362,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     const tick = () => {
       if (document.hidden) return;
-      if (staffResponsavelPausaSyncPesado()) return;
       const d = getData();
       if (!d) return;
       const cnpj = getCooperativaCnpj(d, coopId);

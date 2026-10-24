@@ -25,7 +25,6 @@ import {
 import { listarPendentesConferenciaResponsavel } from "@/lib/conferencia/responsavelConferenciaFilaNav";
 import { resolveStaffNotasPedidoNotifyDomains } from "@/lib/performance/staffNotasPedidoNotifyDomains";
 import { scheduleStaffResponsavelNotasPollLoop } from "@/lib/performance/staffResponsavelNotasPullBoot";
-import { staffResponsavelPausaSyncPesado } from "@/lib/staff/staffResponsavelPausaSyncPesado";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { useConferirProjection } from "@/hooks/useConferirProjection";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -309,7 +308,6 @@ import {
   liberarEspacoArmazenamento,
   agruparPendentesPorCooperado,
   getChaveGrupoConferencia,
-  resolverCooperadoIdGrupoConferencia,
   notaPertenceGrupoConferencia,
   contarFotosEnviadasNota,
   contarFotosEnviadasNotas,
@@ -2079,12 +2077,11 @@ export default function NotasPedidoStaffMain() {
     filaNavCount === 0;
 
   const relatorioEmAbertoConferir = useMemo(() => {
-    if (!mostrarPainelLancamentosAberto || !coopId || !dataLeitura) return null;
-    return montarRelatorioEmAbertoConferir(
-      dataLeitura,
-      coopId,
-      filtroCooperadoId || undefined
-    );
+    if (!mostrarPainelLancamentosAberto || !coopId) return null;
+    const fonte =
+      (isAppDataWarm() ? getData() : null) ?? dataLeitura ?? peekStaffGestaoLastGood();
+    if (!fonte) return null;
+    return montarRelatorioEmAbertoConferir(fonte, coopId, filtroCooperadoId || undefined);
   }, [mostrarPainelLancamentosAberto, coopId, dataLeitura, filtroCooperadoId]);
 
   const contratosEntrega =
@@ -2197,7 +2194,6 @@ export default function NotasPedidoStaffMain() {
   );
 
   const puxarFilaLiveResponsavel = useCallback(() => {
-    if (staffResponsavelPausaSyncPesado()) return;
     if (isCooperado || !coopId) return;
     const d = getData();
     if (!d) return;
@@ -2322,7 +2318,7 @@ export default function NotasPedidoStaffMain() {
     if (isCooperado || !coopId || !tabActive) return;
     if (!isStaffFilaNotasLivePollEnabled()) return;
     const pollMs = resolveStaffNotasPollIntervalMs(true);
-    if (!staffResponsavelPausaSyncPesado()) puxarFilaLiveResponsavel();
+    puxarFilaLiveResponsavel();
     return scheduleStaffResponsavelNotasPollLoop({
       pollIntervalMs: pollMs,
       onPoll: () => puxarFilaLiveResponsavel(),
@@ -3347,7 +3343,9 @@ export default function NotasPedidoStaffMain() {
     }
     setConferenciaDescontoPct(d?.config.descontoPadraoCooperativa ?? 5);
     const coopDonoId =
-      d && coopId ? resolverCooperadoIdGrupoConferencia(d, nota, coopId) : nota.cooperadoId;
+      d && coopId
+        ? resolverCooperadoIdCanonico(d, nota.cooperadoId, coopId, nota.cooperadoNomeSnapshot)
+        : nota.cooperadoId;
     setConferenciaCooperadoId(coopDonoId);
     setConferenciaDivisaoQtd(0);
     setConferenciaDivisaoIds([]);

@@ -97,7 +97,7 @@ export function buildPendentesEstaveisConferencia(
   const byId = new Map<string, NotaPedido>();
   for (const n of pendentesTodas) {
     if (notaLancadaNaFichaCorrida(data.fichaCorrida, n.id)) continue;
-    byId.set(n.id, notasById.get(n.id) ?? n);
+    byId.set(n.id, n);
   }
 
   for (const id of sticky.ids) {

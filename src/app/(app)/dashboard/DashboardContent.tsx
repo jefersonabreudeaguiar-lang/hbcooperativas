@@ -126,7 +126,6 @@ import {
   STAFF_PRIMEIRO_DIA_SENHA_TITULO,
 } from "@/lib/staff/staffPrimeiroDiaContratos";
 import { CooperadoInicioValorReceberCard } from "@/components/cooperado/CooperadoInicioValorReceberCard";
-import { CooperadoInicioSafeRoot } from "@/components/cooperado/CooperadoInicioSafeRoot";
 import {
   COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
   isCooperadoPwaMobileLeveUi,
@@ -134,7 +133,6 @@ import {
 import {
   buildCooperadoPwaInicioDashboardView,
   persistirCooperadoPwaInicioDashboardSnapshot,
-  sanitizeCooperadoPwaInicioDashboardView,
   type CooperadoPwaInicioDashboardView,
 } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
 import { cooperadoPwaInstantPaintReady, lerCooperadoPwaInicioDashboardViewForResume } from "@/lib/cooperado/cooperadoPwaInstantResume";
@@ -145,10 +143,7 @@ import {
 import { isCooperadoAppUser } from "@/permissions";
 import { getSession } from "@/services/dataStore";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
-import {
-  cooperadoMobilePilotSnapshotFirstInicio,
-  isCooperadoMobilePilotPerfActive,
-} from "@/lib/cooperado/cooperadoMobilePilotPerf";
+import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import {
   scheduleCooperadoHbCreditLimiteAndAccountWarmup,
   scheduleCooperadoPilotHbCreditRouteWarmup,
@@ -215,11 +210,7 @@ function CooperadoDashboard() {
   const inicioPwaLeve = isCooperadoPwaMobileLeveUi();
   const appDataUiOn = cooperadoPwaUiSubscribesAppData() && tabActive;
   const { user } = useAuth();
-  const cooperadoMotorAoVivo = user?.role === "cooperado" && isCooperadoMobileGaPromoted(user);
-  const inicioSnapshotFirst =
-    cooperadoMotorAoVivo
-      ? false
-      : inicioPwaLeve || cooperadoMobilePilotSnapshotFirstInicio(user);
+  const inicioSnapshotFirst = inicioPwaLeve || cooperadoMobilePilotSnapshotFirstInicio(user);
   const router = useRouter();
   const irEnviarFotoEntrega = useCallback(() => {
     setCooperadoOptimisticTab("/notas-pedido");
@@ -314,7 +305,7 @@ function CooperadoDashboard() {
 
   /** Modo mensageiro: HB só no runSync (Atualizar) — sem pilot periódico na UI. */
   useSyncContaCoopValorReceberPilot(
-    contaCoopSync && (cooperadoMotorAoVivo || (!messenger && !inicioSnapshotFirst))
+    !messenger && !inicioSnapshotFirst && contaCoopSync
       ? { ...contaCoopSync, user, initialDelayMs: 3_000 }
       : undefined
   );
@@ -340,7 +331,7 @@ function CooperadoDashboard() {
       syncing: syncingForUi,
       apresentacaoConsolidada,
       carregandoValoresFinanceiros,
-      leituraSomentePwa: cooperadoMotorAoVivo ? false : messenger || inicioSnapshotFirst,
+      leituraSomentePwa: messenger || inicioSnapshotFirst,
       tabAtiva: tabActive,
     });
 
@@ -381,23 +372,11 @@ function CooperadoDashboard() {
         }
       }
 
-      if (!isAppDataWarm()) {
-        void import("@/services/dataStore").then(({ waitForAppDataWarm }) => {
-          void waitForAppDataWarm().then((warm) => {
-            if (warm) refreshPwaInicioView({ rebuildFromAppData: true });
-          });
-        });
-        return;
-      }
-      const built = persistirCooperadoPwaInicioDashboardSnapshot(
-        cooperadoId,
-        coopId,
-        user,
-        apresentacaoConsolidada || isCooperadoMobilePilotPerfActive(user)
-      );
+      if (!isAppDataWarm()) return;
+      const built = persistirCooperadoPwaInicioDashboardSnapshot(cooperadoId, coopId, user, true);
       if (built?.view) setPwaInicioView(built.view);
     },
-    [inicioSnapshotFirst, user, cooperadoIdCard, cooperativaIdCard, apresentacaoConsolidada]
+    [inicioSnapshotFirst, user, cooperadoIdCard, cooperativaIdCard]
   );
 
   useEffect(() => {
@@ -447,16 +426,9 @@ function CooperadoDashboard() {
   const deferredInicioRevision = useDeferredValue(inicioDomainsRevision);
 
   const viewLive = useMemo(() => {
-    if (!tabActive || !appDataUiOn || !deferredInicioRevision || !isAppDataWarm() || !user?.cooperadoId) {
-      return null;
-    }
-    try {
-      return buildCooperadoPwaInicioDashboardView(getData(), user, apresentacaoConsolidada);
-    } catch {
-      return null;
-    }
+    if (!appDataUiOn || !deferredInicioRevision || !isAppDataWarm() || !user?.cooperadoId) return null;
+    return buildCooperadoPwaInicioDashboardView(getData(), user, apresentacaoConsolidada);
   }, [
-    tabActive,
     appDataUiOn,
     deferredInicioRevision,
     user?.id,
@@ -466,27 +438,22 @@ function CooperadoDashboard() {
     apresentacaoConsolidada,
   ]);
 
-  const viewRaw = cooperadoMotorAoVivo
-    ? viewLive ?? pwaInicioView ?? pwaInicioViewStickyRef.current
-    : messenger || inicioSnapshotFirst
-      ? pwaInicioView ?? pwaInicioViewStickyRef.current
-      : viewLive;
-  const view = tabActive ? sanitizeCooperadoPwaInicioDashboardView(viewRaw) : null;
+  const view =
+    messenger || inicioSnapshotFirst ? pwaInicioView ?? pwaInicioViewStickyRef.current : viewLive;
 
   const mesAtual = getCurrentMesReferencia();
   const nomeFromSnapshot =
-    view?.cooperado?.nomeCompleto?.split(" ")[0] ??
-    pwaInicioViewStickyRef.current?.cooperado?.nomeCompleto?.split(" ")[0];
+    view?.cooperado?.nomeCompleto.split(" ")[0] ??
+    pwaInicioViewStickyRef.current?.cooperado?.nomeCompleto.split(" ")[0];
   const coopNomeEarly =
     view?.coopNome ?? (user && isAppDataWarm() ? getUserCooperativaNome(user, getData()) : "");
 
   return (
-    <CooperadoInicioSafeRoot>
-      <CooperadoInicioCooperadoLiveRoot
-        cooperadoIdCard={cooperadoIdCard}
-        cooperativaIdCard={cooperativaIdCard}
-      >
-        {!view ? (
+    <CooperadoInicioCooperadoLiveRoot
+      cooperadoIdCard={cooperadoIdCard}
+      cooperativaIdCard={cooperativaIdCard}
+    >
+      {!view ? (
         <div className="space-y-6 max-w-3xl">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
@@ -516,9 +483,8 @@ function CooperadoDashboard() {
           hbCredit={hbCredit}
           cnpjHbFallback={cnpjHbDigits}
         />
-        )}
-      </CooperadoInicioCooperadoLiveRoot>
-    </CooperadoInicioSafeRoot>
+      )}
+    </CooperadoInicioCooperadoLiveRoot>
   );
 }
 
@@ -556,7 +522,7 @@ function CooperadoDashboardInicioView({
     cnpjDigits,
   } = view;
 
-  const nomePrimeiro = cooperado?.nomeCompleto?.split(" ")[0];
+  const nomePrimeiro = cooperado?.nomeCompleto.split(" ")[0];
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -703,11 +669,7 @@ function AdminDashboard() {
       return false;
     }
   }, [navUser?.id, navUser?.role, navUser?.cooperativaId, adminDataRevision]);
-  const inicioTabActive = useCooperadoTabPanelActive("/dashboard");
-  useReconciliarLivroCaixaGestao(
-    meta?.coopId,
-    Boolean(navUser && meta?.coopId && inicioTabActive)
-  );
+  useReconciliarLivroCaixaGestao(meta?.coopId, Boolean(navUser && meta?.coopId));
 
   const dataRevision = adminDataRevision;
   const deferredRevision = useDeferredValue(dataRevision ?? -1);
@@ -758,13 +720,7 @@ function AdminDashboard() {
           if (!cancelled) setWorkerHeavy({ stats, fila });
         })
         .catch(() => {
-          if (cancelled) return;
-          try {
-            const stats = getAdminStatsCached(d, coopScope);
-            setWorkerHeavy({ stats, fila });
-          } catch {
-            /* totais ficam em “…” */
-          }
+          /* totais ficam em “…” */
         });
     } catch {
       /* Início sem fila/totais — não tela branca */
@@ -779,7 +735,6 @@ function AdminDashboard() {
   const { coopNome, mes, instalacao, assinatura, cnpj, coopId } = meta;
   const stats = workerHeavy?.stats ?? heavy?.stats ?? quickStats;
   const fila = workerHeavy?.fila ?? heavy?.fila ?? [];
-  const filaDoDiaPronta = Boolean(heavy ?? workerHeavy);
   const totaisFinanceirosPendentes =
     adminStatsWorker ? !workerHeavy?.stats : !heavy?.stats && Boolean(quickStats);
 
@@ -919,7 +874,7 @@ function AdminDashboard() {
         </Link>
       )}
 
-      {filaDoDiaPronta ? (
+      {heavy ? (
         <FilaDoDiaPanel items={fila} />
       ) : (
         <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6 animate-pulse min-h-[8rem]" aria-busy="true" />

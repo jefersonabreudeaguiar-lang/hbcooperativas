@@ -39,10 +39,7 @@ import { signedLedgerAmountCentsForExtrato } from "@/lib/hb-credit/ledgerLabels"
 import { formatHbCreditUsoMotivo } from "@/lib/hb-credit/hbCreditUsoDescricao";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import { hbCreditCreditoBaseReais } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
-import {
-  HB_CREDIT_MERCADO_NF_AVISO_POLICY_VERSION,
-  isHbCreditMercadoNfDispensada,
-} from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
+import { isHbCreditMercadoNfDispensada } from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
 import { resolveLeituraFinanceiraCooperadoCore } from "@/lib/bic/bicLeituraPorta";
 import type {
   AuthoritativeCreditBaseErrorPayload,
@@ -1587,10 +1584,6 @@ function mapParceiroRow(row: Record<string, unknown>): ContaCoopParceiro {
     partnerTermsAcceptedBy: row.partner_terms_accepted_by ? String(row.partner_terms_accepted_by) : null,
     partnerTermsDiscountSnapshot:
       row.partner_terms_discount_snapshot != null ? Number(row.partner_terms_discount_snapshot) : null,
-    partnerNfAvisoAckVersion: row.partner_nf_aviso_ack_version
-      ? String(row.partner_nf_aviso_ack_version)
-      : null,
-    partnerNfAvisoAckAt: row.partner_nf_aviso_ack_at ? String(row.partner_nf_aviso_ack_at) : null,
     hasFinancialPin: Boolean(row.pin_hash),
     pinLockedUntil: row.pin_locked_until ? String(row.pin_locked_until) : null,
     createdAt: String(row.created_at),
@@ -2754,31 +2747,7 @@ export async function prepareHbCreditPaymentAuthorize(
   cooperadoId: string,
   actorUserId: string
 ): Promise<HbCreditPrepareAuthorizeResult> {
-  const prepared = await ensureHbCreditLimiteAutoritativoPersistido(
-    supabase,
-    cnpj,
-    cooperadoId,
-    actorUserId
-  );
-  if (!prepared.ok) return prepared;
-
-  const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
-  if (!found) return { ok: true };
-
-  const { runHbCreditPhaseAPaymentGuard } = await import(
-    "@/modules/hb-credit/security/phaseAOperationsGuard"
-  );
-  const phaseA = await runHbCreditPhaseAPaymentGuard(
-    supabase,
-    cnpj,
-    cooperadoId,
-    found.row,
-    found.accountCooperadoId
-  );
-  if (!phaseA.ok) {
-    return { ok: false, error: phaseA.error, code: phaseA.code };
-  }
-  return { ok: true };
+  return ensureHbCreditLimiteAutoritativoPersistido(supabase, cnpj, cooperadoId, actorUserId);
 }
 
 export async function authorizePayment(
@@ -2793,7 +2762,6 @@ export async function authorizePayment(
     actorUserId: string;
     cooperadoNome?: string;
     useCashback?: boolean;
-    phaseBStepUp?: boolean;
   }
 ): Promise<
   | {
@@ -2836,21 +2804,6 @@ export async function authorizePayment(
 
   if (!pinCheck.ok) return { ok: false, error: pinCheck.error };
   if (!intentCheck.ok) return { ok: false, error: intentCheck.error, code: intentCheck.code };
-
-  const { runHbCreditPhaseBPaymentGuard } = await import(
-    "@/modules/hb-credit/security/phaseBOperationsGuard"
-  );
-  const phaseB = await runHbCreditPhaseBPaymentGuard(supabase, {
-    cooperativeCnpj: input.cooperativaCnpj,
-    cooperadoId: accountCooperadoId,
-    partnerId: intentCheck.intent.parceiroId,
-    amountCents: intentCheck.intent.amountCents,
-    availableCents: intentCheck.limite.valorDisponivelCents,
-    phaseBStepUp: input.phaseBStepUp,
-  });
-  if (!phaseB.ok) {
-    return { ok: false, error: phaseB.error, code: phaseB.code };
-  }
 
   let cashbackAppliedCents = 0;
   if (input.useCashback) {
@@ -3074,90 +3027,6 @@ export async function acceptPartnerTerms(
   });
 
   return mapParceiroRow(data as Record<string, unknown>);
-}
-
-function partnerRowAckedMercadoNfAviso(parceiro: ContaCoopParceiro): boolean {
-  return parceiro.partnerNfAvisoAckVersion === HB_CREDIT_MERCADO_NF_AVISO_POLICY_VERSION;
-}
-
-export async function partnerHasAckedMercadoNfAviso(
-  supabase: SupabaseClient,
-  parceiro: ContaCoopParceiro
-): Promise<boolean> {
-  if (!isHbCreditMercadoNfDispensada()) return true;
-  if (partnerRowAckedMercadoNfAviso(parceiro)) return true;
-
-  const { data: row } = await supabase
-    .from("hb_credit_partners")
-    .select("partner_nf_aviso_ack_version")
-    .eq("id", parceiro.id)
-    .maybeSingle();
-  if (String(row?.partner_nf_aviso_ack_version ?? "") === HB_CREDIT_MERCADO_NF_AVISO_POLICY_VERSION) {
-    return true;
-  }
-
-  const digits = normalizeCnpj(parceiro.cooperativaCnpj);
-  const { data } = await supabase
-    .from("hb_credit_audit_log")
-    .select("metadata")
-    .eq("cooperative_cnpj", digits)
-    .eq("resource_type", "partner")
-    .eq("resource_id", parceiro.id)
-    .eq("action", "PARTNER_NF_AVISO_ACKED")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const version = (data?.metadata as { version?: string } | null)?.version;
-  return version === HB_CREDIT_MERCADO_NF_AVISO_POLICY_VERSION;
-}
-
-export function partnerNeedsMercadoNfAvisoAck(parceiro: ContaCoopParceiro): boolean {
-  if (!isHbCreditMercadoNfDispensada()) return false;
-  if (parceiro.status !== "ativo") return false;
-  return true;
-}
-
-export async function acceptPartnerMercadoNfAviso(
-  supabase: SupabaseClient,
-  parceiro: ContaCoopParceiro,
-  appUserId: string
-): Promise<boolean> {
-  if (!partnerNeedsMercadoNfAvisoAck(parceiro)) return true;
-  const already = await partnerHasAckedMercadoNfAviso(supabase, parceiro);
-  if (already) return true;
-
-  const now = new Date().toISOString();
-  const digits = normalizeCnpj(parceiro.cooperativaCnpj);
-  const { error: partnerErr } = await supabase
-    .from("hb_credit_partners")
-    .update({
-      partner_nf_aviso_ack_version: HB_CREDIT_MERCADO_NF_AVISO_POLICY_VERSION,
-      partner_nf_aviso_ack_at: now,
-      partner_nf_aviso_ack_by: appUserId,
-      updated_at: now,
-    })
-    .eq("id", parceiro.id);
-
-  const { error: auditErr } = await supabase.from("hb_credit_audit_log").insert({
-    cooperative_cnpj: digits,
-    actor: appUserId,
-    action: "PARTNER_NF_AVISO_ACKED",
-    resource_type: "partner",
-    resource_id: parceiro.id,
-    metadata: { version: HB_CREDIT_MERCADO_NF_AVISO_POLICY_VERSION },
-  });
-
-  if (!partnerErr) return true;
-  return !auditErr;
-}
-
-export async function resolvePartnerNeedsMercadoNfAvisoAck(
-  supabase: SupabaseClient,
-  parceiro: ContaCoopParceiro
-): Promise<boolean> {
-  if (!partnerNeedsMercadoNfAvisoAck(parceiro)) return false;
-  return !(await partnerHasAckedMercadoNfAviso(supabase, parceiro));
 }
 
 export async function getCooperativaNomeByCnpj(

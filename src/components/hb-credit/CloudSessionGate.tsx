@@ -112,20 +112,12 @@ export function CloudSessionGate({
   const cooperadoFailOpen =
     optimistic && user?.role === "cooperado" && Boolean(user.cooperadoId?.trim());
 
-  const staffHbFailOpen =
-    optimistic &&
-    user &&
-    (user.role === "responsavel" || user.role === "tesoureiro");
-
   if (!ready) {
-    if (cooperadoFailOpen || staffHbFailOpen) {
+    if (cooperadoFailOpen) {
       return (
         <>
           <AlertBanner variant="warning" title="Conexão com a nuvem" className="mb-4">
-            {error ||
-              (staffHbFailOpen
-                ? "Sincronizando HB Créditos… Você pode navegar nas abas; use «Tentar novamente» se os dados não carregarem."
-                : "Sincronizando HB Créditos… Se o saldo não aparecer, toque em Tentar novamente.")}
+            {error || "Sincronizando HB Créditos… Se o saldo não aparecer, toque em Tentar novamente."}
           </AlertBanner>
           <div className="flex flex-wrap gap-2 mb-4">
             <Button size="sm" onClick={retry} disabled={retrying}>

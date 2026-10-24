@@ -30,6 +30,7 @@ import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedi
 import { prestacaoPrincipalCooperado, prestacaoExigeAtencaoCooperado } from "@/services/prestacaoContasService";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { getUserCooperativaId, getUserCooperativaNome, normalizeCnpj } from "@/utils/cooperativa";
+import { cooperadoAppReleaseNeedsOperacionalSync } from "@/lib/performance/cooperadoEventDrivenSync";
 import { getCurrentMesReferencia } from "@/utils/format";
 
 export const COOPERADO_PWA_INICIO_DASHBOARD_SNAPSHOT_VERSION = 1;
@@ -68,75 +69,6 @@ export type CooperadoPwaInicioDashboardSnapshot = {
 
 function storageKey(cooperadoId: string, cooperativaId: string): string {
   return `hb.coop.pwaInicioDash.v${COOPERADO_PWA_INICIO_DASHBOARD_SNAPSHOT_VERSION}:${cooperativaId}:${cooperadoId}`;
-}
-
-function mesReferenciaValido(mes: unknown): string | null {
-  if (typeof mes !== "string") return null;
-  const t = mes.trim();
-  return /^\d{4}-\d{2}$/.test(t) ? t : null;
-}
-
-/**
- * Snapshots antigos/corrompidos no localStorage podem trazer só o cooperado (nome) sem `mes` —
- * `formatMesReferencia` quebrava a árvore React logo abaixo do «Olá» e os cards não pintavam.
- */
-export function sanitizeCooperadoPwaInicioDashboardView(
-  view: CooperadoPwaInicioDashboardView | null | undefined
-): CooperadoPwaInicioDashboardView | null {
-  if (!view || typeof view.cooperadoId !== "string" || !view.cooperadoId.trim()) return null;
-  const nomeOk =
-    view.cooperado &&
-    typeof view.cooperado.nomeCompleto === "string" &&
-    view.cooperado.nomeCompleto.trim().length > 0;
-  if (!nomeOk) return null;
-  const mes = mesReferenciaValido(view.mes) ?? getCurrentMesReferencia();
-  const valorBase = view.valorReceber;
-  const valorReceber =
-    valorBase && typeof valorBase === "object"
-      ? {
-          ...valorBase,
-          mes: mesReferenciaValido(valorBase.mes) ?? mes,
-          meses: Array.isArray(valorBase.meses) ? valorBase.meses : [mes],
-          mesLabel:
-            typeof valorBase.mesLabel === "string" && valorBase.mesLabel.trim()
-              ? valorBase.mesLabel
-              : "—",
-          valor: typeof valorBase.valor === "number" ? valorBase.valor : 0,
-          valorRecibo: typeof valorBase.valorRecibo === "number" ? valorBase.valorRecibo : 0,
-          exibir: Boolean(valorBase.exibir),
-          aguardandoAssinatura: Boolean(valorBase.aguardandoAssinatura),
-        }
-      : {
-          exibir: false,
-          mes,
-          meses: [mes],
-          mesLabel: "—",
-          valor: 0,
-          valorRecibo: 0,
-          aguardandoAssinatura: false,
-        };
-
-  return {
-    ...view,
-    cooperadoId: view.cooperadoId.trim(),
-    mes,
-    coopNome: typeof view.coopNome === "string" ? view.coopNome : "",
-    valorReceber,
-    rejeitadas: Array.isArray(view.rejeitadas) ? view.rejeitadas : [],
-    comunicados: Array.isArray(view.comunicados) ? view.comunicados : [],
-    pautasAbertas: Array.isArray(view.pautasAbertas) ? view.pautasAbertas : [],
-    resolvidos: Array.isArray(view.resolvidos) ? view.resolvidos : [],
-    cnpjDigits: typeof view.cnpjDigits === "string" ? view.cnpjDigits : "",
-    fotosEmAnalise: typeof view.fotosEmAnalise === "number" ? view.fotosEmAnalise : 0,
-    precisaPix: Boolean(view.precisaPix),
-    exibirCardAvulsosSeparado: Boolean(view.exibirCardAvulsosSeparado),
-    temSecaoPendencias: Boolean(view.temSecaoPendencias),
-    mostrarBaixarApp: Boolean(view.mostrarBaixarApp),
-    mostrarAssinaturaPilot: Boolean(view.mostrarAssinaturaPilot),
-    precisaAssinatura: Boolean(view.precisaAssinatura),
-    mensalidadeAberta: Boolean(view.mensalidadeAberta),
-    prestacaoAberta: Boolean(view.prestacaoAberta),
-  };
 }
 
 export function buildCooperadoPwaInicioDashboardView(
@@ -262,9 +194,7 @@ export function lerCooperadoPwaInicioDashboardSnapshot(
     const parsed = JSON.parse(raw) as CooperadoPwaInicioDashboardSnapshot;
     if (parsed.v !== COOPERADO_PWA_INICIO_DASHBOARD_SNAPSHOT_VERSION || !parsed.view) return null;
     if (!cooperadoPwaSnapshotBuildReadable(parsed.appBuild)) return null;
-    const view = sanitizeCooperadoPwaInicioDashboardView(parsed.view);
-    if (!view) return null;
-    return { ...parsed, view };
+    return parsed;
   } catch {
     return null;
   }
@@ -300,6 +230,9 @@ export function persistirCooperadoPwaInicioDashboardSnapshot(
     const prevValor = prev?.view?.valorReceber?.valor ?? 0;
     if (prevValor > 0.005) {
       return prev;
+    }
+    if (cooperadoAppReleaseNeedsOperacionalSync()) {
+      return null;
     }
   }
   const payload: CooperadoPwaInicioDashboardSnapshot = {

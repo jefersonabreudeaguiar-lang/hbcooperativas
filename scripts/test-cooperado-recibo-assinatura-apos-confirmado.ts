@@ -124,24 +124,4 @@ const mescladoNuvem = mesclarAssinaturaReciboPagamentoConfirmado(
 );
 assert.ok(mescladoNuvem?.assinaturaCooperado?.includes("base64"), "mescla assinatura em pagamento já confirmado");
 
-const localVerificado = {
-  ...pgDepois,
-  reciboConferidoPorResponsavelEm: "2026-10-23T12:00:00.000Z",
-  reciboConferidoPorId: "resp-1",
-  reciboConferidoPorNome: "Responsável",
-  updatedAt: "2026-10-23T12:00:00.000Z",
-};
-const cloudSemVerificacao = {
-  ...pgDepois,
-  reciboConferidoPorResponsavelEm: undefined,
-  reciboConferidoPorId: undefined,
-  reciboConferidoPorNome: undefined,
-  updatedAt: "2099-06-01T00:00:00.000Z",
-};
-const mergedVerificado = mergePagamentoCooperadoRecord(localVerificado, cloudSemVerificacao);
-assert.ok(
-  mergedVerificado.reciboConferidoPorResponsavelEm,
-  "merge pull preserva recibo verificado local"
-);
-
 console.log("test-cooperado-recibo-assinatura-apos-confirmado: OK");

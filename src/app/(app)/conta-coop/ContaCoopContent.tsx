@@ -56,7 +56,6 @@ import {
 } from "@/lib/hb-credit/hbCreditLabPolicy";
 import { useSyncContaCoopLimiteFromFicha } from "@/hooks/useSyncContaCoopLimiteFromFicha";
 import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedule";
-import { withContaCoopFetchTimeout } from "@/lib/hb-credit/contaCoopStaffFetch";
 import { HB_CREDIT_LIMITE_SYNCED_EVENT } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import { useHbCreditLimitesRevisionPoll } from "@/hooks/useHbCreditLimitesRevisionPoll";
 
@@ -85,8 +84,6 @@ const PREVIEW_COLETIVO_ITENS_RENDER = 50;
 
 /** Lista GET /limites — revalidação leve (poll + eventos complementam). */
 const LIMITES_LISTA_STALE_MS = 45_000;
-const LIMITES_TABLE_PAGE_SIZE = 40;
-const CNPJ_RESOLVE_TIMEOUT_MS = 12_000;
 
 const panelFallback = () => <PageSkeleton compact />;
 
@@ -115,13 +112,6 @@ const ContaCoopDescontosPanel = dynamic(
   () =>
     import("@/components/hb-credit/ContaCoopDescontosPanel").then((m) => ({
       default: m.ContaCoopDescontosPanel,
-    })),
-  { loading: panelFallback, ssr: false }
-);
-const ContaCoopOpsHealthPanel = dynamic(
-  () =>
-    import("@/components/hb-credit/ContaCoopOpsHealthPanel").then((m) => ({
-      default: m.ContaCoopOpsHealthPanel,
     })),
   { loading: panelFallback, ssr: false }
 );
@@ -240,15 +230,7 @@ function mergeCreditosBaseMaps(
   return next;
 }
 
-type Tab =
-  | "painel"
-  | "limites"
-  | "mercados"
-  | "descontos"
-  | "conferir_nf"
-  | "liquidar"
-  | "estornos"
-  | "saude";
+type Tab = "painel" | "limites" | "mercados" | "descontos" | "conferir_nf" | "liquidar" | "estornos";
 
 export default function ContaCoopPage() {
   return (
@@ -273,8 +255,7 @@ function ContaCoopContent() {
       initialTab === "estornos" ||
       initialTab === "limites" ||
       initialTab === "mercados" ||
-      initialTab === "descontos" ||
-      initialTab === "saude"
+      initialTab === "descontos"
     ) {
       return initialTab;
     }
@@ -317,7 +298,6 @@ function ContaCoopContent() {
   const [cooperadoPinResetRequests, setCooperadoPinResetRequests] = useState<ContaCoopCooperadoPinResetRequest[]>(
     []
   );
-  const [limitesTablePage, setLimitesTablePage] = useState(0);
 
   const cnpjFromData =
     useAppDataSelector((data) => {
@@ -345,10 +325,6 @@ function ContaCoopContent() {
     if (cnpjResolved.length === 14) return;
     let cancelled = false;
     setCnpjResolving(true);
-    const timer = window.setTimeout(() => {
-      if (cancelled) return;
-      setCnpjResolving(false);
-    }, CNPJ_RESOLVE_TIMEOUT_MS);
     void resolveCooperativaCnpj(getData(), user.cooperativaId, user).then((resolved) => {
       if (cancelled) return;
       setCnpjResolved(resolved ?? "");
@@ -356,7 +332,6 @@ function ContaCoopContent() {
     });
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
     };
   }, [cnpjFromData, cnpjResolved.length, user?.cooperativaId, user?.id, user?.cooperativaCnpj]);
 
@@ -525,18 +500,6 @@ function ContaCoopContent() {
 
   const limitesLinhasRender = useDeferredValue(limitesLinhasCooperados);
 
-  const limitesTablePageCount = Math.max(1, Math.ceil(limitesLinhasRender.length / LIMITES_TABLE_PAGE_SIZE));
-
-  const limitesLinhasPagina = useMemo(() => {
-    const page = Math.min(limitesTablePage, limitesTablePageCount - 1);
-    const start = page * LIMITES_TABLE_PAGE_SIZE;
-    return limitesLinhasRender.slice(start, start + LIMITES_TABLE_PAGE_SIZE);
-  }, [limitesLinhasRender, limitesTablePage, limitesTablePageCount]);
-
-  useEffect(() => {
-    setLimitesTablePage(0);
-  }, [cooperadoIdsKey, limites.length]);
-
   useEffect(() => {
     if (!cooperadoIdsAtivos.length) return;
     setLimites((prev) => mergeLimitesCooperado(prev, [], cooperadoIdsAtivos));
@@ -642,13 +605,9 @@ function ContaCoopContent() {
       const ids = cooperadoIdsAtivosRef.current;
       const t0 = contaCoopPerfStart("GET /api/credit/limites");
       try {
-        const full = await withContaCoopFetchTimeout(
-          fetchCreditLimites(
-            cnpj,
-            opts?.authoritative ? { cooperadoIds: ids } : { fast: true, cooperadoIds: ids }
-          ),
-          45_000,
-          "Atualização de limites demorou demais. Tente «Atualizar limites» de novo."
+        const full = await fetchCreditLimites(
+          cnpj,
+          opts?.authoritative ? { cooperadoIds: ids } : { fast: true, cooperadoIds: ids }
         );
         applyLimitesFetchResult(full, ids);
       } catch (e) {
@@ -764,11 +723,7 @@ function ContaCoopContent() {
     try {
       const coopId = user?.cooperativaId ?? "";
       const ids = cooperadoIdsAtivosRef.current;
-      const dash = await withContaCoopFetchTimeout(
-        fetchCreditDashboard(cnpj, creditosBaseRef.current),
-        28_000,
-        "O painel HB demorou demais. Toque em Tentar novamente."
-      );
+      const dash = await fetchCreditDashboard(cnpj, creditosBaseRef.current);
       setDashboard(dash);
       if (dash) gravarHbCreditDashboardPersistido(cnpj, dash);
       setLoading(false);
@@ -875,31 +830,8 @@ function ContaCoopContent() {
       setTetoPercentual(s);
       setPercentualColetivo(s);
     }
-    void reloadRef.current({ background: tab !== "painel" });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- recarrega só quando CNPJ fica disponível
+    void reloadRef.current({ background });
   }, [cnpj]);
-
-  useEffect(() => {
-    if (tab !== "painel" || !cnpj) return;
-    if (dashboard) return;
-    void reloadRef.current({ background: false });
-  }, [tab, cnpj, dashboard]);
-
-  const prefetchStaffPanelChunk = useCallback((next: Tab) => {
-    if (next === "liquidar") void import("@/components/hb-credit/ContaCoopLiquidacaoPanel");
-    else if (next === "conferir_nf") void import("@/components/hb-credit/ContaCoopFiscalNotesConferenciaPanel");
-    else if (next === "estornos") void import("@/components/hb-credit/ContaCoopEstornosPanel");
-    else if (next === "descontos") void import("@/components/hb-credit/ContaCoopDescontosPanel");
-    else if (next === "saude") void import("@/components/hb-credit/ContaCoopOpsHealthPanel");
-  }, []);
-
-  const handleTabChangeWithPrefetch = useCallback(
-    (next: Tab) => {
-      prefetchStaffPanelChunk(next);
-      handleTabChange(next);
-    },
-    [handleTabChange, prefetchStaffPanelChunk]
-  );
 
   const parceirosTabs: Tab[] = ["mercados", "conferir_nf", "liquidar", "estornos"];
   useEffect(() => {
@@ -954,15 +886,9 @@ function ContaCoopContent() {
   }, [tab, cnpj, cooperadoIdsAtivos.length, revalidateLimitesLista]);
 
   useEffect(() => {
-    if (tab !== "limites" || !cooperadoIdsAtivos.length || !cnpj) return;
-    const cancel = scheduleContaCoopAuxSync(
-      () => {
-        void ensureCreditosBaseCentsForPost().catch(() => {});
-      },
-      { idleTimeoutMs: 2_500, fallbackMs: 8_000 }
-    );
-    return cancel;
-  }, [tab, cooperadoIdsKey, ensureCreditosBaseCentsForPost, cooperadoIdsAtivos.length, cnpj]);
+    if (tab !== "limites" || !cooperadoIdsAtivos.length) return;
+    void ensureCreditosBaseCentsForPost();
+  }, [tab, cooperadoIdsKey, ensureCreditosBaseCentsForPost, cooperadoIdsAtivos.length]);
 
   useEffect(() => {
     if (!cnpj) return;
@@ -1288,14 +1214,7 @@ function ContaCoopContent() {
   const pinCooperadoBloqueado = (limite: ContaCoopLimiteCooperado) =>
     Boolean(limite.pinLockedUntil && new Date(limite.pinLockedUntil).getTime() > Date.now());
 
-  if (cnpjResolving && !cnpj) {
-    return (
-      <div className="space-y-3 py-8">
-        <PageSkeleton compact />
-        <p className="text-center text-sm text-gray-500">Identificando cooperativa…</p>
-      </div>
-    );
-  }
+  if (cnpjResolving && !cnpj) return <PageSkeleton />;
 
   if (!cnpj) {
     return (
@@ -1336,11 +1255,9 @@ function ContaCoopContent() {
           { id: "conferir_nf", label: "Conferir NFs" },
           { id: "liquidar", label: "Liquidar" },
           { id: "estornos", label: "Estornos" },
-          { id: "saude", label: "Saúde" },
         ]}
         active={tab}
-        onChange={handleTabChangeWithPrefetch}
-        scrollable
+        onChange={handleTabChange}
       />
 
       {tab === "painel" && (
@@ -1622,7 +1539,7 @@ function ContaCoopContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {limitesLinhasPagina.map((l) => {
+                  {limitesLinhasRender.map((l) => {
                     const baseCents = creditosBaseColetivo[l.cooperadoId] ?? 0;
                     const exib = valoresLimiteExibidos(l, baseCents);
                     return (
@@ -1689,36 +1606,6 @@ function ContaCoopContent() {
                 </tbody>
               </table>
             </div>
-            {limitesLinhasRender.length > LIMITES_TABLE_PAGE_SIZE && (
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-gray-50 px-4 py-3 text-sm">
-                <p className="text-gray-600">
-                  Mostrando {limitesLinhasPagina.length} de {limitesLinhasRender.length} cooperados
-                </p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    disabled={limitesTablePage <= 0}
-                    onClick={() => setLimitesTablePage((p) => Math.max(0, p - 1))}
-                  >
-                    Anterior
-                  </Button>
-                  <span className="tabular-nums text-gray-700">
-                    {Math.min(limitesTablePage, limitesTablePageCount - 1) + 1} / {limitesTablePageCount}
-                  </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    disabled={limitesTablePage >= limitesTablePageCount - 1}
-                    onClick={() => setLimitesTablePage((p) => Math.min(limitesTablePageCount - 1, p + 1))}
-                  >
-                    Próxima
-                  </Button>
-                </div>
-              </div>
-            )}
           </Card>
 
           <Card className="space-y-4 !p-5">
@@ -1865,12 +1752,6 @@ function ContaCoopContent() {
             parceiros={parceiros}
             cooperadoNome={cooperadoNome}
           />
-        </div>
-      )}
-
-      {tab === "saude" && (
-        <div>
-          <ContaCoopOpsHealthPanel cnpj={cnpj} />
         </div>
       )}
 

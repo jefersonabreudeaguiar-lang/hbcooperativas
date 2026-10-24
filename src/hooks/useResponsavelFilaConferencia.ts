@@ -11,11 +11,9 @@ import {
   reconciliarNotasConferenciaDecididasLocalmente,
 } from "@/lib/conferencia/conferenciaFilaDecisaoLocal";
 import {
-  appDataParaConferirLeitura,
   listNotasFilaConferenciaDeDados,
   listNotasFilaConferenciaResponsavel,
 } from "@/services/responsavelPainelIndex";
-import type { AppData } from "@/types";
 import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedidoCloudService";
 import { agruparPendentesPorCooperado } from "@/utils/fotoEntrega";
 import {
@@ -38,8 +36,7 @@ export function useResponsavelFilaConferencia(
   coopId: string | undefined,
   isCooperado: boolean,
   filaDetalhada: boolean,
-  panelActive = true,
-  leituraConferir?: AppData | null
+  panelActive = true
 ) {
   const subscribeFila = panelActive && !isCooperado;
   const stickyRef = useRef({ ids: new Set<string>(), snapshot: new Map<string, NotaPedido>() });
@@ -131,18 +128,10 @@ export function useResponsavelFilaConferencia(
     }
   }, [pendentesTodas, filaDetalhada, subscribeFila]);
 
-  const leituraFila = useMemo(() => {
-    if (leituraConferir) return leituraConferir;
-    if (!coopId) return null;
-    const raw = isAppDataWarm() ? getDataOperationalTruth() : peekStaffGestaoLastGood();
-    if (!raw) return null;
-    return appDataParaConferirLeitura(raw, coopId);
-  }, [leituraConferir, coopId]);
-
   const pendentesEstaveis = useMemo(() => {
     if (!filaDetalhada) return lastEstaveisRef.current.length ? lastEstaveisRef.current : pendentesTodas;
     if (!subscribeFila) return lastEstaveisRef.current;
-    const data = leituraFila ?? (isAppDataWarm() ? getDataOperationalTruth() : peekStaffGestaoLastGood());
+    const data = isAppDataWarm() ? getDataOperationalTruth() : peekStaffGestaoLastGood();
     if (!data) return pendentesTodas.length ? pendentesTodas : lastEstaveisRef.current;
     return buildPendentesEstaveisConferencia(
       data,
@@ -151,14 +140,14 @@ export function useResponsavelFilaConferencia(
       coopId,
       stickyRef.current
     );
-  }, [pendentesTodas, pendingDeleteIds, coopId, filaDetalhada, subscribeFila, leituraFila]);
+  }, [pendentesTodas, pendingDeleteIds, coopId, filaDetalhada, subscribeFila]);
 
   const pendentesPorCooperado = useMemo(() => {
-    if (!filaDetalhada || !coopId) return [];
-    const data = leituraFila;
+    if (!filaDetalhada) return [];
+    const data = isAppDataWarm() ? getDataOperationalTruth() : peekStaffGestaoLastGood();
     if (!data) return [];
     return agruparPendentesPorCooperado(data, pendentesEstaveis, coopId);
-  }, [pendentesEstaveis, coopId, filaDetalhada, leituraFila]);
+  }, [pendentesEstaveis, coopId, filaDetalhada]);
 
   const lastFilaEstavelCountRef = useRef(0);
   if (filaDetalhada && subscribeFila) {

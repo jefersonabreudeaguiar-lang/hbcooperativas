@@ -186,29 +186,9 @@ export function reloadStaffGestaoPersistAfterFirstPaint(): void {
 /** Teto do idle após o paint — parse do persist não briga com a 1ª pintura nem com o pull da fila. */
 export const STAFF_GESTAO_PERSIST_RELOAD_IDLE_TIMEOUT_MS = 180;
 
-function staffGestaoSkipAutoPersistMergeOnDesktop(): boolean {
-  if (typeof window === "undefined") return false;
-  if (window.matchMedia("(max-width: 1023px)").matches) return false;
-  return (
-    memoryCache != null && staffGestaoRiquezaTotal(medirRiquezaStaffGestao(memoryCache)) >= 3
-  );
-}
-
-function staffGestaoPersistReloadIdleTimeoutMs(): number {
-  const rich =
-    memoryCache != null && staffGestaoRiquezaTotal(medirRiquezaStaffGestao(memoryCache)) >= 3;
-  if (typeof window !== "undefined") {
-    const mobile = window.matchMedia("(max-width: 1023px)").matches;
-    if (rich) return mobile ? 900 : 12_000;
-    return mobile ? STAFF_GESTAO_PERSIST_RELOAD_IDLE_TIMEOUT_MS : 2_800;
-  }
-  return STAFF_GESTAO_PERSIST_RELOAD_IDLE_TIMEOUT_MS;
-}
-
 export function scheduleStaffGestaoPersistReloadAfterPaint(): void {
   if (typeof window === "undefined" || staffPersistReloadScheduled) return;
   if (!sessionRoleLooksStaffGestao()) return;
-  if (staffGestaoSkipAutoPersistMergeOnDesktop()) return;
   staffPersistReloadScheduled = true;
   const run = () => {
     try {
@@ -218,12 +198,11 @@ export function scheduleStaffGestaoPersistReloadAfterPaint(): void {
     }
   };
   const armIdle = () => {
-    const timeoutMs = staffGestaoPersistReloadIdleTimeoutMs();
     if (typeof requestIdleCallback === "function") {
-      requestIdleCallback(run, { timeout: timeoutMs });
+      requestIdleCallback(run, { timeout: STAFF_GESTAO_PERSIST_RELOAD_IDLE_TIMEOUT_MS });
       return;
     }
-    window.setTimeout(run, timeoutMs);
+    window.setTimeout(run, STAFF_GESTAO_PERSIST_RELOAD_IDLE_TIMEOUT_MS);
   };
   if (typeof requestAnimationFrame === "function") {
     requestAnimationFrame(() => {

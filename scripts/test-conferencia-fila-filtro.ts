@@ -9,7 +9,6 @@ import { repararNotasPedidoFilaConferencia } from "../src/services/conferenciaFi
 import {
   agruparPendentesPorCooperado,
   getChaveGrupoConferencia,
-  getNomeEnvioEntregaNota,
   getNomeGrupoConferencia,
   nomeCooperadoSnapshotUtilizavel,
   resolverCooperadoIdGrupoConferencia,
@@ -115,77 +114,8 @@ const notaNuvem: NotaPedido = {
 assert.equal(resolverCooperadoIdGrupoConferencia(data, notaNuvem, coopId), altonId);
 assert.equal(getChaveGrupoConferencia(notaNuvem, data, coopId), `id:${altonId}`);
 
-const outroId = "c_outro";
-const dataEnvio = {
-  ...data,
-  cooperados: [
-    ...data.cooperados,
-    {
-      id: outroId,
-      cooperativaId: coopId,
-      nomeCompleto: "Cleones Silva",
-      cpfCnpj: "99999999999",
-      telefone: "",
-      endereco: "",
-      comunidade: "",
-      cafDap: "",
-      chavePix: "",
-      banco: "",
-      agencia: "",
-      conta: "",
-      status: "ativo",
-      produtos: [],
-      observacoes: "",
-      createdAt: "",
-      updatedAt: "",
-    },
-  ],
-} as unknown as AppData;
-const notaIdErrado: NotaPedido = {
-  ...notaNuvem,
-  id: "n-id-errado",
-  cooperadoId: outroId,
-  cooperadoNomeSnapshot: "Alton Silva",
-  status: "aguardando_conferencia",
-};
-assert.equal(resolverCooperadoIdGrupoConferencia(dataEnvio, notaIdErrado, coopId), altonId);
-
 assert.equal(nomeCooperadoSnapshotUtilizavel("Desconhecido"), undefined);
-assert.equal(nomeCooperadoSnapshotUtilizavel("Cooperado"), undefined);
-assert.equal(nomeCooperadoSnapshotUtilizavel("c_alton"), undefined);
 assert.equal(nomeCooperadoSnapshotUtilizavel("Alton Silva"), "Alton Silva");
-
-const notaSoCadastro: NotaPedido = {
-  ...notaNuvem,
-  id: "n-so-cadastro",
-  cooperadoId: altonId,
-  cooperadoNomeSnapshot: "Cooperado",
-};
-assert.equal(getNomeEnvioEntregaNota(notaSoCadastro, data, coopId), "Alton Silva");
-
-const dataComUser = {
-  ...data,
-  users: [
-    {
-      id: "u1",
-      email: "alton@test.com",
-      name: "Alton Silva App",
-      role: "cooperado",
-      active: true,
-      cooperadoId: altonId,
-      createdAt: "",
-      updatedAt: "",
-    },
-  ],
-  cooperados: [],
-} as unknown as AppData;
-const notaSemCadastro: NotaPedido = {
-  ...notaNuvem,
-  id: "n-user",
-  cooperadoId: altonId,
-  cooperadoNomeSnapshot: "Cooperado",
-};
-assert.equal(getNomeEnvioEntregaNota(notaSemCadastro, dataComUser, coopId), "Alton Silva App");
 
 const notaSemNome: NotaPedido = {
   ...notaNuvem,

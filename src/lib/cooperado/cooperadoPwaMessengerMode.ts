@@ -25,12 +25,9 @@ export function isCooperadoPwaMessengerMode(): boolean {
   return true;
 }
 
-/** Cooperado mobile assina AppData (valor atualiza na hora, como antes do modo snapshot). */
+/** Painéis cooperado PWA não assinam domínios do AppData (evita re-render a cada sync). */
 export function cooperadoPwaUiSubscribesAppData(): boolean {
-  if (!isCooperadoPwaMessengerMode()) return true;
-  const session = getSession();
-  if (session?.role === "cooperado") return true;
-  return false;
+  return !isCooperadoPwaMessengerMode();
 }
 
 function scheduleMessengerCacheMaterialization(

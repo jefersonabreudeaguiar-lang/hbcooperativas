@@ -421,14 +421,7 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
     ],
     notasPedido: [
       nota("n1", "pago"),
-      {
-        ...nota("n2", "conferida"),
-        valorLiquido: 50,
-        valorBruto: 50,
-        dataEntrega: "2026-08-28",
-        createdAt: "2026-08-28T10:00:00.000Z",
-        updatedAt: "2026-08-28T10:00:00.000Z",
-      },
+      { ...nota("n2", "conferida"), valorLiquido: 50, valorBruto: 50 },
     ],
     pagamentosCooperado: [
       {
@@ -1080,13 +1073,7 @@ function round2(n: number): number {
   const data = baseData({
     notasPedido: [
       { ...nota("n_no_pix", "conferida"), mesReferencia: "2026-09" },
-            {
-        ...nota("n_pos_pix", "conferida"),
-        mesReferencia: "2026-09",
-        dataEntrega: "2026-09-22",
-        createdAt: "2026-09-22T10:00:00.000Z",
-        updatedAt: "2026-09-22T10:00:00.000Z",
-      },
+      { ...nota("n_pos_pix", "conferida"), mesReferencia: "2026-09", createdAt: "2026-09-22T10:00:00.000Z" },
     ],
     pagamentosCooperado: [
       {
@@ -1132,13 +1119,7 @@ function round2(n: number): number {
   const data = baseData({
     notasPedido: [
       { ...nota("n_no_pix", "conferida"), mesReferencia: "2026-09" },
-            {
-        ...nota("n_pos_pix", "conferida"),
-        mesReferencia: "2026-09",
-        dataEntrega: "2026-09-22",
-        createdAt: "2026-09-22T10:00:00.000Z",
-        updatedAt: "2026-09-22T10:00:00.000Z",
-      },
+      { ...nota("n_pos_pix", "conferida"), mesReferencia: "2026-09", createdAt: "2026-09-22T10:00:00.000Z" },
     ],
     pagamentosCooperado: [
       {

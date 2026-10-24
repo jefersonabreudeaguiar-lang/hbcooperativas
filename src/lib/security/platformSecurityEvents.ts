@@ -9,9 +9,7 @@ export type PlatformSecurityAction =
   | "auth.cross_tenant_blocked"
   | "admin.access"
   | "credit.reconciliation_alert"
-  | "credit.post_payment_hb_sync"
-  | "credit.phase_a_guard"
-  | "credit.phase_b_guard";
+  | "credit.post_payment_hb_sync";
 
 export async function recordPlatformSecurityEvent(input: {
   action: PlatformSecurityAction;
@@ -63,57 +61,6 @@ export async function recordCreditReconciliationAlerts(
     metadata: {
       count: findings.length,
       findings: findings.slice(0, 20),
-    },
-  });
-}
-
-export async function recordHbCreditPhaseAGuardAudit(
-  supabase: SupabaseClient,
-  cooperativeCnpj: string,
-  payload: {
-    cooperadoId: string;
-    requestedCooperadoId: string;
-    assessmentStatus: string;
-    wouldBlock: boolean;
-    shadow: boolean;
-    reasons: string[];
-    operationalIssueKinds: string[];
-    accountIntegrityEvents: string[];
-  }
-): Promise<void> {
-  await logSecurityEvent(supabase, {
-    action: "credit.phase_a_guard",
-    cooperativaCnpj: cooperativeCnpj,
-    metadata: {
-      priority: payload.wouldBlock ? "high" : "info",
-      ...payload,
-    },
-  });
-}
-
-export async function recordHbCreditPhaseBGuardAudit(
-  supabase: SupabaseClient,
-  cooperativeCnpj: string,
-  payload: {
-    cooperadoId: string;
-    partnerId: string;
-    amountCents: number;
-    assessmentStatus: string;
-    signals: string[];
-    wouldBlock: boolean;
-    wouldStepUp: boolean;
-    shadow: boolean;
-    phaseBStepUpProvided: boolean;
-    reasons: string[];
-    metrics: Record<string, unknown>;
-  }
-): Promise<void> {
-  await logSecurityEvent(supabase, {
-    action: "credit.phase_b_guard",
-    cooperativaCnpj: cooperativeCnpj,
-    metadata: {
-      priority: payload.wouldBlock || payload.wouldStepUp ? "high" : "info",
-      ...payload,
     },
   });
 }

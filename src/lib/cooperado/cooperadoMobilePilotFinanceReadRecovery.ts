@@ -134,16 +134,6 @@ function markFinanceRecoverySession(userId: string): void {
   }
 }
 
-/** Permite nova rodada de recovery quando a UI financeira segue zerada (aparelho frio). */
-export function clearCooperadoFinanceReadRecoverySession(userId: string): void {
-  if (typeof sessionStorage === "undefined") return;
-  try {
-    sessionStorage.removeItem(`${RECOVERY_SESSION_KEY}:${userId}`);
-  } catch {
-    /* quota */
-  }
-}
-
 export function scheduleCooperadoPilotFinanceReadRecovery(
   user: Omit<User, "password"> | null | undefined
 ): void {
@@ -201,12 +191,10 @@ export function scheduleCooperadoPilotFinanceReadRecovery(
       markFinanceRecoverySession(user.id);
       return;
     }
-    if (!cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
-      markFinanceRecoverySession(user.id);
-      return;
-    }
+    if (!cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) return;
     requestCooperadoGaFinanceiroExibicaoRecoverySync();
     scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
+    markFinanceRecoverySession(user.id);
   };
 
   if (typeof requestIdleCallback === "function") {
@@ -225,9 +213,5 @@ export function cooperadoPilotFinanceRecoveryOnForeground(
   user: Omit<User, "password"> | null | undefined
 ): void {
   if (!user || !isCooperadoMobileGaPromoted(user)) return;
-  if (!cooperadoGaValorReceberExibicaoResolvida(user)) {
-    clearCooperadoFinanceReadRecoverySession(user.id);
-    scheduleCooperadoPilotFinanceReadRecovery(user);
-  }
   cooperadoPilotForcarRematerializacaoFinanceira(user);
 }

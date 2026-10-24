@@ -8,8 +8,6 @@ import {
   staffGestaoRiquezaTotal,
   staffGestaoSnapshotPoorer,
 } from "@/lib/staff/staffGestaoSnapshotGuard";
-import { staffGestaoDesktopWarmupSyncPaused } from "@/lib/staff/staffGestaoDesktopWarmup";
-import { staffTabSwitchQuiescenceActive } from "@/lib/staff/staffTabSwitchQuiescence";
 
 /** Sem cadastro/ficha/PIX não grava — o mount do Início não pode persistir AppData vazio. */
 export function devePersistirReconciliacaoLivroCaixaGestao(data: ReturnType<typeof getData>): boolean {
@@ -35,9 +33,6 @@ function dadosGestaoOuRelerStorage() {
   return data;
 }
 
-const RECONCILE_MIN_GAP_MS = 90_000;
-let lastReconcileAt = 0;
-
 /**
  * PIX confirmado: ficha vira paga, sai de Em aberto e entra no Livro Caixa.
  * Só persiste quando já há pagamento — o toque em Início não rebaixa ficha nem zera o painel.
@@ -54,26 +49,12 @@ export function useReconciliarLivroCaixaGestao(
 
     const tentar = () => {
       if (cancelled || !isAppDataWarm()) return;
-      if (staffTabSwitchQuiescenceActive()) return;
-      const now = Date.now();
-      if (now - lastReconcileAt < RECONCILE_MIN_GAP_MS) return;
-
-      if (staffGestaoDesktopWarmupSyncPaused()) {
-        const snap = getData();
-        const livroCoop = (snap.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId).length;
-        const precisaLivro =
-          temPagamentoParaLivroCaixa(snap) &&
-          livroCoop === 0 &&
-          devePersistirReconciliacaoLivroCaixaGestao(snap);
-        if (!precisaLivro) return;
-      }
       void Promise.all([
         import("@/services/pagamentoIntegridadeService"),
         import("@/services/livroCaixaService"),
       ])
         .then(([integridade, caixa]) => {
           if (cancelled || !isAppDataWarm()) return;
-          if (staffTabSwitchQuiescenceActive()) return;
           const data = dadosGestaoOuRelerStorage();
           if (!devePersistirReconciliacaoLivroCaixaGestao(data)) return;
           if (!temPagamentoParaLivroCaixa(data)) return;
@@ -82,7 +63,6 @@ export function useReconciliarLivroCaixaGestao(
             if (staffGestaoSnapshotPoorer(medirRiquezaStaffGestao(aligned), medirRiquezaStaffGestao(data))) {
               return;
             }
-            lastReconcileAt = Date.now();
             updateData(() => aligned);
             return;
           }
@@ -99,7 +79,6 @@ export function useReconciliarLivroCaixaGestao(
             if (staffGestaoSnapshotPoorer(medirRiquezaStaffGestao(next), medirRiquezaStaffGestao(data))) {
               return;
             }
-            lastReconcileAt = Date.now();
             updateData(() => next);
           }
         })
@@ -110,27 +89,16 @@ export function useReconciliarLivroCaixaGestao(
 
     const agendar = () => {
       window.clearTimeout(timer);
-      if (staffTabSwitchQuiescenceActive()) return;
-      const desktop =
-        typeof window !== "undefined" && !window.matchMedia("(max-width: 1023px)").matches;
-      const delay = desktop ? 12_000 : 1_200;
-      timer = window.setTimeout(tentar, delay);
+      timer = window.setTimeout(tentar, 800);
     };
 
+    tentar();
     agendar();
-    const unsub = subscribe(() => {
-      if (staffTabSwitchQuiescenceActive()) return;
-      agendar();
-    });
+    const unsub = subscribe(agendar);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
       unsub();
     };
   }, [enabled, coopId]);
-}
-
-/** Testes — reset throttle. */
-export function resetReconciliarLivroCaixaGestaoThrottleForTests(): void {
-  lastReconcileAt = 0;
 }

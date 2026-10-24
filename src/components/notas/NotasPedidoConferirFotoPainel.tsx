@@ -6,7 +6,7 @@ import {
   FOTO_ENTREGA_CONFERENCIA_IMG,
   FOTO_ENTREGA_CONFERENCIA_PANEL,
 } from "@/components/notas/fotoEntregaDisplay";
-import { getNomeEnvioEntregaNota } from "@/utils/fotoEntrega";
+import { getCooperadoNomeResolvido } from "@/services/cooperadoCloudService";
 import { cn, formatDate } from "@/utils/format";
 import { getEscolaNotaLabel } from "@/utils/notaEscolaLabel";
 import {
@@ -220,7 +220,7 @@ export function NotasPedidoConferirFotoPainel({
       </div>
       <div className="shrink-0 px-4 py-3 bg-black/40 text-white text-sm space-y-0.5">
         <p>
-          <strong>{getNomeEnvioEntregaNota(selectedNota, data, coopId)}</strong> ·{" "}
+          <strong>{getCooperadoNomeResolvido(data, selectedNota.cooperadoId, coopId)}</strong> ·{" "}
           {formatDate(selectedNota.dataEntrega)}
         </p>
         <p className="text-white/80">

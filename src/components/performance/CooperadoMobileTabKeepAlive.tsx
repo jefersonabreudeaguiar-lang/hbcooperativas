@@ -252,23 +252,15 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   ): { panel: ReactNode | undefined; warm: boolean } => {
     const active = activePath === href;
     const cached = cacheRef.current[href];
-    /**
-     * Aba visível: prioriza `children` quando não é skeleton de loading.
-     * `childrenStaleForPath` só protege o cache LRU — não pode esconder o painel ativo (tela branca).
-     */
-    const liveNode =
-      active && pathname === href
-        ? isCooperadoTabRouteLoadingElement(children)
-          ? isCooperadoTabRouteLoadingElement(deferredChildren)
-            ? children
-            : deferredChildren
-          : children
-        : deferredChildren;
+    const last = lastCommitRef.current;
+    const childrenStaleForPath = last.path !== pathname && last.child === children;
+    /** Aba visível: sem defer — evita skeleton extra no Financeiro. */
+    const liveNode = active && pathname === href && !childrenStaleForPath ? children : deferredChildren;
     const liveForHref =
-      active &&
       pathname === href &&
-      liveNode != null &&
-      !isCooperadoTabRouteLoadingElement(liveNode);
+      !childrenStaleForPath &&
+      !isCooperadoTabRouteLoadingElement(liveNode) &&
+      liveNode != null;
 
     if (active && liveForHref) {
       return { panel: liveNode, warm: false };

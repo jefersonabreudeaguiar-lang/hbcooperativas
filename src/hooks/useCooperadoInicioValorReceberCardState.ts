@@ -59,10 +59,7 @@ import {
 import { getData, isAppDataWarm, preloadAppData, subscribe } from "@/services/dataStore";
 import { cooperadoPilotCardInicioLeituraRapida } from "@/lib/cooperado/cooperadoMobilePilotInicioValorLocal";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import {
-  cooperadoFinanceiroExibicaoDivergeDeAppDataLive,
-  cooperadoPwaFinanceiroSnapshotsAusentes,
-} from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
+import { cooperadoPwaFinanceiroSnapshotsAusentes } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
@@ -226,16 +223,6 @@ export function useCooperadoInicioValorReceberCardState(input: {
         persistidoMesmoBuildEarly?.display &&
           cooperadoMotorTemObrigacaoReceber(persistidoMesmoBuildEarly.display)
       );
-      const cacheDivergeMotorLive = (() => {
-        if (!input.cooperadoId || !isAppDataWarm()) return false;
-        const dataLive = getData();
-        const coopLive =
-          input.cooperativaId ??
-          (dataLive.cooperativas?.length === 1 ? dataLive.cooperativas[0]?.id : undefined);
-        if (!coopLive) return false;
-        const canon = resolverCooperadoIdCanonico(dataLive, input.cooperadoId, coopLive);
-        return cooperadoFinanceiroExibicaoDivergeDeAppDataLive(dataLive, canon, coopLive);
-      })();
       const exibicaoGaResolvida =
         sessionUser?.role === "cooperado" &&
         cooperadoGaValorReceberExibicaoResolvida(sessionUser);
@@ -270,7 +257,6 @@ export function useCooperadoInicioValorReceberCardState(input: {
         !persistidoJaTemValor &&
         !exibicaoGaResolvida;
       const needsMotor =
-        cacheDivergeMotorLive ||
         syncMotorPass ||
         (!persistidoJaTemValor && persistidoTick > 0) ||
         pilotPrecisaMotorLocal ||
@@ -451,8 +437,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
 
       if (
         persistidoMesmoBuild?.display &&
-        cooperadoMotorTemObrigacaoReceber(persistidoMesmoBuild.display) &&
-        !cacheDivergeMotorLive
+        cooperadoMotorTemObrigacaoReceber(persistidoMesmoBuild.display)
       ) {
         const display = persistidoMesmoBuild.display;
         return {
@@ -560,7 +545,6 @@ export function useCooperadoInicioValorReceberCardState(input: {
     appDataWarmKey,
     sessionUser?.id,
     sessionUser?.cooperativaId,
-    sessionUser?.role,
     apresentacaoCard,
     ...(leituraSomentePwa ? [] : [hbDescontosRevision]),
   ]);
