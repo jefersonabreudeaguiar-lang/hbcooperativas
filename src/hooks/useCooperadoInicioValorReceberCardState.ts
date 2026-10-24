@@ -197,7 +197,8 @@ export function useCooperadoInicioValorReceberCardState(input: {
         const paridadeMotor = resolverMotorCardInicioParidadeFinanceiro(
           dataUnified,
           input.cooperadoId,
-          cooperativaIdCard
+          cooperativaIdCard,
+          { apresentacaoConsolidada: apresentacaoCard }
         );
         return {
           display: paridadeMotor.motor,
@@ -601,6 +602,9 @@ export function useCooperadoInicioValorReceberCardState(input: {
   latchRef.current = resolved.latch;
 
   const snapshotExibido = useMemo(() => {
+    if (cooperadoExibicaoFinanceiraUnificadaAoVivo(sessionUser)) {
+      return resolved.display;
+    }
     let base = resolved.display;
     if (
       !cooperadoMotorTemObrigacaoReceber(base) &&
@@ -655,6 +659,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
     persistidoTick,
     appDataWarmKey,
     hbDescontosRevision,
+    sessionUser,
   ]);
 
   useEffect(() => {

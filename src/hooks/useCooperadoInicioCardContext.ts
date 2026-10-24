@@ -16,6 +16,7 @@ import {
   isCooperadoPwaMobileLeveUi,
 } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/cooperadoMobilePilotPerf";
+import { cooperadoExibicaoFinanceiraUnificadaAoVivo } from "@/lib/cooperado/cooperadoExibicaoFinanceiraUnificada";
 
 const INICIO_CARD_DOMAINS: AppDataNotifyDomain[] = ["shell", "notas", "financeiro"];
 
@@ -33,7 +34,9 @@ export function useCooperadoInicioCardContext(user: Omit<User, "password"> | nul
 } | null {
   const pwaLeveUi = isCooperadoPwaMobileLeveUi();
   const pilotInicioSnapshot = cooperadoMobilePilotSnapshotFirstInicio(user);
-  const leituraLocalInicio = pwaLeveUi || pilotInicioSnapshot;
+  const exibicaoUnificada = cooperadoExibicaoFinanceiraUnificadaAoVivo(user);
+  const leituraLocalInicio =
+    !exibicaoUnificada && (pwaLeveUi || pilotInicioSnapshot);
   const [pwaMessengerDataEpoch, setPwaMessengerDataEpoch] = useState(0);
 
   useEffect(() => {

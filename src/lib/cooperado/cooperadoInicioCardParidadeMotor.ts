@@ -55,9 +55,12 @@ export function inicioCardMotorFromParidadeFinanceiro(
 export function resolverMotorCardInicioParidadeFinanceiro(
   data: AppData,
   cooperadoId: string,
-  cooperativaId: string | undefined
+  cooperativaId: string | undefined,
+  opts?: { apresentacaoConsolidada?: boolean }
 ): { motor: InicioCardMotorSnapshot; revision: string } {
-  const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId);
+  const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId, {
+    apresentacaoConsolidada: opts?.apresentacaoConsolidada,
+  });
   const motor = inicioCardMotorFromParidadeFinanceiro(data, cooperadoId, cooperativaId, paridade);
   const revision = cooperadoMotorRevisionOperacional(data, cooperadoId, cooperativaId);
   return { motor, revision };

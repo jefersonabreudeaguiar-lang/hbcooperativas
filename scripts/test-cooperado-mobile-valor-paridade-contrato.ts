@@ -10,7 +10,7 @@ import { APP_BUILD_VERSION } from "../src/lib/appBuildVersion.ts";
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.ok(APP_BUILD_VERSION >= 619, "build 619+ exibição financeira unificada ao vivo");
+assert.ok(APP_BUILD_VERSION >= 620, "build 620+ início contexto ao vivo alinhado");
 
 const hydrate = read("src/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate.ts");
 assert.ok(hydrate.includes("cooperadoFinanceiroExibicaoDivergeDeAppDataLive"));
@@ -46,5 +46,8 @@ assert.ok(messenger.includes("cooperadoExibicaoFinanceiraUnificadaAoVivo(session
 
 assert.ok(hook.includes("resolverMotorCardInicioParidadeFinanceiro"));
 assert.ok(hook.includes("cooperadoExibicaoFinanceiraUnificadaAoVivo"));
+
+const inicioCtx = read("src/hooks/useCooperadoInicioCardContext.ts");
+assert.ok(inicioCtx.includes("!exibicaoUnificada"));
 
 console.log("OK — test-cooperado-mobile-valor-paridade-contrato");
