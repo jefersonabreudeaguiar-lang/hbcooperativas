@@ -6,6 +6,11 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v644
+
+- **Cooperado (Fase 3 — valor + nuvem):** com abas fluidas (v566+), sync/garantia voltam a puxar a nuvem quando a tela está zerada sem bloquear a abertura; piloto Jeferson confirmou A receber, ficha e Financeiro alinhados.
+- **Backup:** tag `cooperado-mobile-fase3-v644`, manifest `docs/baselines/cooperado-mobile-fase3-v644-manifest.json`, dados `npm run backup:cooperado-slice`.
+
 ## v566
 
 - **Cooperado (Fase 2 — abas):** 10s após trocar de aba, sync/pulso/garantia e foreground operacional ficam em pausa; com valor já na tela, o pulso BIC no celular **não** rematerializa a ficha quando a nuvem não mudou; Ficha/refresh GA respeitam a mesma pausa.

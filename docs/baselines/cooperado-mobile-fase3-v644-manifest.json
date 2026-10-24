@@ -1,0 +1,57 @@
+{
+  "label": "cooperado-mobile-fase3-v644",
+  "createdAt": "2026-10-24T18:30:00-03:00",
+  "purpose": "Ponto de retorno após Fase 3 SIM (Jeferson): abas fluidas + A receber + Ficha + Financeiro alinhados. Código e dados cooperado (slice) restauráveis sem rollback da plataforma inteira.",
+  "pilot": {
+    "email": "jefersonabreudeaguiar@gmail.com",
+    "cooperadoId": "c_1781981564381_w67gg",
+    "cnpjDefault": "62351750000165"
+  },
+  "git": {
+    "branch": "main",
+    "commit": "2dd7cb2a6de457e842ebc1937c3b0852d9843e4b",
+    "commitShort": "2dd7cb2a",
+    "tag": "cooperado-mobile-fase3-v644",
+    "message": "fix(cooperado): sync nuvem com valor zerado sem travar UI (644)"
+  },
+  "production": {
+    "url": "https://hbcooperativas.vercel.app",
+    "build": 644,
+    "deploymentId": "dpl_AnaNJcdXMZU9wUBzeUTg4kzFBCvV",
+    "verifiedAt": "2026-10-24T15:24:00-03:00",
+    "pilotGate": {
+      "fase3": "SIM",
+      "reportedAt": "2026-10-24T15:24:00-03:00"
+    }
+  },
+  "restoreCode": [
+    "git fetch origin --tags",
+    "git checkout cooperado-mobile-fase3-v644",
+    "Revisar diff; bump APP_BUILD_VERSION + public/sw.js se for redeploy PWA",
+    "git push origin HEAD:main  # somente com autorização explícita",
+    "Alternativa sem git: Vercel → Deployments → Promote deployment dpl_AnaNJcdXMZU9wUBzeUTg4kzFBCvV"
+  ],
+  "restoreDataCooperado": {
+    "script": "npm run backup:cooperado-slice",
+    "outputDir": "backups/cooperado-mobile-fase3-v644-<timestamp>/ (local, gitignored)",
+    "restoreDoc": "scripts/backups/COOPERADO-MOBILE-FASE3-v644-PONTO-DE-RETORNO.md",
+    "warning": "Slice é só fichas/pagamentos/notas/entregas do cooperado alvo — não substitui operacional.json inteiro sem merge manual."
+  },
+  "codeScopeGlobs": [
+    "src/lib/cooperado/**",
+    "src/components/cooperado/**",
+    "src/components/performance/Cooperado*",
+    "src/app/(app)/dashboard/**",
+    "src/lib/performance/cooperado*",
+    "src/lib/cooperadoInicio*",
+    "src/lib/bic/bicRevisionPulse.ts",
+    "src/lib/appBuildVersion.ts",
+    "public/sw.js",
+    "scripts/test-cooperado-*"
+  ],
+  "outOfScope": [
+    "HB Crédito motor profundo (src/modules/hb-credit profundo)",
+    "Responsável / gestão / admin",
+    "backup:cloud completo (toda a cooperativa)"
+  ]
+}

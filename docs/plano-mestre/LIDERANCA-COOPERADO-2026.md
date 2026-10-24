@@ -110,5 +110,5 @@ Responda **SIM** ou **NÃO**:
 | Fase 1 | 23/10/2026 | SIM (Jeferson) | v564 |
 | Fase 2 | 23/10/2026 | NÃO (Jeferson — trava ao trocar abas) | v565 |
 | Fase 2 | 23/10/2026 | SIM (Jeferson) | v566 |
-| Fase 3 | aguardando piloto | — | v566+ |
-| Fase 4 | | | |
+| Fase 3 | 24/10/2026 | SIM (Jeferson — valores, ficha, Financeiro) | v644 |
+| Fase 4 | aguardando piloto | — | v644+ |
