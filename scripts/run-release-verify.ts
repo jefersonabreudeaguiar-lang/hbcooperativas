@@ -141,6 +141,12 @@ const PHASE_HB: Step[] = [
   },
   {
     phase: "2",
+    title: "HB pagar — comprovante e UX",
+    cmd: "npx",
+    stepArgs: ["tsx", "scripts/test-hb-credit-pagar-ux-contrato.ts"],
+  },
+  {
+    phase: "2",
     title: "HB base × valor a receber",
     cmd: "npx",
     stepArgs: ["tsx", "scripts/test-hb-credit-base-alignment.ts"],

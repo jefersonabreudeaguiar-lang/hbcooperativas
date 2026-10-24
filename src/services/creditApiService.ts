@@ -511,11 +511,10 @@ export async function authorizeCreditPayment(input: {
     input.cooperativaId ??
     local.cooperados.find((c) => c.id === input.cooperadoId)?.cooperativaId;
 
-  let syncContaCoop: AuthorizeCreditPaymentResult["syncContaCoop"];
+  let syncContaCoop: AuthorizeCreditPaymentResult["syncContaCoop"] = "pending";
   let syncContaCoopError: string | undefined;
 
   if (coopId && input.cnpj) {
-    syncContaCoop = "pending";
     const canonico = resolverCooperadoIdCanonico(
       local,
       input.cooperadoId,
@@ -554,22 +553,8 @@ export async function authorizeCreditPayment(input: {
       });
     }
 
-    const maxAttempts = data.projecaoPendente ? 3 : 2;
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      if (attempt > 0) {
-        await sleepMs(HB_REFRESH_RETRY_MS);
-      }
-      try {
-        await refreshContaCoopValorReceberAfterHbTransaction(refreshOpts);
-        notifyHbCreditLimiteSynced({ immediate: true });
-        syncContaCoop = "ok";
-        break;
-      } catch {
-        /* ficha local já tem o débito — pagamento HB confirmado na nuvem */
-      }
-    }
+    void runAuthorizeCreditPaymentLocalRefreshInBackground(refreshOpts, Boolean(data.projecaoPendente));
   } else {
-    syncContaCoop = "pending";
     syncContaCoopError = "refresh_not_executed_missing_cooperativa_or_cnpj";
   }
 
@@ -578,6 +563,32 @@ export async function authorizeCreditPayment(input: {
     syncContaCoop,
     ...(syncContaCoopError ? { syncContaCoopError } : {}),
   };
+}
+
+/** Não bloqueia a tela de comprovante — pagamento já confirmado na nuvem. */
+async function runAuthorizeCreditPaymentLocalRefreshInBackground(
+  refreshOpts: {
+    cnpj: string;
+    cooperadoId: string;
+    mesReferencia: string;
+    cooperativaId: string;
+    cooperadoNome?: string;
+  },
+  projecaoPendente: boolean
+): Promise<void> {
+  const maxAttempts = projecaoPendente ? 3 : 2;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (attempt > 0) {
+      await sleepMs(HB_REFRESH_RETRY_MS);
+    }
+    try {
+      await refreshContaCoopValorReceberAfterHbTransaction(refreshOpts);
+      notifyHbCreditLimiteSynced({ immediate: true });
+      return;
+    } catch {
+      /* débito otimista já aplicado */
+    }
+  }
 }
 
 export async function createCreditIntent(

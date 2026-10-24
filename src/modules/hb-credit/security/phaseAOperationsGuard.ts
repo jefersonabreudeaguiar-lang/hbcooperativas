@@ -118,8 +118,12 @@ export async function assessHbCreditPhaseAForCooperado(
   }
 
   const digits = normalizeCnpj(cnpj);
-  const operational = await runOperationalLimitReconciliation(supabase, digits, [cooperadoId]);
-  const issues = operational.issues.map((i) => ({ kind: i.kind, message: i.message }));
+  /** Sombra: só invariantes na conta (rápido no PIN). Reconciliação operacional completa fica no cron. */
+  let issues: Array<{ kind: string; message: string }> = [];
+  if (!mode.shadow) {
+    const operational = await runOperationalLimitReconciliation(supabase, digits, [cooperadoId]);
+    issues = operational.issues.map((i) => ({ kind: i.kind, message: i.message }));
+  }
 
   return assessHbCreditPhaseAFromAccountRow(digits, cooperadoId, accountRow, issues);
 }
