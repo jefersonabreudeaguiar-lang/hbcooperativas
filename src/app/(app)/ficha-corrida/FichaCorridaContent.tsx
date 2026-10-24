@@ -32,6 +32,7 @@ import {
   cooperadoPilotForcarRematerializacaoFinanceira,
 } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
 import { cooperadoFinanceiroMobileLeituraAoVivo } from "@/lib/cooperado/cooperadoMobilePilot";
+import { cooperadoInicioSincronizadoComFinanceiro } from "@/lib/cooperado/cooperadoInicioSincronizadoComFinanceiro";
 import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import {
   cooperadoPwaUiSubscribesAppData,
@@ -594,6 +595,15 @@ function FichaCorridaPageInner() {
         coopId &&
         cooperadoBicAutorizaZerarCardInicio(store, cooperadoId, coopId)
     );
+    if (
+      cooperadoInicioSincronizadoComFinanceiro(user) &&
+      isAppDataWarm() &&
+      store &&
+      coopId &&
+      live
+    ) {
+      return withHybrid(live);
+    }
     if (fromSnapGuard && snapValor > 0.005 && liveValor <= 0.005 && !liquidadoPeloResponsavel) {
       return withHybrid(fromSnapGuard);
     }

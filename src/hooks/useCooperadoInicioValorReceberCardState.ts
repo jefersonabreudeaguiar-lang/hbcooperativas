@@ -39,6 +39,10 @@ import {
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { resolverMotorCardInicioParidadeFinanceiro } from "@/lib/cooperado/cooperadoInicioCardParidadeMotor";
 import {
+  cooperadoCardInicioMotorParidadeFinanceiro,
+  cooperadoInicioSincronizadoComFinanceiro,
+} from "@/lib/cooperado/cooperadoInicioSincronizadoComFinanceiro";
+import {
   lerCooperadoPwaFichaResumoSnapshot,
   resolveParidadeFromFichaResumoSnapshot,
 } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
@@ -180,6 +184,37 @@ export function useCooperadoInicioValorReceberCardState(input: {
   }, [apresentacaoConsolidada, input.syncing, hbDescontosRevision]);
 
   const resolved = useMemo(() => {
+    if (
+      cooperadoInicioSincronizadoComFinanceiro(sessionUser) &&
+      !leituraSomentePwa &&
+      tabAtiva &&
+      input.cooperadoId
+    ) {
+      const dataPar = input.data ?? (isAppDataWarm() ? getData() : null);
+      if (dataPar) {
+        const cooperativaIdCard = resolverCooperativaIdReciboLatch(
+          dataPar,
+          input.cooperadoId,
+          input.cooperativaId
+        );
+        const paridadeMotor = cooperadoCardInicioMotorParidadeFinanceiro(
+          dataPar,
+          input.cooperadoId,
+          cooperativaIdCard,
+          apresentacaoCard
+        );
+        return {
+          display: paridadeMotor.motor,
+          latch: {
+            motorRevision: paridadeMotor.revision,
+            display: paridadeMotor.motor,
+            hadPendencia: cooperadoMotorTemObrigacaoReceber(paridadeMotor.motor),
+          },
+          atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+          gravarPersistencia: true,
+        };
+      }
+    }
     if (leituraSomentePwa) {
       if (!tabAtiva) {
         const persistidoOcioso = persistidoExibicaoPwaLeve(persistido);
@@ -568,6 +603,9 @@ export function useCooperadoInicioValorReceberCardState(input: {
   latchRef.current = resolved.latch;
 
   const snapshotExibido = useMemo(() => {
+    if (cooperadoInicioSincronizadoComFinanceiro(sessionUser) && !leituraSomentePwa) {
+      return resolved.display;
+    }
     let base = resolved.display;
     if (
       !cooperadoMotorTemObrigacaoReceber(base) &&
