@@ -1,6 +1,6 @@
 /** Após abrir o Início, UI interativa primeiro; sync/BIC pesado espera. */
 const UNTIL_KEY = "hb.coop.inicio-abertura-quiet-until";
-const QUIET_MS = 12_000;
+const QUIET_MS = 6_000;
 
 export function markCooperadoInicioAberturaQuiescence(): void {
   if (typeof sessionStorage === "undefined") return;

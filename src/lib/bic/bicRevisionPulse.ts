@@ -21,7 +21,8 @@ import {
   cooperadoBrowserDesktopFinanceiroEstavel,
 } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
 import { markCooperadoBicFinanceiroFresh } from "@/lib/bic/cooperadoBicSonataSyncUi";
-import { cooperadoGaPausaTrabalhoFinanceiroPesado } from "@/lib/cooperado/cooperadoGaPausaTrabalhoPesado";
+import { cooperadoGaPausaPulsoBicOuRematerializacao } from "@/lib/cooperado/cooperadoGaPausaTrabalhoPesado";
+import { cooperadoInicioAberturaQuiescenceActive } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
@@ -60,7 +61,8 @@ function pulseIntervalMs(user: Omit<User, "password">): number {
 async function runRevisionPulse(user: Omit<User, "password">): Promise<void> {
   if (inflight) return;
   if (typeof document !== "undefined" && document.hidden) return;
-  if (cooperadoGaPausaTrabalhoFinanceiroPesado(user)) return;
+  if (cooperadoInicioAberturaQuiescenceActive()) return;
+  if (cooperadoGaPausaPulsoBicOuRematerializacao(user)) return;
   if (Date.now() - lastPulseAt < pulseMinGapMs(user)) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   if (!isAppDataWarm()) return;
@@ -106,7 +108,8 @@ async function runRevisionPulse(user: Omit<User, "password">): Promise<void> {
 
 function onVisibility(user: Omit<User, "password">): void {
   if (document.visibilityState !== "visible") return;
-  if (cooperadoGaPausaTrabalhoFinanceiroPesado(user)) return;
+  if (cooperadoInicioAberturaQuiescenceActive()) return;
+  if (cooperadoGaPausaPulsoBicOuRematerializacao(user)) return;
   scheduleCooperadoBicHybridIdleTask(() => void runRevisionPulse(user), 2_000);
 }
 

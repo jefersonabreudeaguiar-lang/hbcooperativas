@@ -21,7 +21,7 @@ const ficha = readFileSync(
   "utf8"
 );
 
-assert.match(pulse, /cooperadoGaPausaTrabalhoFinanceiroPesado\(user\)\) return/);
+assert.match(pulse, /cooperadoGaPausaPulsoBicOuRematerializacao\(user\)\) return/);
 assert.match(keepAlive, /markCooperadoTabPathChange\(effectivePath\)/);
 assert.match(keepAlive, /não pode esconder o painel ativo/);
 assert.match(foreground, /cooperadoGaPausaTrabalhoFinanceiroPesado\(session\)/);

@@ -187,7 +187,11 @@ export async function runCooperadoForegroundOperacionalCheck(
   }
 ): Promise<boolean> {
   const session = getSession();
-  if (session?.role === "cooperado" && cooperadoGaPausaTrabalhoFinanceiroPesado(session)) {
+  if (
+    session?.role === "cooperado" &&
+    cooperadoGaPausaTrabalhoFinanceiroPesado(session) &&
+    !cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(session)
+  ) {
     if (opts?.financeiroDesatualizado) {
       cooperadoRematerializarFinanceiroLocalSePossivel(session);
     }

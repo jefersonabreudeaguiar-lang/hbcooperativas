@@ -44,7 +44,12 @@ function clearGarantiaTimers(): void {
 }
 
 function pullNuvemFinanceiro(user: Omit<User, "password">, attempt: number): void {
-  if (cooperadoGaPausaTrabalhoFinanceiroPesado(user)) return;
+  if (
+    cooperadoGaPausaTrabalhoFinanceiroPesado(user) &&
+    !cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)
+  ) {
+    return;
+  }
   if (cooperadoGaValorReceberExibicaoResolvida(user)) {
     cooperadoMobileSyncTrace("garantia_resolvida_local", `attempt=${attempt}`);
     clearGarantiaTimers();
@@ -62,6 +67,9 @@ function pullNuvemFinanceiro(user: Omit<User, "password">, attempt: number): voi
   }
 
   if (cooperadoMobileDeferOperacionalSyncNaAbertura(user)) {
+    if (cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
+      cooperadoGaDispatchPrimeiraCargaSilenciosa(user, { allowRepeat: attempt > 0 });
+    }
     scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
     return;
   }

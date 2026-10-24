@@ -26,7 +26,10 @@ import { cooperadoTabWarmOnPointerDown } from "@/lib/performance/cooperadoTabPoi
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { getData, getDataRevision, isAppDataWarm, preloadAppData } from "@/services/dataStore";
 import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
-import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
+import {
+  cooperadoGaDispatchPrimeiraCargaSilenciosa,
+  scheduleCooperadoGaPrimeiraCargaSilenciosa,
+} from "@/lib/cooperado/cooperadoGaColdBootstrap";
 import { markCooperadoInicioAberturaQuiescence } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
 import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -230,6 +233,9 @@ function CooperadoDashboard() {
     const runBackground = () => {
       if (!isAppDataWarm()) preloadAppData();
       scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
+      if (cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
+        cooperadoGaDispatchPrimeiraCargaSilenciosa(user, { allowRepeat: true });
+      }
     };
     if (typeof requestIdleCallback !== "undefined") {
       const id = requestIdleCallback(runBackground, { timeout: 5_000 });
