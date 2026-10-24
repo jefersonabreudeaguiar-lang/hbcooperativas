@@ -10,6 +10,7 @@ import {
   COOPERADO_GA_EMPACOTAR_AGUARDA_APPDATA,
   COOPERADO_GA_FINANCE_RECOVERY_REPETE_SE_ZERADO,
   COOPERADO_GA_USA_EMPACOTAR_MODELO_APARELHO,
+  COOPERADO_BOOT_SHELL_SEM_CARD_ANTECIPADO,
 } from "../src/lib/cooperado/cooperadoExperienciaJefersonGaContrato.ts";
 import { isCooperadoMobileGaPromoted, isCooperadoMobileExperienciaJeferson } from "../src/lib/cooperado/cooperadoMobilePilot.ts";
 import type { User } from "../src/types/index.ts";
@@ -18,6 +19,11 @@ assert.equal(COOPERADO_EXPERIENCIA_JEFERSON_GA_VERSION, 1);
 assert.equal(COOPERADO_GA_USA_EMPACOTAR_MODELO_APARELHO, true);
 assert.equal(COOPERADO_GA_EMPACOTAR_AGUARDA_APPDATA, true);
 assert.equal(COOPERADO_GA_FINANCE_RECOVERY_REPETE_SE_ZERADO, true);
+assert.equal(COOPERADO_BOOT_SHELL_SEM_CARD_ANTECIPADO, true);
+
+const bootShell = readFileSync(join(root, "src/lib/performance/cooperadoBootShell.ts"), "utf8");
+assert.doesNotMatch(bootShell, /paintInicio/);
+assert.doesNotMatch(bootShell, /A receber/);
 
 const cooperadoGenerico: User = {
   id: "u_orlando",
