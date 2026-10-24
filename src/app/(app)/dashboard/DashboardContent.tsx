@@ -16,6 +16,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
   useAppDataSelector,
+  useAppDataSelectorWhenActive,
   useAppDataReady,
   useAppDataDomainsRevisionWhenActive,
   useAppDataSelectorForDomainsWhenActive,
@@ -674,9 +675,14 @@ function CooperadoDashboardInicioView({
 }
 
 function AdminDashboard() {
+  const tabActive = useCooperadoTabPanelActive("/dashboard");
   const { user, accountUser } = useAuth();
   const gestaoUser = accountUser ?? user;
-  const adminDataRevision = useAppDataSelector(() => (isAppDataWarm() ? getDataRevision() : -1), []);
+  const adminDataRevision = useAppDataSelectorWhenActive(
+    tabActive,
+    () => (isAppDataWarm() ? getDataRevision() : -1),
+    []
+  );
   const navUser = useMemo(() => {
     if (!gestaoUser) return null;
     if (canAccessPainelResponsavelSession(gestaoUser, isAppDataWarm() ? getData() : null)) {
@@ -751,9 +757,9 @@ function AdminDashboard() {
       return false;
     }
   }, [navUser?.id, navUser?.role, navUser?.cooperativaId, adminDataRevision]);
-  useReconciliarLivroCaixaGestao(meta?.coopId, Boolean(navUser && meta?.coopId));
+  useReconciliarLivroCaixaGestao(meta?.coopId, Boolean(navUser && meta?.coopId && tabActive));
 
-  const dataRevision = adminDataRevision;
+  const dataRevision = tabActive ? adminDataRevision : null;
   const deferredRevision = useDeferredValue(dataRevision ?? -1);
 
   const adminStatsWorker = isRqlAdminStatsWorkerEnabled();

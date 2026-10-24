@@ -35,6 +35,7 @@ import {
   capStaffConferenciaSyncTierRequest,
   shouldBlockStaffAutoSyncDuringConferencia,
 } from "@/lib/performance/staffConferenciaSyncTier";
+import { staffGestaoPausaTrabalhoPesadoAutomatico } from "@/lib/staff/staffGestaoPausaTrabalhoPesado";
 import {
   defaultForceForSyncTier,
   type SyncTier,
@@ -127,6 +128,13 @@ export function requestSyncTier(
     return;
   }
   if (shouldBlockStaffAutoSyncDuringConferencia(options?.userInitiated)) {
+    return;
+  }
+  if (
+    !options?.userInitiated &&
+    !options?.eventDriven &&
+    staffGestaoPausaTrabalhoPesadoAutomatico()
+  ) {
     return;
   }
   if (tier === "operacional_full" && cooperadoGaTemPrimeiraCargaSyncPending()) {

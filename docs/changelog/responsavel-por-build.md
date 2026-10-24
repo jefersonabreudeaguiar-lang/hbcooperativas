@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v650
+
+- **Troca de abas (R2):** quiescência 3,5s (sync/fila), `useDeferredValue` no keep-alive, só uma aba pesada (Conferir/Pagar) no DOM; Início gestão não recalcula stats em background.
+
 ## v649
 
 - **Conferir:** abas/grupos da fila usam nome da ficha/nota operacional (`cooperadoNomeSnapshot`), não só cadastro local — evita «Cooperado» genérico.

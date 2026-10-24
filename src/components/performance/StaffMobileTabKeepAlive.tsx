@@ -1,6 +1,7 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, useMemo, type ReactNode } from "react";
+import { useDeferredValue, useLayoutEffect, useRef, useState, useMemo, type ReactNode } from "react";
+import { markStaffTabPathChange } from "@/lib/staff/staffTabSwitchQuiescence";
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
 import { CooperadoTabPanelProvider } from "@/lib/performance/cooperadoTabPanelContext";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
@@ -10,6 +11,7 @@ import {
   isStaffBottomTabPath,
   isStaffMobileTabKeepAliveEnabled,
   staffBottomTabCacheKey,
+  STAFF_TAB_HEAVY_HREFS,
   trimStaffTabCacheOrder,
 } from "@/lib/performance/staffMobileTabKeepAlive";
 import { registerStaffTabPanelCacheProbe } from "@/lib/performance/staffPinnedTabFastPath";
@@ -43,9 +45,14 @@ function publishStaffKeepAliveDomState(state: {
  * Híbrido do responsável: lastro pinado do dia + troca otimista.
  * Aba já visitada reaparece do cache — Next só acompanha a URL.
  */
+function isStaffHeavyTab(href: string): boolean {
+  return (STAFF_TAB_HEAVY_HREFS as readonly string[]).includes(href);
+}
+
 export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
   const enabled = isStaffMobileTabKeepAliveEnabled();
   const effectivePath = useStaffEffectiveTabPath(pathname);
+  const deferredChildren = useDeferredValue(children);
   const cacheRef = useRef<Partial<Record<string, ReactNode>>>({});
   const orderRef = useRef<string[]>([]);
   const lastCommitRef = useRef<{ path: string; child: ReactNode }>({
@@ -61,6 +68,8 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
   const onTab = isStaffBottomTabPath(effectivePath);
 
   useLayoutEffect(() => {
+    markStaffTabPathChange(effectivePath);
+
     publishStaffKeepAliveDomState({
       enabled,
       onTab,
@@ -81,7 +90,7 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
     if (orderChanged || !prevOrder.includes(activeKey) || !prevOrder.includes(tabKey)) {
       setCacheVersion((n) => n + 1);
     }
-  }, [enabled, onTab, activeKey, tabKey, cacheLimit, lowMemory]);
+  }, [enabled, onTab, activeKey, tabKey, cacheLimit, lowMemory, effectivePath]);
 
   useLayoutEffect(() => {
     const last = lastCommitRef.current;
@@ -112,9 +121,17 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
     if (!onTab || !enabled) {
       return [...new Set([...orderRef.current, ...Object.keys(cacheRef.current)])];
     }
-    const mounted = new Set<string>([activeKey]);
-    for (const h of orderRef.current) mounted.add(h);
-    for (const h of Object.keys(cacheRef.current)) mounted.add(h);
+    const active = activeKey;
+    if (isStaffHeavyTab(active)) {
+      return [active];
+    }
+    const mounted = new Set<string>([active]);
+    for (const h of orderRef.current) {
+      if (!isStaffHeavyTab(h)) mounted.add(h);
+    }
+    for (const h of Object.keys(cacheRef.current)) {
+      if (!isStaffHeavyTab(h)) mounted.add(h);
+    }
     return [...mounted];
   }, [cacheVersion, onTab, enabled, activeKey]);
 
@@ -123,14 +140,22 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
     const cached = cacheRef.current[href];
     const last = lastCommitRef.current;
     const childrenStaleForPath = last.path !== pathname && last.child === children;
+    const liveNode =
+      active && tabKey === href
+        ? isStaffTabRouteLoadingElement(children)
+          ? isStaffTabRouteLoadingElement(deferredChildren)
+            ? children
+            : deferredChildren
+          : children
+        : deferredChildren;
     const liveForHref =
       tabKey === href &&
       !childrenStaleForPath &&
-      !isStaffTabRouteLoadingElement(children) &&
-      children != null;
+      liveNode != null &&
+      !isStaffTabRouteLoadingElement(liveNode);
 
     if (active && liveForHref) {
-      return { panel: children, warm: false };
+      return { panel: liveNode, warm: false };
     }
     if (cached !== undefined) {
       return { panel: cached, warm: !active || tabKey !== href };

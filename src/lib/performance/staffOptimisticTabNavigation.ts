@@ -1,4 +1,5 @@
 import { isStaffBottomTabPath, staffBottomTabCacheKey } from "@/lib/performance/staffBottomTabRoutes";
+import { markStaffTabPathChange } from "@/lib/staff/staffTabSwitchQuiescence";
 
 let optimisticHref: string | null = null;
 const listeners = new Set<() => void>();
@@ -12,6 +13,7 @@ export function setStaffOptimisticTab(href: string): void {
   if (!isStaffBottomTabPath(href)) return;
   const key = staffBottomTabCacheKey(href);
   if (optimisticHref === key) return;
+  markStaffTabPathChange(key);
   optimisticHref = key;
   notify();
 }

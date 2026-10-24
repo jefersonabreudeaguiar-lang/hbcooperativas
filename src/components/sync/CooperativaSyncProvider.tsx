@@ -145,6 +145,7 @@ import {
 } from "@/lib/staff/staffResponsavelLiveSyncPolicy";
 import { scheduleStaffGestaoLiveSyncLoop } from "@/lib/performance/staffGestaoLiveSyncLoop";
 import { shouldBlockStaffAutoSyncDuringConferencia } from "@/lib/performance/staffConferenciaSyncTier";
+import { staffGestaoPausaTrabalhoPesadoAutomatico } from "@/lib/staff/staffGestaoPausaTrabalhoPesado";
 import {
   isStaffFilaNotasLivePollEnabled,
   resolveStaffFilaBackgroundCatchupMs,
@@ -1347,6 +1348,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     const tick = () => {
       if (document.hidden) return;
       if (shouldBlockStaffAutoSyncDuringConferencia()) return;
+      if (staffGestaoPausaTrabalhoPesadoAutomatico()) return;
       void runSync(staffResponsavelLiveSyncTickRequest(pathname ?? "", getData()));
     };
 
@@ -1366,6 +1368,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     const tick = () => {
       if (document.hidden) return;
+      if (staffGestaoPausaTrabalhoPesadoAutomatico()) return;
       const d = getData();
       if (!d) return;
       const cnpj = getCooperativaCnpj(d, coopId);
