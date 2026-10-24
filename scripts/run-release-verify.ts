@@ -153,6 +153,12 @@ const PHASE_HB: Step[] = [
   },
   {
     phase: "2",
+    title: "Conta-coop responsável — UX e desempenho",
+    cmd: "npx",
+    stepArgs: ["tsx", "scripts/test-conta-coop-staff-ux-contrato.ts"],
+  },
+  {
+    phase: "2",
     title: "HB pagar — comprovante e UX",
     cmd: "npx",
     stepArgs: ["tsx", "scripts/test-hb-credit-pagar-ux-contrato.ts"],
