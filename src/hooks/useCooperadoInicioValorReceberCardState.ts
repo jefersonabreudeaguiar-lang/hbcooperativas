@@ -219,7 +219,8 @@ export function useCooperadoInicioValorReceberCardState(input: {
             apresentacaoFinanceiroUi,
             cooperativaIdCard
               ? lerCooperadoPwaFichaResumoSnapshot(cooperadoIdCard, cooperativaIdCard)
-              : null
+              : null,
+            persistido?.display
           );
           if (unificado) {
             const temObrigacao = cooperadoMotorTemObrigacaoReceber(unificado.motor);
@@ -230,7 +231,9 @@ export function useCooperadoInicioValorReceberCardState(input: {
                 display: unificado.motor,
                 hadPendencia: temObrigacao,
               },
-              atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+              atualizando:
+                !temObrigacao &&
+                Boolean(input.syncing && isCooperadoUserSyncVisible()),
               gravarPersistencia: temObrigacao,
             };
           }
@@ -664,9 +667,6 @@ export function useCooperadoInicioValorReceberCardState(input: {
   latchRef.current = resolved.latch;
 
   const snapshotExibido = useMemo(() => {
-    if (pilotoParidadeUnificada && !leituraSomentePwa) {
-      return resolved.display;
-    }
     if (
       cooperadoInicioSincronizadoComFinanceiro(sessionUser) &&
       !leituraSomentePwa &&

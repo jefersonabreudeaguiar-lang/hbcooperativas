@@ -23,7 +23,12 @@ import {
 import type { InicioCardMotorSnapshot } from "@/lib/cooperado/cooperadoInicioCardMotorTypes";
 import { cooperadoMotorRevisionOperacional } from "@/lib/cooperado/cooperadoMotorRevisionOperacional";
 import type { CooperadoPwaFichaResumoSnapshot } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
+import { resolveParidadeFromFichaResumoSnapshot } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import { resolverParidadeCooperadoMobileExibicao } from "@/lib/cooperado/cooperadoAReceberParidadeMobileUnificada";
+import {
+  cooperadoBicAutorizaZerarCardInicio,
+  cooperadoMotorTemObrigacaoReceber,
+} from "@/lib/cooperadoInicioCardPolicy";
 
 export function cooperadoInicioSincronizadoComFinanceiro(
   user: Omit<User, "password"> | null | undefined
@@ -54,8 +59,11 @@ export function cooperadoCardInicioMotorParidadeUnificadaPiloto(
   cooperadoId: string,
   cooperativaId: string | undefined,
   apresentacaoFinanceiroUi: boolean,
-  fichaResumoSnap: CooperadoPwaFichaResumoSnapshot | null
+  fichaResumoSnap: CooperadoPwaFichaResumoSnapshot | null,
+  inicioPersistido: InicioCardMotorSnapshot | null | undefined
 ): { motor: InicioCardMotorSnapshot; revision: string } | null {
+  if (!cooperativaId) return null;
+
   const paridade = resolverParidadeCooperadoMobileExibicao({
     data,
     cooperadoId,
@@ -64,16 +72,47 @@ export function cooperadoCardInicioMotorParidadeUnificadaPiloto(
     fichaResumoSnap,
     financeiroDormant: false,
     syncFinanceiroGa: true,
+    inicioCardPersistido: inicioPersistido,
   });
   if (!paridade) return null;
-  const motor = inicioCardMotorFromParidadeFinanceiro(
-    data,
-    cooperadoId,
-    cooperativaId,
-    paridade
-  );
+
+  let motor = inicioCardMotorFromParidadeFinanceiro(data, cooperadoId, cooperativaId, paridade);
   const revision = cooperadoMotorRevisionOperacional(data, cooperadoId, cooperativaId);
-  return { motor, revision };
+
+  if (cooperadoMotorTemObrigacaoReceber(motor)) {
+    return { motor, revision };
+  }
+
+  const tinhaValorExibido = Boolean(
+    inicioPersistido && cooperadoMotorTemObrigacaoReceber(inicioPersistido)
+  );
+  const autorizaZerar = cooperadoBicAutorizaZerarCardInicio(data, cooperadoId, cooperativaId, {
+    tinhaValorExibido,
+  });
+  if (autorizaZerar) return { motor, revision };
+
+  const snapParidade = fichaResumoSnap
+    ? resolveParidadeFromFichaResumoSnapshot(fichaResumoSnap)
+    : null;
+  if (snapParidade && snapParidade.valorLiquido > 0.005) {
+    const overlayHb = linhasOverlayDebitoHbAReceber(cooperadoId, cooperativaId);
+    motor = inicioCardMotorFromParidadeFinanceiro(
+      data,
+      cooperadoId,
+      cooperativaId,
+      aplicarDebitoHbHibridoNaParidade(snapParidade, overlayHb)
+    );
+    if (cooperadoMotorTemObrigacaoReceber(motor)) return { motor, revision };
+  }
+
+  if (tinhaValorExibido && inicioPersistido) {
+    return {
+      motor: inicioPersistido,
+      revision: `persistido:${inicioPersistido.valor}`,
+    };
+  }
+
+  return null;
 }
 
 export function cooperadoCardInicioMotorParidadeFinanceiro(

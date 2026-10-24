@@ -37,6 +37,7 @@ import {
   cooperadoAReceberParidadeUnificadaPilotoJeferson,
   resolverParidadeCooperadoMobileExibicao,
 } from "@/lib/cooperado/cooperadoAReceberParidadeMobileUnificada";
+import { lerInicioCardFinanceiroExibicao } from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
 import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import {
   cooperadoPwaUiSubscribesAppData,
@@ -300,7 +301,13 @@ function FichaCorridaPageInner() {
   const [fichaResumoSnap, setFichaResumoSnap] = useState<CooperadoPwaFichaResumoSnapshot | null>(
     () => {
       if (typeof window === "undefined" || !user?.cooperadoId || !user.cooperativaId) return null;
-      if (!messenger && !pilotFinanceiroLeve) return null;
+      if (
+        !messenger &&
+        !pilotFinanceiroLeve &&
+        !cooperadoAReceberParidadeUnificadaPilotoJeferson(user)
+      ) {
+        return null;
+      }
       return lerCooperadoPwaFichaResumoSnapshot(user.cooperadoId, user.cooperativaId);
     }
   );
@@ -581,6 +588,9 @@ function FichaCorridaPageInner() {
   const paridadeCooperadoMobile = useMemo(() => {
     if (!tabActive || !isCooperado || !cooperadoId) return null;
     if (cooperadoAReceberParidadeUnificadaPilotoJeferson(user)) {
+      const inicioCard = coopId
+        ? lerInicioCardFinanceiroExibicao(cooperadoId, coopId)
+        : null;
       return resolverParidadeCooperadoMobileExibicao({
         data,
         cooperadoId,
@@ -589,6 +599,7 @@ function FichaCorridaPageInner() {
         fichaResumoSnap,
         financeiroDormant,
         syncFinanceiroGa: cooperadoInicioSincronizadoComFinanceiro(user),
+        inicioCardPersistido: inicioCard?.display ?? null,
       });
     }
     const readParidade = (d: NonNullable<typeof data>) =>

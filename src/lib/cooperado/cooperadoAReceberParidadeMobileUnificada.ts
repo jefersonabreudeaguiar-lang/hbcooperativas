@@ -12,7 +12,11 @@ import { resolveParidadeFromFichaResumoSnapshot } from "@/lib/cooperado/cooperad
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import type { LeituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
-import { cooperadoBicAutorizaZerarCardInicio } from "@/lib/cooperadoInicioCardPolicy";
+import {
+  cooperadoBicAutorizaZerarCardInicio,
+  cooperadoMotorTemObrigacaoReceber,
+  type InicioCardMotorSnapshot,
+} from "@/lib/cooperadoInicioCardPolicy";
 import {
   aplicarDebitoHbHibridoNaParidade,
   linhasOverlayDebitoHbAReceber,
@@ -37,7 +41,22 @@ export type ResolverParidadeCooperadoMobileInput = {
   financeiroDormant: boolean;
   /** Ramo GA sync-first (live com fallback snap quando live=0). */
   syncFinanceiroGa?: boolean;
+  inicioCardPersistido?: InicioCardMotorSnapshot | null;
 };
+
+function paridadeMinimaDeValorCard(
+  valor: number,
+  mesLabel: string,
+  base: LeituraFinanceiraParidadeCooperado | null
+): LeituraFinanceiraParidadeCooperado | null {
+  if (valor <= 0.005 || !base) return null;
+  return {
+    ...base,
+    valorLiquido: valor,
+    mesLabel: mesLabel?.trim() || base.mesLabel,
+    consolidado: { ...base.consolidado, valorLiquido: valor },
+  };
+}
 
 export function resolverParidadeCooperadoMobileExibicao(
   input: ResolverParidadeCooperadoMobileInput
@@ -66,11 +85,28 @@ export function resolverParidadeCooperadoMobileExibicao(
     store && cooperadoBicAutorizaZerarCardInicio(store, cooperadoId, coopId)
   );
 
+  const persistidoCard = input.inicioCardPersistido;
+  const persistidoValor =
+    persistidoCard && cooperadoMotorTemObrigacaoReceber(persistidoCard)
+      ? persistidoCard.valor
+      : 0;
+
+  const fallbackPersistidoCard = (): LeituraFinanceiraParidadeCooperado | null => {
+    if (liquidadoPeloResponsavel || persistidoValor <= 0.005) return null;
+    return paridadeMinimaDeValorCard(
+      persistidoValor,
+      persistidoCard?.mesLabel ?? "—",
+      live ?? fromSnapGuard
+    );
+  };
+
   if (input.syncFinanceiroGa && isAppDataWarm() && store && live) {
     if (liveValor > 0.005 || liquidadoPeloResponsavel) return withHybrid(live);
     if (fromSnapGuard && snapValor > 0.005 && !liquidadoPeloResponsavel) {
       return withHybrid(fromSnapGuard);
     }
+    const fromCard = fallbackPersistidoCard();
+    if (fromCard) return withHybrid(fromCard);
     return withHybrid(live);
   }
 
@@ -98,6 +134,15 @@ export function resolverParidadeCooperadoMobileExibicao(
     }
     return withHybrid(fromSnapGuard);
   }
-  if (!store) return withHybrid(fromSnapGuard && snapValor > 0.005 ? fromSnapGuard : null);
-  return withHybrid(live ?? (fromSnapGuard && snapValor > 0.005 ? fromSnapGuard : null));
+  if (!store) {
+    const snap = fromSnapGuard && snapValor > 0.005 ? fromSnapGuard : null;
+    const card = fallbackPersistidoCard();
+    return withHybrid(snap ?? card);
+  }
+  const card = fallbackPersistidoCard();
+  return withHybrid(
+    live ??
+      (fromSnapGuard && snapValor > 0.005 ? fromSnapGuard : null) ??
+      card
+  );
 }
