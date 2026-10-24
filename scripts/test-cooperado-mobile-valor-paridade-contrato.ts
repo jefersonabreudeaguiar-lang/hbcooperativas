@@ -10,7 +10,7 @@ import { APP_BUILD_VERSION } from "../src/lib/appBuildVersion.ts";
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.ok(APP_BUILD_VERSION >= 620, "build 620+ início contexto ao vivo alinhado");
+assert.ok(APP_BUILD_VERSION >= 621, "build 621+ motor ao vivo clássico cooperado");
 
 const hydrate = read("src/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate.ts");
 assert.ok(hydrate.includes("cooperadoFinanceiroExibicaoDivergeDeAppDataLive"));
@@ -38,16 +38,16 @@ const ficha = read("src/app/(app)/ficha-corrida/FichaCorridaContent.tsx");
 assert.ok(ficha.includes("financeiroAppDataAoVivo"));
 
 const unificado = read("src/lib/cooperado/cooperadoExibicaoFinanceiraUnificada.ts");
-assert.ok(unificado.includes("COOPERADO_EXIBICAO_FINANCEIRA_UNIFICADA_AO_VIVO"));
-assert.ok(unificado.includes("cooperadoLeituraFinanceiraExibicao"));
+assert.ok(unificado.includes("COOPERADO_EXIBICAO_FINANCEIRA_UNIFICADA_AO_VIVO = false"));
 
 const messenger = read("src/lib/cooperado/cooperadoPwaMessengerMode.ts");
-assert.ok(messenger.includes("cooperadoExibicaoFinanceiraUnificadaAoVivo(session)"));
-
-assert.ok(hook.includes("resolverMotorCardInicioParidadeFinanceiro"));
-assert.ok(hook.includes("cooperadoExibicaoFinanceiraUnificadaAoVivo"));
+assert.ok(messenger.includes('session?.role === "cooperado") return true'));
 
 const inicioCtx = read("src/hooks/useCooperadoInicioCardContext.ts");
-assert.ok(inicioCtx.includes("!exibicaoUnificada"));
+assert.ok(inicioCtx.includes("isCooperadoMobileGaPromoted(user) ? false"));
+
+const dash = read("src/app/(app)/dashboard/DashboardContent.tsx");
+assert.ok(dash.includes("cooperadoMotorAoVivo"));
+assert.ok(dash.includes("leituraSomentePwa: cooperadoMotorAoVivo ? false"));
 
 console.log("OK — test-cooperado-mobile-valor-paridade-contrato");

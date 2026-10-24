@@ -144,7 +144,6 @@ import {
 import { isCooperadoAppUser } from "@/permissions";
 import { getSession } from "@/services/dataStore";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
-import { cooperadoExibicaoFinanceiraUnificadaAoVivo } from "@/lib/cooperado/cooperadoExibicaoFinanceiraUnificada";
 import {
   cooperadoMobilePilotSnapshotFirstInicio,
   isCooperadoMobilePilotPerfActive,
@@ -215,10 +214,11 @@ function CooperadoDashboard() {
   const inicioPwaLeve = isCooperadoPwaMobileLeveUi();
   const appDataUiOn = cooperadoPwaUiSubscribesAppData() && tabActive;
   const { user } = useAuth();
-  const exibicaoUnificadaAoVivo = cooperadoExibicaoFinanceiraUnificadaAoVivo(user);
+  const cooperadoMotorAoVivo = user?.role === "cooperado" && isCooperadoMobileGaPromoted(user);
   const inicioSnapshotFirst =
-    !exibicaoUnificadaAoVivo &&
-    (inicioPwaLeve || cooperadoMobilePilotSnapshotFirstInicio(user));
+    cooperadoMotorAoVivo
+      ? false
+      : inicioPwaLeve || cooperadoMobilePilotSnapshotFirstInicio(user);
   const router = useRouter();
   const irEnviarFotoEntrega = useCallback(() => {
     setCooperadoOptimisticTab("/notas-pedido");
@@ -313,7 +313,7 @@ function CooperadoDashboard() {
 
   /** Modo mensageiro: HB só no runSync (Atualizar) — sem pilot periódico na UI. */
   useSyncContaCoopValorReceberPilot(
-    contaCoopSync && (exibicaoUnificadaAoVivo || (!messenger && !inicioSnapshotFirst))
+    contaCoopSync && (cooperadoMotorAoVivo || (!messenger && !inicioSnapshotFirst))
       ? { ...contaCoopSync, user, initialDelayMs: 3_000 }
       : undefined
   );
@@ -339,7 +339,7 @@ function CooperadoDashboard() {
       syncing: syncingForUi,
       apresentacaoConsolidada,
       carregandoValoresFinanceiros,
-      leituraSomentePwa: !exibicaoUnificadaAoVivo && (messenger || inicioSnapshotFirst),
+      leituraSomentePwa: cooperadoMotorAoVivo ? false : messenger || inicioSnapshotFirst,
       tabAtiva: tabActive,
     });
 
@@ -458,7 +458,7 @@ function CooperadoDashboard() {
     apresentacaoConsolidada,
   ]);
 
-  const viewRaw = exibicaoUnificadaAoVivo
+  const viewRaw = cooperadoMotorAoVivo
     ? viewLive ?? pwaInicioView ?? pwaInicioViewStickyRef.current
     : messenger || inicioSnapshotFirst
       ? pwaInicioView ?? pwaInicioViewStickyRef.current

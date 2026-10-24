@@ -10,8 +10,8 @@ import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilo
 
 export const COOPERADO_EXIBICAO_FINANCEIRA_UNIFICADA_VERSION = 1;
 
-/** Produção: paridade ao vivo para todos os cooperados GA no celular. */
-export const COOPERADO_EXIBICAO_FINANCEIRA_UNIFICADA_AO_VIVO = true;
+/** Desligado — cooperado volta ao motor ao vivo clássico (Início + Financeiro assinam AppData). */
+export const COOPERADO_EXIBICAO_FINANCEIRA_UNIFICADA_AO_VIVO = false;
 
 export function cooperadoExibicaoFinanceiraUnificadaAoVivo(
   user: Omit<User, "password"> | null | undefined

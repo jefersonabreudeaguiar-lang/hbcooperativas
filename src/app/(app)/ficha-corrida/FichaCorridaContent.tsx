@@ -299,14 +299,11 @@ function FichaCorridaPageInner() {
       return lerCooperadoPwaFichaResumoSnapshot(user.cooperadoId, user.cooperativaId);
     }
   );
-  /** Piloto Jeferson: Financeiro ao vivo; demais mensageiros mantêm dormant até flag GA. */
+  /** Cooperado — Financeiro sempre ao vivo (como antes); não congelar em snapshot dormant. */
   const financeiroDormant = useMemo(() => {
     if (!isCooperado) return false;
-    if (financeiroAppDataAoVivo) return false;
-    if (messenger) return true;
-    if (pilotFinanceiroLeve) return false;
     return false;
-  }, [isCooperado, messenger, pilotFinanceiroLeve, financeiroAppDataAoVivo]);
+  }, [isCooperado]);
   /** PWA leve só desliga subscribe do AppData para cooperado; responsável continua com dados ao vivo. */
   const appDataPanelActive =
     tabActive &&
@@ -592,9 +589,6 @@ function FichaCorridaPageInner() {
     const overlayHb = linhasOverlayDebitoHbAReceber(cooperadoId, coopId);
     const withHybrid = (p: typeof live) =>
       p ? aplicarDebitoHbHibridoNaParidade(p, overlayHb) : p;
-    if (financeiroAppDataAoVivo && store && coopId && live) {
-      return withHybrid(live);
-    }
     const liquidadoPeloResponsavel = Boolean(
       store &&
         coopId &&

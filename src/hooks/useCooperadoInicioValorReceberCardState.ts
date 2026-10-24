@@ -38,7 +38,6 @@ import {
   cooperadoGaValorReceberExibicaoResolvida,
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { resolverMotorCardInicioParidadeFinanceiro } from "@/lib/cooperado/cooperadoInicioCardParidadeMotor";
-import { cooperadoExibicaoFinanceiraUnificadaAoVivo } from "@/lib/cooperado/cooperadoExibicaoFinanceiraUnificada";
 import {
   lerCooperadoPwaFichaResumoSnapshot,
   resolveParidadeFromFichaResumoSnapshot,
@@ -181,37 +180,6 @@ export function useCooperadoInicioValorReceberCardState(input: {
   }, [apresentacaoConsolidada, input.syncing, hbDescontosRevision]);
 
   const resolved = useMemo(() => {
-    if (
-      cooperadoExibicaoFinanceiraUnificadaAoVivo(sessionUser) &&
-      tabAtiva &&
-      input.cooperadoId
-    ) {
-      const dataUnified =
-        input.data ?? (isAppDataWarm() ? getData() : null);
-      if (dataUnified) {
-        const cooperativaIdCard = resolverCooperativaIdReciboLatch(
-          dataUnified,
-          input.cooperadoId,
-          input.cooperativaId
-        );
-        const paridadeMotor = resolverMotorCardInicioParidadeFinanceiro(
-          dataUnified,
-          input.cooperadoId,
-          cooperativaIdCard,
-          { apresentacaoConsolidada: apresentacaoCard }
-        );
-        return {
-          display: paridadeMotor.motor,
-          latch: {
-            motorRevision: paridadeMotor.revision,
-            display: paridadeMotor.motor,
-            hadPendencia: cooperadoMotorTemObrigacaoReceber(paridadeMotor.motor),
-          },
-          atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
-          gravarPersistencia: true,
-        };
-      }
-    }
     if (leituraSomentePwa) {
       if (!tabAtiva) {
         const persistidoOcioso = persistidoExibicaoPwaLeve(persistido);
@@ -594,17 +562,12 @@ export function useCooperadoInicioValorReceberCardState(input: {
     sessionUser?.cooperativaId,
     sessionUser?.role,
     apresentacaoCard,
-    ...(leituraSomentePwa && !cooperadoExibicaoFinanceiraUnificadaAoVivo(sessionUser)
-      ? []
-      : [hbDescontosRevision]),
+    ...(leituraSomentePwa ? [] : [hbDescontosRevision]),
   ]);
 
   latchRef.current = resolved.latch;
 
   const snapshotExibido = useMemo(() => {
-    if (cooperadoExibicaoFinanceiraUnificadaAoVivo(sessionUser)) {
-      return resolved.display;
-    }
     let base = resolved.display;
     if (
       !cooperadoMotorTemObrigacaoReceber(base) &&
@@ -659,7 +622,6 @@ export function useCooperadoInicioValorReceberCardState(input: {
     persistidoTick,
     appDataWarmKey,
     hbDescontosRevision,
-    sessionUser,
   ]);
 
   useEffect(() => {

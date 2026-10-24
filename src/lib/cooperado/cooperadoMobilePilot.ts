@@ -5,7 +5,6 @@ import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { resolveExperienceUser } from "@/lib/mobileExperience";
-import { cooperadoExibicaoFinanceiraUnificadaAoVivo } from "@/lib/cooperado/cooperadoExibicaoFinanceiraUnificada";
 
 /**
  * Piloto mobile cooperado — sessão Jeferson (CoopeagriPla).
@@ -81,11 +80,12 @@ export function cooperadoMobileDeferOperacionalSyncNaAbertura(
   return isCooperadoMobileGaPromoted(user);
 }
 
-/** Financeiro/Ficha com AppData+BIC ao vivo — alinhado ao card Início (estratégia unificada). */
+/** Financeiro cooperado GA — AppData ao vivo (atualiza na hora; snapshots só cache). */
 export function cooperadoFinanceiroMobileLeituraAoVivo(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
-  return cooperadoExibicaoFinanceiraUnificadaAoVivo(user);
+  if (!user || user.role !== "cooperado") return false;
+  return isCooperadoMobileGaPromoted(user);
 }
 
 /**
