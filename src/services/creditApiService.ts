@@ -735,6 +735,7 @@ export async function fetchMercadoParceiroData() {
     fiscalPendentes?: number;
     cooperativaNome?: string;
     needsTermsAcceptance?: boolean;
+    needsMercadoNfAvisoAck?: boolean;
     pixChange?: {
       pending: boolean;
       unlocked: boolean;
@@ -743,6 +744,17 @@ export async function fetchMercadoParceiroData() {
     };
   }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar mercado.");
+  return data;
+}
+
+export async function acceptMercadoNfAvisoComunicado() {
+  const res = await secureApiFetch("/api/credit/mercado", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "accept_nf_aviso" }),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string; needsMercadoNfAvisoAck?: boolean }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Não foi possível registrar a confirmação.");
   return data;
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import {
   HB_CREDIT_MERCADO_NF_AVISO_ASSINATURA,
@@ -10,36 +10,39 @@ import {
   hbCreditMercadoNfAvisoAckKey,
   isHbCreditMercadoNfDispensada,
 } from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
+import { acceptMercadoNfAvisoComunicado } from "@/services/creditApiService";
 
-/** Único aviso visível no painel do mercado — some só depois de confirmar. */
+/** Comunicado NF dispensada — some após confirmação registrada na nuvem (não só localStorage). */
 export function MercadoHbCreditNfDispensadaAviso(props: {
   partnerId: string;
   cooperativaCnpj?: string;
+  needsAck: boolean;
+  onAcknowledged?: () => void | Promise<void>;
 }) {
-  const key = hbCreditMercadoNfAvisoAckKey(props.partnerId, props.cooperativaCnpj);
-  const [pronto, setPronto] = useState(false);
-  const [confirmado, setConfirmado] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [erro, setErro] = useState("");
 
-  useEffect(() => {
-    try {
-      setConfirmado(window.localStorage.getItem(key) === "1");
-    } catch {
-      setConfirmado(false);
-    }
-    setPronto(true);
-  }, [key]);
-
-  if (!isHbCreditMercadoNfDispensada() || !pronto || confirmado || !props.partnerId) {
+  if (!isHbCreditMercadoNfDispensada() || !props.needsAck || !props.partnerId) {
     return null;
   }
 
-  const confirmar = () => {
+  const confirmar = async () => {
+    setBusy(true);
+    setErro("");
     try {
-      window.localStorage.setItem(key, "1");
-    } catch {
-      /* private / quota — some na hora mesmo assim */
+      await acceptMercadoNfAvisoComunicado();
+      try {
+        const key = hbCreditMercadoNfAvisoAckKey(props.partnerId, props.cooperativaCnpj);
+        window.localStorage.setItem(key, "1");
+      } catch {
+        /* cache local opcional */
+      }
+      await props.onAcknowledged?.();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível registrar a confirmação.");
+    } finally {
+      setBusy(false);
     }
-    setConfirmado(true);
   };
 
   return (
@@ -56,8 +59,9 @@ export function MercadoHbCreditNfDispensadaAviso(props: {
       </h2>
       <p className="mt-2 text-sm leading-relaxed text-green-950">{HB_CREDIT_MERCADO_NF_AVISO_CORPO}</p>
       <p className="mt-3 text-sm font-semibold text-green-900">{HB_CREDIT_MERCADO_NF_AVISO_ASSINATURA}</p>
-      <Button type="button" className="mt-4 w-full" onClick={confirmar}>
-        {HB_CREDIT_MERCADO_NF_AVISO_BOTAO}
+      {erro ? <p className="mt-3 text-sm text-red-800">{erro}</p> : null}
+      <Button type="button" className="mt-4 w-full" disabled={busy} onClick={() => void confirmar()}>
+        {busy ? "Registrando…" : HB_CREDIT_MERCADO_NF_AVISO_BOTAO}
       </Button>
     </aside>
   );

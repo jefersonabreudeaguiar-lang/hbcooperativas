@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import {
+  acceptPartnerMercadoNfAviso,
   acceptPartnerTerms,
+  resolvePartnerNeedsMercadoNfAvisoAck,
   getCooperativaNomeByCnpj,
   getParceiroByUserId,
   hasPartnerFinancialPin,
@@ -75,6 +77,7 @@ export async function GET(request: Request) {
   const cooperativaNome =
     (await getCooperativaNomeByCnpj(gate.ctx.supabase, parceiro.cooperativaCnpj)) ?? "Cooperativa parceira";
   const needsTermsAcceptance = partnerNeedsTermsAcceptance(parceiro);
+  const needsMercadoNfAvisoAck = await resolvePartnerNeedsMercadoNfAvisoAck(gate.ctx.supabase, parceiro);
   const pixChange = await getPartnerPixChangeStatus(gate.ctx.supabase, parceiro.id);
   const pinResetPending = await hasPendingPartnerPinResetRequest(
     gate.ctx.supabase,
@@ -95,6 +98,7 @@ export async function GET(request: Request) {
     mesReferenciaFiscal: mesReferencia,
     cooperativaNome,
     needsTermsAcceptance,
+    needsMercadoNfAvisoAck,
     pixChange,
   });
 }
@@ -147,6 +151,19 @@ export async function PATCH(request: Request) {
         "Solicitação enviada. O responsável da cooperativa resetará o PIN em Conta Coop → Mercados.",
       pinResetPending: true,
     });
+  }
+
+  if (body.action === "accept_nf_aviso") {
+    const ok = await acceptPartnerMercadoNfAviso(
+      gate.ctx.supabase,
+      parceiro,
+      gate.ctx.session?.sub ?? "system"
+    );
+    if (!ok) {
+      return NextResponse.json({ error: "Não foi possível registrar a confirmação." }, { status: 400 });
+    }
+    const needsMercadoNfAvisoAck = await resolvePartnerNeedsMercadoNfAvisoAck(gate.ctx.supabase, parceiro);
+    return NextResponse.json({ ok: true, needsMercadoNfAvisoAck });
   }
 
   if (body.action === "accept_terms") {

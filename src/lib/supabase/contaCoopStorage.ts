@@ -39,7 +39,10 @@ import { signedLedgerAmountCentsForExtrato } from "@/lib/hb-credit/ledgerLabels"
 import { formatHbCreditUsoMotivo } from "@/lib/hb-credit/hbCreditUsoDescricao";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import { hbCreditCreditoBaseReais } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
-import { isHbCreditMercadoNfDispensada } from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
+import {
+  HB_CREDIT_MERCADO_NF_AVISO_POLICY_VERSION,
+  isHbCreditMercadoNfDispensada,
+} from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
 import { resolveLeituraFinanceiraCooperadoCore } from "@/lib/bic/bicLeituraPorta";
 import type {
   AuthoritativeCreditBaseErrorPayload,
@@ -3051,6 +3054,62 @@ export async function acceptPartnerTerms(
   });
 
   return mapParceiroRow(data as Record<string, unknown>);
+}
+
+export async function partnerHasAckedMercadoNfAviso(
+  supabase: SupabaseClient,
+  parceiro: ContaCoopParceiro
+): Promise<boolean> {
+  if (!isHbCreditMercadoNfDispensada()) return true;
+  const digits = normalizeCnpj(parceiro.cooperativaCnpj);
+  const { data } = await supabase
+    .from("hb_credit_audit_log")
+    .select("metadata")
+    .eq("cooperative_cnpj", digits)
+    .eq("resource_type", "partner")
+    .eq("resource_id", parceiro.id)
+    .eq("action", "PARTNER_NF_AVISO_ACKED")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const version = (data?.metadata as { version?: string } | null)?.version;
+  return version === HB_CREDIT_MERCADO_NF_AVISO_POLICY_VERSION;
+}
+
+export function partnerNeedsMercadoNfAvisoAck(parceiro: ContaCoopParceiro): boolean {
+  if (!isHbCreditMercadoNfDispensada()) return false;
+  if (parceiro.status !== "ativo") return false;
+  return true;
+}
+
+export async function acceptPartnerMercadoNfAviso(
+  supabase: SupabaseClient,
+  parceiro: ContaCoopParceiro,
+  appUserId: string
+): Promise<boolean> {
+  if (!partnerNeedsMercadoNfAvisoAck(parceiro)) return true;
+  const already = await partnerHasAckedMercadoNfAviso(supabase, parceiro);
+  if (already) return true;
+
+  const digits = normalizeCnpj(parceiro.cooperativaCnpj);
+  const { error } = await supabase.from("hb_credit_audit_log").insert({
+    cooperative_cnpj: digits,
+    actor: appUserId,
+    action: "PARTNER_NF_AVISO_ACKED",
+    resource_type: "partner",
+    resource_id: parceiro.id,
+    metadata: { version: HB_CREDIT_MERCADO_NF_AVISO_POLICY_VERSION },
+  });
+  return !error;
+}
+
+export async function resolvePartnerNeedsMercadoNfAvisoAck(
+  supabase: SupabaseClient,
+  parceiro: ContaCoopParceiro
+): Promise<boolean> {
+  if (!partnerNeedsMercadoNfAvisoAck(parceiro)) return false;
+  return !(await partnerHasAckedMercadoNfAviso(supabase, parceiro));
 }
 
 export async function getCooperativaNomeByCnpj(

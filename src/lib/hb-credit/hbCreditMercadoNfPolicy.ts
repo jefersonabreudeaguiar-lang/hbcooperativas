@@ -23,6 +23,9 @@ export const HB_CREDIT_MERCADO_NF_AVISO_ASSINATURA = "Agradece a Direção HB Co
 
 export const HB_CREDIT_MERCADO_NF_AVISO_BOTAO = "Li e confirmo";
 
+/** Versão do comunicado — mudança no texto exige novo aceite. */
+export const HB_CREDIT_MERCADO_NF_AVISO_POLICY_VERSION = "2026-10-20-v1";
+
 export const HB_CREDIT_MERCADO_NF_AVISO_ACK_PREFIX = "hb-credit-mercado-nf-aviso-ack:v1";
 
 export function hbCreditMercadoNfAvisoAckKey(partnerId: string, cnpjCooperativa?: string): string {

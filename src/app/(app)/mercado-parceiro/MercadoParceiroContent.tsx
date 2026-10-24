@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Form";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import {
+  acceptMercadoNfAvisoComunicado,
   cancelCreditIntent,
   confirmarLiquidacaoMercado,
   createCreditIntent,
@@ -23,7 +24,7 @@ import type { ContaCoopCompraEstornavel, ContaCoopIntent, ContaCoopParceiro, Con
 import { ContaCoopFiscalNotesMercadoPanel } from "@/components/hb-credit/ContaCoopFiscalNotesMercadoPanel";
 import { MercadoHbCreditNfDispensadaAviso } from "@/components/hb-credit/MercadoHbCreditNfDispensadaAviso";
 import { MercadoContaCoopTermosGate } from "@/components/hb-credit/MercadoContaCoopTermosGate";
-import { isHbCreditMercadoNfDispensada } from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
+import { hbCreditMercadoNfAvisoAckKey, isHbCreditMercadoNfDispensada } from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
 import { textoResumoAcordoDescontoMercado, getClausulasTermoMercadoContaCoop, TERMO_MERCADO_CONTA_COOP_VERSAO } from "@/config/termoUsoMercadoContaCoop";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { cn, formatCpfCnpj, formatDateTime, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
@@ -103,6 +104,7 @@ function MercadoParceiroContent() {
   const [fiscalPendentes, setFiscalPendentes] = useState(0);
   const [cooperativaNome, setCooperativaNome] = useState("Cooperativa parceira");
   const [needsTermsAcceptance, setNeedsTermsAcceptance] = useState(false);
+  const [needsMercadoNfAvisoAck, setNeedsMercadoNfAvisoAck] = useState(false);
   const [pixChangePending, setPixChangePending] = useState(false);
   const [pixChangeUnlocked, setPixChangeUnlocked] = useState(false);
   const [tab, setTab] = useState<MercadoTab>("inicio");
@@ -119,6 +121,7 @@ function MercadoParceiroContent() {
       setFiscalPendentes(Number(data.fiscalPendentes ?? 0));
       setCooperativaNome(data.cooperativaNome ?? "Cooperativa parceira");
       setNeedsTermsAcceptance(Boolean(data.needsTermsAcceptance));
+      setNeedsMercadoNfAvisoAck(Boolean(data.needsMercadoNfAvisoAck));
       setPixChangePending(Boolean(data.pixChange?.pending));
       setPixChangeUnlocked(Boolean(data.pixChange?.unlocked));
       if (data.parceiro?.status === "ativo") {
@@ -147,6 +150,20 @@ function MercadoParceiroContent() {
     reload();
     void import("@/lib/hb-credit/gerarQrDataUrl");
   }, [reload]);
+
+  /** Quem já confirmou só no celular (localStorage) — grava na nuvem uma vez e para de repetir. */
+  useEffect(() => {
+    if (!parceiro || !needsMercadoNfAvisoAck || typeof window === "undefined") return;
+    try {
+      const key = hbCreditMercadoNfAvisoAckKey(parceiro.id, parceiro.cooperativaCnpj);
+      if (window.localStorage.getItem(key) !== "1") return;
+    } catch {
+      return;
+    }
+    void acceptMercadoNfAvisoComunicado()
+      .then(() => reload())
+      .catch(() => {});
+  }, [parceiro, needsMercadoNfAvisoAck, reload]);
 
   const cobrancaAberta = peekHbCreditMercadoCobrancaDraft();
 
@@ -403,6 +420,8 @@ function MercadoParceiroContent() {
         <MercadoHbCreditNfDispensadaAviso
           partnerId={parceiro.id}
           cooperativaCnpj={parceiro.cooperativaCnpj}
+          needsAck={needsMercadoNfAvisoAck}
+          onAcknowledged={reload}
         />
       )}
 
