@@ -75,23 +75,44 @@ function run(name: string, fn: () => void): void {
   }
 }
 
-// TESTE A — BIC ON + dado válido
+function fichaComNota(notaId: string, liq: number) {
+  return {
+    id: "f1",
+    cooperadoId: COOPERADO,
+    cooperativaId: COOP,
+    notaPedidoId: notaId,
+    mesReferencia: MES,
+    valorLiquido: liq,
+    valorBruto: liq,
+    descontos: 0,
+    status: "pendente" as const,
+    descricao: "Entrega",
+    createdAt: "2026-09-01T12:00:00.000Z",
+  };
+}
+
+function notaConferida(notaId: string, liq: number) {
+  return {
+    id: notaId,
+    cooperativaId: COOP,
+    cooperadoId: COOPERADO,
+    mesReferencia: MES,
+    status: "conferida" as const,
+    valorBruto: liq,
+    valorLiquido: liq,
+    instituicaoId: "inst-p25",
+    itens: [{ produtoId: "p1", quantidade: 1, precoUnitario: liq }],
+    createdAt: "2026-09-01T10:00:00.000Z",
+    updatedAt: "2026-09-01T10:00:00.000Z",
+  };
+}
+
+// TESTE A — BIC ON + dado válido (ficha + nota — paridade BIC exige lastro de nota)
 run("TESTE A — BIC ON + dado válido", () => {
   withBicOfficial(() => {
     const data = base({
-      fichaCorrida: [
-        {
-          id: "f1",
-          cooperadoId: COOPERADO,
-          cooperativaId: COOP,
-          mesReferencia: MES,
-          valorLiquido: 200,
-          valorBruto: 200,
-          valorDesconto: 0,
-          status: "pendente",
-          descricao: "Entrega",
-        },
-      ],
+      notasPedido: [notaConferida("n-p25", 200)],
+      fichaCorrida: [fichaComNota("n-p25", 200)],
     });
     const snap = buildCooperadoFinanceiroUiSnapshot({
       data,

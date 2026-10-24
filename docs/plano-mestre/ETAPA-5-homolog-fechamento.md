@@ -14,8 +14,15 @@
 | 6 | Browser Chrome (não PWA) — mesmo valor | |
 | 7 | JSON diag anexado no suporte | |
 
-## Próxima ordem (se você disser SIM)
+## Gate técnico (repo)
 
-- Congelar contratos de teste (`v544`–`v552`) no CI.
-- Tag de release cooperado no changelog.
+```powershell
+npm run cooperado:verify:fase4
+```
+
+Checklist piloto impresso: `docs/plano-mestre/FASE-4-PILOTO-CHECKLIST.md`.
+
+## Próxima ordem (após SIM do piloto na Fase 4)
+
+- Tag `cooperado-homolog-fechado` no commit de produção.
 - Etapa 6+ (responsável/HB) só após linha acima verde.

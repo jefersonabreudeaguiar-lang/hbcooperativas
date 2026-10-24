@@ -59,6 +59,7 @@
     "push:main": "git push origin main && npm run confirm:production:wait",
     "release:verify": "npx tsx scripts/run-release-verify.ts",
     "release:verify:fast": "npx tsx scripts/run-release-verify.ts --fast",
+    "cooperado:verify:fase4": "npx tsx scripts/run-cooperado-fase4-verify.ts",
     "audit:weekly": "npx tsx scripts/run-weekly-audits.ts",
     "lab:bic-mirror-sync": "npx tsx scripts/lab/sync-bic-mirror-to-lab-build.ts",
     "test:preservar-pagamentos-confirmados": "npx tsx scripts/test-preservar-pagamentos-confirmados.ts",

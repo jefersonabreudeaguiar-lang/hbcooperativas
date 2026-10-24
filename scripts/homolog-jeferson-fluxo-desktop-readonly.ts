@@ -55,14 +55,19 @@ async function main() {
   }
   const coop = cooperativaFromCloudRow(coopRows[0] as Record<string, unknown>);
 
-  const [storageNotas, tableResult, cloudCooperados, operacional] = await Promise.all([
-    fetchNotasFromStorage(sb, CNPJ),
+  const [tableResult, cloudCooperados, operacional] = await Promise.all([
     fetchNotasFromTable(sb, CNPJ),
     fetchCooperadosFromStorage(sb, CNPJ),
     fetchOperacionalSync(sb, CNPJ),
   ]);
 
-  const notas = mergeNotasSources(tableResult.notas, storageNotas).map((n) => ({
+  let notasMerged = tableResult.notas;
+  if (process.env.HOMOLOG_JEFERSON_FULL_NOTAS === "1") {
+    const storageNotas = await fetchNotasFromStorage(sb, CNPJ);
+    notasMerged = mergeNotasSources(tableResult.notas, storageNotas);
+  }
+
+  const notas = notasMerged.map((n) => ({
     ...n,
     cooperativaId: n.cooperativaId ?? coop.id,
   }));
