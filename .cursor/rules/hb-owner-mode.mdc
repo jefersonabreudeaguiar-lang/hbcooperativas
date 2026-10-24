@@ -25,8 +25,7 @@ alwaysApply: true
 - Regressão: revert para último commit com SIM do usuário, não empilhar correções.
 - Não reativar `COOPERADO_EXIBICAO_FINANCEIRA_UNIFICADA_AO_VIVO` nem piloto só-Jeferson sem SIM explícito.
 
-## Checklist que o usuário valida (copiar no chat quando pedir SIM/NÃO)
-1. Badge/build atual em produção.
-2. Cooperado: Atualizar completa; Início = Financeiro; valor = responsável/desktop após sync.
-3. Troca de abas sem tela branca/travamento.
-4. Responsável: fluxos críticos inalterados (em aberto / pagar / conta-coop).
+## Homologação Jeferson mobile (aba a aba) — usuário só SIM/NÃO
+- A1 Início · A2 Entregas · A3 Preços · A4 Financeiro · A5 ciclo de abas · A6 Atualizar/valor
+- Contrato CI: `npm run test:cooperado-jeferson-abas`
+- Produção atual: build **633** até novo deploy com SIM do usuário.

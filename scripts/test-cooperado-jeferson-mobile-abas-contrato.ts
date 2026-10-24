@@ -1,0 +1,75 @@
+/**
+ * Cooperado mobile Jeferson — contrato por aba (4 bottom tabs + rotas críticas).
+ * Produção: validação humana segue ROTEIRO no final do arquivo.
+ * npx tsx scripts/test-cooperado-jeferson-mobile-abas-contrato.ts
+ */
+import assert from "node:assert/strict";
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { APP_BUILD_VERSION } from "../src/lib/appBuildVersion.ts";
+import { COOPERADO_BOTTOM_TAB_HREFS } from "../src/lib/performance/cooperadoBottomTabRoutes.ts";
+import {
+  COOPERADO_MOBILE_PILOT_EMAIL,
+  isCooperadoMobileGaPromoted,
+} from "../src/lib/cooperado/cooperadoMobilePilot.ts";
+
+const ROOT = join(import.meta.dirname ?? __dirname, "..");
+const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
+
+assert.ok(APP_BUILD_VERSION >= 633, "build 633+ baseline GA cooperado");
+
+const forbidden = [
+  "useCooperadoParidadeExibicaoJeferson",
+  "cooperadoJefersonPilotoFinanceiroAtivo",
+  "cooperadoAReceberParidadeUnificadaPilotoJeferson",
+  "cooperadoInicioSincronizadoComFinanceiro",
+];
+
+const tabPages: Record<string, string> = {
+  "/dashboard": "src/app/(app)/dashboard/DashboardContent.tsx",
+  "/notas-pedido": "src/app/(app)/notas-pedido/NotasPedidoCooperadoMain.tsx",
+  "/precos": "src/app/(app)/precos/PrecosContent.tsx",
+  "/ficha-corrida": "src/app/(app)/ficha-corrida/FichaCorridaContent.tsx",
+};
+
+for (const href of COOPERADO_BOTTOM_TAB_HREFS) {
+  assert.equal(href in tabPages, true, `aba mapeada: ${href}`);
+  const path = tabPages[href]!;
+  assert.ok(existsSync(join(ROOT, path)), `${href} → ${path}`);
+  const src = read(path);
+  assert.match(src, /useCooperadoTabPanelActive/, `${href} respeita tabAtiva`);
+  for (const f of forbidden) {
+    assert.ok(!src.includes(f), `${href} sem piloto isolado: ${f}`);
+  }
+}
+
+const dash = read(tabPages["/dashboard"]!);
+assert.ok(dash.includes("cooperadoMotorAoVivo"));
+assert.ok(dash.includes("useCooperadoInicioValorReceberCardState"));
+assert.ok(dash.includes("CooperadoMobileBuildBadge") || read("src/components/layout/AppLayout.tsx").includes("CooperadoMobileBuildBadge"));
+
+const ficha = read(tabPages["/ficha-corrida"]!);
+assert.ok(ficha.includes("financeiroAppDataAoVivo"));
+assert.ok(ficha.includes("cooperadoGaPausaTrabalhoFinanceiroPesado"));
+
+const keepAlive = read("src/components/performance/CooperadoMobileTabKeepAlive.tsx");
+assert.ok(keepAlive.includes("markCooperadoTabPathChange"));
+
+const gaUser = {
+  id: "u-jeferson",
+  role: "cooperado" as const,
+  email: COOPERADO_MOBILE_PILOT_EMAIL,
+  cooperadoId: "c_1781981564381_w67gg",
+  cooperativaId: "coop1",
+};
+assert.equal(isCooperadoMobileGaPromoted(gaUser), true, "Jeferson está no GA padrão");
+
+console.log("OK — test-cooperado-jeferson-mobile-abas-contrato");
+console.log("");
+console.log("ROTEIRO JEFERSON (produção) — responda SIM/NÃO por linha:");
+console.log("A1 Início (/dashboard): abre, nome, card A receber, Atualizar, sem tela branca");
+console.log("A2 Entregas (/notas-pedido): lista, abrir nota, enviar foto (se tiver pedido)");
+console.log("A3 Preços (/precos): tabela carrega, scroll ok");
+console.log("A4 Financeiro (/ficha-corrida): valor = Início, meses, sem crash ao entrar");
+console.log("A5 Ciclo: Início → Financeiro → Entregas → Preços → Início (sem travar)");
+console.log("A6 Atualizar: termina e valores batem com responsável/desktop");
