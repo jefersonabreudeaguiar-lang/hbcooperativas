@@ -19,6 +19,7 @@ import {
   listarMesesFichaEmAbertoCooperado,
 } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
 import type { PagamentoCooperadoRegistro } from "@/types";
+import { listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { round2 } from "@/utils/calculations";
 
@@ -87,7 +88,7 @@ export function getTotalValoresAPagarGestaoCooperativa(
   _opts?: { bicCentralRead?: boolean }
 ): number {
   const cooperados = cooperativaId
-    ? data.cooperados.filter((c) => c.status === "ativo" && c.cooperativaId === cooperativaId)
+    ? listCooperadosDaCooperativa(data, cooperativaId).filter((c) => c.status === "ativo")
     : data.cooperados.filter((c) => c.status === "ativo");
 
   return round2(

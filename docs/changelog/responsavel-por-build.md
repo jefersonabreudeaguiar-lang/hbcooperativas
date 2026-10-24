@@ -6,6 +6,11 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v648
+
+- **Nomes na gestão:** cooperados vindos só da ficha/nota/PIX deixam de aparecer como «Cooperado»; lista operacional + `getCooperadoNomeResolvido`.
+- **R4:** «A pagar» e Em aberto somam mesmo sem `data.cooperados` vazio — cadastro puxado na abertura quando há ficha sem cooperados locais.
+
 ## v647
 
 - **R3/R4:** «Em aberto» deixa de reutilizar latch antigo após PIX/sync; cache do painel gestão zera ao terminar sync staff.

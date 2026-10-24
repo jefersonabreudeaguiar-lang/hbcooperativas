@@ -1853,8 +1853,9 @@ export default function NotasPedidoStaffMain() {
   );
 
   const nomeCooperadoExibicao = useMemo(() => {
-    if (!data || !cooperadoId) return user?.name ?? "Cooperado";
-    return data.cooperados.find((c) => c.id === cooperadoId)?.nomeCompleto ?? user?.name ?? "Cooperado";
+    if (!data || !cooperadoId || !coopId) return user?.name ?? "Cooperado";
+    const nome = getCooperadoNomeResolvido(data, cooperadoId, coopId);
+    return nome !== "Desconhecido" ? nome : user?.name ?? "Cooperado";
   }, [data, cooperadoId, user?.name]);
 
 

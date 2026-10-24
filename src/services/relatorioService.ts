@@ -1,7 +1,12 @@
 import type { AppData, Cooperado, FichaCorrida, FechamentoMensal, Instituicao, NotaPedido, NotaPedidoItem } from "@/types";
 import { getCooperadoNome, round2, sumBy } from "@/utils/calculations";
 import { formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia } from "@/utils/format";
-import { notaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import {
+  getCooperadoNomeResolvido,
+  listCooperadosDaCooperativa,
+  notaPertenceCooperado,
+  resolverCooperadoIdCanonico,
+} from "@/services/cooperadoCloudService";
 import {
   listarMesesEmAbertoPagamentoResponsavel,
   cooperadoPendentePagamentoResponsavel,
@@ -403,11 +408,13 @@ export function getRelatorioPagarCooperadoEmAberto(
   cooperativaId?: string,
   cooperadoId?: string
 ): LinhaPagarCooperadoEmAberto[] {
-  return data.cooperados
+  const escopo = cooperativaId
+    ? listCooperadosDaCooperativa(data, cooperativaId)
+    : data.cooperados;
+  return escopo
     .filter(
       (c) =>
         c.status === "ativo" &&
-        (!cooperativaId || c.cooperativaId === cooperativaId) &&
         (!cooperadoId || c.id === cooperadoId)
     )
     .map((c) => {
@@ -421,7 +428,7 @@ export function getRelatorioPagarCooperadoEmAberto(
       }));
       return {
         cooperadoId: c.id,
-        cooperado: c.nomeCompleto,
+        cooperado: getCooperadoNomeResolvido(data, c.id, coopScope),
         meses: aberto.meses,
         mesesLabel: formatMesesReferenciaRotulo(aberto.meses),
         entregas: porMes.reduce((s, m) => s + m.entregas, 0),

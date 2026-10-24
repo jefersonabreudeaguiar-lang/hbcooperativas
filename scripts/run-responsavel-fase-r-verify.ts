@@ -11,6 +11,11 @@ const steps: { title: string; cmd: string; args: string[] }[] = [
   { title: "Lançamento (núcleo)", cmd: "npm", args: ["run", "responsavel:verify:lancamento"] },
   { title: "Experiência única GA", cmd: "npx", args: ["tsx", "scripts/test-responsavel-experiencia-unica.ts"] },
   { title: "Em aberto latch pós-sync", cmd: "npx", args: ["tsx", "scripts/test-responsavel-em-aberto-latch-pos-sync.ts"] },
+  {
+    title: "Cooperados só na ficha (nomes + A pagar)",
+    cmd: "npx",
+    args: ["tsx", "scripts/test-responsavel-cooperados-ficha-sem-cadastro.ts"],
+  },
   { title: "Desempenho staff", cmd: "npx", args: ["tsx", "scripts/test-staff-responsavel-desempenho.ts"] },
   { title: "Keep-alive U4", cmd: "npx", args: ["tsx", "scripts/test-staff-mobile-tab-keep-alive-u4.ts"] },
   { title: "Snapshot nunca zera", cmd: "npx", args: ["tsx", "scripts/test-staff-gestao-nunca-zera-snapshot.ts"] },

@@ -88,6 +88,20 @@ export function staffPrecisaHydrateOperacionalPull(
   return staffLocalOperacionalVazio(data, coopId);
 }
 
+/** Operacional local sem cadastro de cooperados (nomes e A pagar zeravam). */
+export function staffCooperadosCadastroAusente(
+  data: AppData | null | undefined,
+  coopId?: string
+): boolean {
+  if (!data || !coopId) return false;
+  const cadastrados = data.cooperados.filter((c) => c.cooperativaId === coopId).length;
+  if (cadastrados > 0) return false;
+  if ((data.fichaCorrida ?? []).some((f) => pertenceCoop(f, coopId))) return true;
+  if ((data.notasPedido ?? []).some((n) => pertenceCoop(n, coopId))) return true;
+  if ((data.pagamentosCooperado ?? []).some((p) => pertenceCoop(p, coopId))) return true;
+  return false;
+}
+
 /** Expande o plano HX 8.4: puxa tudo e desliga push bidirecional. */
 export function expandStaffTierPlanIfOperacionalVazio(
   plan: SyncTierPlan84,
@@ -95,6 +109,17 @@ export function expandStaffTierPlanIfOperacionalVazio(
   coopId?: string,
   opts?: { staffLiveBackground?: boolean; staffUserInitiated?: boolean }
 ): SyncTierPlan84 {
+  if (!opts?.staffUserInitiated && staffCooperadosCadastroAusente(data, coopId)) {
+    return {
+      ...plan,
+      bidirectionalFull: false,
+      pullProfile: true,
+      pullCooperados: true,
+      pullNotas: true,
+      pullOperacional: staffLocalOperacionalVazio(data, coopId),
+      pullContratos: plan.pullContratos ?? false,
+    };
+  }
   // Toque em Atualizar: puxa notas + operacional (skipDestructiveReset no pull — não zera lastro).
   if (opts?.staffUserInitiated) {
     return {

@@ -521,6 +521,62 @@ export async function syncCooperadosFromCloud(cnpj: string, preferredCoopId?: st
   return syncCooperadosInflight;
 }
 
+/** Nome para gestão quando o cadastro local ainda não sincronizou (ficha/nota/PIX). */
+export function resolverNomeCooperadoGestao(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string
+): string {
+  const direct = data.cooperados.find(
+    (c) => c.cooperativaId === cooperativaId && c.id === cooperadoId
+  );
+  if (direct?.nomeCompleto?.trim()) return direct.nomeCompleto.trim();
+
+  for (const f of data.fichaCorrida ?? []) {
+    if (f.cooperativaId !== cooperativaId || f.cooperadoId !== cooperadoId) continue;
+    if (f.cooperadoNomeSnapshot?.trim()) return f.cooperadoNomeSnapshot.trim();
+  }
+  for (const n of data.notasPedido ?? []) {
+    if (!notaPertenceCooperativa(data, n, cooperativaId) || n.cooperadoId !== cooperadoId) continue;
+    if (n.cooperadoNomeSnapshot?.trim()) return n.cooperadoNomeSnapshot.trim();
+  }
+  for (const p of data.pagamentosCooperado ?? []) {
+    if (p.cooperativaId !== cooperativaId || p.cooperadoId !== cooperadoId) continue;
+    if (p.cooperadoNome?.trim()) return p.cooperadoNome.trim();
+  }
+  return "";
+}
+
+function stubCooperadoOperacional(
+  cooperativaId: string,
+  cooperadoId: string,
+  nomeCompleto: string,
+  observacoes: string,
+  createdAt?: string,
+  updatedAt?: string
+): Cooperado {
+  const now = new Date().toISOString();
+  return {
+    id: cooperadoId,
+    cooperativaId,
+    nomeCompleto,
+    cpfCnpj: "",
+    telefone: "",
+    endereco: "",
+    comunidade: "",
+    cafDap: "",
+    chavePix: "",
+    banco: "",
+    agencia: "",
+    conta: "",
+    status: "ativo",
+    produtos: [],
+    observacoes,
+    createdAt: createdAt ?? now,
+    updatedAt: updatedAt ?? now,
+  };
+}
+
 /** Lista cooperados da cooperativa para selects (cadastrados localmente + nuvem + envios). */
 export function listCooperadosDaCooperativa(data: AppData, cooperativaId?: string): Cooperado[] {
   if (!cooperativaId) return [];
@@ -533,35 +589,57 @@ export function listCooperadosDaCooperativa(data: AppData, cooperativaId?: strin
   const nomes = new Set(base.map((c) => nomeNormalizado(c.nomeCompleto)));
   const extras: Cooperado[] = [];
 
+  const tentarIncluirOperacional = (
+    cooperadoId: string,
+    nomeHint: string | undefined,
+    observacoes: string,
+    createdAt?: string,
+    updatedAt?: string
+  ) => {
+    if (!cooperadoId || ids.has(cooperadoId)) return;
+    const nome =
+      nomeHint?.trim() ||
+      resolverNomeCooperadoGestao(data, cooperadoId, cooperativaId);
+    if (!nome) return;
+    const nomeKey = nomeNormalizado(nome);
+    if (nomeKey && nomes.has(nomeKey)) return;
+    extras.push(stubCooperadoOperacional(cooperativaId, cooperadoId, nome, observacoes, createdAt, updatedAt));
+    ids.add(cooperadoId);
+    if (nomeKey) nomes.add(nomeKey);
+  };
+
+  for (const f of data.fichaCorrida ?? []) {
+    if (f.cooperativaId !== cooperativaId) continue;
+    tentarIncluirOperacional(
+      f.cooperadoId,
+      f.cooperadoNomeSnapshot,
+      "Vinculado pela ficha corrida.",
+      f.createdAt,
+      f.updatedAt
+    );
+  }
+
+  for (const p of data.pagamentosCooperado ?? []) {
+    if (p.cooperativaId !== cooperativaId) continue;
+    tentarIncluirOperacional(
+      p.cooperadoId,
+      p.cooperadoNome,
+      "Vinculado por pagamento registrado.",
+      p.createdAt,
+      p.pagoEm
+    );
+  }
+
   for (const nota of data.notasPedido) {
     if (!notaPertenceCooperativa(data, nota, cooperativaId)) continue;
-    const nome = nota.cooperadoNomeSnapshot?.trim();
-    const nomeKey = nome ? nomeNormalizado(nome) : "";
     if (ids.has(nota.cooperadoId)) continue;
-    if (nomeKey && nomes.has(nomeKey)) continue;
-
-    const stub: Cooperado = {
-      id: nota.cooperadoId,
-      cooperativaId: cooperativaId,
-      nomeCompleto: nome || "Cooperado",
-      cpfCnpj: "",
-      telefone: "",
-      endereco: "",
-      comunidade: "",
-      cafDap: "",
-      chavePix: "",
-      banco: "",
-      agencia: "",
-      conta: "",
-      status: "ativo",
-      produtos: [],
-      observacoes: "Vinculado por envio de entrega.",
-      createdAt: nota.createdAt,
-      updatedAt: nota.updatedAt,
-    };
-    extras.push(stub);
-    ids.add(stub.id);
-    if (nomeKey) nomes.add(nomeKey);
+    tentarIncluirOperacional(
+      nota.cooperadoId,
+      nota.cooperadoNomeSnapshot,
+      "Vinculado por envio de entrega.",
+      nota.createdAt,
+      nota.updatedAt
+    );
   }
 
   return [...base, ...extras].sort((a, b) =>
@@ -662,15 +740,21 @@ export function getCooperadoNomeResolvido(
   cooperadoId: string,
   cooperativaId?: string
 ): string {
+  if (!cooperativaId) {
+    const coop = data.cooperados.find((c) => c.id === cooperadoId);
+    if (coop?.nomeCompleto?.trim()) return coop.nomeCompleto.trim();
+    return resolverNomeCooperadoGestao(data, cooperadoId, coop?.cooperativaId ?? "") || "Desconhecido";
+  }
+
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
   const coop = data.cooperados.find((c) => c.id === canonico);
-  if (coop?.nomeCompleto?.trim()) return coop.nomeCompleto;
+  if (coop?.nomeCompleto?.trim()) return coop.nomeCompleto.trim();
 
-  const ficha = data.fichaCorrida.find((f) => f.cooperadoId === cooperadoId);
-  if (ficha?.cooperadoNomeSnapshot?.trim()) return ficha.cooperadoNomeSnapshot.trim();
+  const nomeCanonico = resolverNomeCooperadoGestao(data, canonico, cooperativaId);
+  if (nomeCanonico) return nomeCanonico;
 
-  const nota = data.notasPedido.find((n) => n.cooperadoId === cooperadoId);
-  if (nota?.cooperadoNomeSnapshot?.trim()) return nota.cooperadoNomeSnapshot.trim();
+  const nomeId = resolverNomeCooperadoGestao(data, cooperadoId, cooperativaId);
+  if (nomeId) return nomeId;
 
   return "Desconhecido";
 }
