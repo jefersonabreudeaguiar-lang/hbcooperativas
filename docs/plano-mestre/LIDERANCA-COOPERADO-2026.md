@@ -84,9 +84,11 @@
 
 ---
 
-### Fase 5 — Expansão (depois do cooperado verde)
+### Fase 5 — Responsável (lançamento)
 
-Responsável, HB, painel gestão — **somente** após Fase 4 **SIM**. Escopo definido em etapa separada.
+**Plano dedicado:** `docs/plano-mestre/LIDERANCA-RESPONSAVEL-2026.md` · gate `npm run responsavel:verify:lancamento`.
+
+Somente após Fase 4 cooperado **SIM**. HB Crédito / mercado = fase **R6** (após R5 responsável **SIM**).
 
 ---
 

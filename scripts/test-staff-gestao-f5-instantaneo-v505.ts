@@ -11,7 +11,10 @@ const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
 assert.ok(APP_BUILD_VERSION >= 505, "build 505+");
-assert.match(read("public/sw.js"), /hb-coop-build-5\d\d/);
+assert.match(
+  read("public/sw.js"),
+  new RegExp(`hb-coop-build-${APP_BUILD_VERSION}-`)
+);
 
 const cold = read("src/lib/performance/cooperadoColdStart.ts");
 assert.match(cold, /F5 do responsável: sempre hidrata na hora/);

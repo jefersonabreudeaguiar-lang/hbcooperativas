@@ -43,7 +43,7 @@ function write(t: BicParidadeTelemetry): void {
 }
 
 export function recordBicParidadePulse(
-  outcome: "revisionUnchanged" | "lightPull" | "rematerializeOnly"
+  outcome: "revisionUnchanged" | "lightPull" | "rematerializeOnly" | "operacionalEvent"
 ): void {
   const t = readBicParidadeTelemetry();
   t.pulses += 1;
@@ -51,6 +51,7 @@ export function recordBicParidadePulse(
   if (outcome === "revisionUnchanged") t.revisionUnchanged += 1;
   if (outcome === "lightPull") t.lightPull += 1;
   if (outcome === "rematerializeOnly") t.rematerializeOnly += 1;
+  if (outcome === "operacionalEvent") t.lightPull += 1;
   write(t);
 }
 
