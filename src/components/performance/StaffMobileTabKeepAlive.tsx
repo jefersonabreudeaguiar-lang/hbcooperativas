@@ -6,6 +6,7 @@ import { isLowMemoryDevice } from "@/services/imagePipelineService";
 import { CooperadoTabPanelProvider } from "@/lib/performance/cooperadoTabPanelContext";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { useStaffEffectiveTabPath } from "@/hooks/useStaffEffectiveTabPath";
+import { useStaffMobileViewport } from "@/lib/performance/staffMobileViewport";
 import {
   getStaffMobileTabCacheLimit,
   isStaffBottomTabPath,
@@ -27,6 +28,7 @@ type Props = {
 
 function publishStaffKeepAliveDomState(state: {
   enabled: boolean;
+  mobile: boolean;
   onTab: boolean;
   pathname: string;
   panelCount: number;
@@ -34,7 +36,7 @@ function publishStaffKeepAliveDomState(state: {
   try {
     document.documentElement.setAttribute(
       "data-hb-staff-keep-alive-state",
-      `e${state.enabled ? 1 : 0}t${state.onTab ? 1 : 0}p${state.panelCount}:${state.pathname}`
+      `e${state.enabled ? 1 : 0}m${state.mobile ? 1 : 0}t${state.onTab ? 1 : 0}p${state.panelCount}:${state.pathname}`
     );
   } catch {
     /* ignore */
@@ -46,11 +48,12 @@ function isStaffTabPinned(href: string): boolean {
 }
 
 /**
- * Híbrido do responsável: lastro pinado do dia + troca otimista.
- * Abas pinadas permanecem montadas (sem remount/sync de abertura) — troca fluida.
+ * Mobile gestão: uma aba no DOM + cache pinado (troca otimista pinta do cache).
+ * Desktop: rota única do Next — sem montar Conferir+Pagar+Início em paralelo.
  */
 export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
   const enabled = isStaffMobileTabKeepAliveEnabled();
+  const mobile = useStaffMobileViewport();
   const effectivePath = useStaffEffectiveTabPath(pathname);
   const deferredChildren = useDeferredValue(children);
   const cacheRef = useRef<Partial<Record<string, ReactNode>>>({});
@@ -69,6 +72,7 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
   const onTab = isStaffBottomTabPath(effectivePath);
 
   useLayoutEffect(() => {
+    if (!enabled || !mobile) return;
     if (lastMarkedPathRef.current !== effectivePath) {
       lastMarkedPathRef.current = effectivePath;
       markStaffTabPathChange(effectivePath);
@@ -76,12 +80,13 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
 
     publishStaffKeepAliveDomState({
       enabled,
+      mobile,
       onTab,
       pathname: activeKey,
       panelCount: orderRef.current.length,
     });
 
-    if (!enabled || !onTab) return;
+    if (!onTab) return;
     const merged = [activeKey, tabKey, ...orderRef.current.filter((h) => h !== activeKey && h !== tabKey)];
     const prevOrder = orderRef.current;
     const nextOrder = trimStaffTabCacheOrder(merged, activeKey, cacheLimit, lowMemory);
@@ -96,15 +101,16 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
     if (orderChanged || !prevOrder.includes(activeKey) || !prevOrder.includes(tabKey)) {
       setCacheVersion((n) => n + 1);
     }
-  }, [enabled, onTab, activeKey, tabKey, cacheLimit, lowMemory, effectivePath]);
+  }, [enabled, mobile, onTab, activeKey, tabKey, cacheLimit, lowMemory, effectivePath]);
 
   useLayoutEffect(() => {
+    if (!enabled || !mobile) return;
     const last = lastCommitRef.current;
     const pathChanged = last.path !== pathname;
     const childrenUnchanged = last.child === children;
     lastCommitRef.current = { path: pathname, child: children };
 
-    if (!enabled || !isStaffBottomTabPath(pathname)) return;
+    if (!isStaffBottomTabPath(pathname)) return;
     if (
       !staffTabCacheMayWriteForPath({
         pathChanged,
@@ -115,26 +121,24 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
       return;
     }
     cacheRef.current[tabKey] = children;
-  }, [enabled, pathname, tabKey, children]);
+  }, [enabled, mobile, pathname, tabKey, children]);
 
   useLayoutEffect(() => {
+    if (!enabled || !mobile) {
+      registerStaffTabPanelCacheProbe(null);
+      return;
+    }
     registerStaffTabPanelCacheProbe((href) => Boolean(cacheRef.current[staffBottomTabCacheKey(href)]));
     return () => registerStaffTabPanelCacheProbe(null);
-  }, [enabled, cacheVersion, activeKey]);
+  }, [enabled, mobile, cacheVersion, activeKey]);
 
   const hrefsMountedInDom = useMemo(() => {
     void cacheVersion;
-    if (!onTab || !enabled) {
-      return [...new Set([...orderRef.current, ...Object.keys(cacheRef.current)])];
+    if (!enabled || !mobile || !onTab) {
+      return [activeKey];
     }
-    const mounted = new Set<string>([activeKey]);
-    for (const h of STAFF_TAB_PIN_HREFS) {
-      if (cacheRef.current[h] !== undefined) mounted.add(h);
-    }
-    for (const h of orderRef.current) mounted.add(h);
-    for (const h of Object.keys(cacheRef.current)) mounted.add(h);
-    return [...mounted];
-  }, [cacheVersion, onTab, enabled, activeKey]);
+    return [activeKey];
+  }, [cacheVersion, onTab, enabled, mobile, activeKey]);
 
   const resolvePanel = (href: string): { panel: ReactNode | undefined; warm: boolean } => {
     const active = href === activeKey;
@@ -158,6 +162,9 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
     if (active && liveForHref) {
       return { panel: liveNode, warm: false };
     }
+    if (active && cached !== undefined && tabKey !== href) {
+      return { panel: cached, warm: true };
+    }
     if (cached !== undefined) {
       return { panel: cached, warm: !active || tabKey !== href };
     }
@@ -167,7 +174,7 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
     return { panel: undefined, warm: false };
   };
 
-  if (!enabled) {
+  if (!enabled || !mobile) {
     return <>{children}</>;
   }
 
@@ -179,15 +186,8 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
       return (
         <div
           key={href}
-          className={
-            active
-              ? "relative z-[1] w-full min-h-0"
-              : isStaffTabPinned(href)
-                ? "hidden [content-visibility:auto] [contain-intrinsic-size:0_480px]"
-                : "hidden [content-visibility:hidden]"
-          }
+          className={active ? "relative z-[1] w-full min-h-0" : "hidden"}
           aria-hidden={!active}
-          inert={!active}
           data-staff-tab-panel={href}
           data-staff-tab-panel-warm={warm ? "1" : undefined}
           data-staff-tab-panel-active={active ? "1" : undefined}
@@ -200,12 +200,7 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
   if (!onTab) {
     return (
       <CooperadoTabPanelProvider activeHref={pathname}>
-        <>
-          <div className="hidden" aria-hidden>
-            {renderPanels(staffBottomTabCacheKey(pathname))}
-          </div>
-          {children}
-        </>
+        {children}
       </CooperadoTabPanelProvider>
     );
   }

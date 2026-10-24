@@ -48,8 +48,8 @@ const keepAliveUi = readFileSync(
   join(import.meta.dirname ?? __dirname, "../src/components/performance/StaffMobileTabKeepAlive.tsx"),
   "utf8"
 );
-assert.ok(keepAliveUi.includes("if (!enabled)"), "keep-alive também no desktop");
-assert.ok(!keepAliveUi.includes("if (!enabled || !mobile)"), "não desliga keep-alive no PC");
-assert.ok(keepAliveUi.includes("if (!enabled || !onTab)"), "desktop também grava o painel no cache");
+assert.ok(keepAliveUi.includes("if (!enabled || !mobile)"), "keep-alive só no mobile gestão");
+assert.ok(keepAliveUi.includes("useStaffMobileViewport"), "desktop rota única sem 4 painéis");
+assert.ok(keepAliveUi.includes("return [activeKey]"), "só uma aba no DOM por vez");
 
 console.log("test-staff-mobile-tab-keep-alive-u4: OK");

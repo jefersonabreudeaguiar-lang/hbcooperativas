@@ -47,9 +47,6 @@ assert.deepEqual([...STAFF_TAB_PIN_HREFS], [
   "/livro-caixa",
 ]);
 
-const keepAlive = read("src/components/performance/StaffMobileTabKeepAlive.tsx");
-assert.ok(!keepAlive.includes("if (!enabled || !mobile)"), "keep-alive no desktop");
-
 const pagar = read("src/app/(app)/ficha-corrida/FichaCorridaContent.tsx");
 assert.ok(pagar.includes("não puxa operacional ao abrir a aba"), "Pagar não puxa operacional");
 
@@ -67,7 +64,7 @@ const staffNotas = read("src/app/(app)/notas-pedido/staff/NotasPedidoStaffRespon
 assert.ok(staffNotas.includes("if (isCooperado || !tabActive) return"), "prefetch Conferir só com aba visível");
 
 const keepAliveStaff = read("src/components/performance/StaffMobileTabKeepAlive.tsx");
-assert.ok(keepAliveStaff.includes("STAFF_TAB_PIN_HREFS"), "abas pinadas ficam montadas sem remount");
-assert.ok(keepAliveStaff.includes("isStaffTabPinned(href)"), "cache pinado não evicta painel do dia");
+assert.ok(keepAliveStaff.includes("useStaffMobileViewport"), "gestão desktop não monta 4 abas");
+assert.ok(keepAliveStaff.includes("isStaffTabPinned(href)"), "cache pinado não evicta");
 
 console.log("OK — test-staff-responsavel-desempenho");

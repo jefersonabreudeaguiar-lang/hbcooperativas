@@ -178,6 +178,7 @@ function BrandHeader({ compact = false }: { compact?: boolean }) {
 
 export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { logout } = useAuth();
   const shell = useAppShellNavigationContext();
   if (!shell) return null;
@@ -217,7 +218,24 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
                   ? () => prefetchStaffNotasPedidoRouteBundle()
                   : undefined
               }
-              onClick={onClose}
+              onClick={(e) => {
+                onClose?.();
+                if (
+                  staffUser &&
+                  !active &&
+                  isStaffBottomTabPath(item.href) &&
+                  typeof window !== "undefined" &&
+                  window.matchMedia("(max-width: 1023px)").matches
+                ) {
+                  setStaffOptimisticTab(item.href);
+                  if (tryStaffCachedInstantTabSwitch(pathname, item.href)) {
+                    e.preventDefault();
+                    startTransition(() => {
+                      router.replace(item.href);
+                    });
+                  }
+                }
+              }}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                 active ? "bg-green-700 text-white" : "text-green-200 hover:bg-green-800 hover:text-white"

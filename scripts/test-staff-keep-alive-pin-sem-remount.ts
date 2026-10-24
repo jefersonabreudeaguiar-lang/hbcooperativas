@@ -10,7 +10,7 @@ const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
 const keepAlive = read("src/components/performance/StaffMobileTabKeepAlive.tsx");
-assert.ok(!keepAlive.includes("isStaffHeavyTab(active)"), "não desmonta aba pesada única");
+assert.ok(keepAlive.includes("return [activeKey]"), "uma aba visível no DOM");
 
 const session = read("src/lib/staff/staffResponsavelMountPullSession.ts");
 assert.ok(session.includes("staffResponsavelMountPullJaFeito"));
