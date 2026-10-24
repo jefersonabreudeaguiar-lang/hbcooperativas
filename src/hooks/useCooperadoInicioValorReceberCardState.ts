@@ -44,7 +44,10 @@ import {
   cooperadoInicioSincronizadoComFinanceiro,
 } from "@/lib/cooperado/cooperadoInicioSincronizadoComFinanceiro";
 import { cooperadoJefersonPilotoFinanceiroAtivo } from "@/lib/cooperado/cooperadoJefersonPilotoFinanceiro";
-import { useCooperadoParidadeExibicaoJeferson } from "@/hooks/useCooperadoParidadeExibicaoJeferson";
+import {
+  lerParidadeExibicaoJefersonPiloto,
+  useCooperadoParidadeExibicaoJeferson,
+} from "@/hooks/useCooperadoParidadeExibicaoJeferson";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
@@ -195,11 +198,30 @@ export function useCooperadoInicioValorReceberCardState(input: {
   }, [apresentacaoConsolidada, input.syncing, hbDescontosRevision]);
 
   const pilotoParidadeUnificada = cooperadoJefersonPilotoFinanceiroAtivo(sessionUser);
-  const paridadeJeferson = useCooperadoParidadeExibicaoJeferson(
+  const paridadeJefersonHook = useCooperadoParidadeExibicaoJeferson(
     sessionUser,
     pilotoParidadeUnificada && !leituraSomentePwa,
     apresentacaoConsolidada
   );
+  const paridadeJeferson = useMemo(() => {
+    if (!pilotoParidadeUnificada || leituraSomentePwa) return null;
+    if (paridadeJefersonHook) return paridadeJefersonHook;
+    if (!sessionUser) return null;
+    return lerParidadeExibicaoJefersonPiloto(
+      sessionUser,
+      apresentacaoFinanceiroUi,
+      cooperadoPagamentosHydrated,
+      Boolean(input.syncing)
+    );
+  }, [
+    pilotoParidadeUnificada,
+    leituraSomentePwa,
+    paridadeJefersonHook,
+    sessionUser,
+    apresentacaoFinanceiroUi,
+    cooperadoPagamentosHydrated,
+    input.syncing,
+  ]);
 
   const resolved = useMemo(() => {
     if (pilotoParidadeUnificada && !leituraSomentePwa && paridadeJeferson && sessionUser?.cooperadoId) {
@@ -230,25 +252,6 @@ export function useCooperadoInicioValorReceberCardState(input: {
               };
         const revision = `jeferson-paridade:${paridadeJeferson.valorLiquido}`;
         const temObrigacao = cooperadoMotorTemObrigacaoReceber(display);
-        if (
-          !temObrigacao &&
-          persistido?.display &&
-          cooperadoMotorTemObrigacaoReceber(persistido.display) &&
-          dataPar &&
-          coopId &&
-          !cooperadoBicAutorizaZerarCardInicio(dataPar, cooperadoId, coopId)
-        ) {
-          return {
-            display: persistido.display,
-            latch: {
-              motorRevision: "jeferson-paridade:lastro-persistido",
-              display: persistido.display,
-              hadPendencia: true,
-            },
-            atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
-            gravarPersistencia: false,
-          };
-        }
         return {
           display,
           latch: {

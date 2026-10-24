@@ -29,6 +29,7 @@ import {
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { cooperadoMobileSyncTrace } from "@/lib/cooperado/cooperadoMobileSyncTrace";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { cooperadoJefersonPilotoFinanceiroAtivo } from "@/lib/cooperado/cooperadoJefersonPilotoFinanceiro";
 import { runCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
 import { getSession, reloadStaffGestaoPersistAfterFirstPaint } from "@/services/dataStore";
 import { refreshStaffGestaoPainelLeitura } from "@/lib/staff/staffGestaoPainelRefresh";
@@ -305,6 +306,8 @@ export function cooperadoManualPrefereSyncBaseInformacoes(
   user: ReturnType<typeof getSession>
 ): boolean {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return false;
+  /** Piloto Jeferson: operacional_full no provider (syncingForUi + materialização). */
+  if (cooperadoJefersonPilotoFinanceiroAtivo(user)) return false;
   if (cooperadoAppReleaseNeedsOperacionalSync()) return false;
   return !cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user);
 }

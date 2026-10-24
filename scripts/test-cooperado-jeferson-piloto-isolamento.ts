@@ -17,7 +17,7 @@ import { COOPERADO_MOBILE_PILOT_EMAIL } from "../src/lib/cooperado/cooperadoMobi
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.ok(APP_BUILD_VERSION >= 630, "build 630+ piloto Jeferson isolado");
+assert.ok(APP_BUILD_VERSION >= 631, "build 631+ Atualizar operacional_full piloto");
 assert.ok(COOPERADO_JEFERSON_PILOTO_FINANCEIRO_VERSION >= 1);
 
 const sync = read("src/lib/cooperado/cooperadoInicioSincronizadoComFinanceiro.ts");
@@ -40,6 +40,13 @@ assert.ok(ficha.includes("paridadeCooperadoMobileLegacy"));
 
 const contaCoop = read("src/app/(app)/conta-coop/ContaCoopContent.tsx");
 assert.ok(!contaCoop.includes("useCooperadoParidadeExibicaoJeferson"), "responsável fora do piloto cooperado");
+
+const syncReq = read("src/services/syncRequest.ts");
+assert.ok(
+  syncReq.includes("cooperadoJefersonPilotoFinanceiroAtivo(user)") &&
+    syncReq.includes("return false"),
+  "piloto Jeferson usa operacional_full no Atualizar"
+);
 
 const jefersonUser = {
   id: "u1",

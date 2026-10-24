@@ -34,7 +34,10 @@ import {
 import { cooperadoFinanceiroMobileLeituraAoVivo } from "@/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoInicioSincronizadoComFinanceiro } from "@/lib/cooperado/cooperadoInicioSincronizadoComFinanceiro";
 import { cooperadoAReceberParidadeUnificadaPilotoJeferson } from "@/lib/cooperado/cooperadoAReceberParidadeMobileUnificada";
-import { useCooperadoParidadeExibicaoJeferson } from "@/hooks/useCooperadoParidadeExibicaoJeferson";
+import {
+  lerParidadeExibicaoJefersonPiloto,
+  useCooperadoParidadeExibicaoJeferson,
+} from "@/hooks/useCooperadoParidadeExibicaoJeferson";
 import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import {
   cooperadoPwaUiSubscribesAppData,
@@ -584,7 +587,7 @@ function FichaCorridaPageInner() {
 
   const paridadeJefersonPiloto = useCooperadoParidadeExibicaoJeferson(
     user,
-    tabActive && isCooperado && Boolean(cooperadoId),
+    isCooperado && Boolean(cooperadoId),
     apresentacaoConsolidada
   );
 
@@ -664,10 +667,27 @@ function FichaCorridaPageInner() {
     syncCooperadoFinanceiro,
   ]);
 
-  const paridadeCooperadoMobile =
-    cooperadoAReceberParidadeUnificadaPilotoJeferson(user) && paridadeJefersonPiloto
-      ? paridadeJefersonPiloto
-      : paridadeCooperadoMobileLegacy;
+  const paridadeCooperadoMobile = useMemo(() => {
+    if (!cooperadoAReceberParidadeUnificadaPilotoJeferson(user) || !user) {
+      return paridadeCooperadoMobileLegacy;
+    }
+    if (paridadeJefersonPiloto) return paridadeJefersonPiloto;
+    return (
+      lerParidadeExibicaoJefersonPiloto(
+        user,
+        apresentacaoFinanceiroUi,
+        cooperadoPagamentosHydrated,
+        syncCooperadoFinanceiro
+      ) ?? paridadeCooperadoMobileLegacy
+    );
+  }, [
+    user,
+    paridadeJefersonPiloto,
+    paridadeCooperadoMobileLegacy,
+    apresentacaoFinanceiroUi,
+    cooperadoPagamentosHydrated,
+    syncCooperadoFinanceiro,
+  ]);
 
   const mesEmAberto = useMemo(() => {
     if (!tabActive || !cooperadoId) return getCurrentMesReferencia();
@@ -698,7 +718,7 @@ function FichaCorridaPageInner() {
   const valorReceberConsolidado = useMemo(() => {
     if (!tabActive || !data || !cooperadoId) return null;
     if (isCooperado && paridadeCooperadoMobile) {
-      const meses = paridadeCooperadoMobile.mesesResumo;
+      const meses = paridadeCooperadoMobile.mesesResumo ?? [];
       const mes = meses[0] ?? "";
       return {
         mes,
