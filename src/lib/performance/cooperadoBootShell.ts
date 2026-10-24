@@ -76,6 +76,7 @@ try{
   if(s&&hbCoopSessPilot(s)&&(standalone||mobile)){hide();return;}
 }catch(e){}
 try{if(sessionStorage.getItem("${directKey}")==="1"){el.style.display="flex";el.setAttribute("aria-hidden","false");return;}}catch(e){}
+setTimeout(hide,3500);
 }catch(e){}})();`;
 }
 

@@ -9,6 +9,7 @@ import { COOPERADO_FOREGROUND_STALE_MS } from "@/lib/performance/cooperadoEventD
 import { COOPERADO_MOBILE_TAB_DOM_POLICY } from "@/lib/performance/cooperadoMobileTabDomPolicy";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { isCooperadoPwaMobileEntregasLeve } from "@/lib/cooperado/cooperadoPwaMobileEntregas";
+import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 
 /** Bump ao mudar política de abas/DOM só do piloto Jeferson. */
 export const COOPERADO_MOBILE_PILOT_TAB_DOM_POLICY = "pilot-jeferson-perf-1";
@@ -143,13 +144,13 @@ export function cooperadoMobilePilotPostEnvioForegroundSync(
 }
 
 /**
- * Piloto: não fazer parse eager do AppData no 1º frame (evita tela branca).
- * Mesma ideia do modo mensageiro PWA.
+ * Só adia eager warm no modo mensageiro — cooperado GA precisa do AppData para o card A receber.
  */
 export function cooperadoMobilePilotDeferAppDataEagerWarm(
   user?: Omit<User, "password"> | null
 ): boolean {
-  return isCooperadoMobilePilotPerfActive(user);
+  void user;
+  return isCooperadoPwaMessengerMode();
 }
 
 /** Entregas leve: PWA GA ou piloto Jeferson mobile. */

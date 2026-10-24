@@ -7,6 +7,8 @@ import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell"
 function painelJaTemConteudo(): boolean {
   if (typeof document === "undefined") return false;
   if (document.querySelector("[data-cooperado-tab-panel-active='1']")) return true;
+  if (document.querySelector("[data-cooperado-inicio-shell='1']")) return true;
+  if (document.querySelector("[data-cooperado-inicio-valor-card='1']")) return true;
   const header = document.querySelector("header");
   const main = document.querySelector("main");
   if (header && main) return true;

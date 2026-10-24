@@ -4,6 +4,7 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -23,7 +24,9 @@ import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { setCooperadoOptimisticTab } from "@/lib/performance/cooperadoOptimisticTabNavigation";
 import { cooperadoTabWarmOnPointerDown } from "@/lib/performance/cooperadoTabPointerWarmup";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
-import { getData, getDataRevision, isAppDataWarm } from "@/services/dataStore";
+import { getData, getDataRevision, isAppDataWarm, preloadAppData } from "@/services/dataStore";
+import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
+import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
 import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { evaluateResponsavelPainelAbertura } from "@/lib/responsavel/responsavelPainelContrato";
@@ -74,7 +77,6 @@ import {
   requestVotacaoOperacionalSync,
 } from "@/services/syncRequest";
 import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
-import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { useCooperadoFluxoPadrao } from "@/hooks/useCooperadoFluxoPadrao";
 import { useCooperadoInicioValorReceberCardState } from "@/hooks/useCooperadoInicioValorReceberCardState";
@@ -216,6 +218,17 @@ function CooperadoDashboard() {
     cooperadoMotorAoVivo
       ? false
       : inicioPwaLeve || cooperadoMobilePilotSnapshotFirstInicio(user);
+
+  useLayoutEffect(() => {
+    dismissCooperadoBootShell();
+  }, []);
+
+  useEffect(() => {
+    if (!user || user.role !== "cooperado") return;
+    if (!isAppDataWarm()) preloadAppData({ eager: true });
+    scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
+  }, [user?.id, user?.role]);
+
   const router = useRouter();
   const irEnviarFotoEntrega = useCallback(() => {
     setCooperadoOptimisticTab("/notas-pedido");
@@ -458,6 +471,8 @@ function CooperadoDashboard() {
       ? pwaInicioView ?? pwaInicioViewStickyRef.current
       : viewLive;
   const view = tabActive ? viewRaw : null;
+  /** GA mobile: painel leve com card ao vivo — evita snapshot pesado que some após rollback. */
+  const viewUi = cooperadoMotorAoVivo ? null : view;
 
   const mesAtual = getCurrentMesReferencia();
   const nomeFromSnapshot =
@@ -472,7 +487,7 @@ function CooperadoDashboard() {
         cooperadoIdCard={cooperadoIdCard}
         cooperativaIdCard={cooperativaIdCard}
       >
-        {!view ? (
+        {!viewUi ? (
         <div className="space-y-6 max-w-3xl" data-cooperado-inicio-shell="1">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
@@ -495,7 +510,7 @@ function CooperadoDashboard() {
         </div>
       ) : (
         <CooperadoDashboardInicioView
-          view={view}
+          view={viewUi!}
           valorReceberCard={valorReceberCard}
           cardFinanceiroAtualizando={cardFinanceiroAtualizando}
           irEnviarFotoEntrega={irEnviarFotoEntrega}

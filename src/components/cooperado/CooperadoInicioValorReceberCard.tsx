@@ -92,7 +92,10 @@ export function CooperadoInicioValorReceberCard({
     modoRecibo || modoAssinaturaComAberto ? "/ficha-corrida?assinar=1" : "/ficha-corrida";
 
   return (
-    <div className={`rounded-2xl p-6 shadow-sm flex flex-col ${shellClass}`}>
+    <div
+      className={`rounded-2xl p-6 shadow-sm flex flex-col ${shellClass}`}
+      data-cooperado-inicio-valor-card="1"
+    >
       <Wallet
         size={28}
         className={`mb-3 shrink-0 ${modoRecibo || modoValor || modoAssinaturaComAberto ? "opacity-90" : "text-amber-600"}`}
