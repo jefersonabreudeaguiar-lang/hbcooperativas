@@ -3,7 +3,7 @@
  */
 import type { AppData } from "@/types";
 import type { User } from "@/types";
-import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { cooperadoInicioSincronizadoComFinanceiroPiloto } from "@/lib/cooperado/cooperadoJefersonPilotoFinanceiro";
 import {
   cooperadoPilotAppDataTemFinanceiroLocal,
   cooperadoPilotFinanceiroExibirComSnapshotsLocais,
@@ -30,11 +30,11 @@ import {
   cooperadoMotorTemObrigacaoReceber,
 } from "@/lib/cooperadoInicioCardPolicy";
 
+/** Só piloto Jeferson — demais cooperados usam ramo GA estável (ver ESTRATEGIA.md). */
 export function cooperadoInicioSincronizadoComFinanceiro(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
-  if (!user || user.role !== "cooperado") return false;
-  return isCooperadoMobileGaPromoted(user);
+  return cooperadoInicioSincronizadoComFinanceiroPiloto(user);
 }
 
 /** Mesma regra da aba Financeiro (`FichaCorridaContent`). */

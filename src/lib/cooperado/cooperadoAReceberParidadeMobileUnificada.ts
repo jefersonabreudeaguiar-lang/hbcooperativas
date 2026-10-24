@@ -11,7 +11,7 @@ import type { CooperadoPwaFichaResumoSnapshot } from "@/lib/cooperado/cooperadoP
 import { resolveParidadeFromFichaResumoSnapshot } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import type { LeituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
-import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
+import { cooperadoJefersonPilotoFinanceiroAtivo } from "@/lib/cooperado/cooperadoJefersonPilotoFinanceiro";
 import {
   cooperadoBicAutorizaZerarCardInicio,
   cooperadoMotorTemObrigacaoReceber,
@@ -33,7 +33,7 @@ export const COOPERADO_A_RECEBER_PARIDADE_UNIFICADA_PILOTO_VERSION = 1;
 export function cooperadoAReceberParidadeUnificadaPilotoJeferson(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
-  return isCooperadoMobilePilot(user);
+  return cooperadoJefersonPilotoFinanceiroAtivo(user);
 }
 
 export type ResolverParidadeCooperadoMobileInput = {

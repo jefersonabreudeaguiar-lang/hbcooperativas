@@ -10,7 +10,7 @@ import { APP_BUILD_VERSION } from "../src/lib/appBuildVersion.ts";
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.ok(APP_BUILD_VERSION >= 628, "build 628+ lastro local anti-zero Jeferson");
+assert.ok(APP_BUILD_VERSION >= 630, "build 630+ piloto Jeferson isolado do GA");
 
 const hydrate = read("src/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate.ts");
 assert.ok(hydrate.includes("cooperadoFinanceiroExibicaoDivergeDeAppDataLive"));
@@ -57,7 +57,7 @@ assert.ok(sync.includes("cooperadoApresentacaoFinanceiroUiCooperado"));
 
 const unificada = read("src/lib/cooperado/cooperadoAReceberParidadeMobileUnificada.ts");
 assert.ok(unificada.includes("cooperadoAReceberParidadeUnificadaPilotoJeferson"));
-assert.ok(unificada.includes("isCooperadoMobilePilot"));
+assert.ok(unificada.includes("cooperadoJefersonPilotoFinanceiroAtivo"));
 assert.ok(unificada.includes("resolverParidadeCooperadoMobileExibicao"));
 assert.ok(unificada.includes("inicioCardPersistido"));
 assert.ok(unificada.includes("financeiroAutoritativo"));

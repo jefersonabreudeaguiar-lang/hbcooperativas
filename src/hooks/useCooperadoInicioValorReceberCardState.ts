@@ -43,7 +43,7 @@ import {
   cooperadoCardInicioMotorParidadeFinanceiro,
   cooperadoInicioSincronizadoComFinanceiro,
 } from "@/lib/cooperado/cooperadoInicioSincronizadoComFinanceiro";
-import { cooperadoAReceberParidadeUnificadaPilotoJeferson } from "@/lib/cooperado/cooperadoAReceberParidadeMobileUnificada";
+import { cooperadoJefersonPilotoFinanceiroAtivo } from "@/lib/cooperado/cooperadoJefersonPilotoFinanceiro";
 import { useCooperadoParidadeExibicaoJeferson } from "@/hooks/useCooperadoParidadeExibicaoJeferson";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
@@ -194,7 +194,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
     }
   }, [apresentacaoConsolidada, input.syncing, hbDescontosRevision]);
 
-  const pilotoParidadeUnificada = cooperadoAReceberParidadeUnificadaPilotoJeferson(sessionUser);
+  const pilotoParidadeUnificada = cooperadoJefersonPilotoFinanceiroAtivo(sessionUser);
   const paridadeJeferson = useCooperadoParidadeExibicaoJeferson(
     sessionUser,
     pilotoParidadeUnificada && !leituraSomentePwa,
