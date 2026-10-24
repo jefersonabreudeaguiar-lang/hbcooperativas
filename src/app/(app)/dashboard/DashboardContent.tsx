@@ -143,7 +143,7 @@ import {
 } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { isCooperadoAppUser } from "@/permissions";
 import { getSession } from "@/services/dataStore";
-import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { isCooperadoMobileGaPromoted, isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
 import {
   cooperadoMobilePilotSnapshotFirstInicio,
   isCooperadoMobilePilotPerfActive,
@@ -335,7 +335,8 @@ function CooperadoDashboard() {
       syncing: syncingForUi,
       apresentacaoConsolidada,
       carregandoValoresFinanceiros,
-      leituraSomentePwa: messenger || inicioSnapshotFirst,
+      leituraSomentePwa:
+        (messenger || inicioSnapshotFirst) && !isCooperadoMobilePilot(user),
       tabAtiva: tabActive,
     });
 

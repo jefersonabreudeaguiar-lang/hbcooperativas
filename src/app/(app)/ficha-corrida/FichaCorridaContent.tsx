@@ -8,7 +8,7 @@ import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, Cre
 import { useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
 import { useEnsureAppDataWarm } from "@/hooks/useEnsureAppDataWarm";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
-import { isAppDataWarm } from "@/services/dataStore";
+import { getData, isAppDataWarm } from "@/services/dataStore";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { useCooperadoFinanceiroUiSnapshot } from "@/hooks/useCooperadoFinanceiroUiSnapshot";
 import { useCooperadoMessengerReadModelRevision } from "@/hooks/useCooperadoMessengerReadModelRevision";
@@ -29,7 +29,9 @@ import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/coopera
 import {
   cooperadoPilotAppDataTemFinanceiroLocal,
   cooperadoPilotFinanceiroExibirComSnapshotsLocais,
+  cooperadoPilotForcarRematerializacaoFinanceira,
 } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
+import { cooperadoFinanceiroMobileLeituraAoVivo } from "@/lib/cooperado/cooperadoMobilePilot";
 import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import {
   cooperadoPwaUiSubscribesAppData,
@@ -288,6 +290,7 @@ function FichaCorridaPageInner() {
   /** Celular/PWA: Financeiro com resumo de entregas e mês pago como antes da separação desktop. */
   const messenger = isCooperadoPwaMessengerMode();
   const pilotFinanceiroLeve = cooperadoMobilePilotSnapshotFirstInicio(user);
+  const financeiroAppDataAoVivo = cooperadoFinanceiroMobileLeituraAoVivo(user);
   const readModelsRevision = useCooperadoMessengerReadModelRevision();
   const [fichaResumoSnap, setFichaResumoSnap] = useState<CooperadoPwaFichaResumoSnapshot | null>(
     () => {
@@ -296,16 +299,20 @@ function FichaCorridaPageInner() {
       return lerCooperadoPwaFichaResumoSnapshot(user.cooperadoId, user.cooperativaId);
     }
   );
-  /** Piloto: dados ao vivo na aba Financeiro (snapshot vazio/stale congelava R$ 0). Mensageiro PWA mantém dormant. */
+  /** Piloto Jeferson: Financeiro ao vivo; demais mensageiros mantêm dormant até flag GA. */
   const financeiroDormant = useMemo(() => {
     if (!isCooperado) return false;
+    if (financeiroAppDataAoVivo) return false;
     if (messenger) return true;
     if (pilotFinanceiroLeve) return false;
     return false;
-  }, [isCooperado, messenger, pilotFinanceiroLeve]);
+  }, [isCooperado, messenger, pilotFinanceiroLeve, financeiroAppDataAoVivo]);
   /** PWA leve só desliga subscribe do AppData para cooperado; responsável continua com dados ao vivo. */
   const appDataPanelActive =
-    tabActive && (isCooperado ? cooperadoPwaUiSubscribesAppData() : true);
+    tabActive &&
+    (isCooperado
+      ? cooperadoPwaUiSubscribesAppData() || financeiroAppDataAoVivo
+      : true);
   const dataLive = useAppDataSelectorForDomainsWhenActive(
     appDataPanelActive,
     fichaAppDataDomains,
@@ -320,7 +327,13 @@ function FichaCorridaPageInner() {
   const data = financeiroDormant
     ? dataDormant
     : dataLive ??
-      (!isCooperado ? (isAppDataWarm() ? getData() : peekStaffGestaoLastGood()) : null);
+      (isCooperado && tabActive && isAppDataWarm()
+        ? getData()
+        : !isCooperado
+          ? isAppDataWarm()
+            ? getData()
+            : peekStaffGestaoLastGood()
+          : null);
   const hbDescontosRevision = useContaCoopDescontosRevisionWhenLive(!financeiroDormant);
   const financeiroUiEpoch = financeiroDormant ? readModelsRevision : hbDescontosRevision;
   const searchParams = useSearchParams();
@@ -365,7 +378,12 @@ function FichaCorridaPageInner() {
     }
     const t = window.setTimeout(run, 0);
     return () => window.clearTimeout(t);
-  }, [tabActive, messenger, pilotFinanceiroLeve, isCooperado]);
+  }, [tabActive, messenger, pilotFinanceiroLeve, isCooperado, financeiroAppDataAoVivo]);
+
+  useEffect(() => {
+    if (!tabActive || !financeiroAppDataAoVivo || !user) return;
+    cooperadoPilotForcarRematerializacaoFinanceira(user);
+  }, [tabActive, financeiroAppDataAoVivo, user?.id, user?.cooperadoId]);
 
   useEffect(() => {
     if (!(messenger || pilotFinanceiroLeve) || !cooperadoId || !coopIdEarly) {
@@ -574,6 +592,9 @@ function FichaCorridaPageInner() {
     const overlayHb = linhasOverlayDebitoHbAReceber(cooperadoId, coopId);
     const withHybrid = (p: typeof live) =>
       p ? aplicarDebitoHbHibridoNaParidade(p, overlayHb) : p;
+    if (financeiroAppDataAoVivo && store && coopId && live) {
+      return withHybrid(live);
+    }
     const liquidadoPeloResponsavel = Boolean(
       store &&
         coopId &&
@@ -614,6 +635,8 @@ function FichaCorridaPageInner() {
     fichaResumoSnap,
     apresentacaoFinanceiroUi,
     appDataWarmTick,
+    financeiroAppDataAoVivo,
+    user?.id,
   ]);
 
   const mesEmAberto = useMemo(() => {
