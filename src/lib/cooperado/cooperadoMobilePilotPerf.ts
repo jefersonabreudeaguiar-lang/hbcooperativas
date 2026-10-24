@@ -146,13 +146,13 @@ export function cooperadoMobilePilotPostEnvioForegroundSync(
 }
 
 /**
- * Só adia eager warm no modo mensageiro — cooperado GA precisa do AppData para o card A receber.
+ * Adia parse pesado no 1º frame — card usa persistido/leitura rápida até o idle warm.
  */
 export function cooperadoMobilePilotDeferAppDataEagerWarm(
   user?: Omit<User, "password"> | null
 ): boolean {
-  void user;
-  return isCooperadoPwaMessengerMode();
+  if (isCooperadoPwaMessengerMode()) return true;
+  return isCooperadoMobilePilotPerfActive(user);
 }
 
 /** Entregas leve: PWA GA ou piloto Jeferson mobile. */

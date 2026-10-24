@@ -7,12 +7,14 @@ import { cooperadoGaValorReceberExibicaoResolvida } from "@/lib/cooperado/cooper
 import { cooperadoPilotFinanceiroExibirComSnapshotsLocais } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoTabSwitchQuiescenceActive } from "@/lib/cooperado/cooperadoTabSwitchQuiescence";
+import { cooperadoInicioAberturaQuiescenceActive } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
 
 /** Evita pulso/sync/rematerialização enquanto o cooperado navega ou já vê valor no card. */
 export function cooperadoGaPausaTrabalhoFinanceiroPesado(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return false;
+  if (cooperadoInicioAberturaQuiescenceActive()) return true;
   if (cooperadoTabSwitchQuiescenceActive()) return true;
   if (cooperadoFinanceiroCardCacheTemValor(user)) return true;
   if (cooperadoFinanceiroExibicaoCachePronto(user)) return true;

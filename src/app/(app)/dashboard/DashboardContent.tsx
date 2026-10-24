@@ -27,6 +27,7 @@ import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify"
 import { getData, getDataRevision, isAppDataWarm, preloadAppData } from "@/services/dataStore";
 import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
 import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
+import { markCooperadoInicioAberturaQuiescence } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
 import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { evaluateResponsavelPainelAbertura } from "@/lib/responsavel/responsavelPainelContrato";
@@ -221,12 +222,21 @@ function CooperadoDashboard() {
 
   useLayoutEffect(() => {
     dismissCooperadoBootShell();
-  }, []);
+    if (user?.role === "cooperado") markCooperadoInicioAberturaQuiescence();
+  }, [user?.role]);
 
   useEffect(() => {
     if (!user || user.role !== "cooperado") return;
-    if (!isAppDataWarm()) preloadAppData({ eager: true });
-    scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
+    const runBackground = () => {
+      if (!isAppDataWarm()) preloadAppData();
+      scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(runBackground, { timeout: 5_000 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(runBackground, 800);
+    return () => window.clearTimeout(t);
   }, [user?.id, user?.role]);
 
   const router = useRouter();
@@ -267,27 +277,39 @@ function CooperadoDashboard() {
   }, [user?.id]);
 
   useEffect(() => {
-    if (!inicioSnapshotFirst) {
-      warmupCooperadoFinanceiroTabChunk();
+    const warm = () => warmupCooperadoFinanceiroTabChunk();
+    if (!inicioSnapshotFirst && !cooperadoMotorAoVivo) {
+      warm();
       return;
     }
-    const warm = () => warmupCooperadoFinanceiroTabChunk();
     if (typeof requestIdleCallback === "function") {
       const id = requestIdleCallback(warm, { timeout: 1_500 });
       return () => cancelIdleCallback(id);
     }
     const t = window.setTimeout(warm, 200);
     return () => window.clearTimeout(t);
-  }, [inicioSnapshotFirst]);
+  }, [inicioSnapshotFirst, cooperadoMotorAoVivo]);
 
   useEffect(() => {
     if (!hbCredit.navEnabled || !user) return;
-    scheduleCooperadoPilotHbCreditRouteWarmup(user, (href) => router.prefetch(href));
+    const run = () => scheduleCooperadoPilotHbCreditRouteWarmup(user, (href) => router.prefetch(href));
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(run, { timeout: 6_000 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(run, 1_500);
+    return () => window.clearTimeout(t);
   }, [hbCredit.navEnabled, user?.id, router]);
 
   useEffect(() => {
     if (!hbCredit.navEnabled || !user || user.role !== "cooperado") return;
-    scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
+    const run = () => scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(run, { timeout: 8_000 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(run, 2_000);
+    return () => window.clearTimeout(t);
   }, [hbCredit.navEnabled, user?.id, user?.cooperadoId]);
 
   useEffect(() => {
@@ -444,6 +466,7 @@ function CooperadoDashboard() {
   const deferredInicioRevision = useDeferredValue(inicioDomainsRevision);
 
   const viewLive = useMemo(() => {
+    if (cooperadoMotorAoVivo) return null;
     if (!tabActive || !appDataUiOn || !deferredInicioRevision || !isAppDataWarm() || !user?.cooperadoId) {
       return null;
     }
@@ -455,6 +478,7 @@ function CooperadoDashboard() {
       return null;
     }
   }, [
+    cooperadoMotorAoVivo,
     tabActive,
     appDataUiOn,
     deferredInicioRevision,
