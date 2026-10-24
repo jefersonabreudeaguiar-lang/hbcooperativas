@@ -10,7 +10,7 @@ import { APP_BUILD_VERSION } from "../src/lib/appBuildVersion.ts";
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.ok(APP_BUILD_VERSION >= 627, "build 627+ hook único Jeferson");
+assert.ok(APP_BUILD_VERSION >= 628, "build 628+ lastro local anti-zero Jeferson");
 
 const hydrate = read("src/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate.ts");
 assert.ok(hydrate.includes("cooperadoFinanceiroExibicaoDivergeDeAppDataLive"));
@@ -67,6 +67,7 @@ assert.ok(ficha.includes("useCooperadoParidadeExibicaoJeferson"));
 const jefersonHook = read("src/hooks/useCooperadoParidadeExibicaoJeferson.ts");
 assert.ok(jefersonHook.includes("lerParidadeExibicaoJefersonPiloto"));
 assert.ok(jefersonHook.includes("resolverCooperadoIdCanonico"));
+assert.ok(jefersonHook.includes("aplicarLastroLocalSeMotorZerou"));
 
 assert.ok(hook.includes("cooperadoInicioSincronizadoComFinanceiro"));
 assert.ok(ficha.includes("cooperadoInicioSincronizadoComFinanceiro(user)"));

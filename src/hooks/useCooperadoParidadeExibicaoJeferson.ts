@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useSyncExternalStore } from "react";
-import type { User } from "@/types";
+import type { AppData, User } from "@/types";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
 import {
@@ -23,9 +23,62 @@ import {
   getAppDataDomainRevision,
   subscribeAppDataDomain,
 } from "@/lib/performance/appDataDomainNotify";
+import { lerInicioCardFinanceiroExibicao } from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
+import {
+  cooperadoBicAutorizaZerarCardInicio,
+  cooperadoMotorTemObrigacaoReceber,
+} from "@/lib/cooperadoInicioCardPolicy";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
+
+function paridadeComValorMinimo(
+  base: LeituraFinanceiraParidadeCooperado,
+  valor: number,
+  mesLabel?: string
+): LeituraFinanceiraParidadeCooperado {
+  return {
+    ...base,
+    valorLiquido: valor,
+    mesLabel: mesLabel?.trim() || base.mesLabel,
+    consolidado: { ...base.consolidado, valorLiquido: valor },
+  };
+}
+
+function aplicarLastroLocalSeMotorZerou(
+  data: AppData,
+  cooperadoId: string,
+  coopId: string,
+  paridadeHb: LeituraFinanceiraParidadeCooperado,
+  overlay: ReturnType<typeof linhasOverlayDebitoHbAReceber>
+): LeituraFinanceiraParidadeCooperado {
+  if (paridadeHb.valorLiquido > 0.005) return paridadeHb;
+  if (cooperadoBicAutorizaZerarCardInicio(data, cooperadoId, coopId)) return paridadeHb;
+
+  const leituraAlt = (consolidada: boolean) =>
+    aplicarDebitoHbHibridoNaParidade(
+      cooperadoLeituraFinanceiraExibicao(data, cooperadoId, coopId, {
+        apresentacaoConsolidada: consolidada,
+      }),
+      overlay
+    );
+
+  const semConsolidar = leituraAlt(false);
+  if (semConsolidar.valorLiquido > 0.005) return semConsolidar;
+
+  const snap = lerCooperadoPwaFichaResumoSnapshot(cooperadoId, coopId);
+  const fromSnap = snap ? resolveParidadeFromFichaResumoSnapshot(snap) : null;
+  if (fromSnap && fromSnap.valorLiquido > 0.005) {
+    return aplicarDebitoHbHibridoNaParidade(fromSnap, overlay);
+  }
+
+  const card = lerInicioCardFinanceiroExibicao(cooperadoId, coopId);
+  if (card?.display && cooperadoMotorTemObrigacaoReceber(card.display)) {
+    return paridadeComValorMinimo(paridadeHb, card.display.valor, card.display.mesLabel);
+  }
+
+  return paridadeHb;
+}
 
 /** Única leitura Jeferson — Início e Financeiro chamam isto (via hook). */
 export function lerParidadeExibicaoJefersonPiloto(
@@ -49,21 +102,12 @@ export function lerParidadeExibicaoJefersonPiloto(
     syncing
   );
 
+  const overlay = linhasOverlayDebitoHbAReceber(cooperadoId, coopId);
   const live = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, coopId, {
     apresentacaoConsolidada: autoritativo ? true : apresentacaoFinanceiroUi,
   });
-  const overlay = linhasOverlayDebitoHbAReceber(cooperadoId, coopId);
-  let paridade = aplicarDebitoHbHibridoNaParidade(live, overlay);
-
-  if (!autoritativo && paridade.valorLiquido <= 0.005) {
-    const snap = lerCooperadoPwaFichaResumoSnapshot(cooperadoId, coopId);
-    const fromSnap = snap ? resolveParidadeFromFichaResumoSnapshot(snap) : null;
-    if (fromSnap && fromSnap.valorLiquido > 0.005) {
-      paridade = aplicarDebitoHbHibridoNaParidade(fromSnap, overlay);
-    }
-  }
-
-  return paridade;
+  const paridadeHb = aplicarDebitoHbHibridoNaParidade(live, overlay);
+  return aplicarLastroLocalSeMotorZerou(data, cooperadoId, coopId, paridadeHb, overlay);
 }
 
 /**

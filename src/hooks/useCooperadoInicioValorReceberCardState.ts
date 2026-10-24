@@ -239,6 +239,25 @@ export function useCooperadoInicioValorReceberCardState(input: {
               };
         const revision = `jeferson-paridade:${paridadeJeferson.valorLiquido}`;
         const temObrigacao = cooperadoMotorTemObrigacaoReceber(display);
+        if (
+          !temObrigacao &&
+          persistido?.display &&
+          cooperadoMotorTemObrigacaoReceber(persistido.display) &&
+          dataPar &&
+          coopId &&
+          !cooperadoBicAutorizaZerarCardInicio(dataPar, cooperadoId, coopId)
+        ) {
+          return {
+            display: persistido.display,
+            latch: {
+              motorRevision: "jeferson-paridade:lastro-persistido",
+              display: persistido.display,
+              hadPendencia: true,
+            },
+            atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+            gravarPersistencia: false,
+          };
+        }
         return {
           display,
           latch: {
