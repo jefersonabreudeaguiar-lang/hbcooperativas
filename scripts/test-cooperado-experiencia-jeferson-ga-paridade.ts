@@ -21,6 +21,7 @@ assert.equal(COOPERADO_GA_EMPACOTAR_AGUARDA_APPDATA, true);
 assert.equal(COOPERADO_GA_FINANCE_RECOVERY_REPETE_SE_ZERADO, true);
 assert.equal(COOPERADO_BOOT_SHELL_SEM_CARD_ANTECIPADO, true);
 
+const root = join(import.meta.dirname ?? __dirname, "..");
 const bootShell = readFileSync(join(root, "src/lib/performance/cooperadoBootShell.ts"), "utf8");
 assert.doesNotMatch(bootShell, /paintInicio/);
 assert.doesNotMatch(bootShell, /A receber/);
@@ -40,7 +41,6 @@ const cooperadoGenerico: User = {
 assert.equal(isCooperadoMobileGaPromoted(cooperadoGenerico), true);
 assert.equal(isCooperadoMobileExperienciaJeferson(cooperadoGenerico), true);
 
-const root = join(import.meta.dirname ?? __dirname, "..");
 const pacote = readFileSync(join(root, "src/lib/cooperado/cooperadoAparelhoJefersonPacote.ts"), "utf8");
 assert.match(pacote, /waitForAppDataWarm[\s\S]{0,120}empacotarModeloAparelhoJeferson/, "empacota após AppData");
 
