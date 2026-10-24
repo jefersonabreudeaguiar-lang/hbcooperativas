@@ -41,14 +41,12 @@ import { resolverMotorCardInicioParidadeFinanceiro } from "@/lib/cooperado/coope
 import {
   cooperadoApresentacaoFinanceiroUiCooperado,
   cooperadoCardInicioMotorParidadeFinanceiro,
-  cooperadoCardInicioMotorParidadeUnificadaPiloto,
   cooperadoInicioSincronizadoComFinanceiro,
 } from "@/lib/cooperado/cooperadoInicioSincronizadoComFinanceiro";
-import {
-  cooperadoAReceberFinanceiroAutoritativoPiloto,
-  cooperadoAReceberParidadeUnificadaPilotoJeferson,
-} from "@/lib/cooperado/cooperadoAReceberParidadeMobileUnificada";
+import { cooperadoAReceberParidadeUnificadaPilotoJeferson } from "@/lib/cooperado/cooperadoAReceberParidadeMobileUnificada";
+import { useCooperadoParidadeExibicaoJeferson } from "@/hooks/useCooperadoParidadeExibicaoJeferson";
 import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
+import { getUserCooperativaId } from "@/utils/cooperativa";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
   lerCooperadoPwaFichaResumoSnapshot,
@@ -198,11 +196,10 @@ export function useCooperadoInicioValorReceberCardState(input: {
   }, [apresentacaoConsolidada, input.syncing, hbDescontosRevision]);
 
   const pilotoParidadeUnificada = cooperadoAReceberParidadeUnificadaPilotoJeferson(sessionUser);
-  const financeiroAutoritativoPiloto = cooperadoAReceberFinanceiroAutoritativoPiloto(
+  const paridadeJeferson = useCooperadoParidadeExibicaoJeferson(
     sessionUser,
-    apresentacaoFinanceiroUi,
-    cooperadoPagamentosHydrated,
-    Boolean(input.syncing)
+    pilotoParidadeUnificada && !leituraSomentePwa,
+    apresentacaoConsolidada
   );
 
   useEffect(() => {
@@ -210,15 +207,65 @@ export function useCooperadoInicioValorReceberCardState(input: {
     if (rematerializarCooperadoPwaSnapshotsSeNecessario(sessionUser)) {
       setPersistidoTick((n) => n + 1);
     }
-  }, [
-    pilotoParidadeUnificada,
-    sessionUser?.id,
-    appDataWarmKey,
-    financeiroAutoritativoPiloto,
-    hbDescontosRevision,
-  ]);
+  }, [pilotoParidadeUnificada, sessionUser?.id, appDataWarmKey, paridadeJeferson?.valorLiquido, hbDescontosRevision]);
 
   const resolved = useMemo(() => {
+    if (pilotoParidadeUnificada && !leituraSomentePwa) {
+      if (paridadeJeferson && sessionUser?.cooperadoId) {
+      const dataPar = input.data ?? (isAppDataWarm() ? getData() : null);
+      if (dataPar) {
+        const coopId = getUserCooperativaId(sessionUser, dataPar) ?? input.cooperativaId;
+        const cooperadoId = resolverCooperadoIdCanonico(
+          dataPar,
+          sessionUser.cooperadoId,
+          coopId
+        );
+        const motor = inicioCardMotorFromParidadeFinanceiro(
+          dataPar,
+          cooperadoId,
+          coopId,
+          paridadeJeferson
+        );
+        const valorFinanceiro = paridadeJeferson.valorLiquido > 0.005
+          ? paridadeJeferson.valorLiquido
+          : 0;
+        const display =
+          motor.aguardandoAssinatura && motor.valorRecibo > 0.005
+            ? motor
+            : {
+                ...motor,
+                mesLabel: paridadeJeferson.mesLabel?.trim() || motor.mesLabel,
+                valor: valorFinanceiro,
+              };
+        const revision = `jeferson-paridade:${paridadeJeferson.valorLiquido}`;
+        const temObrigacao = cooperadoMotorTemObrigacaoReceber(display);
+        return {
+          display,
+          latch: {
+            motorRevision: revision,
+            display,
+            hadPendencia: temObrigacao,
+          },
+          atualizando: !temObrigacao && Boolean(input.syncing && isCooperadoUserSyncVisible()),
+          gravarPersistencia: temObrigacao,
+        };
+      }
+      }
+      const esperaParidade = persistido?.display &&
+        cooperadoMotorTemObrigacaoReceber(persistido.display)
+          ? persistido.display
+          : SNAPSHOT_VAZIO;
+      return {
+        display: esperaParidade,
+        latch: {
+          motorRevision: "jeferson-paridade:aguardando",
+          display: esperaParidade,
+          hadPendencia: cooperadoMotorTemObrigacaoReceber(esperaParidade),
+        },
+        atualizando: true,
+        gravarPersistencia: false,
+      };
+    }
     const syncInicioAtivo =
       cooperadoInicioSincronizadoComFinanceiro(sessionUser) &&
       !leituraSomentePwa &&
@@ -234,34 +281,6 @@ export function useCooperadoInicioValorReceberCardState(input: {
           cooperadoIdCard,
           input.cooperativaId
         );
-        if (pilotoParidadeUnificada) {
-          const unificado = cooperadoCardInicioMotorParidadeUnificadaPiloto(
-            dataPar,
-            cooperadoIdCard,
-            cooperativaIdCard,
-            apresentacaoFinanceiroUi,
-            cooperativaIdCard
-              ? lerCooperadoPwaFichaResumoSnapshot(cooperadoIdCard, cooperativaIdCard)
-              : null,
-            persistido?.display,
-            financeiroAutoritativoPiloto
-          );
-          if (unificado) {
-            const temObrigacao = cooperadoMotorTemObrigacaoReceber(unificado.motor);
-            return {
-              display: unificado.motor,
-              latch: {
-                motorRevision: unificado.revision,
-                display: unificado.motor,
-                hadPendencia: temObrigacao,
-              },
-              atualizando:
-                !temObrigacao &&
-                Boolean(input.syncing && isCooperadoUserSyncVisible()),
-              gravarPersistencia: temObrigacao,
-            };
-          }
-        }
         const paridadeMotor = cooperadoCardInicioMotorParidadeFinanceiro(
           dataPar,
           cooperadoIdCard,
@@ -685,13 +704,17 @@ export function useCooperadoInicioValorReceberCardState(input: {
     apresentacaoFinanceiroUi,
     cooperadoPagamentosHydrated,
     pilotoParidadeUnificada,
-    financeiroAutoritativoPiloto,
+    paridadeJeferson?.valorLiquido,
+    paridadeJeferson?.mesLabel,
     ...(leituraSomentePwa ? [] : [hbDescontosRevision]),
   ]);
 
   latchRef.current = resolved.latch;
 
   const snapshotExibido = useMemo(() => {
+    if (pilotoParidadeUnificada && !leituraSomentePwa && paridadeJeferson) {
+      return resolved.display;
+    }
     if (
       cooperadoInicioSincronizadoComFinanceiro(sessionUser) &&
       !leituraSomentePwa &&
@@ -763,6 +786,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
     appDataWarmKey,
     hbDescontosRevision,
     pilotoParidadeUnificada,
+    paridadeJeferson,
     sessionUser?.id,
   ]);
 

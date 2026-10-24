@@ -33,12 +33,8 @@ import {
 } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
 import { cooperadoFinanceiroMobileLeituraAoVivo } from "@/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoInicioSincronizadoComFinanceiro } from "@/lib/cooperado/cooperadoInicioSincronizadoComFinanceiro";
-import {
-  cooperadoAReceberFinanceiroAutoritativoPiloto,
-  cooperadoAReceberParidadeUnificadaPilotoJeferson,
-  resolverParidadeCooperadoMobileExibicao,
-} from "@/lib/cooperado/cooperadoAReceberParidadeMobileUnificada";
-import { lerInicioCardFinanceiroExibicao } from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
+import { cooperadoAReceberParidadeUnificadaPilotoJeferson } from "@/lib/cooperado/cooperadoAReceberParidadeMobileUnificada";
+import { useCooperadoParidadeExibicaoJeferson } from "@/hooks/useCooperadoParidadeExibicaoJeferson";
 import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import {
   cooperadoPwaUiSubscribesAppData,
@@ -586,30 +582,15 @@ function FichaCorridaPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCooperado, user?.id, coopId]);
 
+  const paridadeJefersonPiloto = useCooperadoParidadeExibicaoJeferson(
+    user,
+    tabActive && isCooperado && Boolean(cooperadoId),
+    apresentacaoConsolidada
+  );
+
   /** Uma leitura BIC/paridade por revisão — cooperado mobile. */
-  const paridadeCooperadoMobile = useMemo(() => {
+  const paridadeCooperadoMobileLegacy = useMemo(() => {
     if (!tabActive || !isCooperado || !cooperadoId) return null;
-    if (cooperadoAReceberParidadeUnificadaPilotoJeferson(user)) {
-      const inicioCard = coopId
-        ? lerInicioCardFinanceiroExibicao(cooperadoId, coopId)
-        : null;
-      return resolverParidadeCooperadoMobileExibicao({
-        data,
-        cooperadoId,
-        coopId,
-        apresentacaoFinanceiroUi,
-        fichaResumoSnap,
-        financeiroDormant,
-        syncFinanceiroGa: cooperadoInicioSincronizadoComFinanceiro(user),
-        inicioCardPersistido: inicioCard?.display ?? null,
-        financeiroAutoritativo: cooperadoAReceberFinanceiroAutoritativoPiloto(
-          user,
-          apresentacaoFinanceiroUi,
-          cooperadoPagamentosHydrated,
-          syncCooperadoFinanceiro
-        ),
-      });
-    }
     const readParidade = (d: NonNullable<typeof data>) =>
       cooperadoLeituraFinanceiraExibicao(d, cooperadoId, coopId, {
         apresentacaoConsolidada: apresentacaoFinanceiroUi,
@@ -682,6 +663,11 @@ function FichaCorridaPageInner() {
     cooperadoPagamentosHydrated,
     syncCooperadoFinanceiro,
   ]);
+
+  const paridadeCooperadoMobile =
+    cooperadoAReceberParidadeUnificadaPilotoJeferson(user)
+      ? paridadeJefersonPiloto
+      : paridadeCooperadoMobileLegacy;
 
   const mesEmAberto = useMemo(() => {
     if (!tabActive || !cooperadoId) return getCurrentMesReferencia();
