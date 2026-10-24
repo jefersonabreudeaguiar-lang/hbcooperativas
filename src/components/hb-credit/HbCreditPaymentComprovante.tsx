@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
-import { CheckCircle2, Share2 } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { CheckCircle2, Loader2, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
+import type { HbCreditPaymentReceipt } from "@/lib/hb-credit/hbCreditPaymentReceipt";
 import {
-  formatHbCreditReceiptShareText,
-  type HbCreditPaymentReceipt,
-} from "@/lib/hb-credit/hbCreditPaymentReceipt";
+  captureElementAsPngBlob,
+  shareHbCreditReceiptPng,
+} from "@/lib/hb-credit/hbCreditReceiptShareImage";
 import { hbCooperadoPrimaryBtn } from "@/lib/hb-credit/hbCreditCooperadoUi";
 import { cn } from "@/utils/format";
 
@@ -18,36 +19,39 @@ type Props = {
 };
 
 export function HbCreditPaymentComprovante({ receipt, onConcluir, className }: Props) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [sharing, setSharing] = useState(false);
+
   const paidLabel = useMemo(
     () => new Date(receipt.paidAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }),
     [receipt.paidAt]
   );
 
   const share = useCallback(async () => {
-    const text = formatHbCreditReceiptShareText(receipt);
+    const el = cardRef.current;
+    if (!el || sharing) return;
+    setSharing(true);
     try {
-      if (typeof navigator !== "undefined" && navigator.share) {
-        await navigator.share({
-          title: "Comprovante HB Créditos",
-          text,
-        });
-        return;
+      const blob = await captureElementAsPngBlob(el);
+      const mode = await shareHbCreditReceiptPng(blob, receipt.receiptCode);
+      if (mode === "downloaded") {
+        alert("Imagem do comprovante salva. Envie pelo WhatsApp ou galeria.");
       }
-    } catch {
-      /* usuário cancelou */
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      alert(e instanceof Error ? e.message : "Não foi possível compartilhar a imagem.");
+    } finally {
+      setSharing(false);
     }
-    try {
-      await navigator.clipboard.writeText(text);
-      alert("Comprovante copiado. Cole no WhatsApp ou e-mail se quiser enviar.");
-    } catch {
-      alert(text);
-    }
-  }, [receipt]);
+  }, [receipt.receiptCode, sharing]);
 
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
       <div className="flex flex-1 flex-col px-5 pb-6 pt-4">
-        <div className="mx-auto w-full max-w-md overflow-hidden rounded-3xl border border-emerald-200/90 bg-white shadow-lg shadow-emerald-900/10">
+        <div
+          ref={cardRef}
+          className="mx-auto w-full max-w-md overflow-hidden rounded-3xl border border-emerald-200/90 bg-white shadow-lg shadow-emerald-900/10"
+        >
           <div className="bg-gradient-to-br from-emerald-700 via-green-700 to-emerald-800 px-6 py-5 text-white">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-100/90">
               HB Créditos
@@ -82,10 +86,11 @@ export function HbCreditPaymentComprovante({ receipt, onConcluir, className }: P
           type="button"
           variant="secondary"
           className="mx-auto mt-5 flex w-full max-w-md items-center justify-center gap-2 rounded-2xl border-emerald-200 py-3"
+          disabled={sharing}
           onClick={() => void share()}
         >
-          <Share2 size={18} />
-          Compartilhar comprovante
+          {sharing ? <Loader2 size={18} className="animate-spin" /> : <Share2 size={18} />}
+          {sharing ? "Gerando imagem…" : "Compartilhar comprovante"}
         </Button>
       </div>
 
