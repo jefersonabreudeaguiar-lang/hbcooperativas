@@ -24,7 +24,8 @@ const PWA_SNAPSHOT_KEY_MARKERS = [
  * Snapshot de build recente continua válido na abertura.
  * Exigir o build exato (443 vs 444) zerava o cache e disparava operacional_full no celular.
  */
-const PWA_SNAPSHOT_BUILD_TOLERANCE = 48;
+/** Rollback de build pode invalidar cache local — tolerância ampla evita Início só com “Olá”. */
+const PWA_SNAPSHOT_BUILD_TOLERANCE = 120;
 
 export function cooperadoPwaSnapshotBuildReadable(savedBuild: number | undefined | null): boolean {
   if (savedBuild == null || !Number.isFinite(savedBuild) || savedBuild <= 0) return true;

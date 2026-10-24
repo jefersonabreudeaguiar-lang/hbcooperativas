@@ -126,6 +126,7 @@ import {
   STAFF_PRIMEIRO_DIA_SENHA_TITULO,
 } from "@/lib/staff/staffPrimeiroDiaContratos";
 import { CooperadoInicioValorReceberCard } from "@/components/cooperado/CooperadoInicioValorReceberCard";
+import { CooperadoInicioSafeRoot } from "@/components/cooperado/CooperadoInicioSafeRoot";
 import {
   COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
   isCooperadoPwaMobileLeveUi,
@@ -210,7 +211,11 @@ function CooperadoDashboard() {
   const inicioPwaLeve = isCooperadoPwaMobileLeveUi();
   const appDataUiOn = cooperadoPwaUiSubscribesAppData() && tabActive;
   const { user } = useAuth();
-  const inicioSnapshotFirst = inicioPwaLeve || cooperadoMobilePilotSnapshotFirstInicio(user);
+  const cooperadoMotorAoVivo = user?.role === "cooperado" && isCooperadoMobileGaPromoted(user);
+  const inicioSnapshotFirst =
+    cooperadoMotorAoVivo
+      ? false
+      : inicioPwaLeve || cooperadoMobilePilotSnapshotFirstInicio(user);
   const router = useRouter();
   const irEnviarFotoEntrega = useCallback(() => {
     setCooperadoOptimisticTab("/notas-pedido");
@@ -305,7 +310,7 @@ function CooperadoDashboard() {
 
   /** Modo mensageiro: HB só no runSync (Atualizar) — sem pilot periódico na UI. */
   useSyncContaCoopValorReceberPilot(
-    !messenger && !inicioSnapshotFirst && contaCoopSync
+    contaCoopSync && (cooperadoMotorAoVivo || (!messenger && !inicioSnapshotFirst))
       ? { ...contaCoopSync, user, initialDelayMs: 3_000 }
       : undefined
   );
@@ -331,7 +336,7 @@ function CooperadoDashboard() {
       syncing: syncingForUi,
       apresentacaoConsolidada,
       carregandoValoresFinanceiros,
-      leituraSomentePwa: messenger || inicioSnapshotFirst,
+      leituraSomentePwa: cooperadoMotorAoVivo ? false : messenger || inicioSnapshotFirst,
       tabAtiva: tabActive,
     });
 
@@ -426,9 +431,18 @@ function CooperadoDashboard() {
   const deferredInicioRevision = useDeferredValue(inicioDomainsRevision);
 
   const viewLive = useMemo(() => {
-    if (!appDataUiOn || !deferredInicioRevision || !isAppDataWarm() || !user?.cooperadoId) return null;
-    return buildCooperadoPwaInicioDashboardView(getData(), user, apresentacaoConsolidada);
+    if (!tabActive || !appDataUiOn || !deferredInicioRevision || !isAppDataWarm() || !user?.cooperadoId) {
+      return null;
+    }
+    try {
+      const built = buildCooperadoPwaInicioDashboardView(getData(), user, apresentacaoConsolidada);
+      const nomeOk = Boolean(built?.cooperado?.nomeCompleto?.trim());
+      return nomeOk ? built : null;
+    } catch {
+      return null;
+    }
   }, [
+    tabActive,
     appDataUiOn,
     deferredInicioRevision,
     user?.id,
@@ -438,23 +452,28 @@ function CooperadoDashboard() {
     apresentacaoConsolidada,
   ]);
 
-  const view =
-    messenger || inicioSnapshotFirst ? pwaInicioView ?? pwaInicioViewStickyRef.current : viewLive;
+  const viewRaw = cooperadoMotorAoVivo
+    ? viewLive ?? pwaInicioView ?? pwaInicioViewStickyRef.current
+    : messenger || inicioSnapshotFirst
+      ? pwaInicioView ?? pwaInicioViewStickyRef.current
+      : viewLive;
+  const view = tabActive ? viewRaw : null;
 
   const mesAtual = getCurrentMesReferencia();
   const nomeFromSnapshot =
-    view?.cooperado?.nomeCompleto.split(" ")[0] ??
-    pwaInicioViewStickyRef.current?.cooperado?.nomeCompleto.split(" ")[0];
+    view?.cooperado?.nomeCompleto?.split(" ")[0] ??
+    pwaInicioViewStickyRef.current?.cooperado?.nomeCompleto?.split(" ")[0];
   const coopNomeEarly =
     view?.coopNome ?? (user && isAppDataWarm() ? getUserCooperativaNome(user, getData()) : "");
 
   return (
-    <CooperadoInicioCooperadoLiveRoot
-      cooperadoIdCard={cooperadoIdCard}
-      cooperativaIdCard={cooperativaIdCard}
-    >
-      {!view ? (
-        <div className="space-y-6 max-w-3xl">
+    <CooperadoInicioSafeRoot>
+      <CooperadoInicioCooperadoLiveRoot
+        cooperadoIdCard={cooperadoIdCard}
+        cooperativaIdCard={cooperativaIdCard}
+      >
+        {!view ? (
+        <div className="space-y-6 max-w-3xl" data-cooperado-inicio-shell="1">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
               <CooperadoInicioOláTitulo nomeFromView={nomeFromSnapshot} />
@@ -483,8 +502,9 @@ function CooperadoDashboard() {
           hbCredit={hbCredit}
           cnpjHbFallback={cnpjHbDigits}
         />
-      )}
-    </CooperadoInicioCooperadoLiveRoot>
+        )}
+      </CooperadoInicioCooperadoLiveRoot>
+    </CooperadoInicioSafeRoot>
   );
 }
 
@@ -522,10 +542,10 @@ function CooperadoDashboardInicioView({
     cnpjDigits,
   } = view;
 
-  const nomePrimeiro = cooperado?.nomeCompleto.split(" ")[0];
+  const nomePrimeiro = cooperado?.nomeCompleto?.split(" ")[0];
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6 max-w-3xl" data-cooperado-inicio-shell="1">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">
           <CooperadoInicioOláTitulo nomeFromView={nomePrimeiro} />
