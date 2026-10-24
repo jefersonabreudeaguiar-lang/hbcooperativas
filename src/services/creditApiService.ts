@@ -100,6 +100,22 @@ export async function fetchCreditDashboard(
   return data.dashboard ?? null;
 }
 
+export async function fetchCreditOpsHealth(cnpj: string) {
+  const res = await secureApiFetch(
+    `/api/credit/ops-health?cnpj=${encodeURIComponent(cnpj)}`,
+    { cache: "no-store" }
+  );
+  const data = await parseJson<{
+    ok?: boolean;
+    error?: string;
+    snapshot?: import("@/lib/hb-credit/security/hbCreditOpsHealth").HbCreditOpsHealthSnapshot;
+  }>(res);
+  if (!res.ok || !data.ok || !data.snapshot) {
+    throw new Error(data.error ?? "Erro ao carregar saúde HB.");
+  }
+  return data.snapshot;
+}
+
 export function buildCreditLimitesRequestQuery(
   cnpj: string,
   opts?: {

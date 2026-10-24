@@ -115,6 +115,13 @@ const ContaCoopDescontosPanel = dynamic(
     })),
   { loading: panelFallback, ssr: false }
 );
+const ContaCoopOpsHealthPanel = dynamic(
+  () =>
+    import("@/components/hb-credit/ContaCoopOpsHealthPanel").then((m) => ({
+      default: m.ContaCoopOpsHealthPanel,
+    })),
+  { loading: panelFallback, ssr: false }
+);
 
 type PreviewColetivo = {
   ok?: boolean;
@@ -230,7 +237,15 @@ function mergeCreditosBaseMaps(
   return next;
 }
 
-type Tab = "painel" | "limites" | "mercados" | "descontos" | "conferir_nf" | "liquidar" | "estornos";
+type Tab =
+  | "painel"
+  | "limites"
+  | "mercados"
+  | "descontos"
+  | "conferir_nf"
+  | "liquidar"
+  | "estornos"
+  | "saude";
 
 export default function ContaCoopPage() {
   return (
@@ -255,7 +270,8 @@ function ContaCoopContent() {
       initialTab === "estornos" ||
       initialTab === "limites" ||
       initialTab === "mercados" ||
-      initialTab === "descontos"
+      initialTab === "descontos" ||
+      initialTab === "saude"
     ) {
       return initialTab;
     }
@@ -1255,6 +1271,7 @@ function ContaCoopContent() {
           { id: "conferir_nf", label: "Conferir NFs" },
           { id: "liquidar", label: "Liquidar" },
           { id: "estornos", label: "Estornos" },
+          { id: "saude", label: "Saúde" },
         ]}
         active={tab}
         onChange={handleTabChange}
@@ -1752,6 +1769,12 @@ function ContaCoopContent() {
             parceiros={parceiros}
             cooperadoNome={cooperadoNome}
           />
+        </div>
+      )}
+
+      {tab === "saude" && (
+        <div>
+          <ContaCoopOpsHealthPanel cnpj={cnpj} />
         </div>
       )}
 
