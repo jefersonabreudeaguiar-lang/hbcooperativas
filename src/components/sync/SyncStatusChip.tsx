@@ -12,7 +12,6 @@ import {
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { cooperadoPwaMaterializarSnapshotsFinanceirosPosSync } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
-import { awaitCooperadoGaSyncBaseInformacoesFinanceirasInflight } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
 import { cn } from "@/utils/format";
 import {
   formatRelativoSync,
@@ -177,20 +176,8 @@ export function CooperadoAtualizarButton({
       sawSyncUiRef.current = false;
       return;
     }
-    let cancel = false;
-    void awaitCooperadoGaSyncBaseInformacoesFinanceirasInflight().then(() => {
-      if (cancel || !busy) return;
-      if (!syncingForUi) {
-        cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user);
-        clearCooperadoPwaDadosDesatualizados();
-        setBusy(false);
-      }
-    });
     const id = window.setTimeout(() => setBusy(false), 90_000);
-    return () => {
-      cancel = true;
-      window.clearTimeout(id);
-    };
+    return () => window.clearTimeout(id);
   }, [busy, syncingForUi, user]);
 
   const loveVisible = showLoveMessage && spinning;

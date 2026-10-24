@@ -32,12 +32,6 @@ import {
   cooperadoPilotForcarRematerializacaoFinanceira,
 } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
 import { cooperadoFinanceiroMobileLeituraAoVivo } from "@/lib/cooperado/cooperadoMobilePilot";
-import { cooperadoInicioSincronizadoComFinanceiro } from "@/lib/cooperado/cooperadoInicioSincronizadoComFinanceiro";
-import { cooperadoAReceberParidadeUnificadaPilotoJeferson } from "@/lib/cooperado/cooperadoAReceberParidadeMobileUnificada";
-import {
-  lerParidadeExibicaoJefersonPiloto,
-  useCooperadoParidadeExibicaoJeferson,
-} from "@/hooks/useCooperadoParidadeExibicaoJeferson";
 import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import {
   cooperadoPwaUiSubscribesAppData,
@@ -289,7 +283,6 @@ function FichaCorridaPageInner() {
   const ready = useEnsureAppDataWarm();
   const tabActive = useCooperadoTabPanelActive("/ficha-corrida");
   const { user, isCooperado, cooperadoId, check, coopId: coopIdPerm } = usePermissions();
-  const { syncingForUi: syncCooperadoFinanceiro, cooperadoPagamentosHydrated } = useSyncStatus();
   const fichaAppDataDomains = useMemo(
     (): AppDataNotifyDomain[] => responsavelFichaAppDataDomains(isCooperado),
     [isCooperado]
@@ -302,13 +295,7 @@ function FichaCorridaPageInner() {
   const [fichaResumoSnap, setFichaResumoSnap] = useState<CooperadoPwaFichaResumoSnapshot | null>(
     () => {
       if (typeof window === "undefined" || !user?.cooperadoId || !user.cooperativaId) return null;
-      if (
-        !messenger &&
-        !pilotFinanceiroLeve &&
-        !cooperadoAReceberParidadeUnificadaPilotoJeferson(user)
-      ) {
-        return null;
-      }
+      if (!messenger && !pilotFinanceiroLeve) return null;
       return lerCooperadoPwaFichaResumoSnapshot(user.cooperadoId, user.cooperativaId);
     }
   );
@@ -585,14 +572,8 @@ function FichaCorridaPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCooperado, user?.id, coopId]);
 
-  const paridadeJefersonPiloto = useCooperadoParidadeExibicaoJeferson(
-    user,
-    isCooperado && Boolean(cooperadoId),
-    apresentacaoConsolidada
-  );
-
   /** Uma leitura BIC/paridade por revisão — cooperado mobile. */
-  const paridadeCooperadoMobileLegacy = useMemo(() => {
+  const paridadeCooperadoMobile = useMemo(() => {
     if (!tabActive || !isCooperado || !cooperadoId) return null;
     const readParidade = (d: NonNullable<typeof data>) =>
       cooperadoLeituraFinanceiraExibicao(d, cooperadoId, coopId, {
@@ -613,19 +594,6 @@ function FichaCorridaPageInner() {
         coopId &&
         cooperadoBicAutorizaZerarCardInicio(store, cooperadoId, coopId)
     );
-    if (
-      cooperadoInicioSincronizadoComFinanceiro(user) &&
-      isAppDataWarm() &&
-      store &&
-      coopId &&
-      live
-    ) {
-      if (liveValor > 0.005 || liquidadoPeloResponsavel) return withHybrid(live);
-      if (fromSnapGuard && snapValor > 0.005 && !liquidadoPeloResponsavel) {
-        return withHybrid(fromSnapGuard);
-      }
-      return withHybrid(live);
-    }
     if (fromSnapGuard && snapValor > 0.005 && liveValor <= 0.005 && !liquidadoPeloResponsavel) {
       return withHybrid(fromSnapGuard);
     }
@@ -663,30 +631,6 @@ function FichaCorridaPageInner() {
     appDataWarmTick,
     financeiroAppDataAoVivo,
     user?.id,
-    cooperadoPagamentosHydrated,
-    syncCooperadoFinanceiro,
-  ]);
-
-  const paridadeCooperadoMobile = useMemo(() => {
-    if (!cooperadoAReceberParidadeUnificadaPilotoJeferson(user) || !user) {
-      return paridadeCooperadoMobileLegacy;
-    }
-    if (paridadeJefersonPiloto) return paridadeJefersonPiloto;
-    return (
-      lerParidadeExibicaoJefersonPiloto(
-        user,
-        apresentacaoFinanceiroUi,
-        cooperadoPagamentosHydrated,
-        syncCooperadoFinanceiro
-      ) ?? paridadeCooperadoMobileLegacy
-    );
-  }, [
-    user,
-    paridadeJefersonPiloto,
-    paridadeCooperadoMobileLegacy,
-    apresentacaoFinanceiroUi,
-    cooperadoPagamentosHydrated,
-    syncCooperadoFinanceiro,
   ]);
 
   const mesEmAberto = useMemo(() => {
@@ -718,7 +662,7 @@ function FichaCorridaPageInner() {
   const valorReceberConsolidado = useMemo(() => {
     if (!tabActive || !data || !cooperadoId) return null;
     if (isCooperado && paridadeCooperadoMobile) {
-      const meses = paridadeCooperadoMobile.mesesResumo ?? [];
+      const meses = paridadeCooperadoMobile.mesesResumo;
       const mes = meses[0] ?? "";
       return {
         mes,
@@ -726,7 +670,7 @@ function FichaCorridaPageInner() {
         mesLabel: paridadeCooperadoMobile.mesLabel,
         valor: paridadeCooperadoMobile.valorLiquido,
         valorRecibo: paridadeCooperadoMobile.valorLiquido,
-        aguardandoAssinatura: paridadeCooperadoMobile.consolidado?.aguardandoAssinatura ?? false,
+        aguardandoAssinatura: paridadeCooperadoMobile.consolidado.aguardandoAssinatura,
       };
     }
     return bicCentralQuantoVouReceberParaExibicao(data, cooperadoId, coopId, {
@@ -1216,6 +1160,7 @@ function FichaCorridaPageInner() {
 
   const { exibirAguardandoAssinatura, conferindoPagamentoNuvem } =
     useCooperadoExibirAguardandoAssinatura(isCooperado && !!pagamentoAguardando);
+  const { syncingForUi: syncCooperadoFinanceiro, cooperadoPagamentosHydrated } = useSyncStatus();
   const syncCooperadoFinanceiroUi = cooperadoBicFinanceiroSyncHintForUi(syncCooperadoFinanceiro, {
     onFinanceiroScreen: tabActive && isCooperado,
     cooperadoBicAuthority: isCooperadoBicExibicaoPadraoAtiva(),
@@ -1403,7 +1348,7 @@ function FichaCorridaPageInner() {
       if (
         fluxoReciboAssinatura &&
         pagamentoAguardandoExibicao &&
-        paridadeCooperadoMobile.consolidado?.aguardandoAssinatura &&
+        paridadeCooperadoMobile.consolidado.aguardandoAssinatura &&
         paridadeCooperadoMobile.valorLiquido <= 0
       ) {
         return resumoFromPagamento(pagamentoAguardandoExibicao);
@@ -1412,7 +1357,7 @@ function FichaCorridaPageInner() {
         !fluxoReciboAssinatura ||
         paridadeCooperadoMobile.valorLiquido > 0 ||
         (paridadeCooperadoMobile.resumo.descontosExtras?.length ?? 0) > 0 ||
-        (paridadeCooperadoMobile.resumo?.valorEntregas ?? 0) > 0
+        paridadeCooperadoMobile.resumo.valorEntregas > 0
       ) {
         return paridadeCooperadoMobile.resumo;
       }
