@@ -10,7 +10,7 @@ import { APP_BUILD_VERSION } from "../src/lib/appBuildVersion.ts";
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.ok(APP_BUILD_VERSION >= 623, "build 623+ paridade financeiro sem zerar início");
+assert.ok(APP_BUILD_VERSION >= 624, "build 624+ piloto Jeferson paridade unificada");
 
 const hydrate = read("src/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate.ts");
 assert.ok(hydrate.includes("cooperadoFinanceiroExibicaoDivergeDeAppDataLive"));
@@ -54,6 +54,14 @@ const sync = read("src/lib/cooperado/cooperadoInicioSincronizadoComFinanceiro.ts
 assert.ok(sync.includes("cooperadoCardInicioMotorParidadeFinanceiro"));
 assert.ok(sync.includes("cooperadoLeituraFinanceiraExibicao"));
 assert.ok(sync.includes("cooperadoApresentacaoFinanceiroUiCooperado"));
+assert.ok(sync.includes("cooperadoCardInicioMotorParidadeUnificadaPiloto"));
+
+const unificada = read("src/lib/cooperado/cooperadoAReceberParidadeMobileUnificada.ts");
+assert.ok(unificada.includes("cooperadoAReceberParidadeUnificadaPilotoJeferson"));
+assert.ok(unificada.includes("isCooperadoMobilePilot"));
+assert.ok(unificada.includes("resolverParidadeCooperadoMobileExibicao"));
+assert.ok(ficha.includes("resolverParidadeCooperadoMobileExibicao"));
+assert.ok(hook.includes("cooperadoAReceberParidadeUnificadaPilotoJeferson"));
 
 assert.ok(hook.includes("cooperadoInicioSincronizadoComFinanceiro"));
 assert.ok(ficha.includes("cooperadoInicioSincronizadoComFinanceiro(user)"));

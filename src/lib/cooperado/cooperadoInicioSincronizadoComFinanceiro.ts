@@ -17,9 +17,13 @@ import {
   aplicarDebitoHbHibridoNaParidade,
   linhasOverlayDebitoHbAReceber,
 } from "@/lib/hb-credit/hbAReceberHibrido";
-import { inicioCardMotorFromParidadeFinanceiro } from "@/lib/cooperado/cooperadoInicioCardParidadeMotor";
+import {
+  inicioCardMotorFromParidadeFinanceiro,
+} from "@/lib/cooperado/cooperadoInicioCardParidadeMotor";
 import type { InicioCardMotorSnapshot } from "@/lib/cooperado/cooperadoInicioCardMotorTypes";
 import { cooperadoMotorRevisionOperacional } from "@/lib/cooperado/cooperadoMotorRevisionOperacional";
+import type { CooperadoPwaFichaResumoSnapshot } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
+import { resolverParidadeCooperadoMobileExibicao } from "@/lib/cooperado/cooperadoAReceberParidadeMobileUnificada";
 
 export function cooperadoInicioSincronizadoComFinanceiro(
   user: Omit<User, "password"> | null | undefined
@@ -43,6 +47,33 @@ export function cooperadoApresentacaoFinanceiroUiCooperado(
       isCooperadoInstantResumeEnabled() &&
       cooperadoLocalResumeReady(user))
   );
+}
+
+export function cooperadoCardInicioMotorParidadeUnificadaPiloto(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string | undefined,
+  apresentacaoFinanceiroUi: boolean,
+  fichaResumoSnap: CooperadoPwaFichaResumoSnapshot | null
+): { motor: InicioCardMotorSnapshot; revision: string } | null {
+  const paridade = resolverParidadeCooperadoMobileExibicao({
+    data,
+    cooperadoId,
+    coopId: cooperativaId,
+    apresentacaoFinanceiroUi,
+    fichaResumoSnap,
+    financeiroDormant: false,
+    syncFinanceiroGa: true,
+  });
+  if (!paridade) return null;
+  const motor = inicioCardMotorFromParidadeFinanceiro(
+    data,
+    cooperadoId,
+    cooperativaId,
+    paridade
+  );
+  const revision = cooperadoMotorRevisionOperacional(data, cooperadoId, cooperativaId);
+  return { motor, revision };
 }
 
 export function cooperadoCardInicioMotorParidadeFinanceiro(

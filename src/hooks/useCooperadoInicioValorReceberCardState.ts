@@ -41,8 +41,10 @@ import { resolverMotorCardInicioParidadeFinanceiro } from "@/lib/cooperado/coope
 import {
   cooperadoApresentacaoFinanceiroUiCooperado,
   cooperadoCardInicioMotorParidadeFinanceiro,
+  cooperadoCardInicioMotorParidadeUnificadaPiloto,
   cooperadoInicioSincronizadoComFinanceiro,
 } from "@/lib/cooperado/cooperadoInicioSincronizadoComFinanceiro";
+import { cooperadoAReceberParidadeUnificadaPilotoJeferson } from "@/lib/cooperado/cooperadoAReceberParidadeMobileUnificada";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
   lerCooperadoPwaFichaResumoSnapshot,
@@ -191,23 +193,51 @@ export function useCooperadoInicioValorReceberCardState(input: {
     }
   }, [apresentacaoConsolidada, input.syncing, hbDescontosRevision]);
 
+  const pilotoParidadeUnificada = cooperadoAReceberParidadeUnificadaPilotoJeferson(sessionUser);
+
   const resolved = useMemo(() => {
-    if (
+    const syncInicioAtivo =
       cooperadoInicioSincronizadoComFinanceiro(sessionUser) &&
       !leituraSomentePwa &&
-      tabAtiva &&
-      input.cooperadoId
-    ) {
+      input.cooperadoId &&
+      (pilotoParidadeUnificada || tabAtiva);
+
+    if (syncInicioAtivo && input.cooperadoId) {
+      const cooperadoIdCard = input.cooperadoId;
       const dataPar = input.data ?? (isAppDataWarm() ? getData() : null);
       if (dataPar) {
         const cooperativaIdCard = resolverCooperativaIdReciboLatch(
           dataPar,
-          input.cooperadoId,
+          cooperadoIdCard,
           input.cooperativaId
         );
+        if (pilotoParidadeUnificada) {
+          const unificado = cooperadoCardInicioMotorParidadeUnificadaPiloto(
+            dataPar,
+            cooperadoIdCard,
+            cooperativaIdCard,
+            apresentacaoFinanceiroUi,
+            cooperativaIdCard
+              ? lerCooperadoPwaFichaResumoSnapshot(cooperadoIdCard, cooperativaIdCard)
+              : null
+          );
+          if (unificado) {
+            const temObrigacao = cooperadoMotorTemObrigacaoReceber(unificado.motor);
+            return {
+              display: unificado.motor,
+              latch: {
+                motorRevision: unificado.revision,
+                display: unificado.motor,
+                hadPendencia: temObrigacao,
+              },
+              atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+              gravarPersistencia: temObrigacao,
+            };
+          }
+        }
         const paridadeMotor = cooperadoCardInicioMotorParidadeFinanceiro(
           dataPar,
-          input.cooperadoId,
+          cooperadoIdCard,
           cooperativaIdCard,
           apresentacaoFinanceiroUi
         );
@@ -225,7 +255,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
         }
         const autorizaZerar = cooperadoBicAutorizaZerarCardInicio(
           dataPar,
-          input.cooperadoId,
+          cooperadoIdCard,
           cooperativaIdCard,
           { tinhaValorExibido: cooperadoMotorTemObrigacaoReceber(persistido?.display ?? SNAPSHOT_VAZIO) }
         );
@@ -627,12 +657,16 @@ export function useCooperadoInicioValorReceberCardState(input: {
     apresentacaoCard,
     apresentacaoFinanceiroUi,
     cooperadoPagamentosHydrated,
+    pilotoParidadeUnificada,
     ...(leituraSomentePwa ? [] : [hbDescontosRevision]),
   ]);
 
   latchRef.current = resolved.latch;
 
   const snapshotExibido = useMemo(() => {
+    if (pilotoParidadeUnificada && !leituraSomentePwa) {
+      return resolved.display;
+    }
     if (
       cooperadoInicioSincronizadoComFinanceiro(sessionUser) &&
       !leituraSomentePwa &&
@@ -703,6 +737,8 @@ export function useCooperadoInicioValorReceberCardState(input: {
     persistidoTick,
     appDataWarmKey,
     hbDescontosRevision,
+    pilotoParidadeUnificada,
+    sessionUser?.id,
   ]);
 
   useEffect(() => {

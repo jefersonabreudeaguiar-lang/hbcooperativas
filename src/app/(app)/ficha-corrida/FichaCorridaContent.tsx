@@ -33,6 +33,10 @@ import {
 } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
 import { cooperadoFinanceiroMobileLeituraAoVivo } from "@/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoInicioSincronizadoComFinanceiro } from "@/lib/cooperado/cooperadoInicioSincronizadoComFinanceiro";
+import {
+  cooperadoAReceberParidadeUnificadaPilotoJeferson,
+  resolverParidadeCooperadoMobileExibicao,
+} from "@/lib/cooperado/cooperadoAReceberParidadeMobileUnificada";
 import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import {
   cooperadoPwaUiSubscribesAppData,
@@ -576,6 +580,17 @@ function FichaCorridaPageInner() {
   /** Uma leitura BIC/paridade por revisão — cooperado mobile. */
   const paridadeCooperadoMobile = useMemo(() => {
     if (!tabActive || !isCooperado || !cooperadoId) return null;
+    if (cooperadoAReceberParidadeUnificadaPilotoJeferson(user)) {
+      return resolverParidadeCooperadoMobileExibicao({
+        data,
+        cooperadoId,
+        coopId,
+        apresentacaoFinanceiroUi,
+        fichaResumoSnap,
+        financeiroDormant,
+        syncFinanceiroGa: cooperadoInicioSincronizadoComFinanceiro(user),
+      });
+    }
     const readParidade = (d: NonNullable<typeof data>) =>
       cooperadoLeituraFinanceiraExibicao(d, cooperadoId, coopId, {
         apresentacaoConsolidada: apresentacaoFinanceiroUi,
