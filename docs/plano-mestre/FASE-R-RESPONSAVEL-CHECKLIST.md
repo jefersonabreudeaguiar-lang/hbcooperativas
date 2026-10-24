@@ -20,4 +20,4 @@ Marque **SIM** / **NÃO** (celular **e** desktop quando aplicável).
 
 **“Responsável pronto para lançamento?”** — **SIM** só se todas as linhas críticas (R3 + R4 + R5.1) = SIM.
 
-Repo (agente): `npm run responsavel:verify:lancamento` deve estar verde antes do seu SIM.
+Repo (agente): `npm run responsavel:verify:fase-r` deve estar verde antes do seu SIM (inclui `responsavel:verify:lancamento`).

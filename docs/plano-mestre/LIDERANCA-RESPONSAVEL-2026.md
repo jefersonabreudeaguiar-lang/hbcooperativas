@@ -19,12 +19,14 @@
 | **Live sync leve** | Poll notas + tick sem `operacional_full` em rajada |
 | **Primeiro dia** | Redirect Contratos só se vazio |
 
-Gate técnico único:
+Gates técnicos:
 
 ```powershell
-npm run responsavel:verify:lancamento
+npm run responsavel:verify:lancamento   # núcleo (obrigatório antes de cada entrega staff)
+npm run responsavel:verify:fase-r       # lançamento + desempenho U4 + homolog nuvem read-only
 ```
 
+Experiência única (doc): `docs/plano-mestre/RESPONSAVEL-EXPERIENCIA-UNICA-E-LANCAMENTO.md`  
 Checklist humano: `docs/plano-mestre/FASE-R-RESPONSAVEL-CHECKLIST.md`.
 
 ---
@@ -107,7 +109,7 @@ Checklist humano: `docs/plano-mestre/FASE-R-RESPONSAVEL-CHECKLIST.md`.
 
 | Fase | Data | Resposta | Build |
 |------|------|----------|-------|
-| Plano aceito | 24/10/2026 | (aguardando) | — |
+| Plano aceito | 24/10/2026 | SIM (agente) | 646 |
 | R1 | | | |
 | R2 | | | |
 | R3 | | | |
@@ -118,7 +120,6 @@ Checklist humano: `docs/plano-mestre/FASE-R-RESPONSAVEL-CHECKLIST.md`.
 
 ## Próxima ação (agente)
 
-1. Manter `responsavel:verify:lancamento` verde a cada entrega staff.
-2. Fechar **Fase 4 cooperado** + deploy **645** na Vercel.
-3. Você homologa **R1→R3** no seu usuário responsável; agente corrige com base em SIM/NÃO.
-4. **R5** fecha o app para lançamento público do par responsável↔cooperado.
+1. Manter `responsavel:verify:fase-r` verde a cada entrega staff (**não alterar cooperado**).
+2. Você homologa **R1→R5** (`FASE-R-RESPONSAVEL-CHECKLIST.md`); agente corrige só gestão com base em SIM/NÃO.
+3. Portão **R5 SIM** = lançamento público do par responsável↔cooperado (cooperado já em 645+).

@@ -38,8 +38,14 @@ assert.ok(STAFF_NAV_PREFETCH_PRIORITY.includes("/ficha-corrida"), "Pagar no pref
 assert.ok(STAFF_NAV_PREFETCH_PRIORITY.includes("/livro-caixa"), "Livro no prefetch cedo");
 assert.ok(STAFF_MOBILE_PREFETCH_HREFS.includes("/ficha-corrida"));
 
-assert.equal(getStaffMobileTabCacheLimit(false), 4);
-assert.deepEqual([...STAFF_TAB_PIN_HREFS], ["/notas-pedido", "/ficha-corrida"]);
+assert.equal(getStaffMobileTabCacheLimit(false), 6);
+assert.equal(getStaffMobileTabCacheLimit(true), 5);
+assert.deepEqual([...STAFF_TAB_PIN_HREFS], [
+  "/dashboard",
+  "/notas-pedido",
+  "/ficha-corrida",
+  "/livro-caixa",
+]);
 
 const keepAlive = read("src/components/performance/StaffMobileTabKeepAlive.tsx");
 assert.ok(!keepAlive.includes("if (!enabled || !mobile)"), "keep-alive no desktop");
