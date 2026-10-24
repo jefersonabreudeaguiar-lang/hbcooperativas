@@ -44,7 +44,11 @@ import {
   cooperadoCardInicioMotorParidadeUnificadaPiloto,
   cooperadoInicioSincronizadoComFinanceiro,
 } from "@/lib/cooperado/cooperadoInicioSincronizadoComFinanceiro";
-import { cooperadoAReceberParidadeUnificadaPilotoJeferson } from "@/lib/cooperado/cooperadoAReceberParidadeMobileUnificada";
+import {
+  cooperadoAReceberFinanceiroAutoritativoPiloto,
+  cooperadoAReceberParidadeUnificadaPilotoJeferson,
+} from "@/lib/cooperado/cooperadoAReceberParidadeMobileUnificada";
+import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
   lerCooperadoPwaFichaResumoSnapshot,
@@ -194,6 +198,25 @@ export function useCooperadoInicioValorReceberCardState(input: {
   }, [apresentacaoConsolidada, input.syncing, hbDescontosRevision]);
 
   const pilotoParidadeUnificada = cooperadoAReceberParidadeUnificadaPilotoJeferson(sessionUser);
+  const financeiroAutoritativoPiloto = cooperadoAReceberFinanceiroAutoritativoPiloto(
+    sessionUser,
+    apresentacaoFinanceiroUi,
+    cooperadoPagamentosHydrated,
+    Boolean(input.syncing)
+  );
+
+  useEffect(() => {
+    if (!pilotoParidadeUnificada || !sessionUser || !isAppDataWarm()) return;
+    if (rematerializarCooperadoPwaSnapshotsSeNecessario(sessionUser)) {
+      setPersistidoTick((n) => n + 1);
+    }
+  }, [
+    pilotoParidadeUnificada,
+    sessionUser?.id,
+    appDataWarmKey,
+    financeiroAutoritativoPiloto,
+    hbDescontosRevision,
+  ]);
 
   const resolved = useMemo(() => {
     const syncInicioAtivo =
@@ -220,7 +243,8 @@ export function useCooperadoInicioValorReceberCardState(input: {
             cooperativaIdCard
               ? lerCooperadoPwaFichaResumoSnapshot(cooperadoIdCard, cooperativaIdCard)
               : null,
-            persistido?.display
+            persistido?.display,
+            financeiroAutoritativoPiloto
           );
           if (unificado) {
             const temObrigacao = cooperadoMotorTemObrigacaoReceber(unificado.motor);
@@ -661,6 +685,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
     apresentacaoFinanceiroUi,
     cooperadoPagamentosHydrated,
     pilotoParidadeUnificada,
+    financeiroAutoritativoPiloto,
     ...(leituraSomentePwa ? [] : [hbDescontosRevision]),
   ]);
 

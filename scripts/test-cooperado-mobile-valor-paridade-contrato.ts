@@ -10,7 +10,7 @@ import { APP_BUILD_VERSION } from "../src/lib/appBuildVersion.ts";
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.ok(APP_BUILD_VERSION >= 625, "build 625+ piloto sem zerar live vazio");
+assert.ok(APP_BUILD_VERSION >= 626, "build 626+ piloto autoritativo AppData");
 
 const hydrate = read("src/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate.ts");
 assert.ok(hydrate.includes("cooperadoFinanceiroExibicaoDivergeDeAppDataLive"));
@@ -61,6 +61,8 @@ assert.ok(unificada.includes("cooperadoAReceberParidadeUnificadaPilotoJeferson")
 assert.ok(unificada.includes("isCooperadoMobilePilot"));
 assert.ok(unificada.includes("resolverParidadeCooperadoMobileExibicao"));
 assert.ok(unificada.includes("inicioCardPersistido"));
+assert.ok(unificada.includes("financeiroAutoritativo"));
+assert.ok(unificada.includes("cooperadoAReceberFinanceiroAutoritativoPiloto"));
 assert.ok(ficha.includes("resolverParidadeCooperadoMobileExibicao"));
 assert.ok(hook.includes("cooperadoAReceberParidadeUnificadaPilotoJeferson"));
 

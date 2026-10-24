@@ -60,7 +60,8 @@ export function cooperadoCardInicioMotorParidadeUnificadaPiloto(
   cooperativaId: string | undefined,
   apresentacaoFinanceiroUi: boolean,
   fichaResumoSnap: CooperadoPwaFichaResumoSnapshot | null,
-  inicioPersistido: InicioCardMotorSnapshot | null | undefined
+  inicioPersistido: InicioCardMotorSnapshot | null | undefined,
+  financeiroAutoritativo?: boolean
 ): { motor: InicioCardMotorSnapshot; revision: string } | null {
   if (!cooperativaId) return null;
 
@@ -73,6 +74,7 @@ export function cooperadoCardInicioMotorParidadeUnificadaPiloto(
     financeiroDormant: false,
     syncFinanceiroGa: true,
     inicioCardPersistido: inicioPersistido,
+    financeiroAutoritativo,
   });
   if (!paridade) return null;
 
@@ -90,6 +92,7 @@ export function cooperadoCardInicioMotorParidadeUnificadaPiloto(
     tinhaValorExibido,
   });
   if (autorizaZerar) return { motor, revision };
+  if (financeiroAutoritativo) return { motor, revision };
 
   const snapParidade = fichaResumoSnap
     ? resolveParidadeFromFichaResumoSnapshot(fichaResumoSnap)

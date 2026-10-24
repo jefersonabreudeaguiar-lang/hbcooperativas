@@ -21,7 +21,11 @@ import {
   aplicarDebitoHbHibridoNaParidade,
   linhasOverlayDebitoHbAReceber,
 } from "@/lib/hb-credit/hbAReceberHibrido";
+import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
+import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 import { getData, isAppDataWarm } from "@/services/dataStore";
+
+const PARIDADE_EXIBICAO_DRIFT_EPS = 0.02;
 
 export const COOPERADO_A_RECEBER_PARIDADE_UNIFICADA_PILOTO_VERSION = 1;
 
@@ -42,7 +46,42 @@ export type ResolverParidadeCooperadoMobileInput = {
   /** Ramo GA sync-first (live com fallback snap quando live=0). */
   syncFinanceiroGa?: boolean;
   inicioCardPersistido?: InicioCardMotorSnapshot | null;
+  /** Pós-sync: só motor BIC no AppData — sem snapshot/cache antigo. */
+  financeiroAutoritativo?: boolean;
 };
+
+export function cooperadoAReceberFinanceiroAutoritativoPiloto(
+  user: Omit<User, "password"> | null | undefined,
+  apresentacaoFinanceiroUi: boolean,
+  cooperadoPagamentosHydrated: boolean,
+  syncing: boolean
+): boolean {
+  if (!cooperadoAReceberParidadeUnificadaPilotoJeferson(user)) return false;
+  return Boolean(apresentacaoFinanceiroUi && cooperadoPagamentosHydrated && !syncing);
+}
+
+function appDataFinanceiroConfiavel(
+  store: AppData,
+  cooperadoId: string,
+  coopId: string
+): boolean {
+  return (
+    cooperadoTemDadosFinanceirosMinimos(store, cooperadoId, coopId) &&
+    !cooperadoFinanceiroDesatualizado(store, cooperadoId, coopId)
+  );
+}
+
+function lerParidadeLive(
+  store: AppData,
+  cooperadoId: string,
+  coopId: string,
+  apresentacaoFinanceiroUi: boolean,
+  financeiroAutoritativo: boolean
+): LeituraFinanceiraParidadeCooperado {
+  return cooperadoLeituraFinanceiraExibicao(store, cooperadoId, coopId, {
+    apresentacaoConsolidada: financeiroAutoritativo ? true : apresentacaoFinanceiroUi,
+  });
+}
 
 function paridadeMinimaDeValorCard(
   valor: number,
@@ -65,13 +104,11 @@ export function resolverParidadeCooperadoMobileExibicao(
     input;
   if (!cooperadoId || !coopId) return null;
 
-  const readParidade = (d: AppData) =>
-    cooperadoLeituraFinanceiraExibicao(d, cooperadoId, coopId, {
-      apresentacaoConsolidada: apresentacaoFinanceiroUi,
-    });
-
+  const financeiroAutoritativo = Boolean(input.financeiroAutoritativo);
   const store = (isAppDataWarm() ? getData() : input.data) ?? input.data;
-  const live = store ? readParidade(store) : null;
+  const live = store
+    ? lerParidadeLive(store, cooperadoId, coopId, apresentacaoFinanceiroUi, financeiroAutoritativo)
+    : null;
   const fromSnapGuard = fichaResumoSnap
     ? resolveParidadeFromFichaResumoSnapshot(fichaResumoSnap)
     : null;
@@ -92,6 +129,7 @@ export function resolverParidadeCooperadoMobileExibicao(
       : 0;
 
   const fallbackPersistidoCard = (): LeituraFinanceiraParidadeCooperado | null => {
+    if (financeiroAutoritativo) return null;
     if (liquidadoPeloResponsavel || persistidoValor <= 0.005) return null;
     return paridadeMinimaDeValorCard(
       persistidoValor,
@@ -99,6 +137,32 @@ export function resolverParidadeCooperadoMobileExibicao(
       live ?? fromSnapGuard
     );
   };
+
+  if (financeiroAutoritativo && live) {
+    return withHybrid(live);
+  }
+
+  if (
+    store &&
+    live &&
+    appDataFinanceiroConfiavel(store, cooperadoId, coopId) &&
+    fromSnapGuard &&
+    Math.abs(liveValor - snapValor) > PARIDADE_EXIBICAO_DRIFT_EPS &&
+    !liquidadoPeloResponsavel
+  ) {
+    return withHybrid(live);
+  }
+
+  if (
+    store &&
+    live &&
+    appDataFinanceiroConfiavel(store, cooperadoId, coopId) &&
+    persistidoValor > 0.005 &&
+    Math.abs(liveValor - persistidoValor) > PARIDADE_EXIBICAO_DRIFT_EPS &&
+    !liquidadoPeloResponsavel
+  ) {
+    return withHybrid(live);
+  }
 
   if (input.syncFinanceiroGa && isAppDataWarm() && store && live) {
     if (liveValor > 0.005 || liquidadoPeloResponsavel) return withHybrid(live);

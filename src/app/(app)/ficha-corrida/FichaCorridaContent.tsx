@@ -34,6 +34,7 @@ import {
 import { cooperadoFinanceiroMobileLeituraAoVivo } from "@/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoInicioSincronizadoComFinanceiro } from "@/lib/cooperado/cooperadoInicioSincronizadoComFinanceiro";
 import {
+  cooperadoAReceberFinanceiroAutoritativoPiloto,
   cooperadoAReceberParidadeUnificadaPilotoJeferson,
   resolverParidadeCooperadoMobileExibicao,
 } from "@/lib/cooperado/cooperadoAReceberParidadeMobileUnificada";
@@ -289,6 +290,7 @@ function FichaCorridaPageInner() {
   const ready = useEnsureAppDataWarm();
   const tabActive = useCooperadoTabPanelActive("/ficha-corrida");
   const { user, isCooperado, cooperadoId, check, coopId: coopIdPerm } = usePermissions();
+  const { syncingForUi: syncCooperadoFinanceiro, cooperadoPagamentosHydrated } = useSyncStatus();
   const fichaAppDataDomains = useMemo(
     (): AppDataNotifyDomain[] => responsavelFichaAppDataDomains(isCooperado),
     [isCooperado]
@@ -600,6 +602,12 @@ function FichaCorridaPageInner() {
         financeiroDormant,
         syncFinanceiroGa: cooperadoInicioSincronizadoComFinanceiro(user),
         inicioCardPersistido: inicioCard?.display ?? null,
+        financeiroAutoritativo: cooperadoAReceberFinanceiroAutoritativoPiloto(
+          user,
+          apresentacaoFinanceiroUi,
+          cooperadoPagamentosHydrated,
+          syncCooperadoFinanceiro
+        ),
       });
     }
     const readParidade = (d: NonNullable<typeof data>) =>
@@ -671,6 +679,8 @@ function FichaCorridaPageInner() {
     appDataWarmTick,
     financeiroAppDataAoVivo,
     user?.id,
+    cooperadoPagamentosHydrated,
+    syncCooperadoFinanceiro,
   ]);
 
   const mesEmAberto = useMemo(() => {
@@ -1200,7 +1210,6 @@ function FichaCorridaPageInner() {
 
   const { exibirAguardandoAssinatura, conferindoPagamentoNuvem } =
     useCooperadoExibirAguardandoAssinatura(isCooperado && !!pagamentoAguardando);
-  const { syncingForUi: syncCooperadoFinanceiro, cooperadoPagamentosHydrated } = useSyncStatus();
   const syncCooperadoFinanceiroUi = cooperadoBicFinanceiroSyncHintForUi(syncCooperadoFinanceiro, {
     onFinanceiroScreen: tabActive && isCooperado,
     cooperadoBicAuthority: isCooperadoBicExibicaoPadraoAtiva(),
