@@ -127,6 +127,8 @@ import {
 } from "@/lib/staff/staffPrimeiroDiaContratos";
 import { CooperadoInicioValorReceberCard } from "@/components/cooperado/CooperadoInicioValorReceberCard";
 import { CooperadoInicioSafeRoot } from "@/components/cooperado/CooperadoInicioSafeRoot";
+import { CooperadoInicioJefersonPilotoView } from "@/components/cooperado/CooperadoInicioJefersonPilotoView";
+import { cooperadoJefersonPilotoAbaAtiva } from "@/lib/cooperado/cooperadoJefersonPilotoFases";
 import {
   COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
   isCooperadoPwaMobileLeveUi,
@@ -210,6 +212,14 @@ function EnviarFotoEntregaInicioCard({ onEnviar }: { onEnviar: () => void }) {
 }
 
 function CooperadoDashboard() {
+  const { user: authUser } = useAuth();
+  if (cooperadoJefersonPilotoAbaAtiva(authUser, "inicio")) {
+    return <CooperadoInicioJefersonPilotoView />;
+  }
+  return <CooperadoDashboardFull />;
+}
+
+function CooperadoDashboardFull() {
   const tabActive = useCooperadoTabPanelActive("/dashboard");
   const messenger = isCooperadoPwaMessengerMode();
   const inicioPwaLeve = isCooperadoPwaMobileLeveUi();
