@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v649
+
+- **Conferir:** abas/grupos da fila usam nome da ficha/nota operacional (`cooperadoNomeSnapshot`), não só cadastro local — evita «Cooperado» genérico.
+
 ## v648
 
 - **Nomes na gestão:** cooperados vindos só da ficha/nota/PIX deixam de aparecer como «Cooperado»; lista operacional + `getCooperadoNomeResolvido`.

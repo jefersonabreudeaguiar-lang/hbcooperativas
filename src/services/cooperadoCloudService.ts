@@ -5,7 +5,10 @@ import type {
   PagamentoCooperadoRegistro,
 } from "@/types";
 import { findCooperativaByCnpj, getCooperativaById, normalizeCnpj } from "@/utils/cooperativa";
+import { resolverNomeCooperadoGestao } from "@/lib/cooperado/cooperadoNomeOperacional";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
+
+export { resolverNomeCooperadoGestao } from "@/lib/cooperado/cooperadoNomeOperacional";
 import { getData, refreshStoredSession, saveDataSafe } from "@/services/dataStore";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeAppInstallFields } from "@/services/cooperadoAppInstallService";
@@ -519,28 +522,6 @@ export async function syncCooperadosFromCloud(cnpj: string, preferredCoopId?: st
     }
   })();
   return syncCooperadosInflight;
-}
-
-/** Nome para gestão quando o cadastro local ainda não sincronizou (ficha/nota/PIX). */
-export function resolverNomeCooperadoGestao(
-  data: AppData,
-  cooperadoId: string,
-  cooperativaId: string
-): string {
-  const direct = data.cooperados.find(
-    (c) => c.cooperativaId === cooperativaId && c.id === cooperadoId
-  );
-  if (direct?.nomeCompleto?.trim()) return direct.nomeCompleto.trim();
-
-  for (const f of data.fichaCorrida ?? []) {
-    if (f.cooperativaId !== cooperativaId || f.cooperadoId !== cooperadoId) continue;
-    if (f.cooperadoNomeSnapshot?.trim()) return f.cooperadoNomeSnapshot.trim();
-  }
-  for (const n of data.notasPedido ?? []) {
-    if (!notaPertenceCooperativa(data, n, cooperativaId) || n.cooperadoId !== cooperadoId) continue;
-    if (n.cooperadoNomeSnapshot?.trim()) return n.cooperadoNomeSnapshot.trim();
-  }
-  return "";
 }
 
 function stubCooperadoOperacional(

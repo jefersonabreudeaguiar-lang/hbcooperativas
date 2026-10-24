@@ -133,10 +133,42 @@ const notaAntigaAlton: NotaPedido = {
   createdAt: "2026-10-01T10:00:00.000Z",
   updatedAt: "2026-10-01T10:00:00.000Z",
 };
-assert.equal(getNomeGrupoConferencia([notaSemNome, notaAntigaAlton], data), "Alton Silva");
+assert.equal(getNomeGrupoConferencia([notaSemNome, notaAntigaAlton], data, coopId), "Alton Silva");
 const grupos = agruparPendentesPorCooperado(data, [notaAntigaAlton, notaSemNome], coopId);
 assert.equal(grupos.length, 1);
 assert.equal(grupos[0].nome, "Alton Silva");
 assert.equal(grupos[0].notas.length, 2);
+
+const notaSoId: NotaPedido = {
+  ...notaNuvem,
+  id: "n-so-id",
+  cooperadoId: "c_orlando",
+  cooperadoNomeSnapshot: "Cooperado",
+  createdAt: "2026-10-20T12:00:00.000Z",
+};
+const dataFicha = {
+  ...data,
+  cooperados: [],
+  fichaCorrida: [
+    {
+      id: "f-orl",
+      cooperadoId: "c_orlando",
+      cooperativaId: coopId,
+      mesReferencia: "2026-10",
+      notaPedidoId: "n-so-id",
+      status: "pendente",
+      valorBruto: 100,
+      valorLiquido: 95,
+      cooperadoNomeSnapshot: "Orlando Santos",
+      createdAt: "2026-10-20T12:00:00.000Z",
+      updatedAt: "2026-10-20T12:00:00.000Z",
+    },
+  ],
+} as typeof data;
+assert.equal(
+  getNomeGrupoConferencia([notaSoId], dataFicha, coopId),
+  "Orlando Santos",
+  "Conferir usa nome da ficha quando snapshot genérico"
+);
 
 console.log("test-conferencia-fila-filtro: OK");

@@ -1,4 +1,5 @@
 import type { AppData, NotaPedido } from "@/types";
+import { resolverNomeCooperadoGestao } from "@/lib/cooperado/cooperadoNomeOperacional";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { cpfCooperadoDigits, escolherCooperadoCanonico, nomeNormalizadoCooperado } from "@/utils/cooperadoDedupe";
 import { isInlineDataUrl } from "@/utils/mediaHelpers";
@@ -338,7 +339,9 @@ export function resolverCooperadoIdGrupoConferencia(
   const direct = data.cooperados.find((c) => c.id === nota.cooperadoId && c.cooperativaId === coopId);
   if (direct) return canonizarPorTitular(direct.id);
 
-  const snapshot = nomeCooperadoSnapshotUtilizavel(nota.cooperadoNomeSnapshot);
+  const snapshot =
+    nomeCooperadoSnapshotUtilizavel(nota.cooperadoNomeSnapshot) ||
+    nomeCooperadoSnapshotUtilizavel(resolverNomeCooperadoGestao(data, nota.cooperadoId, coopId));
   if (snapshot) {
     const snapNorm = nomeNormalizadoCooperado(snapshot);
     const byName = data.cooperados.find(
@@ -359,10 +362,26 @@ export function getChaveGrupoConferencia(
   return `id:${resolverCooperadoIdGrupoConferencia(data, nota, cooperativaId)}`;
 }
 
-export function getNomeGrupoConferencia(notas: NotaPedido[], data: AppData): string {
+export function getNomeGrupoConferencia(
+  notas: NotaPedido[],
+  data: AppData,
+  cooperativaId?: string
+): string {
+  const coopId = cooperativaId ?? notas[0]?.cooperativaId;
   for (const n of notas) {
     const snap = nomeCooperadoSnapshotUtilizavel(n.cooperadoNomeSnapshot);
     if (snap) return snap;
+  }
+  if (coopId) {
+    const cid = resolverCooperadoIdDoGrupo(notas, data, coopId);
+    const op = resolverNomeCooperadoGestao(data, cid, coopId);
+    if (op) return op;
+    for (const n of notas) {
+      const opNota = resolverNomeCooperadoGestao(data, n.cooperadoId, coopId);
+      if (opNota) return opNota;
+    }
+  }
+  for (const n of notas) {
     const cadastro = data.cooperados.find((c) => c.id === n.cooperadoId)?.nomeCompleto?.trim();
     if (cadastro) return cadastro;
   }
@@ -395,7 +414,7 @@ export function agruparPendentesPorCooperado(
     .map(([chave, notas]) => ({
       chave,
       cooperadoId: resolverCooperadoIdDoGrupo(notas, data, cooperativaId),
-      nome: getNomeGrupoConferencia(notas, data),
+      nome: getNomeGrupoConferencia(notas, data, cooperativaId),
       notas,
     }))
     .sort((a, b) => {
