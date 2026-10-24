@@ -22,6 +22,7 @@ const steps: { title: string; cmd: string; args: string[] }[] = [
   { title: "Recuperar aba (JS velho)", cmd: "npx", args: ["tsx", "scripts/test-responsavel-painel-recuperar-aba.ts"] },
   { title: "Fila notas live poll", cmd: "npx", args: ["tsx", "scripts/test-staff-fila-notas-live-poll.ts"] },
   { title: "Conferir nomes fila", cmd: "npx", args: ["tsx", "scripts/test-conferencia-fila-filtro.ts"] },
+  { title: "Keep-alive pin sem remount", cmd: "npx", args: ["tsx", "scripts/test-staff-keep-alive-pin-sem-remount.ts"] },
   {
     title: "Homolog operacional cooperativa (read-only)",
     cmd: "npx",

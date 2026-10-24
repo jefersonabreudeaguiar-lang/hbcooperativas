@@ -66,7 +66,8 @@ assert.ok(contaCoop.includes('useCooperadoTabPanelActive("/conta-coop")'), "Cont
 const staffNotas = read("src/app/(app)/notas-pedido/staff/NotasPedidoStaffResponsavelApp.tsx");
 assert.ok(staffNotas.includes("if (isCooperado || !tabActive) return"), "prefetch Conferir só com aba visível");
 
-const heavy = read("src/lib/performance/staffMobileTabKeepAlive.ts");
-assert.ok(heavy.includes('"/cooperados"'), "Cooperados é aba pesada no DOM");
+const keepAliveStaff = read("src/components/performance/StaffMobileTabKeepAlive.tsx");
+assert.ok(keepAliveStaff.includes("STAFF_TAB_PIN_HREFS"), "abas pinadas ficam montadas sem remount");
+assert.ok(keepAliveStaff.includes("isStaffTabPinned(href)"), "cache pinado não evicta painel do dia");
 
 console.log("OK — test-staff-responsavel-desempenho");

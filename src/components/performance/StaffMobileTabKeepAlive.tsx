@@ -11,7 +11,7 @@ import {
   isStaffBottomTabPath,
   isStaffMobileTabKeepAliveEnabled,
   staffBottomTabCacheKey,
-  STAFF_TAB_HEAVY_HREFS,
+  STAFF_TAB_PIN_HREFS,
   trimStaffTabCacheOrder,
 } from "@/lib/performance/staffMobileTabKeepAlive";
 import { registerStaffTabPanelCacheProbe } from "@/lib/performance/staffPinnedTabFastPath";
@@ -41,14 +41,14 @@ function publishStaffKeepAliveDomState(state: {
   }
 }
 
-/**
- * Híbrido do responsável: lastro pinado do dia + troca otimista.
- * Aba já visitada reaparece do cache — Next só acompanha a URL.
- */
-function isStaffHeavyTab(href: string): boolean {
-  return (STAFF_TAB_HEAVY_HREFS as readonly string[]).includes(href);
+function isStaffTabPinned(href: string): boolean {
+  return (STAFF_TAB_PIN_HREFS as readonly string[]).includes(href);
 }
 
+/**
+ * Híbrido do responsável: lastro pinado do dia + troca otimista.
+ * Abas pinadas permanecem montadas (sem remount/sync de abertura) — troca fluida.
+ */
 export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
   const enabled = isStaffMobileTabKeepAliveEnabled();
   const effectivePath = useStaffEffectiveTabPath(pathname);
@@ -62,13 +62,17 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
   const [cacheVersion, setCacheVersion] = useState(0);
   const lowMemory = isLowMemoryDevice();
   const cacheLimit = getStaffMobileTabCacheLimit(lowMemory);
+  const lastMarkedPathRef = useRef<string | null>(null);
 
   const tabKey = staffBottomTabCacheKey(pathname);
   const activeKey = staffBottomTabCacheKey(effectivePath);
   const onTab = isStaffBottomTabPath(effectivePath);
 
   useLayoutEffect(() => {
-    markStaffTabPathChange(effectivePath);
+    if (lastMarkedPathRef.current !== effectivePath) {
+      lastMarkedPathRef.current = effectivePath;
+      markStaffTabPathChange(effectivePath);
+    }
 
     publishStaffKeepAliveDomState({
       enabled,
@@ -85,7 +89,9 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
       nextOrder.length !== prevOrder.length || nextOrder.some((h, i) => h !== prevOrder[i]);
     orderRef.current = nextOrder;
     for (const href of prevOrder) {
-      if (!orderRef.current.includes(href)) delete cacheRef.current[href];
+      if (!orderRef.current.includes(href) && !isStaffTabPinned(href)) {
+        delete cacheRef.current[href];
+      }
     }
     if (orderChanged || !prevOrder.includes(activeKey) || !prevOrder.includes(tabKey)) {
       setCacheVersion((n) => n + 1);
@@ -121,17 +127,12 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
     if (!onTab || !enabled) {
       return [...new Set([...orderRef.current, ...Object.keys(cacheRef.current)])];
     }
-    const active = activeKey;
-    if (isStaffHeavyTab(active)) {
-      return [active];
+    const mounted = new Set<string>([activeKey]);
+    for (const h of STAFF_TAB_PIN_HREFS) {
+      if (cacheRef.current[h] !== undefined) mounted.add(h);
     }
-    const mounted = new Set<string>([active]);
-    for (const h of orderRef.current) {
-      if (!isStaffHeavyTab(h)) mounted.add(h);
-    }
-    for (const h of Object.keys(cacheRef.current)) {
-      if (!isStaffHeavyTab(h)) mounted.add(h);
-    }
+    for (const h of orderRef.current) mounted.add(h);
+    for (const h of Object.keys(cacheRef.current)) mounted.add(h);
     return [...mounted];
   }, [cacheVersion, onTab, enabled, activeKey]);
 
@@ -181,7 +182,9 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
           className={
             active
               ? "relative z-[1] w-full min-h-0"
-              : "hidden [content-visibility:hidden]"
+              : isStaffTabPinned(href)
+                ? "hidden [content-visibility:auto] [contain-intrinsic-size:0_480px]"
+                : "hidden [content-visibility:hidden]"
           }
           aria-hidden={!active}
           inert={!active}

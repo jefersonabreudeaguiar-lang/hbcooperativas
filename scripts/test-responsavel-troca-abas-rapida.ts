@@ -73,7 +73,7 @@ assert.ok(keepAlive.includes("useStaffEffectiveTabPath"), "keep-alive usa caminh
 assert.ok(keepAlive.includes("registerStaffTabPanelCacheProbe"), "keep-alive publica o cache");
 assert.ok(keepAlive.includes("markStaffTabPathChange"), "quiescência na troca de aba");
 assert.ok(keepAlive.includes("useDeferredValue"), "conteúdo pesado não bloqueia o paint");
-assert.ok(keepAlive.includes("STAFF_TAB_HEAVY_HREFS"), "só uma aba pesada no DOM");
+assert.ok(keepAlive.includes("STAFF_TAB_PIN_HREFS"), "abas pinadas permanecem no keep-alive");
 
 const dash = readFileSync(
   join(import.meta.dirname ?? __dirname, "../src/app/(app)/dashboard/DashboardContent.tsx"),

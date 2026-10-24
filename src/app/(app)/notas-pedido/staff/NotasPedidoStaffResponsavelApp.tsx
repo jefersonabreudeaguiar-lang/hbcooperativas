@@ -112,6 +112,10 @@ import {
   peekStaffGestaoLastGood,
   preservarStaffGestaoContraWipe,
 } from "@/lib/staff/staffGestaoSnapshotGuard";
+import {
+  marcarStaffResponsavelMountPullFeito,
+  staffResponsavelMountPullJaFeito,
+} from "@/lib/staff/staffResponsavelMountPullSession";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
   responsavelBloquearNavegacaoConferencia,
@@ -2250,8 +2254,9 @@ export default function NotasPedidoStaffMain() {
   // Responsável: pinta lastro e puxa notas no primeiro frame — não espera idle longo.
   useEffect(() => {
     if (isCooperado || !data || !coopId || !tabActive) return;
-    if (responsavelMountSyncRef.current) return;
+    if (responsavelMountSyncRef.current || staffResponsavelMountPullJaFeito(coopId)) return;
     responsavelMountSyncRef.current = true;
+    marcarStaffResponsavelMountPullFeito(coopId);
     responsavelPrimeiroPullAgendadoRef.current = true;
     scheduleStaffConferirFilaPrimeiroPull(() => {
       const lastro = peekStaffGestaoLastGood();

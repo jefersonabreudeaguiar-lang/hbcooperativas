@@ -7,7 +7,7 @@ const UNTIL_KEY = "hb.staff.tab-hop-quiet-until";
 const LAST_PATH_KEY = "hb.staff.tab-hop-last-path";
 
 /** Janela curta após troca de aba da gestão — sync e stats pesados esperam. */
-const QUIET_MS = 3_500;
+const QUIET_MS = 1_200;
 
 export function markStaffTabPathChange(pathname: string): void {
   if (!isStaffBottomTabPath(pathname)) return;

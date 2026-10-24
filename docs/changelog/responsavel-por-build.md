@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v652
+
+- **Fix travamento/tela branca:** abas pinadas (Início, Conferir, Pagar, Livro) voltam a ficar montadas no keep-alive; pull inicial da Conferir só 1× por cooperativa na sessão; quiescência de troca 1,2s.
+
 ## v651
 
 - **Perf R2+:** Cooperados, Conta HB, Mensalidades (staff) e efeitos da Conferir só com aba visível; abas pesadas incluem Cooperados/Conta no keep-alive.

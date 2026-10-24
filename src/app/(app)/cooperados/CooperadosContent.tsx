@@ -31,12 +31,14 @@ import { resumoAssinaturaCadastroApp } from "@/services/cooperadoAssinaturaServi
 import { AssinaturaCadastroGestaoPanel } from "@/components/cooperado/AssinaturaCadastroGestaoPanel";
 import type { Cooperado, CooperadoStatus } from "@/types";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
 
 const COOPERADOS_STAFF_DOMAINS: AppDataNotifyDomain[] = ["shell", "operacional"];
 
 export default function CooperadosPage() {
   const tabActive = useCooperadoTabPanelActive("/cooperados");
-  const data = useStaffPanelAppData(tabActive, COOPERADOS_STAFF_DOMAINS);
+  const dataLive = useStaffPanelAppData(tabActive, COOPERADOS_STAFF_DOMAINS);
+  const data = dataLive ?? (tabActive ? peekStaffGestaoLastGood() : null);
   const { check, user } = usePermissions();
   const router = useRouter();
   const [search, setSearch] = useState("");
