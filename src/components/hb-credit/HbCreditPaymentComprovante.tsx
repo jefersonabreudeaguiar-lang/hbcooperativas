@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { CheckCircle2, Loader2, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import type { HbCreditPaymentReceipt } from "@/lib/hb-credit/hbCreditPaymentReceipt";
 import {
-  captureElementAsPngBlob,
+  renderHbCreditReceiptPngBlob,
   shareHbCreditReceiptPng,
 } from "@/lib/hb-credit/hbCreditReceiptShareImage";
 import { hbCooperadoPrimaryBtn } from "@/lib/hb-credit/hbCreditCooperadoUi";
@@ -19,7 +19,6 @@ type Props = {
 };
 
 export function HbCreditPaymentComprovante({ receipt, onConcluir, className }: Props) {
-  const cardRef = useRef<HTMLDivElement>(null);
   const [sharing, setSharing] = useState(false);
 
   const paidLabel = useMemo(
@@ -28,11 +27,10 @@ export function HbCreditPaymentComprovante({ receipt, onConcluir, className }: P
   );
 
   const share = useCallback(async () => {
-    const el = cardRef.current;
-    if (!el || sharing) return;
+    if (sharing) return;
     setSharing(true);
     try {
-      const blob = await captureElementAsPngBlob(el);
+      const blob = await renderHbCreditReceiptPngBlob(receipt);
       const mode = await shareHbCreditReceiptPng(blob, receipt.receiptCode);
       if (mode === "downloaded") {
         alert("Imagem do comprovante salva. Envie pelo WhatsApp ou galeria.");
@@ -43,15 +41,12 @@ export function HbCreditPaymentComprovante({ receipt, onConcluir, className }: P
     } finally {
       setSharing(false);
     }
-  }, [receipt.receiptCode, sharing]);
+  }, [receipt, sharing]);
 
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
       <div className="flex flex-1 flex-col px-5 pb-6 pt-4">
-        <div
-          ref={cardRef}
-          className="mx-auto w-full max-w-md overflow-hidden rounded-3xl border border-emerald-200/90 bg-white shadow-lg shadow-emerald-900/10"
-        >
+        <div className="mx-auto w-full max-w-md overflow-hidden rounded-3xl border border-emerald-200/90 bg-white shadow-lg shadow-emerald-900/10">
           <div className="bg-gradient-to-br from-emerald-700 via-green-700 to-emerald-800 px-6 py-5 text-white">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-100/90">
               HB Créditos

@@ -22,8 +22,9 @@ assert.match(api, /runAuthorizeCreditPaymentLocalRefreshInBackground/, "sync loc
 assert.match(api, /void runAuthorizeCreditPaymentLocalRefreshInBackground/, "sync em background");
 
 assert.match(comprovante, /Compartilhar comprovante/, "ação de compartilhar");
-assert.match(comprovante, /captureElementAsPngBlob/, "compartilha via captura do card");
-assert.match(shareImg, /html2canvas/, "gera PNG do comprovante");
+assert.match(comprovante, /renderHbCreditReceiptPngBlob/, "compartilha via PNG canvas");
+assert.match(shareImg, /renderHbCreditReceiptPngBlob/, "gera PNG sem html2canvas");
+assert.ok(!/import\s*\(\s*["']html2canvas["']\s*\)/.test(shareImg), "sem captura DOM html2canvas");
 assert.match(shareImg, /files: \[file\]/, "share nativo com arquivo de imagem");
 
 console.log("OK: contrato pagar HB + comprovante");
