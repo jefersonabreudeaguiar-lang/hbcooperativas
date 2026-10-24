@@ -11,7 +11,13 @@ import { COOPERADO_BOTTOM_TAB_HREFS } from "../src/lib/performance/cooperadoBott
 import {
   COOPERADO_MOBILE_PILOT_EMAIL,
   isCooperadoMobileGaPromoted,
+  isCooperadoMobilePilot,
 } from "../src/lib/cooperado/cooperadoMobilePilot.ts";
+import {
+  COOPERADO_JEFERSON_PILOTO_FASE_LIBERADA,
+  COOPERADO_JEFERSON_PILOTO_PROMOVIDO_GA,
+  cooperadoJefersonPilotoAbaAtiva,
+} from "../src/lib/cooperado/cooperadoJefersonPilotoFases.ts";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
@@ -63,13 +69,14 @@ const gaUser = {
   cooperativaId: "coop1",
 };
 assert.equal(isCooperadoMobileGaPromoted(gaUser), true, "Jeferson está no GA padrão");
+assert.equal(isCooperadoMobilePilot(gaUser), true, "Jeferson é piloto de homologação");
+assert.equal(COOPERADO_JEFERSON_PILOTO_FASE_LIBERADA, "inicio");
+assert.equal(COOPERADO_JEFERSON_PILOTO_PROMOVIDO_GA, false);
+assert.equal(cooperadoJefersonPilotoAbaAtiva(gaUser, "inicio"), true);
+assert.equal(cooperadoJefersonPilotoAbaAtiva(gaUser, "financeiro"), false, "financeiro só após fases anteriores");
 
 console.log("OK — test-cooperado-jeferson-mobile-abas-contrato");
 console.log("");
-console.log("ROTEIRO JEFERSON (produção) — responda SIM/NÃO por linha:");
-console.log("A1 Início (/dashboard): abre, nome, card A receber, Atualizar, sem tela branca");
-console.log("A2 Entregas (/notas-pedido): lista, abrir nota, enviar foto (se tiver pedido)");
-console.log("A3 Preços (/precos): tabela carrega, scroll ok");
-console.log("A4 Financeiro (/ficha-corrida): valor = Início, meses, sem crash ao entrar");
-console.log("A5 Ciclo: Início → Financeiro → Entregas → Preços → Início (sem travar)");
-console.log("A6 Atualizar: termina e valores batem com responsável/desktop");
+console.log(`FASE ATUAL: ${COOPERADO_JEFERSON_PILOTO_FASE_LIBERADA} — homologue só esta aba agora.`);
+console.log("A1 Início (/dashboard): abre, nome, card A receber, Atualizar 633, sem tela branca → SIM/NÃO");
+console.log("(A2–A6 bloqueadas até A1 SIM e avanço de fase no código)");

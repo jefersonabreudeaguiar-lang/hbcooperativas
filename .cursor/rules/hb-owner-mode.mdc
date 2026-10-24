@@ -1,31 +1,36 @@
 ---
-description: HB — agente dono do produto; usuário só valida SIM/NÃO em produção
+description: HB — agente dono; piloto Jeferson uma aba por vez; GA congelado
 alwaysApply: true
 ---
 
-# Modo dono (HB Cooperativas)
+# Modo dono — piloto Jeferson (uma aba por vez)
 
-## Papel do usuário
-- Única entrada: **SIM** ou **NÃO** na checklist de produção (após testar no app real).
-- Não fazer perguntas de arquitetura, escopo ou prioridade ao usuário — decidir e executar.
+## Produção hoje
+- **Todos os cooperados:** build **633** (lógica GA estável 621) — **não alterar** comportamento GA até promoção.
+- **Piloto:** só sessão **Jeferson** (`isCooperadoMobilePilot`) recebe código novo, **uma aba por fase**.
 
-## Papel do agente
-- Dono técnico: priorizar, congelar escopo, diff mínimo, um deploy por problema resolvido.
-- Baseline cooperado mobile: **GA experiência Jeferson para todos** (lógica commit `2c3a8d98` / release **633+**). Sem piloto isolado, sem `useCooperadoParidadeExibicaoJeferson`, sem flags experimentais sem necessidade comprovada.
-- **Congelado** até checklist verde: `conta-coop` responsável, conferir/pagar staff (exceto bug bloqueante com repro).
+## Fases (ordem obrigatória)
+1. `inicio` — A1 (agora)
+2. `entregas` — A2
+3. `precos` — A3
+4. `financeiro` — A4
+5. `ciclo_abas` — A5
+6. `atualizar_valor` — A6
 
-## Antes de cada deploy cooperado
-- `npm run test:cooperado-experiencia-jeferson-ga-paridade`
-- `npm run test:cooperado-mobile-valor-paridade-contrato`
-- `git push` + `npm run confirm:production:wait`
-- Reportar: Status, URL, build, SHA, deploymentId.
+Gate: `cooperadoJefersonPilotoAbaAtiva(user, aba)` em `cooperadoJefersonPilotoFases.ts`.  
+`COOPERADO_JEFERSON_PILOTO_FASE_LIBERADA` só avança após **SIM** do usuário na aba anterior.
 
-## Anti-ciclo
-- Uma hipótese → um commit → produção → usuário SIM/NÃO.
-- Regressão: revert para último commit com SIM do usuário, não empilhar correções.
-- Não reativar `COOPERADO_EXIBICAO_FINANCEIRA_UNIFICADA_AO_VIVO` nem piloto só-Jeferson sem SIM explícito.
+## Usuário
+- Responde **SIM** ou **NÃO** só na **aba em homologação** (ex.: agora só **A1 Início**).
+- Promoção GA (`COOPERADO_JEFERSON_PILOTO_PROMOVIDO_GA = true`) só após A1–A6 SIM.
 
-## Homologação Jeferson mobile (aba a aba) — usuário só SIM/NÃO
-- A1 Início · A2 Entregas · A3 Preços · A4 Financeiro · A5 ciclo de abas · A6 Atualizar/valor
-- Contrato CI: `npm run test:cooperado-jeferson-abas`
-- Produção atual: build **633** até novo deploy com SIM do usuário.
+## Agente
+- Sem perguntas de escopo. Diff mínimo. Um problema → um deploy.
+- Congelado: responsável `/conta-coop`, staff pagar/conferir (exceto bloqueante).
+- Não reativar piloto 624–632 (hooks paridade unificada, sync só Jeferson no GA).
+- Deploy cooperado: testes `test:cooperado-jeferson-abas`, `test:cooperado-experiencia-jeferson`, `confirm:production:wait`.
+
+## Resposta esperada do usuário (fase atual)
+```
+A1 SIM/NÃO — [opcional uma frase se NÃO]
+```
