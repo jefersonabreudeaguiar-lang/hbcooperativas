@@ -45,7 +45,6 @@ import {
 } from "@/lib/cooperado/cooperadoInicioSincronizadoComFinanceiro";
 import { cooperadoAReceberParidadeUnificadaPilotoJeferson } from "@/lib/cooperado/cooperadoAReceberParidadeMobileUnificada";
 import { useCooperadoParidadeExibicaoJeferson } from "@/hooks/useCooperadoParidadeExibicaoJeferson";
-import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
@@ -202,16 +201,8 @@ export function useCooperadoInicioValorReceberCardState(input: {
     apresentacaoConsolidada
   );
 
-  useEffect(() => {
-    if (!pilotoParidadeUnificada || !sessionUser || !isAppDataWarm()) return;
-    if (rematerializarCooperadoPwaSnapshotsSeNecessario(sessionUser)) {
-      setPersistidoTick((n) => n + 1);
-    }
-  }, [pilotoParidadeUnificada, sessionUser?.id, appDataWarmKey, paridadeJeferson?.valorLiquido, hbDescontosRevision]);
-
   const resolved = useMemo(() => {
-    if (pilotoParidadeUnificada && !leituraSomentePwa) {
-      if (paridadeJeferson && sessionUser?.cooperadoId) {
+    if (pilotoParidadeUnificada && !leituraSomentePwa && paridadeJeferson && sessionUser?.cooperadoId) {
       const dataPar = input.data ?? (isAppDataWarm() ? getData() : null);
       if (dataPar) {
         const coopId = getUserCooperativaId(sessionUser, dataPar) ?? input.cooperativaId;
@@ -269,21 +260,6 @@ export function useCooperadoInicioValorReceberCardState(input: {
           gravarPersistencia: temObrigacao,
         };
       }
-      }
-      const esperaParidade = persistido?.display &&
-        cooperadoMotorTemObrigacaoReceber(persistido.display)
-          ? persistido.display
-          : SNAPSHOT_VAZIO;
-      return {
-        display: esperaParidade,
-        latch: {
-          motorRevision: "jeferson-paridade:aguardando",
-          display: esperaParidade,
-          hadPendencia: cooperadoMotorTemObrigacaoReceber(esperaParidade),
-        },
-        atualizando: true,
-        gravarPersistencia: false,
-      };
     }
     const syncInicioAtivo =
       cooperadoInicioSincronizadoComFinanceiro(sessionUser) &&

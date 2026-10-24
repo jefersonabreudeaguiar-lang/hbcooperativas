@@ -665,7 +665,7 @@ function FichaCorridaPageInner() {
   ]);
 
   const paridadeCooperadoMobile =
-    cooperadoAReceberParidadeUnificadaPilotoJeferson(user)
+    cooperadoAReceberParidadeUnificadaPilotoJeferson(user) && paridadeJefersonPiloto
       ? paridadeJefersonPiloto
       : paridadeCooperadoMobileLegacy;
 
@@ -706,7 +706,7 @@ function FichaCorridaPageInner() {
         mesLabel: paridadeCooperadoMobile.mesLabel,
         valor: paridadeCooperadoMobile.valorLiquido,
         valorRecibo: paridadeCooperadoMobile.valorLiquido,
-        aguardandoAssinatura: paridadeCooperadoMobile.consolidado.aguardandoAssinatura,
+        aguardandoAssinatura: paridadeCooperadoMobile.consolidado?.aguardandoAssinatura ?? false,
       };
     }
     return bicCentralQuantoVouReceberParaExibicao(data, cooperadoId, coopId, {
@@ -1383,7 +1383,7 @@ function FichaCorridaPageInner() {
       if (
         fluxoReciboAssinatura &&
         pagamentoAguardandoExibicao &&
-        paridadeCooperadoMobile.consolidado.aguardandoAssinatura &&
+        paridadeCooperadoMobile.consolidado?.aguardandoAssinatura &&
         paridadeCooperadoMobile.valorLiquido <= 0
       ) {
         return resumoFromPagamento(pagamentoAguardandoExibicao);
@@ -1392,7 +1392,7 @@ function FichaCorridaPageInner() {
         !fluxoReciboAssinatura ||
         paridadeCooperadoMobile.valorLiquido > 0 ||
         (paridadeCooperadoMobile.resumo.descontosExtras?.length ?? 0) > 0 ||
-        paridadeCooperadoMobile.resumo.valorEntregas > 0
+        (paridadeCooperadoMobile.resumo?.valorEntregas ?? 0) > 0
       ) {
         return paridadeCooperadoMobile.resumo;
       }

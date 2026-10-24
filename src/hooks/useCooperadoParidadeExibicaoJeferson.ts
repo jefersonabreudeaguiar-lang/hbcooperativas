@@ -37,11 +37,19 @@ function paridadeComValorMinimo(
   valor: number,
   mesLabel?: string
 ): LeituraFinanceiraParidadeCooperado {
+  const label = mesLabel?.trim() || base.mesLabel;
+  const consolidado = base.consolidado
+    ? { ...base.consolidado, valorLiquido: valor, mesLabel: label }
+    : base.consolidado;
+  const resumo = base.resumo
+    ? { ...base.resumo, valorLiquido: valor }
+    : base.resumo;
   return {
     ...base,
     valorLiquido: valor,
-    mesLabel: mesLabel?.trim() || base.mesLabel,
-    consolidado: { ...base.consolidado, valorLiquido: valor },
+    mesLabel: label,
+    consolidado,
+    resumo,
   };
 }
 
@@ -87,6 +95,7 @@ export function lerParidadeExibicaoJefersonPiloto(
   cooperadoPagamentosHydrated: boolean,
   syncing: boolean
 ): LeituraFinanceiraParidadeCooperado | null {
+  try {
   if (!cooperadoAReceberParidadeUnificadaPilotoJeferson(user)) return null;
   if (!isAppDataWarm() || !user.cooperadoId) return null;
 
@@ -108,6 +117,9 @@ export function lerParidadeExibicaoJefersonPiloto(
   });
   const paridadeHb = aplicarDebitoHbHibridoNaParidade(live, overlay);
   return aplicarLastroLocalSeMotorZerou(data, cooperadoId, coopId, paridadeHb, overlay);
+  } catch {
+    return null;
+  }
 }
 
 /**
