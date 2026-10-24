@@ -10,7 +10,7 @@ import { APP_BUILD_VERSION } from "../src/lib/appBuildVersion.ts";
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.ok(APP_BUILD_VERSION >= 618, "build 618+ piloto Jeferson financeiro ao vivo");
+assert.ok(APP_BUILD_VERSION >= 619, "build 619+ exibição financeira unificada ao vivo");
 
 const hydrate = read("src/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate.ts");
 assert.ok(hydrate.includes("cooperadoFinanceiroExibicaoDivergeDeAppDataLive"));
@@ -37,7 +37,14 @@ assert.ok(pilot.includes("cooperadoFinanceiroMobileLeituraAoVivo"));
 const ficha = read("src/app/(app)/ficha-corrida/FichaCorridaContent.tsx");
 assert.ok(ficha.includes("financeiroAppDataAoVivo"));
 
-const contrato = read("src/lib/cooperado/cooperadoExperienciaJefersonGaContrato.ts");
-assert.ok(contrato.includes("COOPERADO_GA_FINANCEIRO_TAB_APPDATA_AO_VIVO"));
+const unificado = read("src/lib/cooperado/cooperadoExibicaoFinanceiraUnificada.ts");
+assert.ok(unificado.includes("COOPERADO_EXIBICAO_FINANCEIRA_UNIFICADA_AO_VIVO"));
+assert.ok(unificado.includes("cooperadoLeituraFinanceiraExibicao"));
+
+const messenger = read("src/lib/cooperado/cooperadoPwaMessengerMode.ts");
+assert.ok(messenger.includes("cooperadoExibicaoFinanceiraUnificadaAoVivo(session)"));
+
+assert.ok(hook.includes("resolverMotorCardInicioParidadeFinanceiro"));
+assert.ok(hook.includes("cooperadoExibicaoFinanceiraUnificadaAoVivo"));
 
 console.log("OK — test-cooperado-mobile-valor-paridade-contrato");

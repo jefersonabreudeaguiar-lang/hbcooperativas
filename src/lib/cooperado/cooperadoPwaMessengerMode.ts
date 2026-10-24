@@ -9,6 +9,7 @@
  */
 import type { User } from "@/types";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import { cooperadoExibicaoFinanceiraUnificadaAoVivo } from "@/lib/cooperado/cooperadoExibicaoFinanceiraUnificada";
 import { getSession } from "@/services/dataStore";
 import { persistirCooperadoPwaFichaResumoSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import { persistirCooperadoPwaInicioDashboardSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
@@ -25,9 +26,11 @@ export function isCooperadoPwaMessengerMode(): boolean {
   return true;
 }
 
-/** Painéis cooperado PWA não assinam domínios do AppData (evita re-render a cada sync). */
+/** Painéis cooperado PWA não assinam AppData — exceto modo unificado (valor ao vivo como antes). */
 export function cooperadoPwaUiSubscribesAppData(): boolean {
-  return !isCooperadoPwaMessengerMode();
+  if (!isCooperadoPwaMessengerMode()) return true;
+  const session = getSession();
+  return Boolean(session && cooperadoExibicaoFinanceiraUnificadaAoVivo(session));
 }
 
 function scheduleMessengerCacheMaterialization(

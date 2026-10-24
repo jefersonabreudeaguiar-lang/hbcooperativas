@@ -143,7 +143,8 @@ import {
 } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { isCooperadoAppUser } from "@/permissions";
 import { getSession } from "@/services/dataStore";
-import { isCooperadoMobileGaPromoted, isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { cooperadoExibicaoFinanceiraUnificadaAoVivo } from "@/lib/cooperado/cooperadoExibicaoFinanceiraUnificada";
 import {
   cooperadoMobilePilotSnapshotFirstInicio,
   isCooperadoMobilePilotPerfActive,
@@ -214,7 +215,10 @@ function CooperadoDashboard() {
   const inicioPwaLeve = isCooperadoPwaMobileLeveUi();
   const appDataUiOn = cooperadoPwaUiSubscribesAppData() && tabActive;
   const { user } = useAuth();
-  const inicioSnapshotFirst = inicioPwaLeve || cooperadoMobilePilotSnapshotFirstInicio(user);
+  const exibicaoUnificadaAoVivo = cooperadoExibicaoFinanceiraUnificadaAoVivo(user);
+  const inicioSnapshotFirst =
+    !exibicaoUnificadaAoVivo &&
+    (inicioPwaLeve || cooperadoMobilePilotSnapshotFirstInicio(user));
   const router = useRouter();
   const irEnviarFotoEntrega = useCallback(() => {
     setCooperadoOptimisticTab("/notas-pedido");
@@ -309,7 +313,7 @@ function CooperadoDashboard() {
 
   /** Modo mensageiro: HB só no runSync (Atualizar) — sem pilot periódico na UI. */
   useSyncContaCoopValorReceberPilot(
-    !messenger && !inicioSnapshotFirst && contaCoopSync
+    contaCoopSync && (exibicaoUnificadaAoVivo || (!messenger && !inicioSnapshotFirst))
       ? { ...contaCoopSync, user, initialDelayMs: 3_000 }
       : undefined
   );
@@ -335,8 +339,7 @@ function CooperadoDashboard() {
       syncing: syncingForUi,
       apresentacaoConsolidada,
       carregandoValoresFinanceiros,
-      leituraSomentePwa:
-        (messenger || inicioSnapshotFirst) && !isCooperadoMobilePilot(user),
+      leituraSomentePwa: !exibicaoUnificadaAoVivo && (messenger || inicioSnapshotFirst),
       tabAtiva: tabActive,
     });
 
@@ -455,8 +458,11 @@ function CooperadoDashboard() {
     apresentacaoConsolidada,
   ]);
 
-  const viewRaw =
-    messenger || inicioSnapshotFirst ? pwaInicioView ?? pwaInicioViewStickyRef.current : viewLive;
+  const viewRaw = exibicaoUnificadaAoVivo
+    ? viewLive ?? pwaInicioView ?? pwaInicioViewStickyRef.current
+    : messenger || inicioSnapshotFirst
+      ? pwaInicioView ?? pwaInicioViewStickyRef.current
+      : viewLive;
   const view = sanitizeCooperadoPwaInicioDashboardView(viewRaw);
 
   const mesAtual = getCurrentMesReferencia();

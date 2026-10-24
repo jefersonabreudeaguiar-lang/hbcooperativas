@@ -38,6 +38,7 @@ import {
   cooperadoGaValorReceberExibicaoResolvida,
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { resolverMotorCardInicioParidadeFinanceiro } from "@/lib/cooperado/cooperadoInicioCardParidadeMotor";
+import { cooperadoExibicaoFinanceiraUnificadaAoVivo } from "@/lib/cooperado/cooperadoExibicaoFinanceiraUnificada";
 import {
   lerCooperadoPwaFichaResumoSnapshot,
   resolveParidadeFromFichaResumoSnapshot,
@@ -180,6 +181,36 @@ export function useCooperadoInicioValorReceberCardState(input: {
   }, [apresentacaoConsolidada, input.syncing, hbDescontosRevision]);
 
   const resolved = useMemo(() => {
+    if (
+      cooperadoExibicaoFinanceiraUnificadaAoVivo(sessionUser) &&
+      tabAtiva &&
+      input.cooperadoId
+    ) {
+      const dataUnified =
+        input.data ?? (isAppDataWarm() ? getData() : null);
+      if (dataUnified) {
+        const cooperativaIdCard = resolverCooperativaIdReciboLatch(
+          dataUnified,
+          input.cooperadoId,
+          input.cooperativaId
+        );
+        const paridadeMotor = resolverMotorCardInicioParidadeFinanceiro(
+          dataUnified,
+          input.cooperadoId,
+          cooperativaIdCard
+        );
+        return {
+          display: paridadeMotor.motor,
+          latch: {
+            motorRevision: paridadeMotor.revision,
+            display: paridadeMotor.motor,
+            hadPendencia: cooperadoMotorTemObrigacaoReceber(paridadeMotor.motor),
+          },
+          atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+          gravarPersistencia: true,
+        };
+      }
+    }
     if (leituraSomentePwa) {
       if (!tabAtiva) {
         const persistidoOcioso = persistidoExibicaoPwaLeve(persistido);
@@ -560,8 +591,11 @@ export function useCooperadoInicioValorReceberCardState(input: {
     appDataWarmKey,
     sessionUser?.id,
     sessionUser?.cooperativaId,
+    sessionUser?.role,
     apresentacaoCard,
-    ...(leituraSomentePwa ? [] : [hbDescontosRevision]),
+    ...(leituraSomentePwa && !cooperadoExibicaoFinanceiraUnificadaAoVivo(sessionUser)
+      ? []
+      : [hbDescontosRevision]),
   ]);
 
   latchRef.current = resolved.latch;

@@ -16,8 +16,5 @@ export const COOPERADO_GA_FINANCE_RECOVERY_REPETE_SE_ZERADO = true;
 /** Splash pré-React não mostra nome/valor — só esqueleto até o Início montar. */
 export const COOPERADO_BOOT_SHELL_SEM_CARD_ANTECIPADO = true;
 
-/**
- * Fase 2 — todos os cooperados GA na aba Financeiro (igual piloto).
- * Enquanto false: só Jeferson (`isCooperadoMobilePilot`) lê AppData/BIC ao vivo no Financeiro.
- */
-export const COOPERADO_GA_FINANCEIRO_TAB_APPDATA_AO_VIVO = false;
+/** @deprecated Use `cooperadoExibicaoFinanceiraUnificadaAoVivo` — mantido para testes de contrato. */
+export const COOPERADO_GA_FINANCEIRO_TAB_APPDATA_AO_VIVO = true;
