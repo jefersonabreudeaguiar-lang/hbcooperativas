@@ -22,6 +22,8 @@ export function cooperadoApresentacaoFinanceiraConsolidadaForSession(
     return cooperadoApresentacaoFinanceiraConsolidada(input);
   }
   if (input.role !== "cooperado") return true;
+  /** Início: card A receber não pode ficar preso em “carregando” sem AppData. */
+  if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) return true;
   if (input.exibirComDadosLocais) return true;
   if (cooperadoPilotFinanceiroExibirComSnapshotsLocais(user)) return true;
   if (cooperadoPilotAppDataTemFinanceiroLocal(user)) return true;

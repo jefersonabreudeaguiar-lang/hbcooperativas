@@ -90,7 +90,9 @@ export const COOPERADO_PILOT_TRIPLE_MOUNT_HREFS: readonly string[] = [
 export function cooperadoPilotTripleMountEnabled(
   user?: Omit<User, "password"> | null
 ): boolean {
-  return isCooperadoMobilePilotPerfActive(user);
+  void user;
+  /** Desligado — triple-mount + cache LRU causava Início só com “Olá” após rollback de build. */
+  return false;
 }
 
 export function cooperadoPilotInstantBottomTabSwitchEnabled(
