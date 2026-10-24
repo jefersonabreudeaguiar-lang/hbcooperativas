@@ -84,6 +84,11 @@ export function sanitizeCooperadoPwaInicioDashboardView(
   view: CooperadoPwaInicioDashboardView | null | undefined
 ): CooperadoPwaInicioDashboardView | null {
   if (!view || typeof view.cooperadoId !== "string" || !view.cooperadoId.trim()) return null;
+  const nomeOk =
+    view.cooperado &&
+    typeof view.cooperado.nomeCompleto === "string" &&
+    view.cooperado.nomeCompleto.trim().length > 0;
+  if (!nomeOk) return null;
   const mes = mesReferenciaValido(view.mes) ?? getCurrentMesReferencia();
   const valorBase = view.valorReceber;
   const valorReceber =

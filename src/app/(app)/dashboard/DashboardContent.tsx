@@ -447,7 +447,11 @@ function CooperadoDashboard() {
 
   const viewLive = useMemo(() => {
     if (!appDataUiOn || !deferredInicioRevision || !isAppDataWarm() || !user?.cooperadoId) return null;
-    return buildCooperadoPwaInicioDashboardView(getData(), user, apresentacaoConsolidada);
+    try {
+      return buildCooperadoPwaInicioDashboardView(getData(), user, apresentacaoConsolidada);
+    } catch {
+      return null;
+    }
   }, [
     appDataUiOn,
     deferredInicioRevision,
@@ -467,8 +471,8 @@ function CooperadoDashboard() {
 
   const mesAtual = getCurrentMesReferencia();
   const nomeFromSnapshot =
-    view?.cooperado?.nomeCompleto.split(" ")[0] ??
-    pwaInicioViewStickyRef.current?.cooperado?.nomeCompleto.split(" ")[0];
+    view?.cooperado?.nomeCompleto?.split(" ")[0] ??
+    pwaInicioViewStickyRef.current?.cooperado?.nomeCompleto?.split(" ")[0];
   const coopNomeEarly =
     view?.coopNome ?? (user && isAppDataWarm() ? getUserCooperativaNome(user, getData()) : "");
 
@@ -546,7 +550,7 @@ function CooperadoDashboardInicioView({
     cnpjDigits,
   } = view;
 
-  const nomePrimeiro = cooperado?.nomeCompleto.split(" ")[0];
+  const nomePrimeiro = cooperado?.nomeCompleto?.split(" ")[0];
 
   return (
     <div className="space-y-6 max-w-3xl">

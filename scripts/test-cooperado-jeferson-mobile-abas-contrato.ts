@@ -22,7 +22,7 @@ import {
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.ok(APP_BUILD_VERSION >= 633, "build 633+ baseline GA cooperado");
+assert.ok(APP_BUILD_VERSION >= 634, "build 634+ inicio sem crash nomeCompleto");
 
 const forbidden = [
   "useCooperadoParidadeExibicaoJeferson",
@@ -49,8 +49,12 @@ for (const href of COOPERADO_BOTTOM_TAB_HREFS) {
   }
 }
 
+const snap = read("src/lib/cooperado/cooperadoPwaInicioDashboardSnapshot.ts");
+assert.ok(snap.includes("nomeOk"));
+
 const dash = read(tabPages["/dashboard"]!);
 assert.ok(dash.includes("cooperadoMotorAoVivo"));
+assert.ok(dash.includes("nomeCompleto?.split"));
 assert.ok(dash.includes("useCooperadoInicioValorReceberCardState"));
 assert.ok(dash.includes("CooperadoMobileBuildBadge") || read("src/components/layout/AppLayout.tsx").includes("CooperadoMobileBuildBadge"));
 
