@@ -161,7 +161,10 @@ function MercadoParceiroContent() {
       return;
     }
     void acceptMercadoNfAvisoComunicado()
-      .then(() => reload())
+      .then((res) => {
+        if (res.needsMercadoNfAvisoAck === false) setNeedsMercadoNfAvisoAck(false);
+        return reload();
+      })
       .catch(() => {});
   }, [parceiro, needsMercadoNfAvisoAck, reload]);
 
@@ -421,7 +424,10 @@ function MercadoParceiroContent() {
           partnerId={parceiro.id}
           cooperativaCnpj={parceiro.cooperativaCnpj}
           needsAck={needsMercadoNfAvisoAck}
-          onAcknowledged={reload}
+          onAcknowledged={async () => {
+            setNeedsMercadoNfAvisoAck(false);
+            await reload();
+          }}
         />
       )}
 

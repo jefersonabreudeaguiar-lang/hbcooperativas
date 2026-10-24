@@ -1587,6 +1587,10 @@ function mapParceiroRow(row: Record<string, unknown>): ContaCoopParceiro {
     partnerTermsAcceptedBy: row.partner_terms_accepted_by ? String(row.partner_terms_accepted_by) : null,
     partnerTermsDiscountSnapshot:
       row.partner_terms_discount_snapshot != null ? Number(row.partner_terms_discount_snapshot) : null,
+    partnerNfAvisoAckVersion: row.partner_nf_aviso_ack_version
+      ? String(row.partner_nf_aviso_ack_version)
+      : null,
+    partnerNfAvisoAckAt: row.partner_nf_aviso_ack_at ? String(row.partner_nf_aviso_ack_at) : null,
     hasFinancialPin: Boolean(row.pin_hash),
     pinLockedUntil: row.pin_locked_until ? String(row.pin_locked_until) : null,
     createdAt: String(row.created_at),
@@ -3056,11 +3060,26 @@ export async function acceptPartnerTerms(
   return mapParceiroRow(data as Record<string, unknown>);
 }
 
+function partnerRowAckedMercadoNfAviso(parceiro: ContaCoopParceiro): boolean {
+  return parceiro.partnerNfAvisoAckVersion === HB_CREDIT_MERCADO_NF_AVISO_POLICY_VERSION;
+}
+
 export async function partnerHasAckedMercadoNfAviso(
   supabase: SupabaseClient,
   parceiro: ContaCoopParceiro
 ): Promise<boolean> {
   if (!isHbCreditMercadoNfDispensada()) return true;
+  if (partnerRowAckedMercadoNfAviso(parceiro)) return true;
+
+  const { data: row } = await supabase
+    .from("hb_credit_partners")
+    .select("partner_nf_aviso_ack_version")
+    .eq("id", parceiro.id)
+    .maybeSingle();
+  if (String(row?.partner_nf_aviso_ack_version ?? "") === HB_CREDIT_MERCADO_NF_AVISO_POLICY_VERSION) {
+    return true;
+  }
+
   const digits = normalizeCnpj(parceiro.cooperativaCnpj);
   const { data } = await supabase
     .from("hb_credit_audit_log")
@@ -3092,8 +3111,19 @@ export async function acceptPartnerMercadoNfAviso(
   const already = await partnerHasAckedMercadoNfAviso(supabase, parceiro);
   if (already) return true;
 
+  const now = new Date().toISOString();
   const digits = normalizeCnpj(parceiro.cooperativaCnpj);
-  const { error } = await supabase.from("hb_credit_audit_log").insert({
+  const { error: partnerErr } = await supabase
+    .from("hb_credit_partners")
+    .update({
+      partner_nf_aviso_ack_version: HB_CREDIT_MERCADO_NF_AVISO_POLICY_VERSION,
+      partner_nf_aviso_ack_at: now,
+      partner_nf_aviso_ack_by: appUserId,
+      updated_at: now,
+    })
+    .eq("id", parceiro.id);
+
+  const { error: auditErr } = await supabase.from("hb_credit_audit_log").insert({
     cooperative_cnpj: digits,
     actor: appUserId,
     action: "PARTNER_NF_AVISO_ACKED",
@@ -3101,7 +3131,9 @@ export async function acceptPartnerMercadoNfAviso(
     resource_id: parceiro.id,
     metadata: { version: HB_CREDIT_MERCADO_NF_AVISO_POLICY_VERSION },
   });
-  return !error;
+
+  if (!partnerErr) return true;
+  return !auditErr;
 }
 
 export async function resolvePartnerNeedsMercadoNfAvisoAck(
