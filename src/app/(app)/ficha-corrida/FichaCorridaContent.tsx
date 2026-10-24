@@ -8,7 +8,7 @@ import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, Cre
 import { useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
 import { useEnsureAppDataWarm } from "@/hooks/useEnsureAppDataWarm";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
-import { getData, isAppDataWarm } from "@/services/dataStore";
+import { isAppDataWarm } from "@/services/dataStore";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { useCooperadoFinanceiroUiSnapshot } from "@/hooks/useCooperadoFinanceiroUiSnapshot";
 import { useCooperadoMessengerReadModelRevision } from "@/hooks/useCooperadoMessengerReadModelRevision";
