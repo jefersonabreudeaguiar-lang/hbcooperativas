@@ -20,8 +20,9 @@ assert.equal(COOPERADO_BOOT_SHELL_PINTA_INICIO_LOCAL, true);
 
 const boot = buildInlineCooperadoBootShellScript();
 assert.match(boot, /paintInicio/);
-assert.match(boot, /hb\.coop\.inicioCard\.v8:/);
 assert.match(boot, /s\.role==="cooperado"/);
+assert.doesNotMatch(boot, /A receber/, "splash não mostra valor cacheado antes do React");
+assert.match(boot, /Financeiro/, "splash leve com abas do app");
 assert.doesNotMatch(
   boot,
   /if\(sessionStorage\.getItem\("[^"]+"\)==="1"\)\{el\.style\.display="flex";el\.setAttribute\("aria-hidden","false"\);return;\}try\{if\(sessionStorage\.getItem/,
@@ -55,5 +56,16 @@ const gate = readFileSync(
   "utf8"
 );
 assert.doesNotMatch(gate, /min-h-screen bg-gray-50/, "gate não vira tela cheia na abertura");
+
+const dismiss = readFileSync(
+  join(root, "src/components/performance/CooperadoBootShellDismiss.tsx"),
+  "utf8"
+);
+assert.match(dismiss, /data-cooperado-inicio-ready/, "splash só some com Início completo no dashboard");
+assert.match(dismiss, /data-cooperado-inicio-loading/, "GA mantém splash enquanto carrega viewLive");
+
+const dash = readFileSync(join(root, "src/app/(app)/dashboard/DashboardContent.tsx"), "utf8");
+assert.match(dash, /data-cooperado-inicio-ready="1"/, "Início completo marca pronto para dismiss");
+assert.match(dash, /data-cooperado-inicio-loading="1"/, "GA não pinta Olá+valor antes do Início completo");
 
 console.log("ok: abertura do cooperado pinta o Início na hora");

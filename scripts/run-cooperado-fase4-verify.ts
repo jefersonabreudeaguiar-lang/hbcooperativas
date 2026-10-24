@@ -11,6 +11,7 @@ const steps: { title: string; cmd: string; args: string[] }[] = [
   { title: "Preservar app (cooperado)", cmd: "npm", args: ["run", "gate:preservar-app"] },
   { title: "Fase 2 fluidez v566", cmd: "npx", args: ["tsx", "scripts/test-cooperado-fase2-tab-fluidez-v566.ts"] },
   { title: "GA auto-sync revisão nuvem", cmd: "npx", args: ["tsx", "scripts/test-cooperado-ga-auto-revision-sync.ts"] },
+  { title: "Início completo GA", cmd: "npx", args: ["tsx", "scripts/test-cooperado-inicio-completo-ga.ts"] },
   { title: "Financeiro UI snapshot", cmd: "npx", args: ["tsx", "scripts/test-cooperado-financeiro-ui-snapshot.ts"] },
   { title: "Início card BIC × recibo", cmd: "npx", args: ["tsx", "scripts/test-cooperado-inicio-card-bic-recibo-legado.ts"] },
   { title: "Início card policy", cmd: "npx", args: ["tsx", "scripts/test-cooperado-inicio-card-policy.ts"] },

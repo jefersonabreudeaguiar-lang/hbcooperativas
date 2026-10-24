@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v646
+
+- **Cooperado (Início):** após ~6s de abertura fluida, GA monta o **Início completo** (pendências, comunicados, etc.), não só Olá + A receber; splash inicial virou esqueleto com abas (sem valor cacheado enganoso).
+
 ## v645
 
 - **Cooperado (todos = GA):** quando a revisão na nuvem muda (nota, ficha, pagamento do responsável), sync **silenciosa** automática — pulso BIC + foreground — sem exigir tocar em Atualizar; mantém pausa na abertura para não travar abas.

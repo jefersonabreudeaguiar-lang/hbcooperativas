@@ -224,7 +224,6 @@ function CooperadoDashboard() {
       : inicioPwaLeve || cooperadoMobilePilotSnapshotFirstInicio(user);
 
   useLayoutEffect(() => {
-    dismissCooperadoBootShell();
     if (user?.role === "cooperado") markCooperadoInicioAberturaQuiescence();
   }, [user?.role]);
 
@@ -472,7 +471,6 @@ function CooperadoDashboard() {
   const deferredInicioRevision = useDeferredValue(inicioDomainsRevision);
 
   const viewLive = useMemo(() => {
-    if (cooperadoMotorAoVivo) return null;
     if (!tabActive || !appDataUiOn || !deferredInicioRevision || !isAppDataWarm() || !user?.cooperadoId) {
       return null;
     }
@@ -501,8 +499,10 @@ function CooperadoDashboard() {
       ? pwaInicioView ?? pwaInicioViewStickyRef.current
       : viewLive;
   const view = tabActive ? viewRaw : null;
-  /** GA mobile: painel leve com card ao vivo — evita snapshot pesado que some após rollback. */
-  const viewUi = cooperadoMotorAoVivo ? null : view;
+  /** GA: snapshot do Início na 1ª pintura; viewLive substitui quando pronto (quiescência só adia recálculo pesado). */
+  const viewUi = cooperadoMotorAoVivo
+    ? viewLive ?? pwaInicioView ?? pwaInicioViewStickyRef.current
+    : view;
 
   const mesAtual = getCurrentMesReferencia();
   const nomeFromSnapshot =
@@ -511,6 +511,11 @@ function CooperadoDashboard() {
   const coopNomeEarly =
     view?.coopNome ?? (user && isAppDataWarm() ? getUserCooperativaNome(user, getData()) : "");
 
+  useEffect(() => {
+    if (!viewUi) return;
+    dismissCooperadoBootShell();
+  }, [viewUi]);
+
   return (
     <CooperadoInicioSafeRoot>
       <CooperadoInicioCooperadoLiveRoot
@@ -518,6 +523,13 @@ function CooperadoDashboard() {
         cooperativaIdCard={cooperativaIdCard}
       >
         {!viewUi ? (
+        cooperadoMotorAoVivo ? (
+          <div
+            className="min-h-[12rem] max-w-3xl"
+            data-cooperado-inicio-loading="1"
+            aria-hidden="true"
+          />
+        ) : (
         <div className="space-y-6 max-w-3xl" data-cooperado-inicio-shell="1">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
@@ -538,6 +550,7 @@ function CooperadoDashboard() {
           </div>
           <CooperadoHbCreditInicioSection hbCredit={hbCredit} cnpjDigits={cnpjHbDigits} />
         </div>
+        )
       ) : (
         <CooperadoDashboardInicioView
           view={viewUi!}
@@ -590,7 +603,11 @@ function CooperadoDashboardInicioView({
   const nomePrimeiro = cooperado?.nomeCompleto?.split(" ")[0];
 
   return (
-    <div className="space-y-6 max-w-3xl" data-cooperado-inicio-shell="1">
+    <div
+      className="space-y-6 max-w-3xl"
+      data-cooperado-inicio-shell="1"
+      data-cooperado-inicio-ready="1"
+    >
       <div>
         <h1 className="text-2xl font-bold text-gray-900">
           <CooperadoInicioOláTitulo nomeFromView={nomePrimeiro} />
