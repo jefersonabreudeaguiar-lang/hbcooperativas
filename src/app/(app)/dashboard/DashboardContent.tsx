@@ -126,6 +126,7 @@ import {
   STAFF_PRIMEIRO_DIA_SENHA_TITULO,
 } from "@/lib/staff/staffPrimeiroDiaContratos";
 import { CooperadoInicioValorReceberCard } from "@/components/cooperado/CooperadoInicioValorReceberCard";
+import { CooperadoInicioSafeRoot } from "@/components/cooperado/CooperadoInicioSafeRoot";
 import {
   COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
   isCooperadoPwaMobileLeveUi,
@@ -446,13 +447,16 @@ function CooperadoDashboard() {
   const deferredInicioRevision = useDeferredValue(inicioDomainsRevision);
 
   const viewLive = useMemo(() => {
-    if (!appDataUiOn || !deferredInicioRevision || !isAppDataWarm() || !user?.cooperadoId) return null;
+    if (!tabActive || !appDataUiOn || !deferredInicioRevision || !isAppDataWarm() || !user?.cooperadoId) {
+      return null;
+    }
     try {
       return buildCooperadoPwaInicioDashboardView(getData(), user, apresentacaoConsolidada);
     } catch {
       return null;
     }
   }, [
+    tabActive,
     appDataUiOn,
     deferredInicioRevision,
     user?.id,
@@ -467,7 +471,7 @@ function CooperadoDashboard() {
     : messenger || inicioSnapshotFirst
       ? pwaInicioView ?? pwaInicioViewStickyRef.current
       : viewLive;
-  const view = sanitizeCooperadoPwaInicioDashboardView(viewRaw);
+  const view = tabActive ? sanitizeCooperadoPwaInicioDashboardView(viewRaw) : null;
 
   const mesAtual = getCurrentMesReferencia();
   const nomeFromSnapshot =
@@ -477,11 +481,12 @@ function CooperadoDashboard() {
     view?.coopNome ?? (user && isAppDataWarm() ? getUserCooperativaNome(user, getData()) : "");
 
   return (
-    <CooperadoInicioCooperadoLiveRoot
-      cooperadoIdCard={cooperadoIdCard}
-      cooperativaIdCard={cooperativaIdCard}
-    >
-      {!view ? (
+    <CooperadoInicioSafeRoot>
+      <CooperadoInicioCooperadoLiveRoot
+        cooperadoIdCard={cooperadoIdCard}
+        cooperativaIdCard={cooperativaIdCard}
+      >
+        {!view ? (
         <div className="space-y-6 max-w-3xl">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
@@ -511,8 +516,9 @@ function CooperadoDashboard() {
           hbCredit={hbCredit}
           cnpjHbFallback={cnpjHbDigits}
         />
-      )}
-    </CooperadoInicioCooperadoLiveRoot>
+        )}
+      </CooperadoInicioCooperadoLiveRoot>
+    </CooperadoInicioSafeRoot>
   );
 }
 

@@ -22,7 +22,7 @@ import {
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.ok(APP_BUILD_VERSION >= 634, "build 634+ inicio sem crash nomeCompleto");
+assert.ok(APP_BUILD_VERSION >= 635, "build 635+ inicio keep-alive + safe root");
 
 const forbidden = [
   "useCooperadoParidadeExibicaoJeferson",
@@ -52,18 +52,20 @@ for (const href of COOPERADO_BOTTOM_TAB_HREFS) {
 const snap = read("src/lib/cooperado/cooperadoPwaInicioDashboardSnapshot.ts");
 assert.ok(snap.includes("nomeOk"));
 
+const keepAlive = read("src/components/performance/CooperadoMobileTabKeepAlive.tsx");
+assert.ok(keepAlive.includes("markCooperadoTabPathChange"));
+assert.ok(keepAlive.includes("não pode esconder o painel ativo"));
+
 const dash = read(tabPages["/dashboard"]!);
 assert.ok(dash.includes("cooperadoMotorAoVivo"));
 assert.ok(dash.includes("nomeCompleto?.split"));
+assert.ok(dash.includes("CooperadoInicioSafeRoot"));
 assert.ok(dash.includes("useCooperadoInicioValorReceberCardState"));
 assert.ok(dash.includes("CooperadoMobileBuildBadge") || read("src/components/layout/AppLayout.tsx").includes("CooperadoMobileBuildBadge"));
 
 const ficha = read(tabPages["/ficha-corrida"]!);
 assert.ok(ficha.includes("financeiroAppDataAoVivo"));
 assert.ok(ficha.includes("cooperadoGaPausaTrabalhoFinanceiroPesado"));
-
-const keepAlive = read("src/components/performance/CooperadoMobileTabKeepAlive.tsx");
-assert.ok(keepAlive.includes("markCooperadoTabPathChange"));
 
 const gaUser = {
   id: "u-jeferson",
