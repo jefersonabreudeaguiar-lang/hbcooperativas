@@ -540,10 +540,6 @@ export function resolverNomeCooperadoGestao(
     if (!notaPertenceCooperativa(data, n, cooperativaId) || n.cooperadoId !== cooperadoId) continue;
     if (n.cooperadoNomeSnapshot?.trim()) return n.cooperadoNomeSnapshot.trim();
   }
-  for (const p of data.pagamentosCooperado ?? []) {
-    if (p.cooperativaId !== cooperativaId || p.cooperadoId !== cooperadoId) continue;
-    if (p.cooperadoNome?.trim()) return p.cooperadoNome.trim();
-  }
   return "";
 }
 
@@ -623,7 +619,7 @@ export function listCooperadosDaCooperativa(data: AppData, cooperativaId?: strin
     if (p.cooperativaId !== cooperativaId) continue;
     tentarIncluirOperacional(
       p.cooperadoId,
-      p.cooperadoNome,
+      undefined,
       "Vinculado por pagamento registrado.",
       p.createdAt,
       p.pagoEm
