@@ -7,7 +7,7 @@ import { recordBicParidadePulse } from "@/lib/bic/bicParidadeTelemetry";
 import { watchBicCooperativaCloudRevision } from "@/lib/bic/bicRevisionWatch";
 import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoBicMobileAuthority";
 import { markCooperadoBicSessionRematerialized } from "@/lib/cooperado/cooperadoBicSessionReinforcementSkip";
-import { runCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
+import { requestCooperadoStaffRevisionSync } from "@/services/syncRequest";
 import { cooperadoRematerializarFinanceiroLocalSePossivel } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import { cooperadoPilotForcarRematerializacaoFinanceira } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
 import { dispatchCooperadoPwaLeveUiSnapshotRefresh } from "@/lib/cooperado/cooperadoPwaLeveUiEvents";
@@ -82,12 +82,9 @@ async function runRevisionPulse(user: Omit<User, "password">): Promise<void> {
 
     const changed = cloudRevisionChangedSinceApplied(digits, remote);
     if (changed) {
-      recordBicParidadePulse("lightPull");
-      await runCooperadoGaSyncBaseInformacoesFinanceiras(user, {
-        bicSession: true,
-        light: true,
-      });
-      rematerializarSilencioso(user);
+      recordBicParidadePulse("operacionalEvent");
+      requestCooperadoStaffRevisionSync();
+      scheduleCooperadoBicHybridIdleTask(() => rematerializarSilencioso(user), 4_000);
       markCooperadoBicFinanceiroFresh();
       return;
     }

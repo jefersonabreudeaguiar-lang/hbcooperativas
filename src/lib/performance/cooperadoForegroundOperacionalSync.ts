@@ -293,12 +293,20 @@ export async function runCooperadoForegroundOperacionalCheck(
     !cooperadoCloudRevisionNotasInSyncWithApplied(digits, remote);
 
   if (session?.role === "cooperado" && isCooperadoMobileGaPromoted(session)) {
+    if (deferFull) return false;
     if (notasAlteradasNaNuvem && remote) {
       void runCooperadoNotasContratosLightPull({
         cnpj: digits,
         user: session,
         remote,
       });
+    }
+    if (
+      reason === "revision_changed" ||
+      reason === "never_applied_revision" ||
+      reason === "stale_local_sync"
+    ) {
+      requestCooperadoStaffRevisionSync();
     }
     return true;
   }

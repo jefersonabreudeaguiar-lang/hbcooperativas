@@ -6,6 +6,11 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v645
+
+- **Cooperado (todos = GA):** quando a revisão na nuvem muda (nota, ficha, pagamento do responsável), sync **silenciosa** automática — pulso BIC + foreground — sem exigir tocar em Atualizar; mantém pausa na abertura para não travar abas.
+- **Doc:** `docs/plano-mestre/COOPERADO-EXPERIENCIA-UNICA-E-SYNC-AUTOMATICO.md`.
+
 ## v644
 
 - **Cooperado (Fase 3 — valor + nuvem):** com abas fluidas (v566+), sync/garantia voltam a puxar a nuvem quando a tela está zerada sem bloquear a abertura; piloto Jeferson confirmou A receber, ficha e Financeiro alinhados.
