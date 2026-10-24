@@ -10,7 +10,7 @@ import { APP_BUILD_VERSION } from "../src/lib/appBuildVersion.ts";
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.ok(APP_BUILD_VERSION >= 622, "build 622+ início sincronizado com financeiro");
+assert.ok(APP_BUILD_VERSION >= 623, "build 623+ paridade financeiro sem zerar início");
 
 const hydrate = read("src/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate.ts");
 assert.ok(hydrate.includes("cooperadoFinanceiroExibicaoDivergeDeAppDataLive"));
@@ -53,6 +53,7 @@ assert.ok(dash.includes("leituraSomentePwa: cooperadoMotorAoVivo ? false"));
 const sync = read("src/lib/cooperado/cooperadoInicioSincronizadoComFinanceiro.ts");
 assert.ok(sync.includes("cooperadoCardInicioMotorParidadeFinanceiro"));
 assert.ok(sync.includes("cooperadoLeituraFinanceiraExibicao"));
+assert.ok(sync.includes("cooperadoApresentacaoFinanceiroUiCooperado"));
 
 assert.ok(hook.includes("cooperadoInicioSincronizadoComFinanceiro"));
 assert.ok(ficha.includes("cooperadoInicioSincronizadoComFinanceiro(user)"));

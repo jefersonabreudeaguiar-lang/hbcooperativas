@@ -602,6 +602,10 @@ function FichaCorridaPageInner() {
       coopId &&
       live
     ) {
+      if (liveValor > 0.005 || liquidadoPeloResponsavel) return withHybrid(live);
+      if (fromSnapGuard && snapValor > 0.005 && !liquidadoPeloResponsavel) {
+        return withHybrid(fromSnapGuard);
+      }
       return withHybrid(live);
     }
     if (fromSnapGuard && snapValor > 0.005 && liveValor <= 0.005 && !liquidadoPeloResponsavel) {

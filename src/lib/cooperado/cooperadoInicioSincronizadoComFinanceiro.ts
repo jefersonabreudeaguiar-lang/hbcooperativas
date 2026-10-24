@@ -4,7 +4,15 @@
 import type { AppData } from "@/types";
 import type { User } from "@/types";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import {
+  cooperadoPilotAppDataTemFinanceiroLocal,
+  cooperadoPilotFinanceiroExibirComSnapshotsLocais,
+} from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
+import {
+  cooperadoLocalResumeReady,
+  isCooperadoInstantResumeEnabled,
+} from "@/lib/performance/cooperadoColdStart";
 import {
   aplicarDebitoHbHibridoNaParidade,
   linhasOverlayDebitoHbAReceber,
@@ -20,14 +28,31 @@ export function cooperadoInicioSincronizadoComFinanceiro(
   return isCooperadoMobileGaPromoted(user);
 }
 
+/** Mesma regra da aba Financeiro (`FichaCorridaContent`). */
+export function cooperadoApresentacaoFinanceiroUiCooperado(
+  user: Omit<User, "password"> | null | undefined,
+  apresentacaoConsolidada: boolean,
+  cooperadoPagamentosHydrated: boolean
+): boolean {
+  if (!user || user.role !== "cooperado") return apresentacaoConsolidada;
+  return (
+    apresentacaoConsolidada ||
+    cooperadoPilotFinanceiroExibirComSnapshotsLocais(user) ||
+    cooperadoPilotAppDataTemFinanceiroLocal(user) ||
+    (cooperadoPagamentosHydrated &&
+      isCooperadoInstantResumeEnabled() &&
+      cooperadoLocalResumeReady(user))
+  );
+}
+
 export function cooperadoCardInicioMotorParidadeFinanceiro(
   data: AppData,
   cooperadoId: string,
   cooperativaId: string | undefined,
-  apresentacaoConsolidada?: boolean
+  apresentacaoFinanceiroUi?: boolean
 ): { motor: InicioCardMotorSnapshot; revision: string } {
   const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, cooperativaId, {
-    apresentacaoConsolidada,
+    apresentacaoConsolidada: apresentacaoFinanceiroUi,
   });
   const overlayHb = linhasOverlayDebitoHbAReceber(cooperadoId, cooperativaId);
   const paridadeHb = aplicarDebitoHbHibridoNaParidade(paridade, overlayHb);

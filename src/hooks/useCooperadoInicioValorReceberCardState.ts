@@ -39,9 +39,11 @@ import {
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { resolverMotorCardInicioParidadeFinanceiro } from "@/lib/cooperado/cooperadoInicioCardParidadeMotor";
 import {
+  cooperadoApresentacaoFinanceiroUiCooperado,
   cooperadoCardInicioMotorParidadeFinanceiro,
   cooperadoInicioSincronizadoComFinanceiro,
 } from "@/lib/cooperado/cooperadoInicioSincronizadoComFinanceiro";
+import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
   lerCooperadoPwaFichaResumoSnapshot,
   resolveParidadeFromFichaResumoSnapshot,
@@ -109,6 +111,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
   atualizando: boolean;
 } {
   const { user: sessionUser } = useAuth();
+  const { cooperadoPagamentosHydrated } = useSyncStatus();
   const latchRef = useRef<InicioCardLatchState | null>(null);
   const tenantKeyRef = useRef("");
 
@@ -171,6 +174,11 @@ export function useCooperadoInicioValorReceberCardState(input: {
   const hbDescontosRevision = useContaCoopDescontosRevision();
 
   const apresentacaoConsolidada = input.apresentacaoConsolidada ?? false;
+  const apresentacaoFinanceiroUi = cooperadoApresentacaoFinanceiroUiCooperado(
+    sessionUser,
+    apresentacaoConsolidada,
+    cooperadoPagamentosHydrated
+  );
   const apresentacaoCard =
     isCooperadoMobilePilotPerfActive() ? true : apresentacaoConsolidada;
   const carregandoFinanceiro =
@@ -201,18 +209,38 @@ export function useCooperadoInicioValorReceberCardState(input: {
           dataPar,
           input.cooperadoId,
           cooperativaIdCard,
-          apresentacaoCard
+          apresentacaoFinanceiroUi
         );
-        return {
-          display: paridadeMotor.motor,
-          latch: {
-            motorRevision: paridadeMotor.revision,
+        if (cooperadoMotorTemObrigacaoReceber(paridadeMotor.motor)) {
+          return {
             display: paridadeMotor.motor,
-            hadPendencia: cooperadoMotorTemObrigacaoReceber(paridadeMotor.motor),
-          },
-          atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
-          gravarPersistencia: true,
-        };
+            latch: {
+              motorRevision: paridadeMotor.revision,
+              display: paridadeMotor.motor,
+              hadPendencia: true,
+            },
+            atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+            gravarPersistencia: true,
+          };
+        }
+        const autorizaZerar = cooperadoBicAutorizaZerarCardInicio(
+          dataPar,
+          input.cooperadoId,
+          cooperativaIdCard,
+          { tinhaValorExibido: cooperadoMotorTemObrigacaoReceber(persistido?.display ?? SNAPSHOT_VAZIO) }
+        );
+        if (autorizaZerar) {
+          return {
+            display: paridadeMotor.motor,
+            latch: {
+              motorRevision: paridadeMotor.revision,
+              display: paridadeMotor.motor,
+              hadPendencia: false,
+            },
+            atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+            gravarPersistencia: true,
+          };
+        }
       }
     }
     if (leituraSomentePwa) {
@@ -597,13 +625,28 @@ export function useCooperadoInicioValorReceberCardState(input: {
     sessionUser?.cooperativaId,
     sessionUser?.role,
     apresentacaoCard,
+    apresentacaoFinanceiroUi,
+    cooperadoPagamentosHydrated,
     ...(leituraSomentePwa ? [] : [hbDescontosRevision]),
   ]);
 
   latchRef.current = resolved.latch;
 
   const snapshotExibido = useMemo(() => {
-    if (cooperadoInicioSincronizadoComFinanceiro(sessionUser) && !leituraSomentePwa) {
+    if (
+      cooperadoInicioSincronizadoComFinanceiro(sessionUser) &&
+      !leituraSomentePwa &&
+      (cooperadoMotorTemObrigacaoReceber(resolved.display) ||
+        (input.cooperadoId &&
+          input.cooperativaId &&
+          isAppDataWarm() &&
+          cooperadoBicAutorizaZerarCardInicio(
+            getData(),
+            input.cooperadoId,
+            input.cooperativaId,
+            { tinhaValorExibido: cooperadoMotorTemObrigacaoReceber(persistido?.display ?? SNAPSHOT_VAZIO) }
+          )))
+    ) {
       return resolved.display;
     }
     let base = resolved.display;
