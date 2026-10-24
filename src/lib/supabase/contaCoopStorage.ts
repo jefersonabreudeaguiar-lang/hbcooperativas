@@ -2793,6 +2793,7 @@ export async function authorizePayment(
     actorUserId: string;
     cooperadoNome?: string;
     useCashback?: boolean;
+    phaseBStepUp?: boolean;
   }
 ): Promise<
   | {
@@ -2835,6 +2836,21 @@ export async function authorizePayment(
 
   if (!pinCheck.ok) return { ok: false, error: pinCheck.error };
   if (!intentCheck.ok) return { ok: false, error: intentCheck.error, code: intentCheck.code };
+
+  const { runHbCreditPhaseBPaymentGuard } = await import(
+    "@/modules/hb-credit/security/phaseBOperationsGuard"
+  );
+  const phaseB = await runHbCreditPhaseBPaymentGuard(supabase, {
+    cooperativeCnpj: input.cooperativaCnpj,
+    cooperadoId: accountCooperadoId,
+    partnerId: intentCheck.intent.parceiroId,
+    amountCents: intentCheck.intent.amountCents,
+    availableCents: intentCheck.limite.valorDisponivelCents,
+    phaseBStepUp: input.phaseBStepUp,
+  });
+  if (!phaseB.ok) {
+    return { ok: false, error: phaseB.error, code: phaseB.code };
+  }
 
   let cashbackAppliedCents = 0;
   if (input.useCashback) {

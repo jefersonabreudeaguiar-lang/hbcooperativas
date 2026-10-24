@@ -84,6 +84,7 @@
     "test:hb-credit-p0": "npx tsx scripts/test-hb-credit-p0-security.ts",
     "test:hb-credit-fail-closed-p0": "npx tsx scripts/test-hb-credit-fail-closed-p0.ts",
     "test:hb-credit-phase-a": "npx tsx scripts/test-hb-credit-phase-a.ts",
+    "test:hb-credit-phase-b": "npx tsx scripts/test-hb-credit-phase-b.ts",
     "test:hb-credit-pagar-ux": "npx tsx scripts/test-hb-credit-pagar-ux-contrato.ts",
     "test:mercado-nf-aviso-ack": "npx tsx scripts/test-mercado-nf-aviso-ack-contrato.ts",
     "test:owner-security": "npx tsx scripts/test-owner-security-foundation.ts",

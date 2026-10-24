@@ -419,6 +419,8 @@ export async function authorizeCreditPayment(input: {
   pin: string;
   idempotencyKey: string;
   useCashback?: boolean;
+  /** Confirmação reforçada (Fase B — 2º PIN em pagamento de risco). */
+  phaseBStepUp?: boolean;
 }): Promise<AuthorizeCreditPaymentResult> {
   const body = JSON.stringify(input);
   const postAuthorize = () =>
@@ -483,7 +485,9 @@ export async function authorizeCreditPayment(input: {
         attempt < maxAuthorizeAttempts - 1 &&
         (res.status === 503 || (data.code && AUTHORIZE_RETRY_CODES.has(data.code)));
       if (!retryable) {
-        throw new Error(mensagemErroAuthApi(res.status, serverMsg));
+        const err = new Error(mensagemErroAuthApi(res.status, serverMsg)) as Error & { code?: string };
+        err.code = data.code;
+        throw err;
       }
       await sleepMs(400 + attempt * 200);
       continue;
@@ -499,7 +503,11 @@ export async function authorizeCreditPayment(input: {
     await sleepMs(400 + attempt * 200);
   }
 
-  if (!res || !res.ok || !data.ok) throw new Error(data.error ?? "Pagamento recusado.");
+  if (!res || !res.ok || !data.ok) {
+    const err = new Error(data.error ?? "Pagamento recusado.") as Error & { code?: string };
+    err.code = data.code;
+    throw err;
+  }
 
   notifyHbCreditLimiteSynced({ immediate: true });
 

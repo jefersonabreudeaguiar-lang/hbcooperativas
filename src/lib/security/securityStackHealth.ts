@@ -41,6 +41,17 @@ export function buildSecurityStackHealth(env: NodeJS.ProcessEnv = process.env): 
       );
     }
   }
+  const phaseBShadow = env.HB_CREDIT_PHASE_B_SHADOW;
+  const phaseBEnforce = env.HB_CREDIT_PHASE_B_ENFORCE;
+  if (
+    phaseBShadow != null &&
+    ["false", "0", "off"].includes(phaseBShadow.trim().toLowerCase()) &&
+    ["true", "1", "on"].includes(String(phaseBEnforce ?? "").trim().toLowerCase())
+  ) {
+    recommendations.push(
+      "Fase B HB: enforce ativo — confirme limites HB_CREDIT_PHASE_B_* e monitore credit.phase_b_guard."
+    );
+  }
   if (!env.FIELD_ENCRYPTION_KEY?.trim() && isStaffMfaFeatureEnabled()) {
     recommendations.push("Defina FIELD_ENCRYPTION_KEY (32+ chars) para cifrar segredos MFA.");
   }

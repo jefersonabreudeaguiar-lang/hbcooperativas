@@ -81,6 +81,7 @@ function HbCreditPagarContent() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<HbCreditPaymentReceipt | null>(null);
+  const [phaseBStepUpPending, setPhaseBStepUpPending] = useState(false);
   const [contaLimite, setContaLimite] = useState<ContaCoopLimiteCooperado | null>(null);
   const [limiteContaRefreshing, setLimiteContaRefreshing] = useState(false);
   const autoPayPinRef = useRef("");
@@ -274,6 +275,7 @@ function HbCreditPagarContent() {
         pin: payPin,
         idempotencyKey: `pay:${intent.id}:${hbApiCooperadoId}`,
         useCashback: pagamentoCooperado ? false : useCashbackOnPay,
+        phaseBStepUp: phaseBStepUpPending,
       });
 
       if (typeof res.disponivelAposCents === "number") {
@@ -316,8 +318,17 @@ function HbCreditPagarContent() {
       clearHbCreditPaymentDraft();
       setPayPin("");
       autoPayPinRef.current = "";
+      setPhaseBStepUpPending(false);
       setSuccess(receipt);
     } catch (e) {
+      const code = (e as { code?: string }).code;
+      if (code === "HB_CREDIT_STEP_UP_REQUIRED") {
+        setPhaseBStepUpPending(true);
+        setPayPin("");
+        autoPayPinRef.current = "";
+        setError(e instanceof Error ? e.message : "Digite o PIN novamente para confirmar.");
+        return;
+      }
       setError(e instanceof Error ? e.message : "Não foi possível concluir o pagamento.");
     } finally {
       payInFlightRef.current = false;
@@ -339,6 +350,7 @@ function HbCreditPagarContent() {
     payPin,
     useCashbackOnPay,
     cashbackAvail,
+    phaseBStepUpPending,
   ]);
 
   const affordOk = limite && intent ? canAffordHbPaymentScanPreview(limite, intent.amountCents) : false;
@@ -517,7 +529,13 @@ function HbCreditPagarContent() {
             disabled={busy || hasPin === false}
             autoFocus
             label="Digite seu PIN"
-            hint={busy ? "Confirmando na nuvem…" : "Confirma automaticamente ao completar"}
+            hint={
+              busy
+                ? "Confirmando na nuvem…"
+                : phaseBStepUpPending
+                  ? "Confirmação extra de segurança — digite o PIN de novo"
+                  : "Confirma automaticamente ao completar"
+            }
           />
         </div>
 

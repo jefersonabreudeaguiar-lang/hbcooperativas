@@ -10,7 +10,8 @@ export type PlatformSecurityAction =
   | "admin.access"
   | "credit.reconciliation_alert"
   | "credit.post_payment_hb_sync"
-  | "credit.phase_a_guard";
+  | "credit.phase_a_guard"
+  | "credit.phase_b_guard";
 
 export async function recordPlatformSecurityEvent(input: {
   action: PlatformSecurityAction;
@@ -85,6 +86,33 @@ export async function recordHbCreditPhaseAGuardAudit(
     cooperativaCnpj: cooperativeCnpj,
     metadata: {
       priority: payload.wouldBlock ? "high" : "info",
+      ...payload,
+    },
+  });
+}
+
+export async function recordHbCreditPhaseBGuardAudit(
+  supabase: SupabaseClient,
+  cooperativeCnpj: string,
+  payload: {
+    cooperadoId: string;
+    partnerId: string;
+    amountCents: number;
+    assessmentStatus: string;
+    signals: string[];
+    wouldBlock: boolean;
+    wouldStepUp: boolean;
+    shadow: boolean;
+    phaseBStepUpProvided: boolean;
+    reasons: string[];
+    metrics: Record<string, unknown>;
+  }
+): Promise<void> {
+  await logSecurityEvent(supabase, {
+    action: "credit.phase_b_guard",
+    cooperativaCnpj: cooperativeCnpj,
+    metadata: {
+      priority: payload.wouldBlock || payload.wouldStepUp ? "high" : "info",
       ...payload,
     },
   });

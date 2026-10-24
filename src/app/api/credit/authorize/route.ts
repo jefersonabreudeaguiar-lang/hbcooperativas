@@ -106,6 +106,7 @@ export async function POST(request: Request) {
     actorUserId: gate.ctx.session?.sub ?? cooperadoId,
     cooperadoNome: String(body?.cooperadoNome ?? gate.ctx.session?.name ?? ""),
     useCashback: Boolean(body?.useCashback),
+    phaseBStepUp: Boolean(body?.phaseBStepUp),
   };
 
   let result = await authorizePayment(supabase, payInput);

@@ -24,6 +24,7 @@ assert.match(api, /void runAuthorizeCreditPaymentLocalRefreshInBackground/, "syn
 
 assert.match(comprovante, /Compartilhar comprovante/, "ação de compartilhar");
 assert.match(comprovante, /shareHbCreditPaymentReceipt/, "compartilha via pipeline SVG");
+assert.match(pagar, /phaseBStepUp/, "suporta step-up Fase B no pagar");
 assert.match(shareImg, /buildHbCreditReceiptSvg/, "gera PNG a partir de SVG");
 assert.match(shareSvg, /HB_CREDIT_RECEIPT_SHARE_IMPL/, "versão explícita do renderer");
 assert.ok(!/import\s*\(\s*["']html2canvas["']\s*\)/.test(shareImg), "sem captura DOM html2canvas");
