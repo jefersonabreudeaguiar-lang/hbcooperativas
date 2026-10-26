@@ -1,8 +1,10 @@
 # Piloto Jeferson — status
 
-**Último portão:** NÃO (26/10/2026) — sintoma: **página sem resposta** ao trocar abas / Financeiro.
+**Último portão:** NÃO (26/10/2026) — sintoma: **tela branca** no Início após o splash.
 
-**Correção build 684:** sync BIC e rematerialização financeira **não rodam** durante quiescência de troca de aba (14s) nem com A receber zerado no meio da navegação.
+**Correção build 685:** GA não usa mais `div` vazio enquanto `viewLive` carrega — pinta **Olá + cards** (`data-cooperado-inicio-shell`); splash some com casca ou após ~2,4s (não bloqueia em `inicio-loading`).
+
+**Build 684 (mantido):** sync BIC/rematerialização adiados na quiescência de aba (14s).
 
 ## O que falhou no teste
 

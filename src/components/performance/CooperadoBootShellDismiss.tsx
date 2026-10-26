@@ -10,8 +10,10 @@ function painelJaTemConteudo(pathname: string): boolean {
   const inicioGa =
     p === "/dashboard" || p.startsWith("/dashboard/");
   if (inicioGa) {
-    if (document.querySelector("[data-cooperado-inicio-loading='1']")) return false;
-    return Boolean(document.querySelector("[data-cooperado-inicio-ready='1']"));
+    if (document.querySelector("[data-cooperado-inicio-ready='1']")) return true;
+    if (document.querySelector("[data-cooperado-inicio-shell='1']")) return true;
+    if (document.querySelector("[data-cooperado-inicio-loading='1']")) return true;
+    return false;
   }
   if (document.querySelector("[data-cooperado-tab-panel-active='1']")) return true;
   if (document.querySelector("[data-cooperado-inicio-ready='1']")) return true;
@@ -54,7 +56,7 @@ export function CooperadoBootShellDismiss() {
         dismissCooperadoBootShell();
         return;
       }
-      if (ticks >= 24) {
+      if (ticks >= 12) {
         window.clearInterval(iv);
         dismissCooperadoBootShell();
       }

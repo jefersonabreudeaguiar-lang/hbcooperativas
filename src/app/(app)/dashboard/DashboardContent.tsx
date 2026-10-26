@@ -513,9 +513,9 @@ function CooperadoDashboard() {
     view?.coopNome ?? (user && isAppDataWarm() ? getUserCooperativaNome(user, getData()) : "");
 
   useEffect(() => {
-    if (!viewUi) return;
+    if (!tabActive || user?.role !== "cooperado") return;
     dismissCooperadoBootShell();
-  }, [viewUi]);
+  }, [tabActive, user?.role, viewUi]);
 
   return (
     <CooperadoInicioSafeRoot>
@@ -524,14 +524,11 @@ function CooperadoDashboard() {
         cooperativaIdCard={cooperativaIdCard}
       >
         {!viewUi ? (
-        cooperadoMotorAoVivo ? (
-          <div
-            className="min-h-[12rem] max-w-3xl"
-            data-cooperado-inicio-loading="1"
-            aria-hidden="true"
-          />
-        ) : (
-        <div className="space-y-6 max-w-3xl" data-cooperado-inicio-shell="1">
+        <div
+          className="space-y-6 max-w-3xl"
+          data-cooperado-inicio-shell="1"
+          data-cooperado-inicio-loading={cooperadoMotorAoVivo ? "1" : undefined}
+        >
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
               <CooperadoInicioOláTitulo nomeFromView={nomeFromSnapshot} />
@@ -551,7 +548,6 @@ function CooperadoDashboard() {
           </div>
           <CooperadoHbCreditInicioSection hbCredit={hbCredit} cnpjDigits={cnpjHbDigits} />
         </div>
-        )
       ) : (
         <CooperadoDashboardInicioView
           view={viewUi!}

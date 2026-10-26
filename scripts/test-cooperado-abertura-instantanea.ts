@@ -61,11 +61,13 @@ const dismiss = readFileSync(
   join(root, "src/components/performance/CooperadoBootShellDismiss.tsx"),
   "utf8"
 );
-assert.match(dismiss, /data-cooperado-inicio-ready/, "splash só some com Início completo no dashboard");
-assert.match(dismiss, /data-cooperado-inicio-loading/, "GA mantém splash enquanto carrega viewLive");
+assert.match(dismiss, /data-cooperado-inicio-ready/, "splash some com Início completo no dashboard");
+assert.match(dismiss, /data-cooperado-inicio-shell/, "splash some com casca Olá+cards no dashboard");
+assert.match(dismiss, /data-cooperado-inicio-loading/, "splash some com casca GA enquanto viewLive carrega");
 
 const dash = readFileSync(join(root, "src/app/(app)/dashboard/DashboardContent.tsx"), "utf8");
 assert.match(dash, /data-cooperado-inicio-ready="1"/, "Início completo marca pronto para dismiss");
-assert.match(dash, /data-cooperado-inicio-loading="1"/, "GA não pinta Olá+valor antes do Início completo");
+assert.match(dash, /data-cooperado-inicio-shell="1"/, "casca do Início visível antes do viewLive");
+assert.match(dash, /data-cooperado-inicio-loading/, "GA marca loading na casca sem tela vazia");
 
 console.log("ok: abertura do cooperado pinta o Início na hora");
