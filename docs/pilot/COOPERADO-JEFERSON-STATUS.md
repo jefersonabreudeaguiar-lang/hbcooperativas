@@ -1,6 +1,8 @@
 # Piloto Jeferson — status
 
-**Último portão:** NÃO (26/10/2026) — canário financeiro build 682 revertido; produção volta ao legado **683**.
+**Último portão:** NÃO (26/10/2026) — sintoma: **página sem resposta** ao trocar abas / Financeiro.
+
+**Correção build 684:** sync BIC e rematerialização financeira **não rodam** durante quiescência de troca de aba (14s) nem com A receber zerado no meio da navegação.
 
 ## O que falhou no teste
 

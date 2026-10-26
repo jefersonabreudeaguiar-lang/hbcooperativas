@@ -10,6 +10,8 @@ import { dispatchCooperadoPwaLeveUiSnapshotRefresh } from "@/lib/cooperado/coope
 import { scheduleCooperadoBicHybridIdleTask } from "@/lib/cooperado/cooperadoBicHybridLight";
 import { runCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
 import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
+import { cooperadoMobileUiQuiescenceActive } from "@/lib/cooperado/cooperadoTabSwitchQuiescence";
+import { cooperadoGaPausaTrabalhoFinanceiroPesado } from "@/lib/cooperado/cooperadoGaPausaTrabalhoPesado";
 
 /** Agrupa vários eventos de revisão sem enfileirar operacional_full. */
 const DEBOUNCE_MS = 2_000;
@@ -18,6 +20,9 @@ let debounceUserId: string | null = null;
 
 /** Pinta o card com AppData local — O(1) na UI. */
 export function rematerializarCooperadoValorCardLeve(user: Omit<User, "password">): void {
+  if (cooperadoMobileUiQuiescenceActive() || cooperadoGaPausaTrabalhoFinanceiroPesado(user)) {
+    return;
+  }
   cooperadoPilotForcarRematerializacaoFinanceira(user);
   cooperadoRematerializarFinanceiroLocalSePossivel(user);
   dispatchCooperadoPwaLeveUiSnapshotRefresh();
@@ -32,6 +37,11 @@ export function scheduleCooperadoGaValorRevisionLightSync(
   if (typeof window === "undefined") return;
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return;
 
+  if (cooperadoMobileUiQuiescenceActive()) {
+    scheduleCooperadoBicHybridIdleTask(() => scheduleCooperadoGaValorRevisionLightSync(user), 5_000);
+    return;
+  }
+
   rematerializarCooperadoValorCardLeve(user);
 
   if (debounceTimer && debounceUserId === user.id) {
@@ -40,6 +50,10 @@ export function scheduleCooperadoGaValorRevisionLightSync(
   debounceUserId = user.id;
   debounceTimer = setTimeout(() => {
     debounceTimer = null;
+    if (cooperadoMobileUiQuiescenceActive()) {
+      scheduleCooperadoGaValorRevisionLightSync(user);
+      return;
+    }
     const precisaNuvem = cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user);
     scheduleCooperadoBicHybridIdleTask(() => {
       void runCooperadoGaSyncBaseInformacoesFinanceiras(user, {

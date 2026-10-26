@@ -6,7 +6,10 @@ import {
 import { cooperadoGaValorReceberExibicaoResolvida } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { cooperadoPilotFinanceiroExibirComSnapshotsLocais } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
-import { cooperadoTabSwitchQuiescenceActive } from "@/lib/cooperado/cooperadoTabSwitchQuiescence";
+import {
+  cooperadoMobileUiQuiescenceActive,
+  cooperadoTabSwitchQuiescenceActive,
+} from "@/lib/cooperado/cooperadoTabSwitchQuiescence";
 import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 
 /** Evita pulso/sync/rematerialização enquanto o cooperado navega ou já vê valor no card. */
@@ -26,6 +29,7 @@ export function cooperadoGaPausaPulsoBicOuRematerializacao(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return false;
+  if (cooperadoMobileUiQuiescenceActive()) return true;
   if (cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) return false;
   return cooperadoGaPausaTrabalhoFinanceiroPesado(user);
 }

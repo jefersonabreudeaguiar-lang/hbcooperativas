@@ -15,14 +15,15 @@ const quiescence = readFileSync(
 );
 const ficha = readFileSync(join(ROOT, "src/app/(app)/ficha-corrida/FichaCorridaContent.tsx"), "utf8");
 
-assert.match(pulse, /cooperadoGaPausaTrabalhoFinanceiroPesado\(user\)\) return/);
-assert.match(pulse, /onVisibility[\s\S]{0,200}cooperadoGaPausaTrabalhoFinanceiroPesado/);
+assert.match(pulse, /cooperadoMobileUiQuiescenceActive\(\)\) return/);
+assert.match(pulse, /cooperadoGaPausaPulsoBicOuRematerializacao\(user\)\) return/);
 assert.match(pulse, /scheduleCooperadoBicHybridIdleTask\(\(\) => void runRevisionPulse\(user\), 2_000\)/);
 assert.match(pulse, /Mobile: revisão igual/);
 assert.doesNotMatch(pulse, /recordBicParidadePulse\("rematerializeOnly"\)[\s\S]{0,80}rematerializarSilencioso\(user\)[\s\S]{0,40}\} finally/);
 
-assert.match(pausa, /cooperadoTabSwitchQuiescenceActive/);
-assert.match(quiescence, /QUIET_MS = 10_000/);
-assert.match(ficha, /cooperadoGaPausaTrabalhoFinanceiroPesado\(user\)\) return[\s\S]{0,120}scheduleCooperadoGaSyncBaseInformacoesFinanceiras/);
+assert.match(pausa, /cooperadoMobileUiQuiescenceActive\(\)\) return true/);
+assert.match(quiescence, /QUIET_MS = 14_000/);
+assert.match(ficha, /cooperadoTabSwitchQuiescenceActive\(\)\) return/);
+assert.match(ficha, /cooperadoGaPausaTrabalhoFinanceiroPesado\(user\)\) return/);
 
 console.log("OK test-cooperado-fase2-tab-fluidez-v565");

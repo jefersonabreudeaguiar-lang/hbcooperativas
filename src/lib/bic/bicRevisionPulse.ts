@@ -25,6 +25,7 @@ import {
 import { markCooperadoBicFinanceiroFresh } from "@/lib/bic/cooperadoBicSonataSyncUi";
 import { cooperadoGaPausaPulsoBicOuRematerializacao } from "@/lib/cooperado/cooperadoGaPausaTrabalhoPesado";
 import { cooperadoInicioAberturaQuiescenceActive } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
+import { cooperadoMobileUiQuiescenceActive } from "@/lib/cooperado/cooperadoTabSwitchQuiescence";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
@@ -62,6 +63,7 @@ async function runRevisionPulse(user: Omit<User, "password">): Promise<void> {
   if (inflight) return;
   if (typeof document !== "undefined" && document.hidden) return;
   if (cooperadoInicioAberturaQuiescenceActive()) return;
+  if (cooperadoMobileUiQuiescenceActive()) return;
   if (Date.now() - lastPulseAt < pulseMinGapMs(user)) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   if (!isAppDataWarm()) return;
@@ -83,7 +85,14 @@ async function runRevisionPulse(user: Omit<User, "password">): Promise<void> {
     if (changed) {
       recordBicParidadePulse("operacionalEvent");
       if (isCooperadoMobileGaPromoted(user)) {
-        scheduleCooperadoGaValorRevisionLightSync(user);
+        if (cooperadoMobileUiQuiescenceActive()) {
+          scheduleCooperadoBicHybridIdleTask(
+            () => scheduleCooperadoGaValorRevisionLightSync(user),
+            6_000
+          );
+        } else {
+          scheduleCooperadoGaValorRevisionLightSync(user);
+        }
       } else {
         requestCooperadoStaffRevisionSync();
         rematerializarSilencioso(user);
