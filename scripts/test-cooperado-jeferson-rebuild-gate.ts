@@ -36,8 +36,10 @@ if (!COOPERADO_JEFERSON_REBUILD_MODE_ON) {
   assert.equal(cooperadoJefersonRebuildUsarConteudoLegado("inicio", jeferson), true);
 } else {
   assert.equal(isCooperadoJefersonRebuildPilot(jeferson), true);
-  assert.equal(cooperadoJefersonRebuildTabHabilitada("inicio", jeferson), false);
-  assert.equal(cooperadoJefersonRebuildUsarConteudoLegado("inicio", jeferson), false);
+  assert.equal(cooperadoJefersonRebuildTabHabilitada("inicio", jeferson), true);
+  assert.equal(cooperadoJefersonRebuildTabHabilitada("entregas", jeferson), false);
+  assert.equal(cooperadoJefersonRebuildUsarConteudoLegado("inicio", jeferson), true);
+  assert.equal(cooperadoJefersonRebuildUsarConteudoLegado("entregas", jeferson), false);
 }
 
 console.log("test-cooperado-jeferson-rebuild-gate: ok");

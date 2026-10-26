@@ -2,7 +2,9 @@
 
 **Objetivo:** manter **mesma UI/UX** (header, abas inferiores, cards, cores, rotas `/dashboard`, `/notas-pedido`, `/precos`, `/ficha-corrida`). Trocar só a **lógica por baixo**, aba a aba, sem apagar dados na nuvem.
 
-**Fase 0 (build ≥703):** Jeferson vê casca zerada em todas as abas + selo `piloto rebuild`; sync financeiro na abertura desligado só para ele.
+**Fase 0 (build ≥703):** casca zerada nas abas ainda não refeitas.
+
+**Fase 1 — Início (build ≥704):** Jeferson — card «A receber» via `/api/cooperado-pilot/inicio-card` (nuvem, escopo `inicio` sem notas); Atualizar no header chama `/api/cooperado-pilot/atualizar-inicio`. Demais abas continuam zeradas.
 
 **Piloto:** apenas Jeferson (`c_1781981564381_w67gg` / `jefersonabreudeaguiar@gmail.com`) — gate `isCooperadoMobilePilot`.  
 **Produção oficial:** Orlando e demais cooperados **não entram** até cada aba ter SIM de homologação e promoção explícita.

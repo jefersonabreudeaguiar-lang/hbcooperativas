@@ -9,6 +9,11 @@ import {
   COOPERADO_ATUALIZAR_MENSAGEM_AMOR,
   executarCooperadoAtualizarManual,
 } from "@/lib/cooperado/cooperadoAtualizarManual";
+import { isCooperadoJefersonRebuildInicioAtivo } from "@/lib/cooperado/cooperadoJefersonRebuildPilot";
+import {
+  COOPERADO_JEFERSON_REBUILD_INICIO_ATUALIZAR_EVENT,
+  COOPERADO_JEFERSON_REBUILD_INICIO_DONE_EVENT,
+} from "@/lib/cooperado/jefersonRebuild/jefersonRebuildInicioEvents";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { cooperadoPwaMaterializarSnapshotsFinanceirosPosSync } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
@@ -180,6 +185,13 @@ export function CooperadoAtualizarButton({
     return () => window.clearTimeout(id);
   }, [busy, syncingForUi, user]);
 
+  useEffect(() => {
+    if (!user || !isCooperadoJefersonRebuildInicioAtivo(user)) return;
+    const onDone = () => setBusy(false);
+    window.addEventListener(COOPERADO_JEFERSON_REBUILD_INICIO_DONE_EVENT, onDone);
+    return () => window.removeEventListener(COOPERADO_JEFERSON_REBUILD_INICIO_DONE_EVENT, onDone);
+  }, [user?.id]);
+
   const loveVisible = showLoveMessage && spinning;
 
   return (
@@ -190,6 +202,10 @@ export function CooperadoAtualizarButton({
         if (busy || syncingForUi) return;
         sawSyncUiRef.current = false;
         setBusy(true);
+        if (user && isCooperadoJefersonRebuildInicioAtivo(user)) {
+          window.dispatchEvent(new Event(COOPERADO_JEFERSON_REBUILD_INICIO_ATUALIZAR_EVENT));
+          return;
+        }
         void executarCooperadoAtualizarManual().then((ok) => {
           if (!ok) setBusy(false);
         });

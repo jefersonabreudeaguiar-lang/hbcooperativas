@@ -7,6 +7,7 @@ import {
   readCooperadoSessionLite,
 } from "@/lib/cooperado/cooperadoSessionLite";
 import { COOPERADO_INICIO_ABERTURA_QUIET_MS_MOBILE_GA } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
+import { isCooperadoJefersonRebuildPilot } from "@/lib/cooperado/cooperadoJefersonRebuildPilot";
 
 const SESSION_UNLOCK_KEY = "hb.coop.gaDataWarmUnlocked.v1";
 const DEFER_UNTIL_KEY = "hb.coop.gaDataWarmDeferUntil.v1";
@@ -59,8 +60,10 @@ export function unlockCooperadoGaDataWarmForSession(): void {
 
 export function cooperadoGaShouldDeferDataWarmFromGetData(): boolean {
   if (typeof window === "undefined") return false;
+  const sessionEarly = readCooperadoSessionLite();
+  if (sessionEarly && isCooperadoJefersonRebuildPilot(sessionEarly)) return true;
   if (sessionUnlocked()) return false;
-  const session = readCooperadoSessionLite();
+  const session = sessionEarly;
   if (!session || session.role !== "cooperado") return false;
   if (!cooperadoGaMobileViewportAtivoLite()) return false;
   const until = readDeferUntil();

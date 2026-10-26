@@ -152,8 +152,12 @@ import {
 import { isCooperadoAppUser } from "@/permissions";
 import { getSession } from "@/services/dataStore";
 import { cooperadoGaInicioSomenteCasca, isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
-import { shouldRenderCooperadoJefersonRebuildShell } from "@/lib/cooperado/cooperadoJefersonRebuildPilot";
+import {
+  isCooperadoJefersonRebuildInicioAtivo,
+  shouldRenderCooperadoJefersonRebuildShell,
+} from "@/lib/cooperado/cooperadoJefersonRebuildPilot";
 import { CooperadoJefersonRebuildTabCorpo } from "@/components/cooperado/CooperadoJefersonRebuildTabCorpo";
+import { CooperadoJefersonRebuildInicioPage } from "@/components/cooperado/CooperadoJefersonRebuildInicioPage";
 import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import {
   scheduleCooperadoHbCreditLimiteAndAccountWarmup,
@@ -221,6 +225,13 @@ function CooperadoDashboard() {
     return (
       <CooperadoInicioSafeRoot>
         <CooperadoJefersonRebuildTabCorpo tab="inicio" user={user} />
+      </CooperadoInicioSafeRoot>
+    );
+  }
+  if (user && isCooperadoJefersonRebuildInicioAtivo(user)) {
+    return (
+      <CooperadoInicioSafeRoot>
+        <CooperadoJefersonRebuildInicioPage user={user} />
       </CooperadoInicioSafeRoot>
     );
   }

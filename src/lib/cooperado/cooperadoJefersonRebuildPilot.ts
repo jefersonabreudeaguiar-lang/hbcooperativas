@@ -1,5 +1,8 @@
 import type { User } from "@/types";
-import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
+import {
+  COOPERADO_MOBILE_PILOT_COOPERADO_ID,
+  isCooperadoMobilePilot,
+} from "@/lib/cooperado/cooperadoMobilePilot";
 
 /** Liga reconstrução incremental — só afeta Jeferson quando `true`. */
 export const COOPERADO_JEFERSON_REBUILD_MODE_ON = true;
@@ -10,7 +13,9 @@ export type CooperadoJefersonRebuildTab = "inicio" | "entregas" | "precos" | "fi
  * Abas já reimplementadas no piloto. Vazio = cooperado Jeferson vê casca zerada em todas.
  * Promoção oficial: copiar implementação estável e habilitar GA separadamente.
  */
-export const COOPERADO_JEFERSON_REBUILD_TABS_HABILITADAS: readonly CooperadoJefersonRebuildTab[] = [];
+export const COOPERADO_JEFERSON_REBUILD_TABS_HABILITADAS: readonly CooperadoJefersonRebuildTab[] = [
+  "inicio",
+];
 
 export function isCooperadoJefersonRebuildPilot(
   user: Omit<User, "password"> | null | undefined
@@ -40,4 +45,23 @@ export function shouldRenderCooperadoJefersonRebuildShell(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   return isCooperadoJefersonRebuildPilot(user) && !cooperadoJefersonRebuildTabHabilitada(tab, user);
+}
+
+export function isCooperadoJefersonRebuildInicioAtivo(
+  user: Omit<User, "password"> | null | undefined
+): boolean {
+  return isCooperadoJefersonRebuildPilot(user) && cooperadoJefersonRebuildTabHabilitada("inicio", user);
+}
+
+/** Fragmento para `<head>` — Jeferson rebuild não faz parse do operacional local. */
+export function cooperadoJefersonRebuildInlineHeadSkipAppDataWarmJs(): string {
+  const id = COOPERADO_MOBILE_PILOT_COOPERADO_ID;
+  if (!COOPERADO_JEFERSON_REBUILD_MODE_ON) return "";
+  return (
+    `try{var raw=localStorage.getItem("coopeagriplla_session");if(raw){var s=JSON.parse(raw);` +
+    `var cid=(s.cooperadoId||s.mobileCooperadoId||"").trim();` +
+    `if(s.role==="cooperado"&&cid==="` +
+    id +
+    `")return;}}catch(e){}`
+  );
 }
