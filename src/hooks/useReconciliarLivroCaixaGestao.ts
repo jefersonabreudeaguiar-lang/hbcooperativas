@@ -12,7 +12,7 @@ import {
 } from "@/lib/staff/staffGestaoSnapshotGuard";
 import {
   staffGestaoPerfilEhDesktop,
-  staffGestaoPerfilReconciliarLivroCaixaAtivo,
+  staffGestaoPerfilReconciliarLivroHookHabilitado,
 } from "@/lib/staff/staffGestaoPerfilDesktop";
 
 /** Sem cadastro/ficha/PIX não grava — o mount do Início não pode persistir AppData vazio. */
@@ -51,12 +51,9 @@ export function useReconciliarLivroCaixaGestao(
   const pathname = usePathname() ?? "";
 
   useEffect(() => {
-    if (!enabled || !coopId) return;
+    if (!staffGestaoPerfilReconciliarLivroHookHabilitado(pathname, enabled) || !coopId) return;
 
     const mobile = isStaffMobileViewportActive();
-    if (!mobile && !staffGestaoPerfilReconciliarLivroCaixaAtivo(pathname)) {
-      return;
-    }
 
     let cancelled = false;
     let timer = 0;
@@ -72,7 +69,9 @@ export function useReconciliarLivroCaixaGestao(
           const data = dadosGestaoOuRelerStorage();
           if (!devePersistirReconciliacaoLivroCaixaGestao(data)) return;
           if (!temPagamentoParaLivroCaixa(data)) return;
-          const aligned = integridade.posProcessarIntegridadePagamentosCooperativa(data);
+          const aligned = integridade.posProcessarIntegridadePagamentosCooperativa(data, {
+            reconciliarLivroCaixa: true,
+          });
           if (aligned !== data) {
             if (staffGestaoSnapshotPoorer(medirRiquezaStaffGestao(aligned), medirRiquezaStaffGestao(data))) {
               return;

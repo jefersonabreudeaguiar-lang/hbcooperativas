@@ -664,11 +664,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       try {
         const raw = readAppDataPersistRaw();
         if (raw && raw.length > 10_000) {
-          if (staffGestaoEmViewportDesktop()) {
-            scheduleStaffGestaoPersistReloadAfterPaint();
-          } else {
-            data = refreshData();
-          }
+          data = refreshData();
         }
       } catch {
         /* storage */

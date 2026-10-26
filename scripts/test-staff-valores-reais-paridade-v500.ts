@@ -136,4 +136,28 @@ assert.equal(
 );
 assert.equal(getTotalValoresAPagarGestaoCooperativa(comPix, COOP), 0, "Início zera só após PIX real");
 
+resetResponsavelPainelIndexCache();
+const fichaNan = {
+  ...soNota,
+  fichaCorrida: [
+    {
+      id: "fc-nan",
+      cooperativaId: COOP,
+      cooperadoId: "c-1",
+      notaPedidoId: "n-1",
+      mesReferencia: MES,
+      status: "pendente",
+      valorBruto: Number.NaN,
+      valorLiquido: Number.NaN,
+      descontos: 0,
+      descricao: "x",
+      dataLancamento: "2026-10-02",
+      createdAt: "2026-10-02T00:00:00.000Z",
+    },
+  ],
+} as AppData;
+const emAbertoNan = getRelatorioLancamentosEmAbertoResponsavel(fichaNan, COOP);
+assert.equal(emAbertoNan.length, 1, "ficha pendente com NaN não some do Em aberto");
+assert.ok((emAbertoNan[0]?.total ?? 0) > 0.005, "Em aberto recupera líquido da nota");
+
 console.log("test-staff-valores-reais-paridade-v500.ts ok");

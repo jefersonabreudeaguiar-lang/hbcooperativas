@@ -63,7 +63,6 @@ import {
   scheduleCooperadoPostInteractiveTask,
 } from "@/lib/performance/cooperadoColdStart";
 import { useEnsureAppDataWarm } from "@/hooks/useEnsureAppDataWarm";
-import { useReconciliarLivroCaixaGestao } from "@/hooks/useReconciliarLivroCaixaGestao";
 import {
   setStaffConferenciaLancamentoAtivo,
   setStaffConferenciaModalOpen,
@@ -747,7 +746,6 @@ export default function NotasPedidoStaffMain() {
       : undefined) ??
     coopIdPerm ??
     undefined;
-  useReconciliarLivroCaixaGestao(coopId, Boolean(!isCooperado && coopId));
   const hbDescontosRevision = useContaCoopDescontosRevision();
   const cooperadoCanonico =
     isCooperado && data && cooperadoId && coopId

@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v667
+
+- **Deploy:** `staffMobileViewportCore` sem React — corrige build Next (API routes não importam `useSyncExternalStore`).
+
 ## v666
 
 - **Cooperado (cirúrgico):** abrir Financeiro não roda `posProcessarFinanceiroLocal`/reconcile da cooperativa no idle; integridade adia `limparFicha` na troca de aba; cooperado fora do `AbaLastGoodSafeRoot` do responsável.

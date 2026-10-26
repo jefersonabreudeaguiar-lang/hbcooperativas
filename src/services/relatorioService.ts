@@ -15,6 +15,7 @@ import {
   getTotalValoresAPagarGestaoCooperativa,
   valorAPagarCooperadoEmAberto,
 } from "@/lib/responsavel/responsavelGestaoLeitura";
+import { totalValoresAPagarGestaoUnificado } from "@/lib/responsavel/responsavelGestaoTotais";
 import {
   agregarItensNotasCooperado,
   getPagamentoAguardandoCooperado,
@@ -399,6 +400,7 @@ export function flattenLinhasPagarCooperadoEmAberto(
 
 /** Total geral a pagar a cooperados (todos os meses em aberto). Fonte única = painel admin. */
 export function getTotalValoresAPagarEmAberto(data: AppData, cooperativaId?: string): number {
+  if (cooperativaId) return totalValoresAPagarGestaoUnificado(data, cooperativaId);
   return getTotalValoresAPagarGestaoCooperativa(data, cooperativaId);
 }
 

@@ -11,6 +11,7 @@ import {
 } from "@/services/cooperadoCloudService";
 import { getDataOperationalTruth, getDataRevision } from "@/services/dataStore";
 import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
+import { staffGestaoPerfilEhDesktop } from "@/lib/staff/staffGestaoPerfilDesktop";
 import { valorAPagarCooperadoEmAberto } from "@/lib/responsavel/responsavelGestaoLeitura";
 import { unirValoresAvulsosReceber } from "@/services/valoresAvulsosReceberService";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
@@ -52,7 +53,62 @@ type PainelCache = {
 };
 
 let painelCache: PainelCache | null = null;
-let pagarProjCache: { revision: number; coopId: string; data: AppData } | null = null;
+
+type GestaoLeituraCacheFootprint = {
+  revision: number;
+  coopId: string;
+  pix: number;
+  fichas: number;
+  notas: number;
+  /** Centavos de ficha pendente — evita cache com contagem igual e valor diferente após F5. */
+  pendenteCents: number;
+};
+
+let pagarProjCache: (GestaoLeituraCacheFootprint & { data: AppData }) | null = null;
+let leituraFichaCache: (GestaoLeituraCacheFootprint & { data: AppData }) | null = null;
+
+function gestaoLeituraPendenteCentsFootprint(data: AppData, coopId: string): number {
+  let sum = 0;
+  for (const f of data.fichaCorrida ?? []) {
+    if (f.cooperativaId && f.cooperativaId !== coopId) continue;
+    if (f.status !== "pendente") continue;
+    const liq = Number(f.valorLiquido);
+    const bruto = Number(f.valorBruto);
+    const v = liq > 0.005 ? liq : bruto > 0.005 ? bruto : 0;
+    if (v > 0.005) sum += v;
+  }
+  return Math.round(sum * 100);
+}
+
+function gestaoLeituraCacheFootprint(
+  data: AppData,
+  coopId: string
+): Omit<GestaoLeituraCacheFootprint, "data"> {
+  const lastro = scoreSnapshotConferir(data);
+  return {
+    revision: getDataRevision(),
+    coopId,
+    pix: lastro.pix,
+    fichas: lastro.fichas,
+    notas: lastro.notas,
+    pendenteCents: gestaoLeituraPendenteCentsFootprint(data, coopId),
+  };
+}
+
+function gestaoLeituraCacheHit(
+  cache: GestaoLeituraCacheFootprint | null,
+  fp: Omit<GestaoLeituraCacheFootprint, "data">
+): boolean {
+  return (
+    cache !== null &&
+    cache.revision === fp.revision &&
+    cache.coopId === fp.coopId &&
+    cache.pix === fp.pix &&
+    cache.fichas === fp.fichas &&
+    cache.notas === fp.notas &&
+    cache.pendenteCents === fp.pendenteCents
+  );
+}
 
 type RelatorioAbertoCache = {
   revision: number;
@@ -72,6 +128,7 @@ function garantirCacheDoBuildAtual(): void {
   if (conferirLatchBuild === APP_BUILD_VERSION) return;
   painelCache = null;
   pagarProjCache = null;
+  leituraFichaCache = null;
   relatorioAbertoCache = null;
   relatorioAbertoLatch = null;
   conferirLeituraLatchByKey.clear();
@@ -96,6 +153,18 @@ function cooperadoIdListagemPagarNaCooperativa(
   const canon = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
   if (coopIds.has(canon)) return canon;
   if (coopIds.has(cooperadoId)) return cooperadoId;
+  if (!cooperadoId) return null;
+  if (coopIds.size === 0) return canon || cooperadoId;
+  const id = canon || cooperadoId;
+  const fichaNaCoop = (data.fichaCorrida ?? []).some(
+    (f) =>
+      f.cooperadoId === id &&
+      (!f.cooperativaId || f.cooperativaId === coopId)
+  );
+  const notaNaCoop = (data.notasPedido ?? []).some(
+    (n) => n.cooperadoId === id && n.cooperativaId === coopId
+  );
+  if (fichaNaCoop || notaNaCoop) return id;
   return null;
 }
 
@@ -165,30 +234,67 @@ function listarNotasConferidasSemPixCooperado(
   return out;
 }
 
+function numeroFichaOuNotaValido(n: number | undefined): boolean {
+  return Number.isFinite(Number(n)) && Number(n) > 0.005;
+}
+
+/** Nota conferida sem ficha válida — precisa projetar ficha (F5 com notas_delta). */
+function gestaoLeituraPrecisaReconciliarFicha(data: AppData, coopId: string): boolean {
+  if (!coopId) return false;
+  const excluidas = idsNotasPedidoExcluidas(data, coopId);
+  for (const n of data.notasPedido ?? []) {
+    if (n.cooperativaId !== coopId) continue;
+    if (n.status !== "conferida" && n.status !== "pago") continue;
+    if (excluidas.has(n.id)) continue;
+    if (notaQuitadaPorPagamentoCooperativaRegistrado(data, n, n.cooperadoId)) continue;
+    const fichas = (data.fichaCorrida ?? []).filter((f) => f.notaPedidoId === n.id);
+    if (!fichas.length) return true;
+    for (const f of fichas) {
+      if (f.status !== "pendente") continue;
+      if (
+        !numeroFichaOuNotaValido(f.valorLiquido) &&
+        !numeroFichaOuNotaValido(f.valorBruto)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /**
  * Leitura da ficha ainda sem PIX — Conferir pode marcar nota/ficha como paga e esvaziar Pagar/Em aberto.
  * Só leitura; não persiste.
  */
 function appDataParaLeituraFichaEmAbertoResponsavel(data: AppData, coopId?: string): AppData {
+  const key = coopId ?? "";
+  const fp = gestaoLeituraCacheFootprint(data, key);
+  if (gestaoLeituraCacheHit(leituraFichaCache, fp)) {
+    return leituraFichaCache!.data;
+  }
+
   const leituraConferir = appDataParaConferirLeitura(data, coopId);
+  const reparado = repararIntegridadePagamentosCooperativa(leituraConferir, { forcar: true });
+  const precisaReconciliar =
+    !staffGestaoPerfilEhDesktop() ||
+    !coopId ||
+    gestaoLeituraPrecisaReconciliarFicha(reparado, coopId) ||
+    gestaoLeituraPrecisaReconciliarFicha(data, coopId);
+  const comFicha = precisaReconciliar
+    ? reconciliarFichaFromNotasConferidas(reparado)
+    : reparado;
   const pipeline = completarFichaProjetadaComNota(
-    alinharFichaComPagamentosCooperativa(
-      reconciliarFichaFromNotasConferidas(
-        repararIntegridadePagamentosCooperativa(leituraConferir, { forcar: true })
-      )
-    )
+    alinharFichaComPagamentosCooperativa(comFicha)
   );
-  // Mesmo lastro da aba Pagar: nota/ficha do snapshot local não perde líquido após reconcile/F5.
-  return preservarValoresNumericosDaFonte(data, pipeline);
+  const next = preservarValoresNumericosDaFonte(data, pipeline);
+  leituraFichaCache = { ...fp, data: next };
+  return next;
 }
 
 /**
  * Foto da aba Pagar: lastro do Conferir + ficha reconstruída das notas conferidas.
  * Só leitura — não persiste.
  */
-function numeroFichaOuNotaValido(n: number | undefined): boolean {
-  return Number.isFinite(Number(n)) && Number(n) > 0.005;
-}
 
 /** A projeção não pode apagar o R$ que já estava na nota/ficha. */
 function preservarValoresNumericosDaFonte(fonte: AppData, projetado: AppData): AppData {
@@ -214,20 +320,42 @@ function preservarValoresNumericosDaFonte(fonte: AppData, projetado: AppData): A
   const fichasFonte = new Map((fonte.fichaCorrida ?? []).map((f) => [f.id, f]));
   let fichasChanged = false;
   const fichas = (nextNotas.fichaCorrida ?? []).map((f) => {
+    if (numeroFichaOuNotaValido(f.valorLiquido) || numeroFichaOuNotaValido(f.valorBruto)) {
+      return f;
+    }
     const orig = fichasFonte.get(f.id);
-    if (!orig || numeroFichaOuNotaValido(f.valorLiquido) || numeroFichaOuNotaValido(f.valorBruto)) {
-      return f;
+    if (
+      orig &&
+      (numeroFichaOuNotaValido(orig.valorLiquido) || numeroFichaOuNotaValido(orig.valorBruto))
+    ) {
+      fichasChanged = true;
+      return {
+        ...f,
+        valorBruto: orig.valorBruto,
+        valorLiquido: orig.valorLiquido,
+        descontos: orig.descontos,
+      };
     }
-    if (!numeroFichaOuNotaValido(orig.valorLiquido) && !numeroFichaOuNotaValido(orig.valorBruto)) {
-      return f;
+    const nota = f.notaPedidoId
+      ? (fonte.notasPedido ?? []).find((n) => n.id === f.notaPedidoId)
+      : undefined;
+    if (
+      nota &&
+      (numeroFichaOuNotaValido(nota.valorLiquido) || numeroFichaOuNotaValido(nota.valorBruto))
+    ) {
+      fichasChanged = true;
+      const nLiq = Number(nota.valorLiquido);
+      const nBruto = Number(nota.valorBruto);
+      return {
+        ...f,
+        valorBruto: nBruto > 0.005 ? nBruto : f.valorBruto,
+        valorLiquido: nLiq > 0.005 ? nLiq : nBruto,
+        descontos: Number.isFinite(Number(nota.valorDesconto))
+          ? Number(nota.valorDesconto)
+          : f.descontos,
+      };
     }
-    fichasChanged = true;
-    return {
-      ...f,
-      valorBruto: orig.valorBruto,
-      valorLiquido: orig.valorLiquido,
-      descontos: orig.descontos,
-    };
+    return f;
   });
   const next = fichasChanged ? { ...nextNotas, fichaCorrida: fichas } : nextNotas;
   return completarFichaProjetadaComNota(next);
@@ -235,24 +363,20 @@ function preservarValoresNumericosDaFonte(fonte: AppData, projetado: AppData): A
 
 export function appDataParaPagarCooperadosResponsavel(data: AppData, coopId?: string): AppData {
   garantirCacheDoBuildAtual();
-  const revision = getDataRevision();
   const key = coopId ?? "";
-  if (pagarProjCache && pagarProjCache.revision === revision && pagarProjCache.coopId === key) {
-    return pagarProjCache.data;
+  const fp = gestaoLeituraCacheFootprint(data, key);
+  if (gestaoLeituraCacheHit(pagarProjCache, fp)) {
+    return pagarProjCache!.data;
   }
   const leitura = appDataParaLeituraFichaEmAbertoResponsavel(data, coopId);
-  const projetado = preservarValoresNumericosDaFonte(
-    data,
-    alinharFichaComPagamentosCooperativa(reconciliarFichaFromNotasConferidas(leitura))
-  );
   const next = {
-    ...projetado,
+    ...leitura,
     valoresAvulsosReceber: unirValoresAvulsosReceber(
-      projetado.valoresAvulsosReceber,
+      leitura.valoresAvulsosReceber,
       data.valoresAvulsosReceber
     ),
   };
-  pagarProjCache = { revision, coopId: key, data: next };
+  pagarProjCache = { ...fp, data: next };
   return next;
 }
 
@@ -484,11 +608,18 @@ function aplicarLastroCompletenessConferir(candidato: AppData, key = "_"): AppDa
 export function appDataParaConferirLeitura(data: AppData, coopId?: string): AppData {
   garantirCacheDoBuildAtual();
   const key = coopId || "_";
-  if (!conferirLeituraLatchByKey.has(key)) {
-    const lkg = peekStaffGestaoLastGood();
-    if (lkg && ((lkg.notasPedido?.length ?? 0) > 0 || (lkg.fichaCorrida?.length ?? 0) > 0)) {
-      conferirLeituraLatchByKey.set(key, lkg);
+  // PC: sem latch LKG — evita travar notas novas do persist e desalinhar Em aberto × Pagar.
+  if (!staffGestaoPerfilEhDesktop()) {
+    if (!conferirLeituraLatchByKey.has(key)) {
+      const lkg = peekStaffGestaoLastGood();
+      if (lkg && ((lkg.notasPedido?.length ?? 0) > 0 || (lkg.fichaCorrida?.length ?? 0) > 0)) {
+        conferirLeituraLatchByKey.set(key, lkg);
+      }
     }
+  }
+  // PC: sem merge/align a cada notify — leitura financeira alinha uma vez no pipeline de Pagar/Em aberto.
+  if (staffGestaoPerfilEhDesktop()) {
+    return data;
   }
   const truth = getDataOperationalTruth();
   const merged = escolherSnapshotMaisCompleto(truth, data);
@@ -506,15 +637,22 @@ export function cooperadoEmAbertoPodeSair(
   mesesLinha?: string[]
 ): boolean {
   if (!cooperadoId || !coopId) return false;
+  if (
+    cooperadoPendentePagamentoResponsavel(data, cooperadoId, undefined, coopId) ||
+    cooperadoTemNotaConferidaSemPix(data, cooperadoId, coopId)
+  ) {
+    return false;
+  }
   const aberto = listarMesesFichaEmAbertoCooperado(data, cooperadoId, coopId, {
     usarLiquido: true,
   });
   if (aberto.total > 0.005) return false;
   if (cooperadoLinhaCobrePorPixConfirmado(data, cooperadoId, coopId, mesesLinha)) return true;
-  const temFicha = (data.fichaCorrida ?? []).some((f) =>
+  const fichasCoop = (data.fichaCorrida ?? []).filter((f) =>
     fichaPertenceCooperado(data, f, cooperadoId, coopId)
   );
-  if (temFicha) return true;
+  if (fichasCoop.some((f) => f.status === "pendente")) return false;
+  if (fichasCoop.length > 0) return true;
   const meses = (mesesLinha ?? []).filter(Boolean);
   if (!meses.length) return false;
   return meses.every(
@@ -761,13 +899,57 @@ export function listCooperadosPagamentoPendenteResponsavel(data: AppData, coopId
       status: "ativo",
     } as Cooperado);
   }
-  if (out.length > 0) return out;
-  return getPainelCache(data, coopId).cooperadosPagar;
+  return out;
 }
 
 export function countCooperadosPagamentoPendenteResponsavel(data: AppData, coopId: string): number {
   if (!coopId) return 0;
   return listCooperadosPagamentoPendenteResponsavel(data, coopId).length;
+}
+
+/** Ficha pendente sem nota local (sync operacional) — ainda entra no Em aberto/Pagar. */
+function linhaEmAbertoDeFichaPendenteOperacional(
+  data: AppData,
+  cooperadoId: string,
+  coopId: string,
+  nome: string
+): LinhaPagarCooperadoEmAberto | null {
+  const porMesMap = new Map<string, { entregas: number; total: number }>();
+  for (const f of data.fichaCorrida ?? []) {
+    if (f.cooperativaId && f.cooperativaId !== coopId) continue;
+    if (!fichaPertenceCooperado(data, f, cooperadoId, coopId)) continue;
+    if (f.status !== "pendente") continue;
+    const mes = f.mesReferencia;
+    if (!mes) continue;
+    const liq = Number(f.valorLiquido);
+    const bruto = Number(f.valorBruto);
+    const valor = liq > 0.005 ? liq : bruto > 0.005 ? bruto : 0;
+    if (valor <= 0.005) continue;
+    const cur = porMesMap.get(mes) ?? { entregas: 0, total: 0 };
+    cur.entregas += 1;
+    cur.total = round2(cur.total + valor);
+    porMesMap.set(mes, cur);
+  }
+  const porMes = [...porMesMap.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([mes, m]) => ({
+      mes,
+      mesLabel: formatMesReferencia(mes),
+      entregas: m.entregas,
+      total: m.total,
+    }));
+  const total = round2(porMes.reduce((s, m) => s + m.total, 0));
+  if (total <= 0.005) return null;
+  const meses = porMes.map((m) => m.mes);
+  return {
+    cooperadoId,
+    cooperado: nome,
+    meses,
+    mesesLabel: formatMesesReferenciaRotulo(meses),
+    entregas: porMes.reduce((s, m) => s + m.entregas, 0),
+    total,
+    porMes,
+  };
 }
 
 function linhaEmAbertoDeNotasSemFicha(
@@ -813,6 +995,35 @@ function linhaEmAbertoDeNotasSemFicha(
   };
 }
 
+function linhaEmAbertoDeValorAPagar(
+  dataAberto: AppData,
+  cooperadoId: string,
+  coopId: string,
+  nomeHint?: string
+): LinhaPagarCooperadoEmAberto | null {
+  const aberto = valorAPagarCooperadoEmAberto(dataAberto, cooperadoId, coopId);
+  if (aberto.total <= 0.005) return null;
+  const nome =
+    nomeHint?.trim() ||
+    resolverNomeCooperadoGestao(dataAberto, cooperadoId, coopId) ||
+    "Cooperado";
+  const porMes = aberto.porMes.map((m) => ({
+    mes: m.mes,
+    mesLabel: formatMesReferencia(m.mes),
+    entregas: m.entregas,
+    total: m.total,
+  }));
+  return {
+    cooperadoId,
+    cooperado: nome,
+    meses: aberto.meses,
+    mesesLabel: formatMesesReferenciaRotulo(aberto.meses),
+    entregas: porMes.reduce((s, m) => s + m.entregas, 0),
+    total: aberto.total,
+    porMes,
+  };
+}
+
 function motorEmAbertoComNotasSemFicha(
   dataAberto: AppData,
   coopId: string,
@@ -821,10 +1032,24 @@ function motorEmAbertoComNotasSemFicha(
   const motor = getRelatorioPagarCooperadoEmAberto(dataAberto, coopId, cooperadoId);
   const ja = new Set(motor.map((l) => l.cooperadoId));
   const extras: LinhaPagarCooperadoEmAberto[] = [];
+  const candidatos = candidatosCooperadoPagamento(dataAberto, coopId);
+  for (const id of candidatos) {
+    if (cooperadoId && id !== cooperadoId) continue;
+    if (ja.has(id)) continue;
+    const nome = resolverNomeCooperadoGestao(dataAberto, id, coopId);
+    const extra =
+      linhaEmAbertoDeValorAPagar(dataAberto, id, coopId, nome) ??
+      linhaEmAbertoDeNotasSemFicha(dataAberto, id, coopId, nome || "Cooperado") ??
+      linhaEmAbertoDeFichaPendenteOperacional(dataAberto, id, coopId, nome || "Cooperado");
+    if (extra) extras.push(extra);
+  }
   for (const c of listCooperadosDaCooperativa(dataAberto, coopId)) {
     if (cooperadoId && c.id !== cooperadoId) continue;
-    if (ja.has(c.id)) continue;
-    const extra = linhaEmAbertoDeNotasSemFicha(dataAberto, c.id, coopId, c.nomeCompleto);
+    if (ja.has(c.id) || candidatos.has(c.id)) continue;
+    const extra =
+      linhaEmAbertoDeValorAPagar(dataAberto, c.id, coopId, c.nomeCompleto) ??
+      linhaEmAbertoDeNotasSemFicha(dataAberto, c.id, coopId, c.nomeCompleto) ??
+      linhaEmAbertoDeFichaPendenteOperacional(dataAberto, c.id, coopId, c.nomeCompleto);
     if (extra) extras.push(extra);
   }
   return extras.length === 0 ? motor : [...motor, ...extras].sort((a, b) =>
@@ -839,7 +1064,7 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
   cooperadoId?: string
 ): LinhaPagarCooperadoEmAberto[] {
   if (!coopId) return [];
-  const dataAberto = appDataParaLeituraFichaEmAbertoResponsavel(data, coopId);
+  const dataAberto = appDataParaPagarCooperadosResponsavel(data, coopId);
   if (cooperadoId) {
     return fundirLinhasEmAbertoEstavel(
       [],
@@ -873,7 +1098,7 @@ export function getRelatorioLancamentosEmAbertoResponsavel(
     relatorioAbertoLatch.coopId === coopId
       ? relatorioAbertoLatch.linhas
       : [];
-  const linhas = fundirLinhasEmAbertoEstavel(anterior, motor, dataAberto, coopId);
+  const linhas = fundirLinhasEmAbertoEstavel([], motor, dataAberto, coopId);
   relatorioAbertoLatch = { coopId, linhas };
   relatorioAbertoCache = {
     revision,
@@ -894,6 +1119,7 @@ export function countCooperadosLancamentosEmAbertoResponsavel(data: AppData, coo
 export function resetResponsavelPainelIndexCache(): void {
   painelCache = null;
   pagarProjCache = null;
+  leituraFichaCache = null;
   relatorioAbertoCache = null;
   relatorioAbertoLatch = null;
   conferirLeituraLatchByKey.clear();

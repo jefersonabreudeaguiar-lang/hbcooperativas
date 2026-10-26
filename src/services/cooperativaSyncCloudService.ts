@@ -6,6 +6,7 @@ import {
   staffLocalOperacionalVazio,
 } from "@/lib/staff/staffOperacionalColdHydrate";
 import { peekStaffGestaoLastGood, preservarStaffGestaoContraWipe } from "@/lib/staff/staffGestaoSnapshotGuard";
+import { staffGestaoPerfilReaplicarAbaLastGoodPermitido } from "@/lib/staff/staffGestaoPerfilDesktop";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
 import { getData, getDataOperationalTruth, saveDataSafe, runWithBatchedSaveAsync } from "@/services/dataStore";
@@ -2472,7 +2473,9 @@ export async function syncOperacionalFromCloud(
     };
   }
 
-  const protegido = reaplicarAbaLastGoodSeRegrediu(merged, coopId, "pagar");
+  const protegido = staffGestaoPerfilReaplicarAbaLastGoodPermitido()
+    ? reaplicarAbaLastGoodSeRegrediu(merged, coopId, "pagar")
+    : merged;
   saveDataSafe(protegido);
   const after = getData();
   if (detectCooperadoPagamentosNaoMaterializados(coopId, bundle.operacional, after)) {

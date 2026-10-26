@@ -158,8 +158,13 @@ export function valorAPagarCooperadoEmAberto(
   let total = 0;
   for (const m of aberto.porMes) {
     const resumoMes = getResumoPagamentoCooperado(data, cooperadoId, m.mes, cooperativaId);
-    porMes.push({ mes: m.mes, entregas: m.entregas, total: resumoMes.valorLiquido });
-    total = round2(total + resumoMes.valorLiquido);
+    const liquido = Number(resumoMes.valorLiquido);
+    const mesTotal = Number.isFinite(liquido) && liquido > 0.005 ? liquido : m.total;
+    porMes.push({ mes: m.mes, entregas: m.entregas, total: mesTotal });
+    total = round2(total + mesTotal);
+  }
+  if (total <= 0.005) {
+    return valorAPagarDeNotasSemFicha(data, cooperadoId, cooperativaId);
   }
   return { meses: porMes.map((m) => m.mes), porMes, total };
 }

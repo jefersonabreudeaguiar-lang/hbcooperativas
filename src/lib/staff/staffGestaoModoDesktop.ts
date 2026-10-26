@@ -11,6 +11,8 @@ import {
   staffGestaoPerfilSyncBackgroundPermitido,
 } from "@/lib/staff/staffGestaoPerfilDesktop";
 
+export { staffGestaoPerfilEhDesktop } from "@/lib/staff/staffGestaoPerfilDesktop";
+
 export {
   staffGestaoPerfilAberturaSyncPermitido,
   staffGestaoPerfilNotasLivePollPermitido,

@@ -29,6 +29,7 @@ const steps: { title: string; cmd: string; args: string[] }[] = [
   { title: "Desktop abertura leve", cmd: "npx", args: ["tsx", "scripts/test-staff-desktop-abertura-leve.ts"] },
   { title: "Perfil desktop gestão", cmd: "npx", args: ["tsx", "scripts/test-staff-gestao-perfil-desktop.ts"] },
   { title: "Desktop reconciliar livro isolado", cmd: "npx", args: ["tsx", "scripts/test-staff-desktop-reconciliar-livro-isolado.ts"] },
+  { title: "Candidatos sem cadastro local", cmd: "npx", args: ["tsx", "scripts/test-responsavel-candidatos-sem-cadastro.ts"] },
   {
     title: "Homolog operacional cooperativa (read-only)",
     cmd: "npx",

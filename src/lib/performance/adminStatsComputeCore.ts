@@ -15,6 +15,7 @@ import {
   countNotasFilaConferenciaResponsavel,
 } from "@/services/responsavelPainelIndex";
 import { getTotalValoresAPagarGestaoCooperativa } from "@/lib/responsavel/responsavelGestaoLeitura";
+import { totalValoresAPagarGestaoUnificado } from "@/lib/responsavel/responsavelGestaoTotais";
 
 export interface AdminDashboardStats {
   totalVendidoMes: number;
@@ -98,7 +99,9 @@ export function computeAdminStatsPure(
 
   const valoresAPagar = opts?.skipValoresAPagar
     ? 0
-    : getTotalValoresAPagarGestaoCooperativa(d, cooperativaId);
+    : cooperativaId
+      ? totalValoresAPagarGestaoUnificado(d, cooperativaId)
+      : getTotalValoresAPagarGestaoCooperativa(dataPagar, cooperativaId);
 
   return {
     totalVendidoMes: sumBy(entregasMes, (e) => e.valorBruto),

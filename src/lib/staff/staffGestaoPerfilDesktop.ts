@@ -3,7 +3,7 @@
  * Toda decisão “desktop vs mobile” da staff passa aqui ou em staffGestaoModoDesktop (reexport).
  */
 import type { SyncRunOptions } from "@/services/syncRequest";
-import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewport";
+import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewportCore";
 
 /** Bump + teste `test-staff-gestao-perfil-desktop.ts` a cada mudança de comportamento PC. */
 export const STAFF_GESTAO_DESKTOP_PERFIL_VERSION = 7;

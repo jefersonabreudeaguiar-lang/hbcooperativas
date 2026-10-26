@@ -13,7 +13,9 @@ import {
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.equal(STAFF_GESTAO_DESKTOP_PERFIL_VERSION, 2);
+assert.equal(STAFF_GESTAO_DESKTOP_PERFIL_VERSION, 7);
+assert.ok(read("src/lib/performance/cooperadoColdStart.ts").includes("preloadAppData({ eager: true })"));
+assert.ok(read("src/lib/responsavel/responsavelGestaoTotais.ts").includes("getRelatorioLancamentosEmAbertoResponsavel"));
 
 assert.equal(
   staffGestaoPerfilCapSyncAutomaticoForViewport(true, { tier: "operacional_full", silent: true }),
@@ -34,6 +36,12 @@ assert.equal(
 
 assert.ok(read("src/hooks/useReconciliarLivroCaixaGestao.ts").includes("isStaffMobileViewportActive"));
 assert.ok(read("src/lib/staff/staffGestaoPerfilDesktop.ts").includes("staffGestaoPerfilAtributosDom"));
+assert.ok(read("src/lib/staff/staffGestaoPerfilDesktop.ts").includes("staffGestaoPerfilReconciliarLivroHookHabilitado"));
+assert.ok(read("src/services/responsavelPainelIndex.ts").includes("preservarValoresNumericosDaFonte(data, pipeline)"));
+assert.ok(read("src/services/responsavelPainelIndex.ts").includes("staffGestaoPerfilEhDesktop()"));
+assert.ok(read("src/services/pagamentoIntegridadeService.ts").includes("staffGestaoPerfilEhDesktop"));
+assert.ok(read("src/lib/staff/staffGestaoPerfilDesktop.ts").includes("staffGestaoPerfilReaplicarAbaLastGoodPermitido"));
+assert.ok(!read("src/app/(app)/notas-pedido/staff/NotasPedidoStaffResponsavelApp.tsx").includes("useReconciliarLivroCaixaGestao"));
 assert.ok(read("src/components/layout/AppLayout.tsx").includes("data-staff-gestao-perfil-version"));
 
 assert.ok(read("src/lib/staff/staffGestaoModoDesktop.ts").includes("staffGestaoPerfil"));

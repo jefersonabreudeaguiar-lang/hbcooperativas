@@ -22,6 +22,7 @@ import {
   promoverPagamentosAguardandoConfirmadosPeloResponsavel,
 } from "@/services/notaPedidoService";
 import { reconciliarLivroCaixaContabilCooperativa } from "@/services/livroCaixaService";
+import { staffGestaoPerfilEhDesktop } from "@/lib/staff/staffGestaoPerfilDesktop";
 import {
   aplicarPreservacaoPagamentosConfirmadosNoOperacional,
   mergePagamentoRegistro,
@@ -327,7 +328,9 @@ export function posProcessarIntegridadePagamentosCooperativa(
 ): AppData {
   let next = promoverPagamentosAguardandoConfirmadosPeloResponsavel(data);
   next = alinharFichaComPagamentosCooperativa(repararIntegridadePagamentosCooperativa(next));
-  if (opts?.reconciliarLivroCaixa === false) return next;
+  const reconcileLivro =
+    opts?.reconciliarLivroCaixa ?? !staffGestaoPerfilEhDesktop();
+  if (!reconcileLivro) return next;
   const coopIds = [...new Set(next.cooperativas.map((c) => c.id))];
   for (const coopId of coopIds) {
     next = reconciliarLivroCaixaContabilCooperativa(next, coopId);

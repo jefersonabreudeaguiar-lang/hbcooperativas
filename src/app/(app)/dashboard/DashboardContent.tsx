@@ -13,7 +13,7 @@ import {
 import type { AppData, User } from "@/types";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   useAppDataSelector,
   useAppDataSelectorWhenActive,
@@ -676,6 +676,7 @@ function CooperadoDashboardInicioView({
 
 function AdminDashboard() {
   const tabActive = useCooperadoTabPanelActive("/dashboard");
+  const pathname = usePathname() ?? "";
   const { user, accountUser } = useAuth();
   const gestaoUser = accountUser ?? user;
   const adminDataRevision = useAppDataSelectorWhenActive(
@@ -757,7 +758,7 @@ function AdminDashboard() {
       return false;
     }
   }, [navUser?.id, navUser?.role, navUser?.cooperativaId, adminDataRevision]);
-  useReconciliarLivroCaixaGestao(meta?.coopId, Boolean(navUser && meta?.coopId && tabActive));
+  useReconciliarLivroCaixaGestao(meta?.coopId, false);
 
   const dataRevision = tabActive ? adminDataRevision : null;
   const deferredRevision = useDeferredValue(dataRevision ?? -1);
