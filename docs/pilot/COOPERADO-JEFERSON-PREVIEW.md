@@ -14,14 +14,14 @@
 
 - Tag: `cooperado-mobile-fase3-v644` (`2dd7cb2a`) — Fase 3 SIM em 24/10/2026.
 - Script: `npm run pilot:cooperado-baseline`
-- Build piloto: **680+** (badge no header — diferente de produção).
+- Build piloto: **681** (badge no header — diferente de produção **671**).
 
 ## Como abrir (Jeferson)
 
 1. Abrir a **URL de Preview** da branch `pilot/cooperado-jeferson-baseline` (Vercel → Deployments → branch pilot).
 2. Login com o e-mail acima.
 3. Instalar/atualizar PWA a partir **dessa URL** (não use o ícone antigo de produção até o portão final).
-4. Conferir badge **v680** (ou superior piloto).
+4. Conferir badge **v681** (ou superior piloto).
 
 ## Portões (SIM / NÃO)
 

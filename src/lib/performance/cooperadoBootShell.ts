@@ -1,6 +1,6 @@
 /**
  * Shell HTML estático no 1º paint (antes do bundle React) — PWA cooperado com sessão.
- * Cooperado: pinta o último Início do cache e some quando o React monta.
+ * Cooperado: Olá + esqueleto + abas (sem valor cacheado); some quando o React monta o Início completo.
  */
 import {
   PWA_DIRECT_ENTRY_SESSION_KEY,
@@ -8,13 +8,10 @@ import {
   PWA_REPAIR_SESSION_VERSION,
 } from "@/lib/pwa/clientRelease";
 import { cooperadoMobilePilotInlineSessionHelperJs } from "@/lib/cooperado/cooperadoMobilePilotInlineSession";
-import { COOPERADO_INICIO_CARD_STORAGE_VERSION } from "@/lib/cooperado/cooperadoAberturaInstantanea";
-
 const SESSION_KEY = "coopeagriplla_session";
 
 export function buildInlineCooperadoBootShellScript(): string {
   const directKey = PWA_DIRECT_ENTRY_SESSION_KEY;
-  const cardPrefix = `hb.coop.inicioCard.v${COOPERADO_INICIO_CARD_STORAGE_VERSION}:`;
   const pilotFn = cooperadoMobilePilotInlineSessionHelperJs();
   return `(function(){try{${pilotFn}
 if(typeof document==="undefined")return;
@@ -32,35 +29,21 @@ if(typeof localStorage==="undefined"||!localStorage.getItem("${SESSION_KEY}")){h
 var standalone=window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches;
 var mobile=window.matchMedia&&window.matchMedia("(max-width: 1023px)").matches;
 if(!standalone&&!mobile){hide();return;}
-function brl(n){
-  var neg=n<0;n=Math.abs(Number(n)||0);var c=Math.round(n*100);
-  var w=String(Math.floor(c/100));var f=String(c%100);if(f.length<2)f="0"+f;
-  w=w.replace(/\\B(?=(\\d{3})+(?!\\d))/g,".");
-  return (neg?"- ":"")+"R$ "+w+","+f;
-}
 function paintInicio(s){
   var nome=String(s&&s.name||"Cooperado").replace(/[<>&]/g,"").split(/\\s+/)[0]||"Cooperado";
-  var valorTxt="";
-  try{
-    var prefix="${cardPrefix}";
-    var cid=String(s&&s.cooperadoId||"");
-    for(var i=0;i<localStorage.length;i++){
-      var k=localStorage.key(i);
-      if(!k||k.indexOf(prefix)!==0)continue;
-      if(cid&&k.indexOf(":"+cid)===-1)continue;
-      var card=JSON.parse(localStorage.getItem(k)||"null");
-      if(card&&card.display&&typeof card.display.valor==="number"){
-        valorTxt=brl(card.display.valor);
-        break;
-      }
-    }
-  }catch(e){}
   el.innerHTML='<div style="height:56px;background:#14532d;flex-shrink:0;display:flex;align-items:center;padding:0 16px;color:#fff;font-size:14px;font-weight:600">HB Cooperativas</div>'
-    +'<div style="flex:1;padding:16px;max-width:32rem;margin:0 auto;width:100%">'
+    +'<div style="flex:1;padding:16px;max-width:32rem;margin:0 auto;width:100%;padding-bottom:72px">'
     +'<p style="font-size:18px;font-weight:600;color:#111827;margin:0">Olá, '+nome+'</p>'
-    +(valorTxt
-      ?'<div style="margin-top:16px;border:1px solid #bbf7d0;background:#fff;border-radius:12px;padding:16px"><p style="margin:0;font-size:13px;color:#6b7280">A receber</p><p style="margin:6px 0 0;font-size:28px;font-weight:700;color:#166534">'+valorTxt+"</p></div>"
-      :'<div style="margin-top:16px;height:96px;background:#fff;border-radius:12px;border:1px solid #e5e7eb"></div>')
+    +'<div style="margin-top:8px;height:14px;width:40%;background:#e5e7eb;border-radius:6px"></div>'
+    +'<div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    +'<div style="height:96px;background:#fff;border-radius:12px;border:1px solid #e5e7eb"></div>'
+    +'<div style="height:96px;background:#fff;border-radius:12px;border:1px solid #e5e7eb"></div>'
+    +"</div></div>"
+    +'<div style="position:fixed;bottom:0;left:0;right:0;height:56px;background:#fff;border-top:1px solid #e5e7eb;display:flex;justify-content:space-around;align-items:center;padding:0 8px">'
+    +'<span style="font-size:11px;color:#166534;font-weight:600">Início</span>'
+    +'<span style="font-size:11px;color:#9ca3af">Entregas</span>'
+    +'<span style="font-size:11px;color:#9ca3af">Ficha</span>'
+    +'<span style="font-size:11px;color:#9ca3af">Financeiro</span>'
     +"</div>";
   el.style.display="flex";
   el.setAttribute("aria-hidden","false");

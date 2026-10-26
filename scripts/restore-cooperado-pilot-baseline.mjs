@@ -31,14 +31,16 @@ const FROM_TAG = [
   "src/hooks/useCooperadoStaffRevisionWatch.ts",
   "src/hooks/useCooperadoTabPanelActive.ts",
   "src/lib/bic/bicRevisionPulse.ts",
-  "src/app/(app)/dashboard/DashboardContent.tsx",
 ];
 
 /** Gestão + anti-travamento cooperado em arquivos compartilhados (main). */
 const FROM_MAIN = [
   "src/lib/performance/cooperadoColdStart.ts",
+  "src/lib/performance/cooperadoBootShell.ts",
+  "src/components/performance/CooperadoBootShellDismiss.tsx",
   "src/services/dataStore.ts",
   "src/components/sync/CooperativaSyncProvider.tsx",
+  "src/app/(app)/dashboard/DashboardContent.tsx",
   "src/app/(app)/ficha-corrida/FichaCorridaContent.tsx",
   "src/services/cooperadoFinanceiroGuard.ts",
 ];
