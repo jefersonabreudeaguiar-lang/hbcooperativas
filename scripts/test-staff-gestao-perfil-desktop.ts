@@ -13,7 +13,7 @@ import {
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.equal(STAFF_GESTAO_DESKTOP_PERFIL_VERSION, 1);
+assert.equal(STAFF_GESTAO_DESKTOP_PERFIL_VERSION, 2);
 
 assert.equal(
   staffGestaoPerfilCapSyncAutomaticoForViewport(true, { tier: "operacional_full", silent: true }),
@@ -27,10 +27,13 @@ assert.equal(
   }),
   null
 );
-assert.deepEqual(
+assert.equal(
   staffGestaoPerfilCapSyncAutomaticoForViewport(true, { tier: "pulse", silent: true }),
-  { tier: "pulse", silent: true }
+  null
 );
+
+assert.ok(read("src/hooks/useReconciliarLivroCaixaGestao.ts").includes("staffGestaoPerfilEhDesktop"));
+assert.ok(read("src/hooks/useReconciliarLivroCaixaGestao.ts").includes("pathEhLivroCaixa"));
 
 assert.ok(read("src/lib/staff/staffGestaoModoDesktop.ts").includes("staffGestaoPerfil"));
 assert.ok(read("src/components/sync/CooperativaSyncProvider.tsx").includes("staffGestaoPerfilCapSyncAutomatico"));

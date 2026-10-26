@@ -3,10 +3,17 @@
  */
 import {
   staffGestaoPerfilAberturaDelayMs,
+  staffGestaoPerfilAberturaSyncPermitido,
   staffGestaoPerfilCapSyncAutomatico,
   staffGestaoPerfilEhDesktop,
+  staffGestaoPerfilNotasLivePollPermitido,
   staffGestaoPerfilPersistReloadIdleTimeoutMs,
   staffGestaoPerfilSyncBackgroundPermitido,
+} from "@/lib/staff/staffGestaoPerfilDesktop";
+
+export {
+  staffGestaoPerfilAberturaSyncPermitido,
+  staffGestaoPerfilNotasLivePollPermitido,
 } from "@/lib/staff/staffGestaoPerfilDesktop";
 
 export { staffGestaoPerfilCapSyncAutomatico } from "@/lib/staff/staffGestaoPerfilDesktop";

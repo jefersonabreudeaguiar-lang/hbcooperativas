@@ -80,6 +80,7 @@ import {
 } from "@/lib/performance/staffFilaNotasLivePoll";
 import { markRqlColdStartPhase, markRqlStaffNotasSubviewTransition } from "@/lib/performance/rqlMarks";
 import { staffGestaoPausaTrabalhoPesadoAutomatico } from "@/lib/staff/staffGestaoPausaTrabalhoPesado";
+import { staffGestaoPerfilNotasLivePollPermitido } from "@/lib/staff/staffGestaoModoDesktop";
 import {
   loadCooperadoAnexarPipeline,
   prefetchCooperadoAnexarPipeline,
@@ -2324,6 +2325,7 @@ export default function NotasPedidoStaffMain() {
 
   useEffect(() => {
     if (isCooperado || !coopId || !tabActive) return;
+    if (!staffGestaoPerfilNotasLivePollPermitido()) return;
     if (!isStaffFilaNotasLivePollEnabled()) return;
     const pollMs = resolveStaffNotasPollIntervalMs(true);
     puxarFilaLiveResponsavel();

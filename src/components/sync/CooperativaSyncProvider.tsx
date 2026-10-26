@@ -149,6 +149,7 @@ import { staffGestaoPausaTrabalhoPesadoAutomatico } from "@/lib/staff/staffGesta
 import {
   staffGestaoAberturaSyncDelayMs,
   staffGestaoEmViewportDesktop,
+  staffGestaoPerfilAberturaSyncPermitido,
   staffGestaoPerfilCapSyncAutomatico,
   staffGestaoSyncBackgroundPermitido,
 } from "@/lib/staff/staffGestaoModoDesktop";
@@ -1272,7 +1273,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         });
       }
     } else if (staff && isCooperadoInstantResumeEnabled()) {
-      if (!document.hidden) {
+      if (!document.hidden && staffGestaoPerfilAberturaSyncPermitido()) {
         markUserActivity();
         const runStaffOpen = () => {
           markNextCooperadoSyncSilent();
@@ -1284,7 +1285,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           else window.setTimeout(runStaffOpen, delayOpen);
         });
       }
-    } else if (staff) {
+    } else if (staff && staffGestaoPerfilAberturaSyncPermitido()) {
       const delayOpen = staffGestaoAberturaSyncDelayMs();
       initialDelay = setTimeout(() => {
         if (!document.hidden) {

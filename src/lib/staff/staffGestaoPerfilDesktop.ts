@@ -6,7 +6,7 @@ import type { SyncRunOptions } from "@/services/syncRequest";
 import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewport";
 
 /** Bump + teste `test-staff-gestao-perfil-desktop.ts` a cada mudança de comportamento PC. */
-export const STAFF_GESTAO_DESKTOP_PERFIL_VERSION = 1;
+export const STAFF_GESTAO_DESKTOP_PERFIL_VERSION = 2;
 
 export function staffGestaoPerfilEhDesktop(): boolean {
   if (typeof window === "undefined") return false;
@@ -17,12 +17,27 @@ export function staffGestaoPerfilSyncBackgroundPermitido(): boolean {
   return isStaffMobileViewportActive();
 }
 
+/** PC: sem sync automático na abertura — só «Atualizar». */
+export function staffGestaoPerfilAberturaSyncPermitido(): boolean {
+  return !staffGestaoPerfilEhDesktop();
+}
+
 export function staffGestaoPerfilAberturaDelayMs(): number {
-  return staffGestaoPerfilEhDesktop() ? 6_000 : 400;
+  return staffGestaoPerfilEhDesktop() ? 0 : 400;
 }
 
 export function staffGestaoPerfilPersistReloadIdleTimeoutMs(): number {
-  return staffGestaoPerfilEhDesktop() ? 4_500 : 180;
+  return staffGestaoPerfilEhDesktop() ? 12_000 : 180;
+}
+
+/** Poll da fila Conferir — só mobile; PC usa Atualizar na tela. */
+export function staffGestaoPerfilNotasLivePollPermitido(): boolean {
+  return isStaffMobileViewportActive();
+}
+
+/** Reconciliar livro no Início/Notas disparava subscribe → loop no PC. */
+export function staffGestaoPerfilReconciliarLivroForaDoLivroCaixa(): boolean {
+  return !staffGestaoPerfilEhDesktop();
 }
 
 export function staffGestaoPerfilPrefetchNavDelayMs(): number {
@@ -43,12 +58,7 @@ export function staffGestaoPerfilCapSyncAutomaticoForViewport(
 ): SyncRunOptions | null | undefined {
   if (!desktop) return opts;
   if (opts?.userInitiated === true || opts?.eventDriven === true) return opts;
-
-  const tier = opts?.tier;
-  if (tier === "operacional_full") return null;
-  if (tier === "financeiro_delta" && opts?.force === true) return null;
-
-  return opts;
+  return null;
 }
 
 export function staffGestaoPerfilCapSyncAutomatico(

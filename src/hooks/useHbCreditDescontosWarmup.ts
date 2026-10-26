@@ -21,6 +21,7 @@ import {
   scheduleCooperadoPostInteractiveTask,
   scheduleStaffPostInteractiveTask,
 } from "@/lib/performance/cooperadoColdStart";
+import { staffGestaoPerfilEhDesktop } from "@/lib/staff/staffGestaoPerfilDesktop";
 
 const WARMUP_INITIAL_DELAY_COOPERADO_MS = 3_000;
 const WARMUP_INITIAL_DELAY_STAFF_MS = 15_000;
@@ -113,6 +114,7 @@ export function useHbCreditDescontosWarmup(user: Omit<User, "password"> | null) 
 
   useEffect(() => {
     if (!user || !shouldSyncHbFichaBaseDescontos()) return;
+    if (user.role !== "cooperado" && staffGestaoPerfilEhDesktop()) return;
     if (user.role === "cooperado" && isCooperadoManualOperacionalSync()) return;
     const coopId = getUserCooperativaId(user, getData());
     if (!coopId) return;

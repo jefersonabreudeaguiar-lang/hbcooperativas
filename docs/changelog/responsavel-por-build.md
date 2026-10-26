@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v659
+
+- **Perfil desktop v2:** zero sync automático no PC; sem abertura sync; sem poll Conferir; HB warmup staff off; **reconciliar livro** só em `/livro-caixa` sem `subscribe` (fim do loop que travava o Chrome).
+
 ## v658
 
 - **Perfil desktop v1:** `staffGestaoPerfilDesktop` — uma política para PC (sync, abertura, persist, prefetch, cap de tiers pesados automáticos). `data-staff-gestao-perfil` no HTML. Doc `METODO-GESTAO-PC-2026.md`.
