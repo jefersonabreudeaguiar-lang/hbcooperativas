@@ -61,9 +61,11 @@ import {
 import { criarValorAvulsoReceber } from "../src/services/valoresAvulsosReceberService.ts";
 import type { AppData, FichaCorrida, NotaPedido } from "../src/types/index.ts";
 import { isDivisaoEntregaHabilitada } from "../src/lib/conferencia/divisaoEntregaPolicy.ts";
+import { COOPERADO_MOBILE_PILOT_COOPERADO_ID } from "../src/lib/cooperado/cooperadoMobilePilot.ts";
 
 const COOP = "coop-1";
 const COOPERADO = "c_orlando";
+const COOPERADO_PILOTO = COOPERADO_MOBILE_PILOT_COOPERADO_ID;
 
 function baseData(overrides?: Partial<AppData>): AppData {
   return {
@@ -415,6 +417,85 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
 {
   const MES = "2026-08";
   const data = baseData({
+    cooperados: [
+      {
+        id: COOPERADO_PILOTO,
+        cooperativaId: COOP,
+        nomeCompleto: "Jeferson Piloto",
+        cpf: "11111111111",
+        status: "ativo",
+        createdAt: "",
+      },
+    ],
+    fichaCorrida: [
+      {
+        ...ficha("f1", "n1", MES),
+        cooperadoId: COOPERADO_PILOTO,
+        status: "pago",
+      },
+      {
+        ...ficha("f2", "n2", MES),
+        cooperadoId: COOPERADO_PILOTO,
+        valorBruto: 50,
+        valorLiquido: 50,
+      },
+    ],
+    notasPedido: [
+      { ...nota("n1", "pago"), cooperadoId: COOPERADO_PILOTO },
+      {
+        ...nota("n2", "conferida"),
+        cooperadoId: COOPERADO_PILOTO,
+        valorLiquido: 50,
+        valorBruto: 50,
+      },
+    ],
+    pagamentosCooperado: [
+      {
+        id: "pg_confirmado_n2",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO_PILOTO,
+        mesReferencia: MES,
+        valorBruto: 100,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 100,
+        fichaIds: ["f1"],
+        notaPedidoIds: ["n1"],
+        status: "confirmado",
+        pagoPor: "Resp",
+        pagoEm: "2026-08-25T12:00:00.000Z",
+        assinadoEm: "2026-08-26T12:00:00.000Z",
+        createdAt: "2026-08-25T12:00:00.000Z",
+      },
+    ],
+    arquivosMensais: [
+      {
+        id: "am_ago",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO_PILOTO,
+        mesReferencia: MES,
+        notaPedidoIds: ["n1"],
+        pagamentoIds: ["pg_confirmado_n2"],
+        mensalidadeFixa: 0,
+        updatedAt: "2026-08-26T12:00:00.000Z",
+      },
+    ],
+  });
+  const aReceber = getResumoValorAPagarRelatorio(data, COOPERADO_PILOTO, MES, COOP).valorLiquido;
+  const card = getValorQuantoVouReceber(data, COOPERADO_PILOTO, COOP);
+  const baseMes = getResumoPagamentoCooperado(data, COOPERADO_PILOTO, MES, COOP);
+  assert.equal(baseMes.valorEntregas, 50, "Resumo vivo considera só a nova ficha pendente");
+  assert.ok(aReceber > 0, "Nova entrega após recibo assinado volta a gerar valor a receber");
+  const complementar = resumoComplementaresPosPagamento(data, COOPERADO_PILOTO, MES, COOP);
+  assert.ok(complementar, "Resumo complementar pós-PIX");
+  assert.equal(aReceber, complementar.valorLiquido, "Relatório e resumo alinhados");
+  assert.equal(card.valor, aReceber, "Início/ficha refletem o pendente novo");
+  assert.equal(card.aguardandoAssinatura, false);
+}
+
+{
+  const MES = "2026-08";
+  const data = baseData({
     fichaCorrida: [
       { ...ficha("f1", "n1", MES), status: "pago" },
       { ...ficha("f2", "n2", MES), valorBruto: 50, valorLiquido: 50 },
@@ -442,29 +523,9 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
         createdAt: "2026-08-25T12:00:00.000Z",
       },
     ],
-    arquivosMensais: [
-      {
-        id: "am_ago",
-        cooperativaId: COOP,
-        cooperadoId: COOPERADO,
-        mesReferencia: MES,
-        notaPedidoIds: ["n1"],
-        pagamentoIds: ["pg_confirmado_n2"],
-        mensalidadeFixa: 0,
-        updatedAt: "2026-08-26T12:00:00.000Z",
-      },
-    ],
   });
   const aReceber = getResumoValorAPagarRelatorio(data, COOPERADO, MES, COOP).valorLiquido;
-  const card = getValorQuantoVouReceber(data, COOPERADO, COOP);
-  const baseMes = getResumoPagamentoCooperado(data, COOPERADO, MES, COOP);
-  assert.equal(baseMes.valorEntregas, 50, "Resumo vivo considera só a nova ficha pendente");
-  assert.ok(aReceber > 0, "Nova entrega após recibo assinado volta a gerar valor a receber");
-  const complementar = resumoComplementaresPosPagamento(data, COOPERADO, MES, COOP);
-  assert.ok(complementar, "Resumo complementar pós-PIX");
-  assert.equal(aReceber, complementar.valorLiquido, "Relatório e resumo alinhados");
-  assert.equal(card.valor, aReceber, "Início/ficha refletem o pendente novo");
-  assert.equal(card.aguardandoAssinatura, false);
+  assert.equal(aReceber, 0, "Demais cooperados mantêm legado até promoção GA");
 }
 
 {
@@ -1071,15 +1132,30 @@ function round2(n: number): number {
 
 {
   const data = baseData({
+    cooperados: [
+      {
+        id: COOPERADO_PILOTO,
+        cooperativaId: COOP,
+        nomeCompleto: "Jeferson Piloto",
+        cpf: "11111111111",
+        status: "ativo",
+        createdAt: "",
+      },
+    ],
     notasPedido: [
-      { ...nota("n_no_pix", "conferida"), mesReferencia: "2026-09" },
-      { ...nota("n_pos_pix", "conferida"), mesReferencia: "2026-09", createdAt: "2026-09-22T10:00:00.000Z" },
+      { ...nota("n_no_pix", "conferida"), cooperadoId: COOPERADO_PILOTO, mesReferencia: "2026-09" },
+      {
+        ...nota("n_pos_pix", "conferida"),
+        cooperadoId: COOPERADO_PILOTO,
+        mesReferencia: "2026-09",
+        createdAt: "2026-09-22T10:00:00.000Z",
+      },
     ],
     pagamentosCooperado: [
       {
         id: "pg_mes",
         cooperativaId: COOP,
-        cooperadoId: COOPERADO,
+        cooperadoId: COOPERADO_PILOTO,
         mesReferencia: "2026-09",
         mesesReferencia: ["2026-09"],
         valorBruto: 100,
@@ -1094,7 +1170,9 @@ function round2(n: number): number {
         createdAt: "2026-09-21T12:00:00.000Z",
       },
     ],
-    fichaCorrida: [ficha("f_no_pix", "n_no_pix", "2026-09")],
+    fichaCorrida: [
+      { ...ficha("f_no_pix", "n_no_pix", "2026-09"), cooperadoId: COOPERADO_PILOTO },
+    ],
   });
   const rec = reconciliarFichaFromNotasConferidas(data);
   assert.ok(
@@ -1108,24 +1186,39 @@ function round2(n: number): number {
     "posProcessar não pode marcar como pago nota fora do PIX"
   );
   assert.ok(
-    getTotalAPagarCooperado(pos, COOPERADO, undefined, COOP) > 0,
+    getTotalAPagarCooperado(pos, COOPERADO_PILOTO, undefined, COOP) > 0,
     "cooperado deve ver valor da nota pós-pagamento"
   );
-  const cardPos = getValorQuantoVouReceber(pos, COOPERADO, COOP);
+  const cardPos = getValorQuantoVouReceber(pos, COOPERADO_PILOTO, COOP);
   assert.ok(cardPos.valor > 0, "card Quanto vou receber deve refletir nota pós-PIX");
 }
 
 {
   const data = baseData({
+    cooperados: [
+      {
+        id: COOPERADO_PILOTO,
+        cooperativaId: COOP,
+        nomeCompleto: "Jeferson Piloto",
+        cpf: "11111111111",
+        status: "ativo",
+        createdAt: "",
+      },
+    ],
     notasPedido: [
-      { ...nota("n_no_pix", "conferida"), mesReferencia: "2026-09" },
-      { ...nota("n_pos_pix", "conferida"), mesReferencia: "2026-09", createdAt: "2026-09-22T10:00:00.000Z" },
+      { ...nota("n_no_pix", "conferida"), cooperadoId: COOPERADO_PILOTO, mesReferencia: "2026-09" },
+      {
+        ...nota("n_pos_pix", "conferida"),
+        cooperadoId: COOPERADO_PILOTO,
+        mesReferencia: "2026-09",
+        createdAt: "2026-09-22T10:00:00.000Z",
+      },
     ],
     pagamentosCooperado: [
       {
         id: "pg_mes",
         cooperativaId: COOP,
-        cooperadoId: COOPERADO,
+        cooperadoId: COOPERADO_PILOTO,
         mesReferencia: "2026-09",
         valorBruto: 100,
         descontoCooperativa: 0,
@@ -1139,11 +1232,13 @@ function round2(n: number): number {
         createdAt: "2026-09-21T12:00:00.000Z",
       },
     ],
-    fichaCorrida: [ficha("f_no_pix", "n_no_pix", "2026-09")],
+    fichaCorrida: [
+      { ...ficha("f_no_pix", "n_no_pix", "2026-09"), cooperadoId: COOPERADO_PILOTO },
+    ],
   });
   const rec = reconciliarFichaFromNotasConferidas(data);
   const pos = posProcessarIntegridadePagamentosCooperativa(rec);
-  const fin = getConsolidadoFinanceiroCooperado(pos, COOPERADO, COOP);
+  const fin = getConsolidadoFinanceiroCooperado(pos, COOPERADO_PILOTO, COOP);
   assert.ok(fin.valorLiquido > 0, "consolidado cooperado deve mostrar complemento pós-PIX");
   assert.equal(
     fin.resumo.descontosExtras.filter((d) => d.tipo === "mensalidade").length,
@@ -1155,9 +1250,20 @@ function round2(n: number): number {
 {
   const MES = "2026-09";
   const data = baseData({
+    cooperados: [
+      {
+        id: COOPERADO_PILOTO,
+        cooperativaId: COOP,
+        nomeCompleto: "Jeferson Piloto",
+        cpf: "11111111111",
+        status: "ativo",
+        createdAt: "",
+      },
+    ],
     notasPedido: [
       {
         ...nota("n_foto_antiga", "conferida"),
+        cooperadoId: COOPERADO_PILOTO,
         mesReferencia: MES,
         createdAt: "2026-09-01T10:00:00.000Z",
         updatedAt: "2026-09-22T18:00:00.000Z",
@@ -1168,7 +1274,7 @@ function round2(n: number): number {
       {
         id: "pg_mes_implicito",
         cooperativaId: COOP,
-        cooperadoId: COOPERADO,
+        cooperadoId: COOPERADO_PILOTO,
         mesReferencia: MES,
         mesesReferencia: [MES],
         valorBruto: 500,
@@ -1187,8 +1293,8 @@ function round2(n: number): number {
   const rec = reconciliarFichaFromNotasConferidas(data);
   const fichaNova = rec.fichaCorrida.find((f) => f.notaPedidoId === "n_foto_antiga");
   assert.equal(fichaNova?.status, "pendente", "conferência após PIX não usa só createdAt da foto");
-  const total = getTotalAPagarCooperado(rec, COOPERADO, undefined, COOP);
-  const card = getValorQuantoVouReceber(rec, COOPERADO, COOP);
+  const total = getTotalAPagarCooperado(rec, COOPERADO_PILOTO, undefined, COOP);
+  const card = getValorQuantoVouReceber(rec, COOPERADO_PILOTO, COOP);
   assert.ok(total > 0, "total responsável inclui nota conferida após pagamento");
   assert.equal(card.valor, total, "card cooperado usa mesma base do responsável");
 }
