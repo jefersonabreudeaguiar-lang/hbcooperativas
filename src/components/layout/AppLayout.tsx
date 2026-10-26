@@ -62,6 +62,7 @@ import {
   scheduleStaffNavPrefetchEarly,
 } from "@/lib/performance/staffNavPrefetch";
 import { markStaffTabPathChange } from "@/lib/staff/staffTabSwitchQuiescence";
+import { staffGestaoPerfilAtributosDom } from "@/lib/staff/staffGestaoPerfilDesktop";
 import { useMobileBottomTabSwitchFeedback } from "@/lib/performance/tabSwitchFeedback";
 import {
   COOPERADO_PILOT_HB_PAY_TAB_HREF,
@@ -581,15 +582,13 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         cooperadoKeepAliveShell || staffKeepAliveShell ? "1" : "0"
       );
       if (!isCooperadoAppUser(navUser)) {
-        const desktopStaff =
-          typeof window !== "undefined" &&
-          window.matchMedia("(min-width: 1024px)").matches;
-        document.documentElement.setAttribute(
-          "data-staff-gestao-perfil",
-          desktopStaff ? "desktop" : "mobile"
-        );
+        const attrs = staffGestaoPerfilAtributosDom();
+        for (const [k, v] of Object.entries(attrs)) {
+          document.documentElement.setAttribute(k, v);
+        }
       } else {
         document.documentElement.removeAttribute("data-staff-gestao-perfil");
+        document.documentElement.removeAttribute("data-staff-gestao-perfil-version");
       }
       const cooperadoMobile =
         isCooperadoAppUser(navUser) &&

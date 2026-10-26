@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { getData, isAppDataWarm, refreshData, subscribe, updateData } from "@/services/dataStore";
 import { readAppDataPersistRaw } from "@/lib/staff/staffGestaoPersistKey";
+import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewport";
 import {
   medirRiquezaStaffGestao,
   staffGestaoRiquezaTotal,
@@ -11,7 +12,7 @@ import {
 } from "@/lib/staff/staffGestaoSnapshotGuard";
 import {
   staffGestaoPerfilEhDesktop,
-  staffGestaoPerfilReconciliarLivroForaDoLivroCaixa,
+  staffGestaoPerfilReconciliarLivroCaixaAtivo,
 } from "@/lib/staff/staffGestaoPerfilDesktop";
 
 /** Sem cadastro/ficha/PIX não grava — o mount do Início não pode persistir AppData vazio. */
@@ -39,13 +40,9 @@ function dadosGestaoOuRelerStorage() {
   return data;
 }
 
-function pathEhLivroCaixa(pathname: string): boolean {
-  return pathname === "/livro-caixa" || pathname.startsWith("/livro-caixa/");
-}
-
 /**
  * PIX confirmado: ficha vira paga, sai de Em aberto e entra no Livro Caixa.
- * PC: só na rota Livro Caixa, sem subscribe (evita loop com reload do persist).
+ * Desktop (`!isStaffMobileViewportActive`): só `/livro-caixa`, uma execução, sem `subscribe`.
  */
 export function useReconciliarLivroCaixaGestao(
   coopId: string | undefined,
@@ -56,9 +53,8 @@ export function useReconciliarLivroCaixaGestao(
   useEffect(() => {
     if (!enabled || !coopId) return;
 
-    const desktop = staffGestaoPerfilEhDesktop();
-    const foraDoLivro = !pathEhLivroCaixa(pathname);
-    if (desktop && foraDoLivro && !staffGestaoPerfilReconciliarLivroForaDoLivroCaixa()) {
+    const mobile = isStaffMobileViewportActive();
+    if (!mobile && !staffGestaoPerfilReconciliarLivroCaixaAtivo(pathname)) {
       return;
     }
 
@@ -105,20 +101,18 @@ export function useReconciliarLivroCaixaGestao(
         });
     };
 
-    const agendar = () => {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(tentar, desktop ? 2_500 : 800);
-    };
-
-    if (desktop) {
-      const delay = pathEhLivroCaixa(pathname) ? 2_000 : 0;
-      if (delay <= 0) return;
-      timer = window.setTimeout(tentar, delay);
+    if (!mobile) {
+      timer = window.setTimeout(tentar, 2_000);
       return () => {
         cancelled = true;
         window.clearTimeout(timer);
       };
     }
+
+    const agendar = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(tentar, 800);
+    };
 
     tentar();
     agendar();

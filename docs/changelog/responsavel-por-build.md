@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v660
+
+- **T1:** `useReconciliarLivroCaixaGestao` isolado no desktop (`isStaffMobileViewportActive`) — sem `subscribe` fora de `/livro-caixa`.
+- **T2:** `appDataParaLeituraFichaEmAbertoResponsavel` reconcilia ficha das notas — paridade Em aberto × Pagar após F5/leitura.
+- **T3:** Fila Conferir enriquece `cooperadoNomeSnapshot` via `resolverNomeCooperadoGestao`; DOM `data-staff-gestao-perfil-version`.
+
 ## v659
 
 - **Perfil desktop v2:** zero sync automático no PC; sem abertura sync; sem poll Conferir; HB warmup staff off; **reconciliar livro** só em `/livro-caixa` sem `subscribe` (fim do loop que travava o Chrome).

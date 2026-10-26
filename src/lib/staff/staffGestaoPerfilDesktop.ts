@@ -40,6 +40,28 @@ export function staffGestaoPerfilReconciliarLivroForaDoLivroCaixa(): boolean {
   return !staffGestaoPerfilEhDesktop();
 }
 
+/** Desktop: hook de reconciliar livro só roda em `/livro-caixa` (sem subscribe AppData). */
+export function staffGestaoPerfilReconciliarLivroCaixaAtivoForViewport(
+  desktop: boolean,
+  pathname: string
+): boolean {
+  if (!desktop) return true;
+  const p = pathname || "";
+  return p === "/livro-caixa" || p.startsWith("/livro-caixa/");
+}
+
+export function staffGestaoPerfilReconciliarLivroCaixaAtivo(pathname: string): boolean {
+  return staffGestaoPerfilReconciliarLivroCaixaAtivoForViewport(staffGestaoPerfilEhDesktop(), pathname);
+}
+
+export function staffGestaoPerfilAtributosDom(): Record<string, string> {
+  const desktop = staffGestaoPerfilEhDesktop();
+  return {
+    "data-staff-gestao-perfil": desktop ? "desktop" : "mobile",
+    "data-staff-gestao-perfil-version": String(STAFF_GESTAO_DESKTOP_PERFIL_VERSION),
+  };
+}
+
 export function staffGestaoPerfilPrefetchNavDelayMs(): number {
   return staffGestaoPerfilEhDesktop() ? 12_000 : 0;
 }

@@ -32,8 +32,9 @@ assert.equal(
   null
 );
 
-assert.ok(read("src/hooks/useReconciliarLivroCaixaGestao.ts").includes("staffGestaoPerfilEhDesktop"));
-assert.ok(read("src/hooks/useReconciliarLivroCaixaGestao.ts").includes("pathEhLivroCaixa"));
+assert.ok(read("src/hooks/useReconciliarLivroCaixaGestao.ts").includes("isStaffMobileViewportActive"));
+assert.ok(read("src/lib/staff/staffGestaoPerfilDesktop.ts").includes("staffGestaoPerfilAtributosDom"));
+assert.ok(read("src/components/layout/AppLayout.tsx").includes("data-staff-gestao-perfil-version"));
 
 assert.ok(read("src/lib/staff/staffGestaoModoDesktop.ts").includes("staffGestaoPerfil"));
 assert.ok(read("src/components/sync/CooperativaSyncProvider.tsx").includes("staffGestaoPerfilCapSyncAutomatico"));

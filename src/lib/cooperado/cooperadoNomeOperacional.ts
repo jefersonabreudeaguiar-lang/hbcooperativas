@@ -19,5 +19,13 @@ export function resolverNomeCooperadoGestao(
     if (n.cooperativaId !== cooperativaId || n.cooperadoId !== cooperadoId) continue;
     if (n.cooperadoNomeSnapshot?.trim()) return n.cooperadoNomeSnapshot.trim();
   }
+  for (const n of data.notasPedido ?? []) {
+    if (n.cooperativaId !== cooperativaId) continue;
+    if (n.cooperadoId !== cooperadoId) continue;
+    const ficha = (data.fichaCorrida ?? []).find(
+      (row) => row.cooperativaId === cooperativaId && row.notaPedidoId === n.id
+    );
+    if (ficha?.cooperadoNomeSnapshot?.trim()) return ficha.cooperadoNomeSnapshot.trim();
+  }
   return "";
 }

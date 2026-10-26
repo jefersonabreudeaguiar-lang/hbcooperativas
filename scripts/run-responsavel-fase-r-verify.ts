@@ -28,6 +28,7 @@ const steps: { title: string; cmd: string; args: string[] }[] = [
   { title: "Desktop prefetch policy", cmd: "npx", args: ["tsx", "scripts/test-staff-desktop-prefetch-policy.ts"] },
   { title: "Desktop abertura leve", cmd: "npx", args: ["tsx", "scripts/test-staff-desktop-abertura-leve.ts"] },
   { title: "Perfil desktop gestão", cmd: "npx", args: ["tsx", "scripts/test-staff-gestao-perfil-desktop.ts"] },
+  { title: "Desktop reconciliar livro isolado", cmd: "npx", args: ["tsx", "scripts/test-staff-desktop-reconciliar-livro-isolado.ts"] },
   {
     title: "Homolog operacional cooperativa (read-only)",
     cmd: "npx",

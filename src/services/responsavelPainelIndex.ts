@@ -27,7 +27,8 @@ import {
   reconciliarFichaFromNotasConferidas,
 } from "@/services/notaPedidoService";
 import { round2 } from "@/utils/calculations";
-import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
+import { resolverNomeCooperadoGestao } from "@/lib/cooperado/cooperadoNomeOperacional";
+import { nomeCooperadoSnapshotUtilizavel, notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import {
   isNotaStatusDowngrade,
   notaElegivelParaFilaConferenciaResponsavel,
@@ -170,11 +171,15 @@ function listarNotasConferidasSemPixCooperado(
  */
 function appDataParaLeituraFichaEmAbertoResponsavel(data: AppData, coopId?: string): AppData {
   const leituraConferir = appDataParaConferirLeitura(data, coopId);
-  return completarFichaProjetadaComNota(
+  const pipeline = completarFichaProjetadaComNota(
     alinharFichaComPagamentosCooperativa(
-      repararIntegridadePagamentosCooperativa(leituraConferir, { forcar: true })
+      reconciliarFichaFromNotasConferidas(
+        repararIntegridadePagamentosCooperativa(leituraConferir, { forcar: true })
+      )
     )
   );
+  // Mesmo lastro da aba Pagar: nota/ficha do snapshot local não perde líquido após reconcile/F5.
+  return preservarValoresNumericosDaFonte(data, pipeline);
 }
 
 /**
@@ -649,12 +654,20 @@ export function deveRecuperarFilaConferirVazia(
   return !temFicha;
 }
 
+function enriquecerNotaFilaComNomeGestao(data: AppData, nota: NotaPedido, coopId: string): NotaPedido {
+  const base = sanitizarNotaParaFilaConferencia(nota);
+  if (nomeCooperadoSnapshotUtilizavel(base.cooperadoNomeSnapshot)) return base;
+  const nome = resolverNomeCooperadoGestao(data, base.cooperadoId, coopId);
+  if (!nome) return base;
+  return { ...base, cooperadoNomeSnapshot: nome };
+}
+
 function coletarFilaNotasConferir(data: AppData, coopId: string): NotaPedido[] {
   const excluidas = idsNotasPedidoExcluidas(data, coopId);
   const filaNotas: NotaPedido[] = [];
   for (const n of data.notasPedido ?? []) {
     if (notaLancadaNaFichaCorrida(data.fichaCorrida, n.id)) continue;
-    const candidata = sanitizarNotaParaFilaConferencia(n);
+    const candidata = enriquecerNotaFilaComNomeGestao(data, n, coopId);
     if (!notaElegivelParaFilaConferenciaResponsavel(candidata)) continue;
     if (!notaPertenceCooperativa(data, n, coopId)) continue;
     if (excluidas.has(n.id)) continue;
