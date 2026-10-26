@@ -90,6 +90,10 @@ import {
 } from "@/services/conferenciaOperacionalPushScope";
 import { takeInlineParsedAppData } from "@/lib/performance/cooperadoAppDataInlineWarm";
 import { cooperadoGaShouldDeferDataWarmFromGetData } from "@/lib/cooperado/cooperadoGaDataWarmDefer";
+import {
+  cooperadoGaMobileViewportAtivoLite,
+  readCooperadoSessionLite,
+} from "@/lib/cooperado/cooperadoSessionLite";
 
 export { generateId };
 
@@ -866,7 +870,19 @@ function scheduleAutomaticTasksIfNeeded(data: AppData): AppData {
 }
 
 /** Inicia leitura do localStorage — `eager` sincroniza no primeiro frame (HX 9.0 cooperado). */
-export function preloadAppData(opts?: { eager?: boolean; force?: boolean }): void {
+function cooperadoMobileDeferPreloadParse(opts?: {
+  userInitiated?: boolean;
+}): boolean {
+  if (!opts?.userInitiated) return false;
+  const session = readCooperadoSessionLite();
+  return Boolean(session?.role === "cooperado" && cooperadoGaMobileViewportAtivoLite());
+}
+
+export function preloadAppData(opts?: {
+  eager?: boolean;
+  force?: boolean;
+  userInitiated?: boolean;
+}): void {
   if (typeof window === "undefined" || memoryCache) return;
   if (!opts?.force && cooperadoGaShouldDeferDataWarmFromGetData()) return;
   if (dataWarmInFlight && !opts?.eager) return;
@@ -884,6 +900,15 @@ export function preloadAppData(opts?: { eager?: boolean; force?: boolean }): voi
 
   if (opts?.eager) {
     run();
+    return;
+  }
+
+  if (cooperadoMobileDeferPreloadParse(opts)) {
+    if (typeof requestIdleCallback !== "undefined") {
+      requestIdleCallback(run, { timeout: 1_500 });
+    } else {
+      window.setTimeout(run, 400);
+    }
     return;
   }
 

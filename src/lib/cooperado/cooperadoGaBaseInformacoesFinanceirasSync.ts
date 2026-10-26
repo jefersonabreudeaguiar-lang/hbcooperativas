@@ -23,13 +23,18 @@ import {
   fingerprintCooperativaCloudRevision,
   persistAppliedCooperativaCloudRevision,
 } from "@/lib/performance/cooperadoEventDrivenSync";
-import { isCooperadoBicHybridLightEnabled } from "@/lib/cooperado/cooperadoBicHybridLight";
+import {
+  isCooperadoBicHybridLightEnabled,
+  scheduleCooperadoBicHybridIdleTask,
+} from "@/lib/cooperado/cooperadoBicHybridLight";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { syncOperacionalFromCloud } from "@/services/cooperativaSyncCloudService";
 import { getData, isAppDataWarm, preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { syncNotasPedidoFromCloud } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
+import { cooperadoGaMobileViewportAtivoLite } from "@/lib/cooperado/cooperadoSessionLite";
+import { yieldCooperadoMobileUiBeforeHeavyWork } from "@/lib/cooperado/cooperadoGaMobileAtualizarYield";
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
 import { cooperadoMotorTemObrigacaoReceber } from "@/lib/cooperadoInicioCardPolicy";
 import { resolverMotorCardInicioParidadeFinanceiro } from "@/lib/cooperado/cooperadoInicioCardParidadeMotor";
@@ -137,19 +142,53 @@ export async function runCooperadoGaSyncBaseInformacoesFinanceiras(
 
   inflight = (async () => {
     if (typeof navigator !== "undefined" && !navigator.onLine) return false;
+    const mobileAtualizar =
+      Boolean(opts?.userInitiated) && cooperadoGaMobileViewportAtivoLite();
+    if (mobileAtualizar) {
+      await yieldCooperadoMobileUiBeforeHeavyWork();
+    }
     if (!lightReconcile && !opts?.silent) {
       markCooperadoUserSyncVisible();
     }
-    preloadAppData();
-    const warm = isAppDataWarm() ? true : await waitForAppDataWarm(20_000);
-    if (!warm) return false;
+
+    let digits = normalizeCnpj(user.cooperativaCnpj ?? "");
+    if (digits.length !== 14) {
+      preloadAppData({ userInitiated: Boolean(opts?.userInitiated) });
+      const warm = isAppDataWarm() ? true : await waitForAppDataWarm(20_000);
+      if (!warm) return false;
+      const data = getData();
+      const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
+      if (!coopId) return false;
+      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+      digits = normalizeCnpj(cnpj ?? "");
+    } else if (mobileAtualizar && !isAppDataWarm()) {
+      const op = await syncOperacionalFromCloud(digits);
+      if (!op.ok) {
+        await syncNotasPedidoFromCloud(digits, { retryFull: true }).catch(() => {});
+      } else {
+        await syncNotasPedidoFromCloud(digits, { retryFull: false }).catch(() => {});
+      }
+      markPull(user.id);
+      scheduleCooperadoBicHybridIdleTask(() => {
+        if (isAppDataWarm()) {
+          cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user, { light: true });
+          cooperadoPilotForcarRematerializacaoFinanceira(user);
+        }
+        dispatchCooperadoPwaLeveUiSnapshotRefresh();
+        scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
+      }, 1_200);
+      return true;
+    } else {
+      preloadAppData({ userInitiated: Boolean(opts?.userInitiated) });
+      const warm = isAppDataWarm() ? true : await waitForAppDataWarm(20_000);
+      if (!warm) return false;
+    }
+
+    if (digits.length !== 14) return false;
 
     const data = getData();
     const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
     if (!coopId) return false;
-    const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-    const digits = normalizeCnpj(cnpj ?? "");
-    if (digits.length !== 14) return false;
 
     const remote = await watchBicCooperativaCloudRevision(digits);
     const nuvemMudou = remote ? cloudRevisionChangedSinceApplied(digits, remote) : true;
@@ -174,14 +213,21 @@ export async function runCooperadoGaSyncBaseInformacoesFinanceiras(
     }
 
     const desktopEstavel = cooperadoBrowserDesktopFinanceiroEstavel(user);
-    if (!desktopEstavel || nuvemMudou) {
-      cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user);
-      cooperadoPilotForcarRematerializacaoFinanceira(user);
+    const materializar = () => {
+      if (!desktopEstavel || nuvemMudou) {
+        cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user, { light: mobileAtualizar });
+        cooperadoPilotForcarRematerializacaoFinanceira(user);
+      }
+      if (!cooperadoBrowserDesktopBicPerfActive(user) || nuvemMudou) {
+        dispatchCooperadoPwaLeveUiSnapshotRefresh();
+      }
+      scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
+    };
+    if (mobileAtualizar) {
+      scheduleCooperadoBicHybridIdleTask(materializar, 1_200);
+    } else {
+      materializar();
     }
-    if (!cooperadoBrowserDesktopBicPerfActive(user) || nuvemMudou) {
-      dispatchCooperadoPwaLeveUiSnapshotRefresh();
-    }
-    scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
 
     const dataAfter = getData();
     const cooperadoId = user.cooperadoId;

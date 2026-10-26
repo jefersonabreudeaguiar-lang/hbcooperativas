@@ -6,8 +6,11 @@ import {
   requestAppSyncImmediate,
   requestCooperadoManualRefreshSync,
 } from "@/services/syncRequest";
-import { preloadAppData } from "@/services/dataStore";
+import { isAppDataWarm } from "@/services/dataStore";
 import { unlockCooperadoGaDataWarmForSession } from "@/lib/cooperado/cooperadoGaDataWarmDefer";
+import { readCooperadoSessionLite } from "@/lib/cooperado/cooperadoSessionLite";
+import { yieldCooperadoMobileUiBeforeHeavyWork } from "@/lib/cooperado/cooperadoGaMobileAtualizarYield";
+import { markCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
 import { runClientReleaseShield } from "@/lib/pwa/clientReleaseShield";
 import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
 import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
@@ -26,13 +29,18 @@ export async function executarCooperadoAtualizarManual(): Promise<boolean> {
   if (typeof navigator !== "undefined" && !navigator.onLine) return false;
   const release = await runClientReleaseShield("cooperado_manual_atualizar");
   if (release === "aligning") return true;
-  const session = getSession();
-  if (session?.role === "cooperado" && rematerializarCooperadoPwaSnapshotsSeNecessario(session)) {
-    clearCooperadoPwaDadosDesatualizados();
-  }
+  const session = readCooperadoSessionLite() ?? getSession();
   grantCooperadoEventDrivenSync();
   unlockCooperadoGaDataWarmForSession();
-  preloadAppData({ force: true });
+  markCooperadoUserSyncVisible();
+  await yieldCooperadoMobileUiBeforeHeavyWork();
+  if (
+    session?.role === "cooperado" &&
+    isAppDataWarm() &&
+    rematerializarCooperadoPwaSnapshotsSeNecessario(session)
+  ) {
+    clearCooperadoPwaDadosDesatualizados();
+  }
   if (isCooperadoEventDrivenSync()) {
     requestCooperadoManualRefreshSync();
   } else {

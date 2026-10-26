@@ -323,6 +323,13 @@ export function cooperadoManualPrefereSyncBaseInformacoes(
 ): boolean {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return false;
   if (cooperadoAppReleaseNeedsOperacionalSync()) return false;
+  if (typeof window !== "undefined") {
+    try {
+      if (window.matchMedia("(max-width: 1023px)").matches) return true;
+    } catch {
+      return true;
+    }
+  }
   return !cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user);
 }
 
