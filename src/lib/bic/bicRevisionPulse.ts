@@ -8,9 +8,11 @@ import { watchBicCooperativaCloudRevision } from "@/lib/bic/bicRevisionWatch";
 import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoBicMobileAuthority";
 import { markCooperadoBicSessionRematerialized } from "@/lib/cooperado/cooperadoBicSessionReinforcementSkip";
 import { requestCooperadoStaffRevisionSync } from "@/services/syncRequest";
-import { cooperadoRematerializarFinanceiroLocalSePossivel } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
-import { cooperadoPilotForcarRematerializacaoFinanceira } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
-import { dispatchCooperadoPwaLeveUiSnapshotRefresh } from "@/lib/cooperado/cooperadoPwaLeveUiEvents";
+import {
+  rematerializarCooperadoValorCardLeve,
+  scheduleCooperadoGaValorRevisionLightSync,
+} from "@/lib/cooperado/cooperadoGaRevisionLightSync";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import {
   cloudRevisionChangedSinceApplied,
   fingerprintCooperativaCloudRevision,
@@ -39,9 +41,7 @@ let inflight = false;
 
 function rematerializarSilencioso(user: Omit<User, "password">): void {
   const run = () => {
-    cooperadoPilotForcarRematerializacaoFinanceira(user);
-    cooperadoRematerializarFinanceiroLocalSePossivel(user);
-    dispatchCooperadoPwaLeveUiSnapshotRefresh();
+    rematerializarCooperadoValorCardLeve(user);
     markCooperadoBicSessionRematerialized(user.id);
     markCooperadoBicFinanceiroFresh();
   };
@@ -62,7 +62,6 @@ async function runRevisionPulse(user: Omit<User, "password">): Promise<void> {
   if (inflight) return;
   if (typeof document !== "undefined" && document.hidden) return;
   if (cooperadoInicioAberturaQuiescenceActive()) return;
-  if (cooperadoGaPausaPulsoBicOuRematerializacao(user)) return;
   if (Date.now() - lastPulseAt < pulseMinGapMs(user)) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   if (!isAppDataWarm()) return;
@@ -83,11 +82,17 @@ async function runRevisionPulse(user: Omit<User, "password">): Promise<void> {
     const changed = cloudRevisionChangedSinceApplied(digits, remote);
     if (changed) {
       recordBicParidadePulse("operacionalEvent");
-      requestCooperadoStaffRevisionSync();
-      scheduleCooperadoBicHybridIdleTask(() => rematerializarSilencioso(user), 4_000);
+      if (isCooperadoMobileGaPromoted(user)) {
+        scheduleCooperadoGaValorRevisionLightSync(user);
+      } else {
+        requestCooperadoStaffRevisionSync();
+        rematerializarSilencioso(user);
+      }
       markCooperadoBicFinanceiroFresh();
       return;
     }
+
+    if (cooperadoGaPausaPulsoBicOuRematerializacao(user)) return;
 
     if (cooperadoBrowserDesktopBicPerfActive(user)) {
       if (!cooperadoBrowserDesktopFinanceiroEstavel(user)) {
@@ -106,7 +111,7 @@ async function runRevisionPulse(user: Omit<User, "password">): Promise<void> {
 function onVisibility(user: Omit<User, "password">): void {
   if (document.visibilityState !== "visible") return;
   if (cooperadoInicioAberturaQuiescenceActive()) return;
-  if (cooperadoGaPausaPulsoBicOuRematerializacao(user)) return;
+  /** Checagem de revisão na nuvem é leve — não bloquear quando o card já tem valor (pause só dentro do pulse). */
   scheduleCooperadoBicHybridIdleTask(() => void runRevisionPulse(user), 2_000);
 }
 

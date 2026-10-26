@@ -6,6 +6,11 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v671
+
+- **Cooperado (A receber automático):** revisão na nuvem (responsável lançou) → card repinta na hora + `scheduleCooperadoGaValorRevisionLightSync` (pull silencioso em idle, sem `operacional_full` imediato).
+- **Início / foreground:** card GA escuta AppData e snapshot; pulso BIC não deixa de checar a nuvem só porque já há valor na tela.
+
 ## v670
 
 - **Cooperado (paridade backup):** `npm run restore:cooperado-backup-code` restaura a árvore da tag `cooperado-mobile-fase3-v644` (hooks + lib) sem mexer em gestão/`dataStore`/ficha.

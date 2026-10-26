@@ -30,6 +30,7 @@ import {
 import { cooperadoMobileSyncTrace } from "@/lib/cooperado/cooperadoMobileSyncTrace";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { runCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
+import { scheduleCooperadoGaValorRevisionLightSync } from "@/lib/cooperado/cooperadoGaRevisionLightSync";
 import { getSession } from "@/services/dataStore";
 import {
   capStaffConferenciaSyncTierRequest,
@@ -173,6 +174,15 @@ export function requestCooperadoStaffRevisionSync(): void {
   if (!isCooperadoEventDrivenSync()) return;
   grantCooperadoEventDrivenSync();
   markNextCooperadoSyncSilent();
+  const session = getSession();
+  if (
+    session?.role === "cooperado" &&
+    isCooperadoMobileGaPromoted(session) &&
+    cooperadoGaBloqueiaOperacionalFullAutomatico({ eventDriven: true })
+  ) {
+    scheduleCooperadoGaValorRevisionLightSync(session);
+    return;
+  }
   requestSyncTier("operacional_full", { force: true, immediate: true, eventDriven: true });
 }
 

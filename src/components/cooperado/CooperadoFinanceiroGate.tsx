@@ -69,7 +69,7 @@ import {
   scheduleCooperadoGaFinanceiroExibicaoRefresh,
 } from "@/lib/cooperado/cooperadoGaFinanceiroExibicaoRefreshSchedule";
 import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
-import { scheduleCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
+import { scheduleCooperadoGaValorRevisionLightSync } from "@/lib/cooperado/cooperadoGaRevisionLightSync";
 import {
   cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem,
   cooperadoGaValorReceberExibicaoResolvida,
@@ -175,7 +175,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
         cooperadoRematerializarFinanceiroLocalSePossivel(user);
         tryAckCooperadoAppReleaseWhenLocalReady(user);
         if (isAppDataWarm() && cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
-          scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user, { silent: true });
+          scheduleCooperadoGaValorRevisionLightSync(user);
         }
         if (
           !cooperadoMobileDeferOperacionalSyncNaAbertura(user) &&

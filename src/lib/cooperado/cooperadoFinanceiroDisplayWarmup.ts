@@ -9,7 +9,7 @@ import { dispatchCooperadoPwaLeveUiSnapshotRefresh } from "@/lib/cooperado/coope
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { tryAckCooperadoAppReleaseWhenLocalReady } from "@/lib/cooperado/cooperadoMobileReleaseLocalAck";
 import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
-import { scheduleCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
+import { scheduleCooperadoGaValorRevisionLightSync } from "@/lib/cooperado/cooperadoGaRevisionLightSync";
 import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
 import { cooperadoBrowserDesktopFinanceiroEstavel } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
@@ -78,7 +78,7 @@ export function scheduleCooperadoFinanceiroDisplayWarmup(
 
       const temCache = cooperadoFinanceiroCardCacheTemValor(user);
       if (!temCache && cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
-        scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user, { silent: true });
+        scheduleCooperadoGaValorRevisionLightSync(user);
       }
     })().finally(() => {
       warmupInFlight = null;

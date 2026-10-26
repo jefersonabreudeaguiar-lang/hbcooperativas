@@ -14,14 +14,18 @@ const pulse = readFileSync(join(ROOT, "src/lib/bic/bicRevisionPulse.ts"), "utf8"
 
 assert.match(
   foreground,
-  /isCooperadoMobileGaPromoted\(session\)[\s\S]*requestCooperadoStaffRevisionSync\(\)/,
-  "foreground GA deve chamar requestCooperadoStaffRevisionSync em revisão"
+  /isCooperadoMobileGaPromoted\(session\)[\s\S]*scheduleCooperadoGaValorRevisionLightSync\(session\)/,
+  "foreground GA deve sync leve em revisão (sem operacional_full imediato)"
 );
-assert.match(pulse, /requestCooperadoStaffRevisionSync\(\)/, "pulso BIC deve sync operacional na mudança de revisão");
+assert.match(
+  pulse,
+  /scheduleCooperadoGaValorRevisionLightSync\(user\)/,
+  "pulso GA deve sync leve na mudança de revisão"
+);
 assert.doesNotMatch(
   pulse,
   /runCooperadoGaSyncBaseInformacoesFinanceiras/,
-  "pulso não deve usar base sync bloqueada na abertura"
+  "pulso não deve usar base sync bloqueante na abertura"
 );
 
 console.log("OK test-cooperado-ga-auto-revision-sync");

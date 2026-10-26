@@ -35,6 +35,7 @@ import {
   requestCooperadoGaFinanceiroExibicaoRecoverySync,
   requestCooperadoStaffRevisionSync,
 } from "@/services/syncRequest";
+import { scheduleCooperadoGaValorRevisionLightSync } from "@/lib/cooperado/cooperadoGaRevisionLightSync";
 import type { CooperativaCloudRevision } from "@/lib/performance/cooperadoEventDrivenSync";
 import { resolveCooperadoForegroundStaleMs } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { cooperadoGaDeferForegroundRevisionChecks } from "@/lib/cooperado/cooperadoGaSyncPolicy";
@@ -306,7 +307,7 @@ export async function runCooperadoForegroundOperacionalCheck(
       reason === "never_applied_revision" ||
       reason === "stale_local_sync"
     ) {
-      requestCooperadoStaffRevisionSync();
+      scheduleCooperadoGaValorRevisionLightSync(session);
     }
     return true;
   }
