@@ -33,6 +33,10 @@ import {
   cooperadoMobilePilotInitialAuthLoading,
 } from "@/lib/cooperado/cooperadoMobilePilotAuthBootstrap";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { readCooperadoSessionLite } from "@/lib/cooperado/cooperadoSessionLite";
+import { cooperadoGaShouldDeferDataWarmFromGetData } from "@/lib/cooperado/cooperadoGaDataWarmDefer";
+import { markCooperadoInicioAberturaQuiescence } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
+import { cooperadoGaMobileViewportAtivoLite } from "@/lib/cooperado/cooperadoSessionLite";
 import { scheduleEmpacotarModeloAparelhoJeferson } from "@/lib/cooperado/cooperadoAparelhoJefersonPacote";
 import {
   getSession,
@@ -132,11 +136,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useLayoutEffect(() => {
-    if (isCooperadoInstantResumeEnabled()) {
+    const sessionLite = readCooperadoSessionLite();
+    if (sessionLite?.role === "cooperado" && cooperadoGaMobileViewportAtivoLite()) {
+      markCooperadoInicioAberturaQuiescence();
+    }
+    if (
+      isCooperadoInstantResumeEnabled() &&
+      !cooperadoGaShouldDeferDataWarmFromGetData()
+    ) {
       ensureCooperadoAppDataEagerWarm();
     }
     refresh();
-    const session = getSession();
+    const session = sessionLite ?? getSession();
     applyCooperadoMobilePilotPerfDomFlag(session);
     if (session?.role === "cooperado") {
       if (resetCooperadoAposVazamentoPainelGestao(session)) return;
