@@ -26,7 +26,6 @@ import {
   cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem,
   cooperadoGaValorReceberExibicaoResolvida,
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
-import { cooperadoGaPausaTrabalhoFinanceiroPesado } from "@/lib/cooperado/cooperadoGaPausaTrabalhoPesado";
 import { scheduleCooperadoHbCreditLimiteAndAccountWarmup } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
 import { requestCooperadoGaFinanceiroExibicaoRecoverySync } from "@/services/syncRequest";
 import {
