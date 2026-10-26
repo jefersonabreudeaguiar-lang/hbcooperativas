@@ -60,6 +60,8 @@ import { getData, isAppDataWarm, preloadAppData, subscribe } from "@/services/da
 import { cooperadoPilotCardInicioLeituraRapida } from "@/lib/cooperado/cooperadoMobilePilotInicioValorLocal";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { rematerializarCooperadoValorCardLeve } from "@/lib/cooperado/cooperadoGaRevisionLightSync";
+import { cooperadoInicioAberturaQuiescenceActive } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
+import { scheduleCooperadoBicHybridIdleTask } from "@/lib/cooperado/cooperadoBicHybridLight";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { cooperadoPwaFinanceiroSnapshotsAusentes } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
@@ -168,12 +170,18 @@ export function useCooperadoInicioValorReceberCardState(input: {
     if (!tabAtiva || !sessionUser || sessionUser.role !== "cooperado") return;
     if (!isCooperadoMobileGaPromoted(sessionUser)) return;
     if (!isAppDataWarm()) return;
-    const run = () => rematerializarCooperadoValorCardLeve(sessionUser);
+    const run = () => {
+      if (cooperadoInicioAberturaQuiescenceActive()) {
+        scheduleCooperadoBicHybridIdleTask(run, 1_500);
+        return;
+      }
+      rematerializarCooperadoValorCardLeve(sessionUser);
+    };
     if (typeof requestIdleCallback !== "undefined") {
-      const id = requestIdleCallback(run, { timeout: 400 });
+      const id = requestIdleCallback(run, { timeout: 2_500 });
       return () => cancelIdleCallback(id);
     }
-    const t = window.setTimeout(run, 0);
+    const t = window.setTimeout(run, 400);
     return () => window.clearTimeout(t);
   }, [appDataWarmKey, tabAtiva, sessionUser?.id, sessionUser?.role]);
 
@@ -198,6 +206,52 @@ export function useCooperadoInicioValorReceberCardState(input: {
   }, [apresentacaoConsolidada, input.syncing, hbDescontosRevision]);
 
   const resolved = useMemo(() => {
+    if (
+      tabAtiva &&
+      sessionUser?.role === "cooperado" &&
+      isCooperadoMobileGaPromoted(sessionUser) &&
+      cooperadoInicioAberturaQuiescenceActive()
+    ) {
+      const persistidoLeve = persistidoExibicaoPwaLeve(persistido);
+      if (persistidoLeve?.display) {
+        return {
+          display: persistidoLeve.display,
+          latch: {
+            motorRevision: persistidoLeve.motorRevision,
+            display: persistidoLeve.display,
+            hadPendencia: true,
+          },
+          atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+          gravarPersistencia: false,
+        };
+      }
+      if (input.cooperadoId) {
+        const pilotDisplay = cooperadoPilotCardInicioLeituraRapida(
+          input.cooperadoId,
+          input.cooperativaId,
+          sessionUser
+        );
+        if (pilotDisplay) {
+          return {
+            display: pilotDisplay,
+            latch: {
+              motorRevision: `gaAberturaLeve:${appDataWarmKey}`,
+              display: pilotDisplay,
+              hadPendencia: cooperadoMotorTemObrigacaoReceber(pilotDisplay),
+            },
+            atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+            gravarPersistencia: false,
+          };
+        }
+      }
+      return {
+        display: persistido?.display ?? SNAPSHOT_VAZIO,
+        latch: latchRef.current,
+        atualizando: carregandoFinanceiro,
+        gravarPersistencia: false,
+      };
+    }
+
     if (leituraSomentePwa) {
       if (!tabAtiva) {
         const persistidoOcioso = persistidoExibicaoPwaLeve(persistido);

@@ -1,6 +1,8 @@
 # Piloto Jeferson — status
 
-**Último portão:** NÃO (26/10/2026) — sintoma: **tela branca** no Início após o splash.
+**Último portão:** aguardando SIM/NÃO (26/10/2026) — **abriu mas travado** no Início (build 685).
+
+**Correção build 686:** quiescência de abertura **antes** do motor do card; leitura leve (cache) 8s; `viewLive` e rematerialização GA adiados na thread ociosa.
 
 **Correção build 685:** GA não usa mais `div` vazio enquanto `viewLive` carrega — pinta **Olá + cards** (`data-cooperado-inicio-shell`); splash some com casca ou após ~2,4s (não bloqueia em `inicio-loading`).
 

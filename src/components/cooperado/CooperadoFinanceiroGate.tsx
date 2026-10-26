@@ -84,7 +84,11 @@ import {
   cooperadoPilotFinanceiroExibirComSnapshotsLocais,
   scheduleCooperadoPilotFinanceReadRecovery,
 } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
-import { cooperadoTabSwitchQuiescenceActive } from "@/lib/cooperado/cooperadoTabSwitchQuiescence";
+import {
+  cooperadoMobileUiQuiescenceActive,
+  cooperadoTabSwitchQuiescenceActive,
+} from "@/lib/cooperado/cooperadoTabSwitchQuiescence";
+import { scheduleCooperadoBicHybridIdleTask } from "@/lib/cooperado/cooperadoBicHybridLight";
 
 /** Após este tempo, o conteúdo pode seguir mesmo sem sync (shell já navegável). */
 const SYNC_HINT_MAX_MS = 18_000;
@@ -172,11 +176,18 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
       markCooperadoPostShellSyncStarted();
 
       if (isCooperadoPwaMessengerMode() || isCooperadoMobileGaPromoted(user)) {
-        cooperadoRematerializarFinanceiroLocalSePossivel(user);
-        tryAckCooperadoAppReleaseWhenLocalReady(user);
-        if (isAppDataWarm() && cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
-          scheduleCooperadoGaValorRevisionLightSync(user);
-        }
+        const runGaLocalBootstrap = () => {
+          if (cooperadoMobileUiQuiescenceActive()) {
+            scheduleCooperadoBicHybridIdleTask(runGaLocalBootstrap, 1_500);
+            return;
+          }
+          cooperadoRematerializarFinanceiroLocalSePossivel(user);
+          tryAckCooperadoAppReleaseWhenLocalReady(user);
+          if (isAppDataWarm() && cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
+            scheduleCooperadoGaValorRevisionLightSync(user);
+          }
+        };
+        scheduleCooperadoBicHybridIdleTask(runGaLocalBootstrap, 600);
         if (
           !cooperadoMobileDeferOperacionalSyncNaAbertura(user) &&
           isCooperadoPwaMessengerMode() &&

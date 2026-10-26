@@ -65,7 +65,15 @@ assert.match(dismiss, /data-cooperado-inicio-ready/, "splash some com Início co
 assert.match(dismiss, /data-cooperado-inicio-shell/, "splash some com casca Olá+cards no dashboard");
 assert.match(dismiss, /data-cooperado-inicio-loading/, "splash some com casca GA enquanto viewLive carrega");
 
+const card = readFileSync(join(root, "src/hooks/useCooperadoInicioValorReceberCardState.ts"), "utf8");
+assert.match(
+  card,
+  /cooperadoInicioAberturaQuiescenceActive\(\)/,
+  "card A receber evita motor pesado na abertura GA"
+);
+
 const dash = readFileSync(join(root, "src/app/(app)/dashboard/DashboardContent.tsx"), "utf8");
+assert.match(dash, /markCooperadoInicioAberturaQuiescence\(\)/, "quiescência de abertura antes do motor");
 assert.match(dash, /data-cooperado-inicio-ready="1"/, "Início completo marca pronto para dismiss");
 assert.match(dash, /data-cooperado-inicio-shell="1"/, "casca do Início visível antes do viewLive");
 assert.match(dash, /data-cooperado-inicio-loading/, "GA marca loading na casca sem tela vazia");

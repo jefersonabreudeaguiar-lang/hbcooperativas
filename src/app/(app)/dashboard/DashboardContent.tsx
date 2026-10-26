@@ -4,7 +4,6 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -31,7 +30,10 @@ import {
   cooperadoGaDispatchPrimeiraCargaSilenciosa,
   scheduleCooperadoGaPrimeiraCargaSilenciosa,
 } from "@/lib/cooperado/cooperadoGaColdBootstrap";
-import { markCooperadoInicioAberturaQuiescence } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
+import {
+  cooperadoInicioAberturaQuiescenceActive,
+  markCooperadoInicioAberturaQuiescence,
+} from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
 import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { evaluateResponsavelPainelAbertura } from "@/lib/responsavel/responsavelPainelContrato";
@@ -224,9 +226,10 @@ function CooperadoDashboard() {
       ? false
       : inicioPwaLeve || cooperadoMobilePilotSnapshotFirstInicio(user);
 
-  useLayoutEffect(() => {
-    if (user?.role === "cooperado") markCooperadoInicioAberturaQuiescence();
-  }, [user?.role]);
+  /** Antes do motor do card — 1º frame GA não pode calcular ficha na thread principal. */
+  if (user?.role === "cooperado") {
+    markCooperadoInicioAberturaQuiescence();
+  }
 
   useEffect(() => {
     if (!user || user.role !== "cooperado") return;
@@ -472,6 +475,12 @@ function CooperadoDashboard() {
   const deferredInicioRevision = useDeferredValue(inicioDomainsRevision);
 
   const viewLive = useMemo(() => {
+    if (
+      cooperadoMotorAoVivo &&
+      cooperadoInicioAberturaQuiescenceActive()
+    ) {
+      return null;
+    }
     if (!tabActive || !appDataUiOn || !deferredInicioRevision || !isAppDataWarm() || !user?.cooperadoId) {
       return null;
     }
