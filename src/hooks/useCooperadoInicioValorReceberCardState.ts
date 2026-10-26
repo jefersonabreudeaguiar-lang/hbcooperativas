@@ -702,7 +702,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
   ]);
 
   useEffect(() => {
-    if (!input.cooperadoId) return;
+    if (!input.cooperadoId || !resolved.latch) return;
     if (!cooperadoMotorTemObrigacaoReceber(snapshotExibido)) return;
     gravarInicioCardPersistidoFlex(input.cooperadoId, input.cooperativaId, {
       v: INICIO_CARD_STORAGE_VERSION,
@@ -715,14 +715,14 @@ export function useCooperadoInicioValorReceberCardState(input: {
     input.cooperadoId,
     input.cooperativaId,
     snapshotExibido,
-    resolved.latch.motorRevision,
+    resolved.latch?.motorRevision,
   ]);
 
   useEffect(() => {
     const cooperadoId = input.cooperadoId;
     if (!cooperadoId) return;
     const persistirAoFechar = () => {
-      if (!cooperadoMotorTemObrigacaoReceber(snapshotExibido)) return;
+      if (!resolved.latch || !cooperadoMotorTemObrigacaoReceber(snapshotExibido)) return;
       gravarInicioCardPersistidoFlex(cooperadoId, input.cooperativaId, {
         v: INICIO_CARD_STORAGE_VERSION,
         appBuild: APP_BUILD_VERSION,
@@ -741,7 +741,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
     input.cooperadoId,
     input.cooperativaId,
     snapshotExibido,
-    resolved.latch.motorRevision,
+    resolved.latch?.motorRevision,
   ]);
 
   const exibicaoIndeterminada =
