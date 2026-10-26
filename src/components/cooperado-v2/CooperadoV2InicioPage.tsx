@@ -6,7 +6,6 @@ import { CooperadoInicioValorReceberCard } from "@/components/cooperado/Cooperad
 import type { CooperadoV2InicioCardPayload } from "@/lib/cooperado-v2/server/cooperadoV2InicioCard";
 import { CooperadoV2Shell } from "@/components/cooperado-v2/CooperadoV2Shell";
 import { fetchCooperadoV2Api } from "@/lib/cooperado-v2/cooperadoV2Fetch";
-import { ensureCloudSessionReady, getLastCloudSyncError } from "@/lib/security/clientSession";
 
 async function fetchInicioCard(): Promise<CooperadoV2InicioCardPayload> {
   const res = await fetchCooperadoV2Api("/api/cooperado-v2/inicio-card", {
@@ -35,14 +34,6 @@ export function CooperadoV2InicioPage() {
     setLento(false);
     const slowHint = window.setTimeout(() => setLento(true), 8_000);
     try {
-      const sessionOk = await ensureCloudSessionReady();
-      if (!sessionOk) {
-        throw new Error(
-          getLastCloudSyncError() ||
-            "Sessão na nuvem não pronta. Saia, entre de novo e aguarde alguns segundos."
-        );
-      }
-
       if (manual) {
         const res = await fetchCooperadoV2Api("/api/cooperado-v2/atualizar", {
           method: "POST",
