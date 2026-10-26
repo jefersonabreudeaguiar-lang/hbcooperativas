@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { RefreshCw, Check } from "lucide-react";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { requestStaffGestaoAtualizar } from "@/services/syncRequest";
@@ -9,11 +10,18 @@ import {
   COOPERADO_ATUALIZAR_MENSAGEM_AMOR,
   executarCooperadoAtualizarManual,
 } from "@/lib/cooperado/cooperadoAtualizarManual";
-import { isCooperadoJefersonRebuildInicioAtivo } from "@/lib/cooperado/cooperadoJefersonRebuildPilot";
+import {
+  isCooperadoJefersonRebuildEntregasAtivo,
+  isCooperadoJefersonRebuildInicioAtivo,
+} from "@/lib/cooperado/cooperadoJefersonRebuildPilot";
 import {
   COOPERADO_JEFERSON_REBUILD_INICIO_ATUALIZAR_EVENT,
   COOPERADO_JEFERSON_REBUILD_INICIO_DONE_EVENT,
 } from "@/lib/cooperado/jefersonRebuild/jefersonRebuildInicioEvents";
+import {
+  COOPERADO_JEFERSON_REBUILD_ENTREGAS_ATUALIZAR_EVENT,
+  COOPERADO_JEFERSON_REBUILD_ENTREGAS_DONE_EVENT,
+} from "@/lib/cooperado/jefersonRebuild/jefersonRebuildEntregasEvents";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { cooperadoPwaMaterializarSnapshotsFinanceirosPosSync } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
@@ -162,13 +170,23 @@ export function CooperadoAtualizarButton({
   showLoveMessage?: boolean;
 }) {
   const { user } = useAuth();
+  const pathname = usePathname();
   const { syncingForUi } = useSyncStatus();
   const [busy, setBusy] = useState(false);
   const sawSyncUiRef = useRef(false);
   const spinning = busy || syncingForUi;
   const header = variant === "header";
 
+  const rebuildEntregasAtualizar =
+    user &&
+    isCooperadoJefersonRebuildEntregasAtivo(user) &&
+    (pathname === "/notas-pedido" || pathname?.startsWith("/notas-pedido/"));
+  const rebuildInicioAtualizar =
+    user && isCooperadoJefersonRebuildInicioAtivo(user) && pathname === "/dashboard";
+  const rebuildLeveAtualizar = rebuildEntregasAtualizar || rebuildInicioAtualizar;
+
   useEffect(() => {
+    if (rebuildLeveAtualizar) return;
     if (syncingForUi) sawSyncUiRef.current = true;
     if (!busy) {
       sawSyncUiRef.current = false;
@@ -183,14 +201,22 @@ export function CooperadoAtualizarButton({
     }
     const id = window.setTimeout(() => setBusy(false), 90_000);
     return () => window.clearTimeout(id);
-  }, [busy, syncingForUi, user]);
+  }, [busy, syncingForUi, user, rebuildLeveAtualizar]);
 
   useEffect(() => {
-    if (!user || !isCooperadoJefersonRebuildInicioAtivo(user)) return;
+    if (!user) return;
     const onDone = () => setBusy(false);
-    window.addEventListener(COOPERADO_JEFERSON_REBUILD_INICIO_DONE_EVENT, onDone);
-    return () => window.removeEventListener(COOPERADO_JEFERSON_REBUILD_INICIO_DONE_EVENT, onDone);
-  }, [user?.id]);
+    if (isCooperadoJefersonRebuildInicioAtivo(user)) {
+      window.addEventListener(COOPERADO_JEFERSON_REBUILD_INICIO_DONE_EVENT, onDone);
+    }
+    if (isCooperadoJefersonRebuildEntregasAtivo(user)) {
+      window.addEventListener(COOPERADO_JEFERSON_REBUILD_ENTREGAS_DONE_EVENT, onDone);
+    }
+    return () => {
+      window.removeEventListener(COOPERADO_JEFERSON_REBUILD_INICIO_DONE_EVENT, onDone);
+      window.removeEventListener(COOPERADO_JEFERSON_REBUILD_ENTREGAS_DONE_EVENT, onDone);
+    };
+  }, [user?.id, user]);
 
   const loveVisible = showLoveMessage && spinning;
 
@@ -202,7 +228,11 @@ export function CooperadoAtualizarButton({
         if (busy || syncingForUi) return;
         sawSyncUiRef.current = false;
         setBusy(true);
-        if (user && isCooperadoJefersonRebuildInicioAtivo(user)) {
+        if (rebuildEntregasAtualizar) {
+          window.dispatchEvent(new Event(COOPERADO_JEFERSON_REBUILD_ENTREGAS_ATUALIZAR_EVENT));
+          return;
+        }
+        if (rebuildInicioAtualizar) {
           window.dispatchEvent(new Event(COOPERADO_JEFERSON_REBUILD_INICIO_ATUALIZAR_EVENT));
           return;
         }

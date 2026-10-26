@@ -4,7 +4,9 @@
 
 **Fase 0 (build ≥703):** casca zerada nas abas ainda não refeitas.
 
-**Fase 1 — Início (build ≥704):** Jeferson — card «A receber» via `/api/cooperado-pilot/inicio-card` (nuvem, escopo `inicio` sem notas); Atualizar no header chama `/api/cooperado-pilot/atualizar-inicio`. Demais abas continuam zeradas.
+**Fase 1 — Início (build ≥704):** Jeferson — card «A receber» via `/api/cooperado-pilot/inicio-card` (nuvem, escopo `inicio` sem notas); Atualizar no header chama `/api/cooperado-pilot/atualizar-inicio`.
+
+**Fase 2 — Entregas (build ≥705):** Jeferson — lista via `/api/cooperado-pilot/entregas-resumo` (nuvem `full`, snapshot no servidor); cache `sessionStorage`; Atualizar → `/api/cooperado-pilot/atualizar-entregas`. Envio de fotos ainda não no piloto. Preços e Financeiro continuam zerados.
 
 **Piloto:** apenas Jeferson (`c_1781981564381_w67gg` / `jefersonabreudeaguiar@gmail.com`) — gate `isCooperadoMobilePilot`.  
 **Produção oficial:** Orlando e demais cooperados **não entram** até cada aba ter SIM de homologação e promoção explícita.

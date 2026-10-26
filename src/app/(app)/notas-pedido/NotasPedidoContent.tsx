@@ -3,8 +3,12 @@
 import dynamic from "next/dynamic";
 import { RouteChunkLoadingShell } from "@/lib/performance/appRouteLazy";
 import { usePermissions } from "@/hooks/usePermissions";
-import { shouldRenderCooperadoJefersonRebuildShell } from "@/lib/cooperado/cooperadoJefersonRebuildPilot";
+import {
+  isCooperadoJefersonRebuildEntregasAtivo,
+  shouldRenderCooperadoJefersonRebuildShell,
+} from "@/lib/cooperado/cooperadoJefersonRebuildPilot";
 import { CooperadoJefersonRebuildTabCorpo } from "@/components/cooperado/CooperadoJefersonRebuildTabCorpo";
+import { CooperadoJefersonRebuildEntregasPage } from "@/components/cooperado/CooperadoJefersonRebuildEntregasPage";
 
 const NotasPedidoStaffMain = dynamic(() => import("./staff/NotasPedidoStaffResponsavelApp"), {
   loading: () => <RouteChunkLoadingShell />,
@@ -20,6 +24,9 @@ export default function NotasPedidoContent() {
   if (!user) return <RouteChunkLoadingShell />;
   if (isCooperado && shouldRenderCooperadoJefersonRebuildShell("entregas", user)) {
     return <CooperadoJefersonRebuildTabCorpo tab="entregas" user={user} />;
+  }
+  if (isCooperado && isCooperadoJefersonRebuildEntregasAtivo(user)) {
+    return <CooperadoJefersonRebuildEntregasPage user={user} />;
   }
   return isCooperado ? <NotasPedidoCooperadoMain /> : <NotasPedidoStaffMain />;
 }

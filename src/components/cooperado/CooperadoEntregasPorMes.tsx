@@ -47,6 +47,8 @@ interface CooperadoEntregasPorMesProps {
   nomeCooperado: string;
   ultimaNotaEnviadaIds?: string[];
   painelRotaAtiva?: boolean;
+  /** Piloto rebuild: dados da nuvem sem AppData local. */
+  dataOverride?: AppData | null;
   onReenviar: (nota: NotaPedido) => void;
   onExcluir: (nota: NotaPedido) => void;
   getEscolaLabel: (nota: NotaPedido) => string;
@@ -368,6 +370,7 @@ export const CooperadoEntregasPorMes = memo(function CooperadoEntregasPorMes({
   nomeCooperado,
   ultimaNotaEnviadaIds = [],
   painelRotaAtiva = true,
+  dataOverride,
   onReenviar,
   onExcluir,
   getEscolaLabel,
@@ -375,7 +378,8 @@ export const CooperadoEntregasPorMes = memo(function CooperadoEntregasPorMes({
   const { user } = useAuth();
   const entregasLeve = cooperadoCooperadoEntregasLeveUiForUser(user);
   const virtualizeMin = cooperadoMobilePilotEntregasVirtualizeMinRows(user);
-  const data = useAppDataSnapshotForDomainsWhenActive(painelRotaAtiva, ["notas"]);
+  const snapshotData = useAppDataSnapshotForDomainsWhenActive(painelRotaAtiva, ["notas"]);
+  const data = dataOverride !== undefined ? dataOverride : snapshotData;
   const [expandidaId, setExpandidaId] = useState<string | null>(null);
   const [mesAberto, setMesAberto] = useState<string | null>(() => resumos[0]?.mesReferencia ?? null);
   const [fotosMesAberto, setFotosMesAberto] = useState<string | null>(null);

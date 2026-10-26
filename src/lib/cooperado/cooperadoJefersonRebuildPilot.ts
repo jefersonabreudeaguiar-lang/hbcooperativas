@@ -15,6 +15,7 @@ export type CooperadoJefersonRebuildTab = "inicio" | "entregas" | "precos" | "fi
  */
 export const COOPERADO_JEFERSON_REBUILD_TABS_HABILITADAS: readonly CooperadoJefersonRebuildTab[] = [
   "inicio",
+  "entregas",
 ];
 
 export function isCooperadoJefersonRebuildPilot(
@@ -51,6 +52,12 @@ export function isCooperadoJefersonRebuildInicioAtivo(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   return isCooperadoJefersonRebuildPilot(user) && cooperadoJefersonRebuildTabHabilitada("inicio", user);
+}
+
+export function isCooperadoJefersonRebuildEntregasAtivo(
+  user: Omit<User, "password"> | null | undefined
+): boolean {
+  return isCooperadoJefersonRebuildPilot(user) && cooperadoJefersonRebuildTabHabilitada("entregas", user);
 }
 
 /** Fragmento para `<head>` — Jeferson rebuild não faz parse do operacional local. */
