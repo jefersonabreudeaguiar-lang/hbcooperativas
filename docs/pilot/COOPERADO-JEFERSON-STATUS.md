@@ -1,0 +1,19 @@
+# Piloto Jeferson — status
+
+**Último portão:** NÃO (26/10/2026) — canário financeiro build 682 revertido; produção volta ao legado **683**.
+
+## O que falhou no teste
+
+O build 682 só alterava o cálculo de **complementar pós-PIX** no `notaPedidoService` para o id do Jeferson. Não restaurava o pacote completo cooperado (abas, Financeiro, sync) que estava na tag v644.
+
+## Próxima tentativa (só Jeferson, antes do GA)
+
+1. Mudanças de **UI/sync cooperado** atrás de `isCooperadoMobilePilot` (não Preview separado).
+2. Financeiro complementar no mesmo gate.
+3. Estrela + build novo; Jeferson em **https://hbcooperativas.vercel.app**.
+4. Novo SIM/NÃO por fase (`LIDERANCA-COOPERADO-2026.md`).
+
+## Identidade piloto
+
+- E-mail: `jefersonabreudeaguiar@gmail.com`
+- cooperadoId: `c_1781981564381_w67gg`
