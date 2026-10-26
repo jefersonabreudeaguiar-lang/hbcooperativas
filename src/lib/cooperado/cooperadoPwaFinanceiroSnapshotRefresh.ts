@@ -23,6 +23,7 @@ import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTe
 import { persistOperacionalSyncedAppBuild } from "@/lib/performance/cooperadoEventDrivenSync";
 import { isCooperadoMobilePilotPerfActive } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { cooperadoGaInicioSomenteCasca } from "@/lib/cooperado/cooperadoMobilePilot";
+import { cooperadoGaPausaTrabalhoFinanceiroPesado } from "@/lib/cooperado/cooperadoGaPausaTrabalhoPesado";
 import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoBicMobileAuthority";
 import { cooperadoBrowserDesktopBicPerfActive } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
@@ -31,7 +32,9 @@ import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 export function cooperadoRematerializarFinanceiroLocalSePossivel(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
-  if (!user || user.role !== "cooperado" || !user.cooperadoId || !isAppDataWarm()) return false;
+  if (!user || user.role !== "cooperado" || !user.cooperadoId) return false;
+  if (cooperadoGaPausaTrabalhoFinanceiroPesado(user)) return false;
+  if (!isAppDataWarm()) return false;
   const data = getData();
   const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
   if (!coopId) return false;

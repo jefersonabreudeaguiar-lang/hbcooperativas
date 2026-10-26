@@ -1,5 +1,10 @@
 import type { User } from "@/types";
-import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import {
+  cooperadoGaInicioSomenteCasca,
+  isCooperadoMobileGaPromoted,
+} from "@/lib/cooperado/cooperadoMobilePilot";
+import { cooperadoInicioAberturaQuiescenceActive } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
+import { cooperadoGaPausaTrabalhoFinanceiroPesado } from "@/lib/cooperado/cooperadoGaPausaTrabalhoPesado";
 import { dispatchCooperadoPwaLeveUiSnapshotRefresh } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { cooperadoRematerializarFinanceiroLocalSePossivel } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import {
@@ -79,6 +84,7 @@ export function cooperadoPilotForcarRematerializacaoFinanceira(
   user: Omit<User, "password"> | null | undefined
 ): void {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return;
+  if (cooperadoGaPausaTrabalhoFinanceiroPesado(user)) return;
 
   const run = () => {
     if (!isAppDataWarm()) return;
@@ -138,6 +144,13 @@ export function scheduleCooperadoPilotFinanceReadRecovery(
   user: Omit<User, "password"> | null | undefined
 ): void {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return;
+  if (
+    cooperadoGaInicioSomenteCasca(user) &&
+    cooperadoInicioAberturaQuiescenceActive()
+  ) {
+    window.setTimeout(() => scheduleCooperadoPilotFinanceReadRecovery(user), 2_500);
+    return;
+  }
   if (financeRecoveryAlreadyRanThisSession(user.id)) return;
   if (cooperadoBrowserDesktopFinanceiroEstavel(user)) {
     markFinanceRecoverySession(user.id);

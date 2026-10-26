@@ -26,6 +26,13 @@ const pilot = readFileSync(
   "utf8"
 );
 assert.match(pilot, /cooperadoGaInicioSomenteCasca/);
+assert.match(pilot, /cooperadoGaMobilePostergarAppDataWarm/);
+
+const quiet = readFileSync(
+  join(import.meta.dirname ?? __dirname, "..", "src/lib/cooperado/cooperadoInicioAberturaQuiescence.ts"),
+  "utf8"
+);
+assert.match(quiet, /COOPERADO_INICIO_ABERTURA_QUIET_MS_MOBILE_GA/);
 
 const snap = readFileSync(
   join(import.meta.dirname ?? __dirname, "..", "src/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh.ts"),

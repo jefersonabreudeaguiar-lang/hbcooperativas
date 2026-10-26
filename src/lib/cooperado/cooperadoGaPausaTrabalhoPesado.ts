@@ -11,12 +11,17 @@ import {
   cooperadoTabSwitchQuiescenceActive,
 } from "@/lib/cooperado/cooperadoTabSwitchQuiescence";
 import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
+import { cooperadoGaInicioSomenteCasca } from "@/lib/cooperado/cooperadoMobilePilot";
+import { cooperadoInicioAberturaQuiescenceActive } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
 
 /** Evita pulso/sync/rematerialização enquanto o cooperado navega ou já vê valor no card. */
 export function cooperadoGaPausaTrabalhoFinanceiroPesado(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return false;
+  if (cooperadoGaInicioSomenteCasca(user) && cooperadoInicioAberturaQuiescenceActive()) {
+    return true;
+  }
   if (cooperadoTabSwitchQuiescenceActive()) return true;
   if (cooperadoFinanceiroCardCacheTemValor(user)) return true;
   if (cooperadoFinanceiroExibicaoCachePronto(user)) return true;

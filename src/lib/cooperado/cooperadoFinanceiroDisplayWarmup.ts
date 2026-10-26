@@ -13,6 +13,8 @@ import { scheduleCooperadoGaValorRevisionLightSync } from "@/lib/cooperado/coope
 import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
 import { cooperadoBrowserDesktopFinanceiroEstavel } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
+import { cooperadoGaInicioSomenteCasca } from "@/lib/cooperado/cooperadoMobilePilot";
+import { cooperadoInicioAberturaQuiescenceActive } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
 
 let warmupInFlight: Promise<void> | null = null;
 
@@ -54,6 +56,10 @@ export function scheduleCooperadoFinanceiroDisplayWarmup(
   if (financeWarmupAlreadyRanThisSession(user.id)) return;
   if (cooperadoBrowserDesktopFinanceiroEstavel(user)) {
     markFinanceWarmupSession(user.id);
+    return;
+  }
+  if (cooperadoGaInicioSomenteCasca(user) && cooperadoInicioAberturaQuiescenceActive()) {
+    window.setTimeout(() => scheduleCooperadoFinanceiroDisplayWarmup(user), 2_500);
     return;
   }
 

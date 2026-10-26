@@ -58,7 +58,10 @@ import {
 } from "@/lib/cooperado/cooperadoBicHybridLight";
 import { getData, isAppDataWarm, preloadAppData, subscribe } from "@/services/dataStore";
 import { cooperadoPilotCardInicioLeituraRapida } from "@/lib/cooperado/cooperadoMobilePilotInicioValorLocal";
-import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import {
+  cooperadoGaInicioSomenteCasca,
+  isCooperadoMobileGaPromoted,
+} from "@/lib/cooperado/cooperadoMobilePilot";
 import { rematerializarCooperadoValorCardLeve } from "@/lib/cooperado/cooperadoGaRevisionLightSync";
 import { useCooperadoInicioAberturaQuiescenceActive } from "@/hooks/useCooperadoInicioAberturaQuiescenceActive";
 import { scheduleCooperadoBicHybridIdleTask } from "@/lib/cooperado/cooperadoBicHybridLight";
@@ -146,9 +149,10 @@ export function useCooperadoInicioValorReceberCardState(input: {
 
   useEffect(() => {
     if (!leituraSomentePwa || !isCooperadoMobilePilotPerfActive()) return;
+    if (sessionUser && cooperadoGaInicioSomenteCasca(sessionUser)) return;
     if (isAppDataWarm()) return;
     preloadAppData();
-  }, [leituraSomentePwa, appDataWarmKey]);
+  }, [leituraSomentePwa, appDataWarmKey, sessionUser?.id, sessionUser?.role]);
 
   useEffect(() => {
     const gaAuto =

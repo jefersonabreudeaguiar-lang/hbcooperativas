@@ -15,6 +15,8 @@ import {
 } from "@/lib/cooperado/cooperadoBicHybridLight";
 import { markCooperadoBicSessionRematerialized } from "@/lib/cooperado/cooperadoBicSessionReinforcementSkip";
 import { cooperadoBrowserDesktopFinanceiroEstavel } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
+import { cooperadoGaInicioSomenteCasca } from "@/lib/cooperado/cooperadoMobilePilot";
+import { cooperadoInicioAberturaQuiescenceActive } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
 
 let activeUserId: string | null = null;
 let scheduled = false;
@@ -48,7 +50,17 @@ export function scheduleCooperadoBicMobileSessionSync(
 
   activeUserId = user!.id;
   scheduled = true;
-  scheduleCooperadoPostInteractiveTask(() => rematerializarBicSnapshots(user!));
+  const fire = () => {
+    if (
+      cooperadoGaInicioSomenteCasca(user) &&
+      cooperadoInicioAberturaQuiescenceActive()
+    ) {
+      window.setTimeout(fire, 2_500);
+      return;
+    }
+    rematerializarBicSnapshots(user!);
+  };
+  scheduleCooperadoPostInteractiveTask(fire);
 }
 
 export function cancelCooperadoBicMobileSessionSync(): void {

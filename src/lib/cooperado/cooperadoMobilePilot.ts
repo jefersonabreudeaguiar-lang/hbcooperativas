@@ -119,3 +119,10 @@ export function cooperadoGaInicioSomenteCasca(
 ): boolean {
   return Boolean(user && isCooperadoMobileGaPromoted(user) && cooperadoGaMobileViewportAtivo());
 }
+
+/** Celular GA: adia `loadData` / rematerialização na abertura (card usa cache leve). */
+export function cooperadoGaMobilePostergarAppDataWarm(
+  user: Omit<User, "password"> | null | undefined
+): boolean {
+  return cooperadoGaInicioSomenteCasca(user);
+}

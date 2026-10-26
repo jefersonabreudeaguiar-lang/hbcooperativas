@@ -30,6 +30,12 @@ import {
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { cooperadoMobilePilotDeferAppDataEagerWarm } from "@/lib/cooperado/cooperadoMobilePilotPerf";
+import {
+  cooperadoGaMobilePostergarAppDataWarm,
+  cooperadoGaMobileViewportAtivo,
+  isCooperadoMobileGaPromoted,
+} from "@/lib/cooperado/cooperadoMobilePilot";
+import { COOPERADO_INICIO_ABERTURA_QUIET_MS_MOBILE_GA } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
 import { shouldDeferAppDataEagerWarmForCooperadoBicHybrid } from "@/lib/cooperado/cooperadoBicHybridLight";
 
 /** Mesma chave que `cooperadoEventDrivenSync` — evita import circular no cold start. */
@@ -126,13 +132,13 @@ function shouldDeferAppDataEagerWarmForSession(session: ReturnType<typeof getSes
   return false;
 }
 
-function scheduleDeferredAppDataEagerWarm(): void {
+function scheduleDeferredAppDataEagerWarm(timeoutMs = 1_400): void {
   if (typeof window === "undefined") return;
   const run = () => preloadAppData({ eager: true });
   if (typeof requestIdleCallback !== "undefined") {
-    requestIdleCallback(run, { timeout: 1_400 });
+    requestIdleCallback(run, { timeout: timeoutMs });
   } else {
-    window.setTimeout(run, 16);
+    window.setTimeout(run, Math.min(timeoutMs, 16_000));
   }
 }
 
@@ -149,6 +155,15 @@ export function ensureCooperadoAppDataEagerWarm(): void {
     return;
   }
   if (!isCooperadoInstantResumeEnabled()) return;
+  if (
+    session?.role === "cooperado" &&
+    isCooperadoMobileGaPromoted(session) &&
+    cooperadoGaMobileViewportAtivo() &&
+    cooperadoGaMobilePostergarAppDataWarm(session)
+  ) {
+    scheduleDeferredAppDataEagerWarm(COOPERADO_INICIO_ABERTURA_QUIET_MS_MOBILE_GA + 5_000);
+    return;
+  }
   if (shouldDeferAppDataEagerWarmForSession(session)) {
     preloadAppData();
     scheduleDeferredAppDataEagerWarm();

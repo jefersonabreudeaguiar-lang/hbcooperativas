@@ -178,6 +178,7 @@ import {
   rematerializarCooperadoPwaSnapshotsSeNecessario,
 } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import {
+  cooperadoGaInicioSomenteCasca,
   cooperadoMobileDeferOperacionalSyncNaAbertura,
   isCooperadoMobileGaPromoted,
 } from "@/lib/cooperado/cooperadoMobilePilot";
@@ -476,9 +477,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         !cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, coopId);
       if (!fatiaLocalUtil && !cooperadoLocalResumeReady(user)) return;
       markCooperadoPagamentosHydrated();
-      if (isCooperadoPwaMobileLeveUi() || isCooperadoPwaMessengerMode()) {
+      if (
+        !cooperadoGaInicioSomenteCasca(user) &&
+        (isCooperadoPwaMobileLeveUi() || isCooperadoPwaMessengerMode())
+      ) {
         cooperadoRematerializarFinanceiroLocalSePossivel(user);
-      } else {
+      } else if (!cooperadoGaInicioSomenteCasca(user)) {
         persistirInicioCardValorReceberCooperado(user);
       }
     };
@@ -1239,7 +1243,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         scheduleCooperadoPostShellSync(() => {
           prepararFinanceiroLocalCooperado(user);
           if (isCooperadoPwaMessengerMode() || deferReleaseOnOpen) {
-            if (deferReleaseOnOpen && cooperadoAppReleaseNeedsOperacionalSync()) {
+            if (
+              deferReleaseOnOpen &&
+              cooperadoAppReleaseNeedsOperacionalSync() &&
+              !cooperadoGaInicioSomenteCasca(user)
+            ) {
               scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
             }
             scheduleCooperadoMessengerStaffRevisionPull(user, coopId);

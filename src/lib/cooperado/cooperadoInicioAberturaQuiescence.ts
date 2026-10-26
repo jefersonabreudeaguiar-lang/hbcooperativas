@@ -1,6 +1,26 @@
+import { getSession } from "@/services/dataStore";
+import {
+  cooperadoGaMobileViewportAtivo,
+  isCooperadoMobileGaPromoted,
+} from "@/lib/cooperado/cooperadoMobilePilot";
+
 /** Após abrir o Início, UI interativa primeiro; sync/BIC pesado espera. */
 const UNTIL_KEY = "hb.coop.inicio-abertura-quiet-until";
 export const COOPERADO_INICIO_ABERTURA_QUIET_MS = 2_000;
+/** Celular GA: janela longa — parse do operacional + rematerialização depois da casca estável. */
+export const COOPERADO_INICIO_ABERTURA_QUIET_MS_MOBILE_GA = 45_000;
+
+function resolveInicioAberturaQuietMs(): number {
+  const session = getSession();
+  if (
+    session?.role === "cooperado" &&
+    isCooperadoMobileGaPromoted(session) &&
+    cooperadoGaMobileViewportAtivo()
+  ) {
+    return COOPERADO_INICIO_ABERTURA_QUIET_MS_MOBILE_GA;
+  }
+  return COOPERADO_INICIO_ABERTURA_QUIET_MS;
+}
 
 const listeners = new Set<() => void>();
 let endTimer: ReturnType<typeof setTimeout> | null = null;
@@ -36,7 +56,7 @@ export function markCooperadoInicioAberturaQuiescence(): void {
   try {
     const until = readUntil();
     if (Number.isFinite(until) && until > Date.now()) return;
-    sessionStorage.setItem(UNTIL_KEY, String(Date.now() + COOPERADO_INICIO_ABERTURA_QUIET_MS));
+    sessionStorage.setItem(UNTIL_KEY, String(Date.now() + resolveInicioAberturaQuietMs()));
     emitQuiescenceChange();
     scheduleEndEmit();
   } catch {
