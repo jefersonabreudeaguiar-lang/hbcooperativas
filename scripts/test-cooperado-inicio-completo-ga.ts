@@ -1,5 +1,5 @@
 /**
- * GA motor ao vivo: Início completo após abertura (não viewUi sempre null).
+ * GA mobile: Início leve (casca ou snapshot PWA) — sem promover viewLive pesado.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -12,13 +12,17 @@ const dash = readFileSync(
 
 assert.match(
   dash,
-  /const viewUi = cooperadoMotorAoVivo[\s\S]*viewLive \?\? pwaInicioView \?\? pwaInicioViewStickyRef\.current/
+  /const viewUi = cooperadoMotorAoVivo[\s\S]*pwaInicioView \?\? pwaInicioViewStickyRef\.current/
 );
-assert.doesNotMatch(dash, /const viewUi = cooperadoMotorAoVivo \? null : view/);
+assert.match(
+  dash,
+  /cooperadoMotorAoVivo\) \{\s*setViewLive\(null\)/,
+  "GA não monta viewLive (motor pesado)"
+);
 assert.doesNotMatch(
   dash,
   /cooperadoMotorAoVivo && inicioAberturaQuieta\) return null/,
-  "quiescência não pode esconder viewLive do Início completo"
+  "quiescência não pode esconder o Início inteiro"
 );
 
 const boot = readFileSync(

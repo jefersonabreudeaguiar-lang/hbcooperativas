@@ -443,10 +443,16 @@ function CooperadoDashboard() {
     if (!apresentacaoConsolidada || lastSyncedAt == null) return;
     void import("@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh").then((mod) => {
       mod.cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user);
+      if (cooperadoMotorAoVivo && !messenger) {
+        refreshPwaInicioView();
+        return;
+      }
       refreshPwaInicioView({ rebuildFromAppData: true });
     });
   }, [
     inicioSnapshotFirst,
+    cooperadoMotorAoVivo,
+    messenger,
     apresentacaoConsolidada,
     lastSyncedAt,
     user?.id,
@@ -483,7 +489,8 @@ function CooperadoDashboard() {
   const [viewLive, setViewLive] = useState<CooperadoPwaInicioDashboardView | null>(null);
 
   useEffect(() => {
-    if (!shouldBuildViewLive || !user?.cooperadoId) {
+    /** GA mobile: só casca + card leve + snapshot PWA — `viewLive` derrubava o renderer (Chrome “erro ao exibir”). */
+    if (!shouldBuildViewLive || !user?.cooperadoId || cooperadoMotorAoVivo) {
       setViewLive(null);
       return;
     }
@@ -498,20 +505,6 @@ function CooperadoDashboard() {
         setViewLive(null);
       }
     };
-    if (cooperadoMotorAoVivo) {
-      if (typeof requestIdleCallback !== "undefined") {
-        const id = requestIdleCallback(run, { timeout: 2_500 });
-        return () => {
-          cancelled = true;
-          cancelIdleCallback(id);
-        };
-      }
-      const t = window.setTimeout(run, 150);
-      return () => {
-        cancelled = true;
-        window.clearTimeout(t);
-      };
-    }
     run();
     return () => {
       cancelled = true;
@@ -528,14 +521,14 @@ function CooperadoDashboard() {
   ]);
 
   const viewRaw = cooperadoMotorAoVivo
-    ? viewLive ?? pwaInicioView ?? pwaInicioViewStickyRef.current
+    ? pwaInicioView ?? pwaInicioViewStickyRef.current
     : messenger || inicioSnapshotFirst
       ? pwaInicioView ?? pwaInicioViewStickyRef.current
       : viewLive;
   const view = tabActive ? viewRaw : null;
-  /** GA: snapshot do Início na 1ª pintura; viewLive substitui quando pronto (quiescência só adia recálculo pesado). */
+  /** GA: casca leve ou snapshot PWA — sem promover `viewLive` (motor pesado). */
   const viewUi = cooperadoMotorAoVivo
-    ? viewLive ?? pwaInicioView ?? pwaInicioViewStickyRef.current
+    ? pwaInicioView ?? pwaInicioViewStickyRef.current ?? null
     : view;
 
   const mesAtual = getCurrentMesReferencia();

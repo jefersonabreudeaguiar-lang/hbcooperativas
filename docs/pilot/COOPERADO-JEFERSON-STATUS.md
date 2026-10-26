@@ -1,6 +1,6 @@
 # Piloto Jeferson — status
 
-**Último portão:** aguardando SIM/NÃO — **build 691** (snapshot-first + complementar pós-PIX).
+**Último portão:** aguardando SIM/NÃO — **build 692+** (GA Início sem `viewLive` pesado; paridade a pagar responsável).
 
 **Auditoria marco zero (read-only, 2026-10-26):** [`docs/diagnostico/MARCO-ZERO-POS-PAGAMENTO.md`](../diagnostico/MARCO-ZERO-POS-PAGAMENTO.md) e [`MARCO-ZERO-AUDITORIA-2026-10-26.md`](../diagnostico/MARCO-ZERO-AUDITORIA-2026-10-26.md) — Jeferson na nuvem: a receber app **R$ 2.520,38** vs base HB **R$ 3.232,56** (HB usado **R$ 550,55**).
 
