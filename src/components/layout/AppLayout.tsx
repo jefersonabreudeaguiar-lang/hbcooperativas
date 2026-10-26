@@ -580,6 +580,17 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         "data-hb-keep-alive-wrap",
         cooperadoKeepAliveShell || staffKeepAliveShell ? "1" : "0"
       );
+      if (!isCooperadoAppUser(navUser)) {
+        const desktopStaff =
+          typeof window !== "undefined" &&
+          window.matchMedia("(min-width: 1024px)").matches;
+        document.documentElement.setAttribute(
+          "data-staff-gestao-perfil",
+          desktopStaff ? "desktop" : "mobile"
+        );
+      } else {
+        document.documentElement.removeAttribute("data-staff-gestao-perfil");
+      }
       const cooperadoMobile =
         isCooperadoAppUser(navUser) &&
         typeof window !== "undefined" &&

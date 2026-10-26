@@ -1,20 +1,28 @@
 /**
- * PC gestão: UI responsiva > sync em background.
- * Celular mantém live sync / fila catch-up; desktop só abertura + «Atualizar».
+ * PC gestão — delega ao perfil único (`staffGestaoPerfilDesktop`).
  */
-import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewport";
+import {
+  staffGestaoPerfilAberturaDelayMs,
+  staffGestaoPerfilCapSyncAutomatico,
+  staffGestaoPerfilEhDesktop,
+  staffGestaoPerfilPersistReloadIdleTimeoutMs,
+  staffGestaoPerfilSyncBackgroundPermitido,
+} from "@/lib/staff/staffGestaoPerfilDesktop";
+
+export { staffGestaoPerfilCapSyncAutomatico } from "@/lib/staff/staffGestaoPerfilDesktop";
 
 export function staffGestaoEmViewportDesktop(): boolean {
-  if (typeof window === "undefined") return false;
-  return !isStaffMobileViewportActive();
+  return staffGestaoPerfilEhDesktop();
 }
 
-/** Sync periódico, idle, visibility e fila catch-up fora da Conferir. */
 export function staffGestaoSyncBackgroundPermitido(): boolean {
-  return isStaffMobileViewportActive();
+  return staffGestaoPerfilSyncBackgroundPermitido();
 }
 
-/** Abertura automática no PC — depois do shell interativo (ms). */
 export function staffGestaoAberturaSyncDelayMs(): number {
-  return staffGestaoEmViewportDesktop() ? 6_000 : 400;
+  return staffGestaoPerfilAberturaDelayMs();
+}
+
+export function staffGestaoPersistReloadIdleTimeoutMs(): number {
+  return staffGestaoPerfilPersistReloadIdleTimeoutMs();
 }

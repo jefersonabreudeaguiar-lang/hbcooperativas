@@ -149,6 +149,7 @@ import { staffGestaoPausaTrabalhoPesadoAutomatico } from "@/lib/staff/staffGesta
 import {
   staffGestaoAberturaSyncDelayMs,
   staffGestaoEmViewportDesktop,
+  staffGestaoPerfilCapSyncAutomatico,
   staffGestaoSyncBackgroundPermitido,
 } from "@/lib/staff/staffGestaoModoDesktop";
 import { scheduleStaffGestaoPersistReloadAfterPaint } from "@/services/dataStore";
@@ -597,7 +598,10 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     await hydrateCooperadoPagamentosFromCloud();
   }, [hydrateCooperadoPagamentosFromCloud]);
 
-  const runSync = useCallback(async (opts?: SyncRunOptions) => {
+  const runSync = useCallback(async (incoming?: SyncRunOptions) => {
+    const capped = staffGestaoPerfilCapSyncAutomatico(incoming);
+    if (capped === null) return;
+    const opts = capped ?? incoming;
     const userInitiatedRun = opts?.userInitiated === true;
     const currentUser = userRef.current;
     if (!currentUser) return;

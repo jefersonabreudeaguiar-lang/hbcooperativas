@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v658
+
+- **Perfil desktop v1:** `staffGestaoPerfilDesktop` — uma política para PC (sync, abertura, persist, prefetch, cap de tiers pesados automáticos). `data-staff-gestao-perfil` no HTML. Doc `METODO-GESTAO-PC-2026.md`.
+
 ## v657
 
 - **PC abertura:** sync automático adiado (~6s) e tier `pulse` (sem `financeiro_delta` forçado); parse do `localStorage` no idle (~4,5s); prefetch de rotas só após 12s.

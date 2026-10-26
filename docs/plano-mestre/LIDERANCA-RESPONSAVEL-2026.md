@@ -120,8 +120,12 @@ Checklist humano: `docs/plano-mestre/FASE-R-RESPONSAVEL-CHECKLIST.md`.
 
 ---
 
+## Método PC (trilhas T1→T3)
+
+Ver **`METODO-GESTAO-PC-2026.md`**: perfil único `staffGestaoPerfilDesktop` (contrato versionado), diagnóstico F12 com chave `coopeagriplla_data:CNPJ`, **T1 estável antes de T2 (dados/F5)**.
+
 ## Próxima ação (agente)
 
 1. Manter `responsavel:verify:fase-r` verde a cada entrega staff (**não alterar cooperado**).
-2. Você homologa **R1→R5** (`FASE-R-RESPONSAVEL-CHECKLIST.md`); agente corrige só gestão com base em SIM/NÃO.
+2. Você homologa **R1→R2 (T1)** antes de R3/R4; respostas **SIM/NÃO** por item.
 3. Portão **R5 SIM** = lançamento público do par responsável↔cooperado (cooperado já em 645+).

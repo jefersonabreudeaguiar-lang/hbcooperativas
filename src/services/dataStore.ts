@@ -28,7 +28,7 @@ import {
   shouldAdoptStaffPersistHint,
   shouldFlushAppDataMemoryOnTenantChange,
 } from "@/lib/staff/staffGestaoTenantSwitch";
-import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewport";
+import { staffGestaoPersistReloadIdleTimeoutMs } from "@/lib/staff/staffGestaoModoDesktop";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
 import { normalizeCreatorEmail, normalizeAuthEmail } from "@/lib/security/appCreator";
 import {
@@ -200,8 +200,8 @@ export function scheduleStaffGestaoPersistReloadAfterPaint(): void {
     }
   };
   const idleTimeout =
-    typeof window !== "undefined" && !isStaffMobileViewportActive()
-      ? STAFF_GESTAO_PERSIST_RELOAD_IDLE_TIMEOUT_DESKTOP_MS
+    typeof window !== "undefined"
+      ? staffGestaoPersistReloadIdleTimeoutMs()
       : STAFF_GESTAO_PERSIST_RELOAD_IDLE_TIMEOUT_MS;
   const armIdle = () => {
     if (typeof requestIdleCallback === "function") {

@@ -3,6 +3,7 @@ import type { CooperadoNavPrefetchRouter } from "@/lib/performance/cooperadoNavP
 import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 import { prefetchStaffTabRouteChunks } from "@/lib/performance/prefetchStaffTabRouteChunks";
 import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewport";
+import { staffGestaoPerfilPrefetchNavDelayMs } from "@/lib/staff/staffGestaoPerfilDesktop";
 
 /** Rotas do dia do responsável — Início, Conferir, Pagar, Livro. */
 export const STAFF_NAV_PREFETCH_PRIORITY: readonly string[] = [
@@ -51,7 +52,7 @@ export function scheduleStaffNavPrefetchDesktop(router: CooperadoNavPrefetchRout
         /* ignore */
       }
     }
-  }, 12_000);
+  }, staffGestaoPerfilPrefetchNavDelayMs() || 12_000);
   return () => {
     cancelled = true;
     window.clearTimeout(t);
