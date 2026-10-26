@@ -21,8 +21,14 @@
 ```powershell
 cd C:\Image-Cipher\coopeagriplla-gestao
 git fetch origin --tags
+npm run restore:cooperado-backup-code
+# preserva gestão + anti-travamento; depois: APP_BUILD_VERSION + public/sw.js e deploy
+```
+
+Checkout da tag inteira (só se quiser rollback global — afeta responsável):
+
+```powershell
 git checkout cooperado-mobile-fase3-v644
-# revisar; se for publicar de novo: incrementar APP_BUILD_VERSION + CACHE em public/sw.js
 ```
 
 Ou na Vercel: **Promote** o deployment `dpl_AnaNJcdXMZU9wUBzeUTg4kzFBCvV`.

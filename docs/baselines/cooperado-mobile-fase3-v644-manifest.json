@@ -44,10 +44,27 @@
     "src/app/(app)/dashboard/**",
     "src/lib/performance/cooperado*",
     "src/lib/cooperadoInicio*",
+    "src/hooks/useCooperado*",
     "src/lib/bic/bicRevisionPulse.ts",
     "src/lib/appBuildVersion.ts",
     "public/sw.js",
     "scripts/test-cooperado-*"
+  ],
+  "restoreCodeAutomated": "npm run restore:cooperado-backup-code",
+  "preserveOnRestore": [
+    "src/lib/performance/cooperadoColdStart.ts",
+    "src/services/dataStore.ts",
+    "src/components/sync/CooperativaSyncProvider.tsx",
+    "src/app/(app)/ficha-corrida/FichaCorridaContent.tsx",
+    "src/services/cooperadoFinanceiroGuard.ts",
+    "src/lib/bic/bicRevisionPulse.ts",
+    "src/app/(app)/dashboard/DashboardContent.tsx",
+    "src/components/performance/CooperadoBootShellDismiss.tsx",
+    "src/lib/performance/cooperadoBootShell.ts",
+    "src/lib/cooperado/cooperadoAberturaInstantanea.ts",
+    "src/lib/performance/cooperadoForegroundOperacionalSync.ts",
+    "src/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery.ts",
+    "src/components/cooperado/CooperadoFinanceiroGate.tsx"
   ],
   "outOfScope": [
     "HB Crédito motor profundo (src/modules/hb-credit profundo)",

@@ -25,6 +25,7 @@ import {
 } from "@/lib/hb-credit/hbAReceberHibrido";
 import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { scheduleCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
+import { cooperadoTabSwitchQuiescenceActive } from "@/lib/cooperado/cooperadoTabSwitchQuiescence";
 import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import {
   cooperadoPilotAppDataTemFinanceiroLocal,
@@ -390,15 +391,17 @@ function FichaCorridaPageInner() {
 
   useEffect(() => {
     if (!tabActive || !isCooperado || !user || user.role !== "cooperado") return;
+    if (cooperadoTabSwitchQuiescenceActive()) return;
     const run = () => {
+      if (cooperadoTabSwitchQuiescenceActive()) return;
       if (cooperadoGaPausaTrabalhoFinanceiroPesado(user)) return;
       scheduleCooperadoGaSyncBaseInformacoesFinanceiras(user, { silent: true });
     };
     if (typeof requestIdleCallback !== "undefined") {
-      const id = requestIdleCallback(run, { timeout: 1_200 });
+      const id = requestIdleCallback(run, { timeout: 3_500 });
       return () => cancelIdleCallback(id);
     }
-    const t = window.setTimeout(run, 0);
+    const t = window.setTimeout(run, 400);
     return () => window.clearTimeout(t);
   }, [tabActive, isCooperado, user?.id, appDataWarmTick]);
 
@@ -406,7 +409,9 @@ function FichaCorridaPageInner() {
     if (!tabActive || !(messenger || pilotFinanceiroLeve) || !user || user.role !== "cooperado") {
       return;
     }
+    if (cooperadoTabSwitchQuiescenceActive()) return;
     const run = () => {
+      if (cooperadoTabSwitchQuiescenceActive()) return;
       if (cooperadoGaPausaTrabalhoFinanceiroPesado(user)) return;
       rematerializarCooperadoPwaSnapshotsSeNecessario(user);
     };

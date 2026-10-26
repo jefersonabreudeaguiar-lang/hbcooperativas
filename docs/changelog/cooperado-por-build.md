@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v670
+
+- **Cooperado (paridade backup):** `npm run restore:cooperado-backup-code` restaura a árvore da tag `cooperado-mobile-fase3-v644` (hooks + lib) sem mexer em gestão/`dataStore`/ficha.
+- **A receber:** GA deixa de ficar preso em “—/Atualizando” quando já há fatia financeira local com valor.
+- **Financeiro:** sync pesado adia na troca de aba (quiescence) — menos travamento ao abrir a aba.
+
 ## v669
 
 - **Cooperado (correção):** desfaz rollback v668 que tinha ido **só** até a tag v644 — faltavam **v645** (sync na revisão da nuvem) e **v646** (`data-cooperado-inicio-ready` + card A receber no GA). Mantém anti-travamento v666 no idle.

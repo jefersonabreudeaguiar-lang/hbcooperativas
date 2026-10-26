@@ -84,6 +84,7 @@ import {
   cooperadoPilotFinanceiroExibirComSnapshotsLocais,
   scheduleCooperadoPilotFinanceReadRecovery,
 } from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
+import { cooperadoTabSwitchQuiescenceActive } from "@/lib/cooperado/cooperadoTabSwitchQuiescence";
 
 /** Após este tempo, o conteúdo pode seguir mesmo sem sync (shell já navegável). */
 const SYNC_HINT_MAX_MS = 18_000;
@@ -201,9 +202,11 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
         requestCooperadoAppReleaseSync();
       }
 
-      const limpo = limparFichaObsoletaCooperado(data, cooperadoId, coopId);
-      if (limpo !== data) {
-        saveAppDataIfSyncLeaseCurrent(getCooperadoRunSyncSessionLease() ?? undefined, limpo);
+      if (!cooperadoTabSwitchQuiescenceActive()) {
+        const limpo = limparFichaObsoletaCooperado(data, cooperadoId, coopId);
+        if (limpo !== data) {
+          saveAppDataIfSyncLeaseCurrent(getCooperadoRunSyncSessionLease() ?? undefined, limpo);
+        }
       }
 
       if (isCooperadoEventDrivenSync()) {
