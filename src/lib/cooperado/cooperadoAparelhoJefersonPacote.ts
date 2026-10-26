@@ -36,7 +36,10 @@ export function empacotarModeloAparelhoJeferson(
   if (isCooperadoPwaMessengerMode()) {
     persistirCooperadoPwaMessengerCaches(user, { light: false });
   } else {
-    cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user);
+    cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user, {
+      light: true,
+      skipInicioDashboardView: true,
+    });
   }
 
   dispatchCooperadoPwaLeveUiSnapshotRefresh();

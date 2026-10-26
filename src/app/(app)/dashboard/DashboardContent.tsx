@@ -151,7 +151,7 @@ import {
 } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { isCooperadoAppUser } from "@/permissions";
 import { getSession } from "@/services/dataStore";
-import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { cooperadoGaInicioSomenteCasca, isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import {
   scheduleCooperadoHbCreditLimiteAndAccountWarmup,
@@ -220,6 +220,7 @@ function CooperadoDashboard() {
   const appDataUiOn = cooperadoPwaUiSubscribesAppData() && tabActive;
   const { user } = useAuth();
   const cooperadoMotorAoVivo = user?.role === "cooperado" && isCooperadoMobileGaPromoted(user);
+  const gaInicioSomenteCasca = cooperadoGaInicioSomenteCasca(user);
   /** GA: card e casca leves primeiro; viewLive em idle substitui sem motor pesado na thread principal. */
   const inicioSnapshotFirst =
     inicioPwaLeve || cooperadoMobilePilotSnapshotFirstInicio(user);
@@ -234,9 +235,11 @@ function CooperadoDashboard() {
     if (!user || user.role !== "cooperado") return;
     const runBackground = () => {
       if (!isAppDataWarm()) preloadAppData();
-      scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
-      if (cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
-        cooperadoGaDispatchPrimeiraCargaSilenciosa(user, { allowRepeat: true });
+      if (!gaInicioSomenteCasca) {
+        scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
+        if (cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
+          cooperadoGaDispatchPrimeiraCargaSilenciosa(user, { allowRepeat: true });
+        }
       }
     };
     if (typeof requestIdleCallback !== "undefined") {
@@ -245,7 +248,7 @@ function CooperadoDashboard() {
     }
     const t = window.setTimeout(runBackground, 800);
     return () => window.clearTimeout(t);
-  }, [user?.id, user?.role]);
+  }, [user?.id, user?.role, gaInicioSomenteCasca]);
 
   const router = useRouter();
   const irEnviarFotoEntrega = useCallback(() => {
@@ -397,6 +400,13 @@ function CooperadoDashboard() {
     if (typeof window === "undefined" || !isCooperadoPwaMobileLeveUi()) return null;
     const session = getSession();
     if (!session?.cooperadoId) return null;
+    if (
+      session.role === "cooperado" &&
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 1023px)").matches
+    ) {
+      return null;
+    }
     return lerCooperadoPwaInicioDashboardViewForResume(
       session.cooperadoId,
       session.cooperativaId
@@ -471,10 +481,10 @@ function CooperadoDashboard() {
   }, [inicioSnapshotFirst, refreshPwaInicioView]);
 
   useEffect(() => {
-    if (!inicioSnapshotFirst || !tabActive) return;
+    if (!inicioSnapshotFirst || !tabActive || gaInicioSomenteCasca) return;
     const id = requestAnimationFrame(() => refreshPwaInicioView());
     return () => cancelAnimationFrame(id);
-  }, [inicioSnapshotFirst, tabActive, refreshPwaInicioView]);
+  }, [inicioSnapshotFirst, tabActive, gaInicioSomenteCasca, refreshPwaInicioView]);
 
   const inicioDomainsRevision = useAppDataDomainsRevisionWhenActive(appDataUiOn, DASHBOARD_INICIO_DOMAINS);
   const deferredInicioRevision = useDeferredValue(inicioDomainsRevision);
@@ -526,10 +536,12 @@ function CooperadoDashboard() {
       ? pwaInicioView ?? pwaInicioViewStickyRef.current
       : viewLive;
   const view = tabActive ? viewRaw : null;
-  /** GA: casca leve ou snapshot PWA — sem promover `viewLive` (motor pesado). */
-  const viewUi = cooperadoMotorAoVivo
-    ? pwaInicioView ?? pwaInicioViewStickyRef.current ?? null
-    : view;
+  /** GA mobile: só casca + card; desktop GA pode usar snapshot PWA. */
+  const viewUi = gaInicioSomenteCasca
+    ? null
+    : cooperadoMotorAoVivo
+      ? pwaInicioView ?? pwaInicioViewStickyRef.current ?? null
+      : view;
 
   const mesAtual = getCurrentMesReferencia();
   const nomeFromSnapshot =

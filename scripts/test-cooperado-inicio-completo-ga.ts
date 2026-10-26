@@ -1,5 +1,5 @@
 /**
- * GA mobile: Início leve (casca ou snapshot PWA) — sem promover viewLive pesado.
+ * GA mobile: Início somente casca — sem viewLive nem snapshot pesado na abertura.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -10,26 +10,27 @@ const dash = readFileSync(
   "utf8"
 );
 
+assert.match(dash, /gaInicioSomenteCasca/);
 assert.match(
   dash,
-  /const viewUi = cooperadoMotorAoVivo[\s\S]*pwaInicioView \?\? pwaInicioViewStickyRef\.current/
+  /const viewUi = gaInicioSomenteCasca\s*\?\s*null/
 );
 assert.match(
   dash,
   /cooperadoMotorAoVivo\) \{\s*setViewLive\(null\)/,
-  "GA não monta viewLive (motor pesado)"
-);
-assert.doesNotMatch(
-  dash,
-  /cooperadoMotorAoVivo && inicioAberturaQuieta\) return null/,
-  "quiescência não pode esconder o Início inteiro"
+  "GA não monta viewLive"
 );
 
-const boot = readFileSync(
-  join(import.meta.dirname ?? __dirname, "..", "src/lib/performance/cooperadoBootShell.ts"),
+const pilot = readFileSync(
+  join(import.meta.dirname ?? __dirname, "..", "src/lib/cooperado/cooperadoMobilePilot.ts"),
   "utf8"
 );
-assert.doesNotMatch(boot, /A receber/);
-assert.match(boot, /Financeiro/);
+assert.match(pilot, /cooperadoGaInicioSomenteCasca/);
+
+const snap = readFileSync(
+  join(import.meta.dirname ?? __dirname, "..", "src/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh.ts"),
+  "utf8"
+);
+assert.match(snap, /skipInicioDashboardView/);
 
 console.log("OK test-cooperado-inicio-completo-ga");

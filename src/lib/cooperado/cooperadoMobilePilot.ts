@@ -99,3 +99,23 @@ export function cooperadoMobilePilotOrDefault<T>(
 ): T {
   return isCooperadoMobileGaPromoted(user) ? pilotValue : productionValue;
 }
+
+/** Viewport cooperado no celular (PWA ou Chrome mobile). */
+export function cooperadoGaMobileViewportAtivo(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.matchMedia("(max-width: 1023px)").matches;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Início GA no celular: só casca + card leve — sem `buildCooperadoPwaInicioDashboardView`
+ * (evita crash do renderer Chrome).
+ */
+export function cooperadoGaInicioSomenteCasca(
+  user: Omit<User, "password"> | null | undefined
+): boolean {
+  return Boolean(user && isCooperadoMobileGaPromoted(user) && cooperadoGaMobileViewportAtivo());
+}

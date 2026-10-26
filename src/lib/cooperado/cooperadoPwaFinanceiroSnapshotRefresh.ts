@@ -22,6 +22,7 @@ import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoP
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import { persistOperacionalSyncedAppBuild } from "@/lib/performance/cooperadoEventDrivenSync";
 import { isCooperadoMobilePilotPerfActive } from "@/lib/cooperado/cooperadoMobilePilotPerf";
+import { cooperadoGaInicioSomenteCasca } from "@/lib/cooperado/cooperadoMobilePilot";
 import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoBicMobileAuthority";
 import { cooperadoBrowserDesktopBicPerfActive } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
@@ -67,8 +68,9 @@ export function scheduleCooperadoMessengerStaffRevisionPull(
 /** Cache limpo ou dados novos na nuvem — grava card, ficha e painel Início no celular. */
 export function cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(
   user: Omit<User, "password"> | null | undefined,
-  opts?: { light?: boolean }
+  opts?: { light?: boolean; skipInicioDashboardView?: boolean }
 ): void {
+  const skipInicioView = opts?.skipInicioDashboardView ?? cooperadoGaInicioSomenteCasca(user);
   if (!user || user.role !== "cooperado") return;
   if (isCooperadoPwaMessengerMode()) {
     persistirCooperadoPwaMessengerCaches(user, { light: opts?.light });
@@ -80,7 +82,9 @@ export function cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(
     if (cooperadoBrowserDesktopBicPerfActive(user)) return;
     persistirInicioCardCooperadoNotificarPwaLeve(user);
     persistirCooperadoPwaFichaResumoSnapshotFromUser(user, true);
-    persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, true);
+    if (!skipInicioView) {
+      persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, true);
+    }
     clearCooperadoPwaDadosDesatualizados();
     dispatchCooperadoPwaLeveUiSnapshotRefresh();
     return;
@@ -88,9 +92,13 @@ export function cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(
   if (!isCooperadoPwaMobileLeveUi() && !isCooperadoMobilePilotPerfActive(user)) return;
   persistirInicioCardCooperadoNotificarPwaLeve(user);
   persistirCooperadoPwaFichaResumoSnapshotFromUser(user, true);
-  persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, true);
-  void import("@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot").then((mod) => {
-    mod.persistirCooperadoPwaEntregasResumosSnapshotFromUser(user);
-  });
+  if (!skipInicioView) {
+    persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, true);
+  }
+  if (!opts?.light) {
+    void import("@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot").then((mod) => {
+      mod.persistirCooperadoPwaEntregasResumosSnapshotFromUser(user);
+    });
+  }
   dispatchCooperadoPwaLeveUiSnapshotRefresh();
 }

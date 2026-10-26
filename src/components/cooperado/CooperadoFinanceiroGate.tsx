@@ -61,6 +61,7 @@ import {
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { cooperadoPwaInstantPaintReady } from "@/lib/cooperado/cooperadoPwaInstantResume";
 import {
+  cooperadoGaInicioSomenteCasca,
   cooperadoMobileDeferOperacionalSyncNaAbertura,
   isCooperadoMobileGaPromoted,
 } from "@/lib/cooperado/cooperadoMobilePilot";
@@ -129,7 +130,9 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     scheduleCooperadoFinanceiroDisplayWarmup(user);
     scheduleCooperadoPilotFinanceReadRecovery(user);
     scheduleCooperadoGaFinanceiroExibicaoRefresh(user);
-    scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
+    if (!cooperadoGaInicioSomenteCasca(user)) {
+      scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
+    }
     if (isCooperadoMobileBicLeituraAuthority(user)) {
       markCooperadoBicFinanceiroFresh();
     }
@@ -152,7 +155,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     if (consumeCooperadoPostLoginFinanceSync()) {
       if (!isCooperadoMobileGaPromoted(user)) {
         pullFinanceiroImediato();
-      } else {
+      } else if (!cooperadoGaInicioSomenteCasca(user)) {
         scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
       }
     } else if (isAppDataWarm()) {

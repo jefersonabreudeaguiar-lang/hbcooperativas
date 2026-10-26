@@ -121,12 +121,23 @@ export function scheduleCooperadoGaPrimeiraCargaSilenciosa(
   };
 
   const releasePrecisaOperacional = cooperadoAppReleaseNeedsOperacionalSync();
+  const mobileViewport =
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(max-width: 1023px)").matches;
+  /** Celular: nunca operacional_full nos primeiros segundos (crash renderer). */
+  const idleTimeoutMs = mobileViewport ? 25_000 : releasePrecisaOperacional ? 2_500 : 12_000;
+  const delayFallbackMs = mobileViewport ? 20_000 : releasePrecisaOperacional ? 1_500 : 6_000;
   if (isCooperadoInstantResumeEnabled()) {
-    scheduleCooperadoPostInteractiveTask(fire);
+    if (mobileViewport) {
+      window.setTimeout(fire, delayFallbackMs);
+    } else {
+      scheduleCooperadoPostInteractiveTask(fire);
+    }
   } else if (typeof requestIdleCallback === "function") {
-    requestIdleCallback(fire, { timeout: releasePrecisaOperacional ? 2_500 : 12_000 });
+    requestIdleCallback(fire, { timeout: idleTimeoutMs });
   } else {
-    window.setTimeout(fire, releasePrecisaOperacional ? 1_500 : 6_000);
+    window.setTimeout(fire, delayFallbackMs);
   }
 }
 
