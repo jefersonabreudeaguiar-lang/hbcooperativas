@@ -6,6 +6,11 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v689
+
+- **Cooperado (crash Chrome):** Início GA monta a view pesada no `requestIdleCallback` (não na mesma frame do card); celular sem dual-mount Início+Financeiro (menos RAM).
+- **Inclui v687–688:** quiescência de abertura corrigida + complementar pós-PIX.
+
 ## v688
 
 - **Dados (A receber):** entrega conferida **depois do PIX** ou **fora do escopo** do pagamento volta a aparecer no Início/Ficha (complementar pós-pagamento); conferência usa `dataConferencia` quando é posterior ao pagamento.

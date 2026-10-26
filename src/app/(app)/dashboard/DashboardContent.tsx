@@ -474,25 +474,52 @@ function CooperadoDashboard() {
   const inicioDomainsRevision = useAppDataDomainsRevisionWhenActive(appDataUiOn, DASHBOARD_INICIO_DOMAINS);
   const deferredInicioRevision = useDeferredValue(inicioDomainsRevision);
 
-  const viewLive = useMemo(() => {
-    if (cooperadoMotorAoVivo && inicioAberturaQuiet) {
-      return null;
+  const shouldBuildViewLive =
+    !inicioAberturaQuiet &&
+    tabActive &&
+    appDataUiOn &&
+    Boolean(deferredInicioRevision) &&
+    Boolean(user?.cooperadoId);
+
+  const [viewLive, setViewLive] = useState<CooperadoPwaInicioDashboardView | null>(null);
+
+  useEffect(() => {
+    if (!shouldBuildViewLive || !user?.cooperadoId) {
+      setViewLive(null);
+      return;
     }
-    if (!tabActive || !appDataUiOn || !deferredInicioRevision || !isAppDataWarm() || !user?.cooperadoId) {
-      return null;
+    let cancelled = false;
+    const run = () => {
+      if (cancelled || !isAppDataWarm()) return;
+      try {
+        const built = buildCooperadoPwaInicioDashboardView(getData(), user, apresentacaoConsolidada);
+        const nomeOk = Boolean(built?.cooperado?.nomeCompleto?.trim());
+        setViewLive(nomeOk ? built : null);
+      } catch {
+        setViewLive(null);
+      }
+    };
+    if (cooperadoMotorAoVivo) {
+      if (typeof requestIdleCallback !== "undefined") {
+        const id = requestIdleCallback(run, { timeout: 2_500 });
+        return () => {
+          cancelled = true;
+          cancelIdleCallback(id);
+        };
+      }
+      const t = window.setTimeout(run, 150);
+      return () => {
+        cancelled = true;
+        window.clearTimeout(t);
+      };
     }
-    try {
-      const built = buildCooperadoPwaInicioDashboardView(getData(), user, apresentacaoConsolidada);
-      const nomeOk = Boolean(built?.cooperado?.nomeCompleto?.trim());
-      return nomeOk ? built : null;
-    } catch {
-      return null;
-    }
+    run();
+    return () => {
+      cancelled = true;
+    };
   }, [
+    shouldBuildViewLive,
     cooperadoMotorAoVivo,
-    inicioAberturaQuiet,
-    tabActive,
-    appDataUiOn,
     deferredInicioRevision,
     user?.id,
     user?.cooperadoId,

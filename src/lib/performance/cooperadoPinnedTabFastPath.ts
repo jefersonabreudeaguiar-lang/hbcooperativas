@@ -107,6 +107,9 @@ export function tryCooperadoPinnedInstantTabSwitch(
 
 /** Híbrido: mantém Início + Financeiro montados (só estas duas) após primeira visita. */
 export function isCooperadoPinnedDualMountEnabled(): boolean {
+  if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
+    return false;
+  }
   const raw =
     typeof process !== "undefined"
       ? (process.env.NEXT_PUBLIC_COOPERADO_PINNED_DUAL_MOUNT ?? "true")

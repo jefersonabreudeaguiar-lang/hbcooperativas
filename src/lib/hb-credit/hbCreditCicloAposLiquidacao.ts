@@ -39,7 +39,8 @@ function quitadoAteMs(p: PagamentoCooperadoRegistro): number {
 }
 
 function pagamentoLiquidaCicloHb(p: PagamentoCooperadoRegistro): boolean {
-  return p.status === "confirmado" || p.status === "aguardando_confirmacao";
+  /** PIX aguardando assinatura ainda não liquidou o ciclo HB — compras do mês continuam no líquido. */
+  return p.status === "confirmado";
 }
 
 export function coletarCicloHbLiquidado(
