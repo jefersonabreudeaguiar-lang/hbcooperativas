@@ -6,10 +6,14 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v669
+
+- **Cooperado (correção):** desfaz rollback v668 que tinha ido **só** até a tag v644 — faltavam **v645** (sync na revisão da nuvem) e **v646** (`data-cooperado-inicio-ready` + card A receber no GA). Mantém anti-travamento v666 no idle.
+- **Dados na nuvem:** inalterados.
+
 ## v668
 
-- **Cooperado (código):** restaurado ao ponto de backup **`cooperado-mobile-fase3-v644`** (Fase 3 SIM) — Início/abas/sync/Financeiro como no piloto; gestão/responsável **não** revertidos.
-- **Dados na nuvem:** inalterados.
+- **Revertido em v669** — rollback v644 puro deixava A receber vazio e abertura pesada.
 
 ## v646
 

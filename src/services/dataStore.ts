@@ -818,10 +818,13 @@ function migrateResponsavelPrincipal(data: AppData): AppData {
 function runAutomaticTasks(data: AppData): AppData {
   if (isCloudSyncInProgress()) return data;
   let current = compactarFotosNoArmazenamento(data);
-  const coopCnpj = data.cooperativas
-    .map((c) => normalizeCnpj(c.cnpj ?? ""))
-    .find((d) => d.length === 14);
-  current = posProcessarFinanceiroLocal(current, coopCnpj);
+  const session = getSession();
+  if (session?.role !== "cooperado") {
+    const coopCnpj = data.cooperativas
+      .map((c) => normalizeCnpj(c.cnpj ?? ""))
+      .find((d) => d.length === 14);
+    current = posProcessarFinanceiroLocal(current, coopCnpj);
+  }
   current = sincronizarMensalidadeCooperativa(current);
   const stripped = stripBinaryForPersist(current);
   return stripped;
