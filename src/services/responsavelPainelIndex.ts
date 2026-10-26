@@ -21,6 +21,7 @@ import {
   repararIntegridadePagamentosCooperativa,
 } from "@/services/pagamentoIntegridadeService";
 import {
+  getTotalAPagarCooperado,
   idsNotasPedidoExcluidas,
   listarFichasEmAbertoPagamento,
   listarPagamentosConfirmadosQueCobremMes,
@@ -1041,7 +1042,12 @@ function motorEmAbertoComNotasSemFicha(
       linhaEmAbertoDeValorAPagar(dataAberto, id, coopId, nome) ??
       linhaEmAbertoDeNotasSemFicha(dataAberto, id, coopId, nome || "Cooperado") ??
       linhaEmAbertoDeFichaPendenteOperacional(dataAberto, id, coopId, nome || "Cooperado");
-    if (extra) extras.push(extra);
+    if (
+      extra &&
+      getTotalAPagarCooperado(dataAberto, id, undefined, coopId) > 0.005
+    ) {
+      extras.push(extra);
+    }
   }
   for (const c of listCooperadosDaCooperativa(dataAberto, coopId)) {
     if (cooperadoId && c.id !== cooperadoId) continue;
@@ -1050,7 +1056,12 @@ function motorEmAbertoComNotasSemFicha(
       linhaEmAbertoDeValorAPagar(dataAberto, c.id, coopId, c.nomeCompleto) ??
       linhaEmAbertoDeNotasSemFicha(dataAberto, c.id, coopId, c.nomeCompleto) ??
       linhaEmAbertoDeFichaPendenteOperacional(dataAberto, c.id, coopId, c.nomeCompleto);
-    if (extra) extras.push(extra);
+    if (
+      extra &&
+      getTotalAPagarCooperado(dataAberto, c.id, undefined, coopId) > 0.005
+    ) {
+      extras.push(extra);
+    }
   }
   return extras.length === 0 ? motor : [...motor, ...extras].sort((a, b) =>
     a.cooperado.localeCompare(b.cooperado, "pt-BR")

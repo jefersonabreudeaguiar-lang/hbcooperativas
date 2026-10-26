@@ -3,7 +3,6 @@ import { getCooperadoNome, round2, sumBy } from "@/utils/calculations";
 import { formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia } from "@/utils/format";
 import {
   getCooperadoNomeResolvido,
-  listCooperadosDaCooperativa,
   notaPertenceCooperado,
   resolverCooperadoIdCanonico,
 } from "@/services/cooperadoCloudService";
@@ -411,14 +410,10 @@ export function getRelatorioPagarCooperadoEmAberto(
   cooperadoId?: string
 ): LinhaPagarCooperadoEmAberto[] {
   const escopo = cooperativaId
-    ? listCooperadosDaCooperativa(data, cooperativaId)
-    : data.cooperados;
+    ? data.cooperados.filter((c) => c.cooperativaId === cooperativaId && c.status === "ativo")
+    : data.cooperados.filter((c) => c.status === "ativo");
   return escopo
-    .filter(
-      (c) =>
-        c.status === "ativo" &&
-        (!cooperadoId || c.id === cooperadoId)
-    )
+    .filter((c) => !cooperadoId || c.id === cooperadoId)
     .map((c) => {
       const coopScope = cooperativaId ?? c.cooperativaId;
       const aberto = valorAPagarCooperadoEmAberto(data, c.id, coopScope);

@@ -4,15 +4,22 @@
 import type { AppData } from "@/types";
 import { getRelatorioLancamentosEmAbertoResponsavel } from "@/services/responsavelPainelIndex";
 import { getTotalValoresAPagarGestaoCooperativa } from "@/lib/responsavel/responsavelGestaoLeitura";
+import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
 import { round2 } from "@/utils/calculations";
 
-/** Soma das linhas do relatório Em aberto (paridade com Pagar / Início). */
+function cooperadosAtivosCadastrados(data: AppData, cooperativaId: string) {
+  return data.cooperados.filter((c) => c.cooperativaId === cooperativaId && c.status === "ativo");
+}
+
+/** SSOT: soma `getTotalAPagarCooperado` (getResumoValorAPagarRelatorio). Em aberto só entra se bater. */
 export function totalValoresAPagarGestaoUnificado(data: AppData, cooperativaId: string): number {
-  const linhas = getRelatorioLancamentosEmAbertoResponsavel(data, cooperativaId);
-  const total = round2(linhas.reduce((s, l) => s + (l.total ?? 0), 0));
-  if (total > 0.005) return total;
-  return getTotalValoresAPagarGestaoCooperativa(
-    data,
-    cooperativaId
+  const cooperados = cooperadosAtivosCadastrados(data, cooperativaId);
+  const totalOficial = round2(
+    cooperados.reduce((s, c) => s + getTotalAPagarCooperado(data, c.id, undefined, cooperativaId), 0)
   );
+  if (totalOficial > 0.005) return totalOficial;
+  const linhas = getRelatorioLancamentosEmAbertoResponsavel(data, cooperativaId);
+  const totalLinhas = round2(linhas.reduce((s, l) => s + (l.total ?? 0), 0));
+  if (totalLinhas > 0.005) return totalLinhas;
+  return getTotalValoresAPagarGestaoCooperativa(data, cooperativaId);
 }

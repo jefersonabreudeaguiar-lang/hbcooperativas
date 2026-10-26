@@ -9,6 +9,10 @@ import { bicCentralGetResumoPagamentoExibicao } from "@/services/bicLeituraCentr
 import {
   getResumoPagamentoConsolidadoCooperado,
   getResumoPagamentoCooperado,
+  getResumoValorAPagarRelatorio,
+  getTotalAPagarCooperado,
+  listarFichasPendentesPagamento,
+  mesesReferenciaComDebitoAberto,
   notaQuitadaPorPagamentoCooperativaRegistrado,
   resumoFromPagamento,
   type AjustesResumoPagamento,
@@ -88,7 +92,7 @@ export function getTotalValoresAPagarGestaoCooperativa(
   _opts?: { bicCentralRead?: boolean }
 ): number {
   const cooperados = cooperativaId
-    ? listCooperadosDaCooperativa(data, cooperativaId).filter((c) => c.status === "ativo")
+    ? data.cooperados.filter((c) => c.cooperativaId === cooperativaId && c.status === "ativo")
     : data.cooperados.filter((c) => c.status === "ativo");
 
   return round2(
@@ -148,22 +152,26 @@ export function valorAPagarCooperadoEmAberto(
   cooperadoId: string,
   cooperativaId: string
 ): { meses: string[]; porMes: MesValorAPagarEmAberto[]; total: number } {
-  const aberto = listarMesesFichaEmAbertoCooperado(data, cooperadoId, cooperativaId, {
-    usarLiquido: true,
-  });
-  if (aberto.total <= 0.005) {
-    return valorAPagarDeNotasSemFicha(data, cooperadoId, cooperativaId);
-  }
+  const meses = mesesReferenciaComDebitoAberto(data, cooperadoId, cooperativaId);
   const porMes: MesValorAPagarEmAberto[] = [];
   let total = 0;
-  for (const m of aberto.porMes) {
-    const resumoMes = getResumoPagamentoCooperado(data, cooperadoId, m.mes, cooperativaId);
-    const liquido = Number(resumoMes.valorLiquido);
-    const mesTotal = Number.isFinite(liquido) && liquido > 0.005 ? liquido : m.total;
-    porMes.push({ mes: m.mes, entregas: m.entregas, total: mesTotal });
+  for (const mes of meses) {
+    const resumoMes = getResumoValorAPagarRelatorio(data, cooperadoId, mes, cooperativaId);
+    const mesTotal = round2(resumoMes.valorLiquido);
+    if (mesTotal <= 0.005) continue;
+    const entregas = listarFichasPendentesPagamento(data, cooperadoId, mes, cooperativaId).length;
+    porMes.push({
+      mes,
+      entregas: entregas > 0 ? entregas : resumoMes.valorEntregas > 0.005 ? 1 : 0,
+      total: mesTotal,
+    });
     total = round2(total + mesTotal);
   }
   if (total <= 0.005) {
+    const oficial = getTotalAPagarCooperado(data, cooperadoId, undefined, cooperativaId);
+    if (oficial <= 0.005) {
+      return { meses: [], porMes: [], total: 0 };
+    }
     return valorAPagarDeNotasSemFicha(data, cooperadoId, cooperativaId);
   }
   return { meses: porMes.map((m) => m.mes), porMes, total };
