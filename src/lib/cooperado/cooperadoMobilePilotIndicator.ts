@@ -12,7 +12,7 @@ import { isCooperadoMobilePilot } from "@/lib/cooperado/cooperadoMobilePilot";
  */
 
 /** Revisão atual em teste (somente piloto Jeferson). */
-export const COOPERADO_MOBILE_PILOT_PENDING_REVISION = 11;
+export const COOPERADO_MOBILE_PILOT_PENDING_REVISION = 10;
 
 /** Última revisão já liberada para todos (GA). */
 export const COOPERADO_MOBILE_PILOT_PROMOTED_REVISION = 10;

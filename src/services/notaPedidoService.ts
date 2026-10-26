@@ -27,7 +27,6 @@ import {
 } from "@/services/valoresAvulsosReceberService";
 import { round2 } from "@/utils/calculations";
 import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
-import { cooperadoJefersonCanaryFinanceComplementarAtivo } from "@/lib/cooperado/cooperadoJefersonCanary";
 import {
   pagamentoSuprimidoPorReciboAssinadoLocal,
   resolverCooperativaIdReciboLatch,
@@ -1903,18 +1902,10 @@ function mesComPagamentoCooperativaRegistrado(
   return !!getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia);
 }
 
-type NotaReferenciaTemporalOpts = { incluirDataConferencia?: boolean };
-
-/** Entrega (e opcionalmente conferência no canário Jeferson) — createdAt do sync não reabre pago. */
-function notaReferenciaTemporalEscopoPagamento(
-  nota: NotaPedido,
-  opts?: NotaReferenciaTemporalOpts
-): number {
-  const stamps: string[] = [];
-  if (opts?.incluirDataConferencia && nota.dataConferencia) stamps.push(nota.dataConferencia);
-  if (nota.dataEntrega) stamps.push(nota.dataEntrega);
-  for (const stamp of stamps) {
-    const raw = stamp.length === 10 ? `${stamp}T00:00:00.000Z` : stamp;
+/** Só data de entrega — createdAt/conferência refeitos no sync não reabrem o pago. */
+function notaReferenciaTemporalEscopoPagamento(nota: NotaPedido): number {
+  if (nota.dataEntrega) {
+    const raw = nota.dataEntrega.length === 10 ? `${nota.dataEntrega}T00:00:00.000Z` : nota.dataEntrega;
     const dia = Date.parse(raw);
     if (Number.isFinite(dia)) return dia;
   }
@@ -1956,10 +1947,7 @@ export function notaQuitadaPorPagamentoCooperativaRegistrado(
       (p.fichaIds?.length ?? 0) > 0 || (p.notaPedidoIds?.length ?? 0) > 0;
     if (escopoExplicito) continue;
 
-    const incluirConferencia = cooperadoJefersonCanaryFinanceComplementarAtivo(data, alvo, coopId);
-    const notaTs = notaReferenciaTemporalEscopoPagamento(nota, {
-      incluirDataConferencia: incluirConferencia,
-    });
+    const notaTs = notaReferenciaTemporalEscopoPagamento(nota);
     const pagoTs = Date.parse(p.pagoEm ?? p.createdAt ?? "");
     if (!Number.isNaN(notaTs) && !Number.isNaN(pagoTs) && notaTs > pagoTs) continue;
     return true;
@@ -2247,7 +2235,8 @@ export function pagamentoEscopoIdsResolvemNoAppData(
   return false;
 }
 
-function fichaCobertaPorPagamentoCooperativaLegado(
+/** Ficha já quitada pelo registro de pagamento da cooperativa (mesmo com status local ainda pendente). */
+export function fichaCobertaPorPagamentoCooperativa(
   data: AppData,
   ficha: FichaCorrida,
   pagamento: PagamentoCooperadoRegistro
@@ -2269,42 +2258,6 @@ function fichaCobertaPorPagamentoCooperativaLegado(
     return notaTs <= pagoTs;
   }
   /** Mesmo mês do PIX, sem data de entrega — mês já liquidado, não reabre. */
-  return true;
-}
-
-/** Ficha já quitada pelo registro de pagamento da cooperativa (mesmo com status local ainda pendente). */
-export function fichaCobertaPorPagamentoCooperativa(
-  data: AppData,
-  ficha: FichaCorrida,
-  pagamento: PagamentoCooperadoRegistro
-): boolean {
-  const coopId = ficha.cooperativaId ?? data.cooperados.find((c) => c.id === ficha.cooperadoId)?.cooperativaId;
-  if (!cooperadoJefersonCanaryFinanceComplementarAtivo(data, ficha.cooperadoId, coopId)) {
-    return fichaCobertaPorPagamentoCooperativaLegado(data, ficha, pagamento);
-  }
-  if (ficha.status === "pago") return true;
-  if (pagamento.notaPedidoIds?.includes(ficha.notaPedidoId)) return true;
-  if (pagamento.fichaIds?.includes(ficha.id)) return true;
-  const nota = data.notasPedido.find((n) => n.id === ficha.notaPedidoId);
-  if (nota?.status === "pago") return true;
-  if (nota && notaQuitadaPorPagamentoCooperativaRegistrado(data, nota, ficha.cooperadoId)) {
-    return true;
-  }
-  const escopoExplicito =
-    (pagamento.fichaIds?.length ?? 0) > 0 || (pagamento.notaPedidoIds?.length ?? 0) > 0;
-  if (escopoExplicito) {
-    return false;
-  }
-  const meses = getMesesReferenciaPagamento(pagamento);
-  const mesFicha = nota?.mesReferencia ?? ficha.mesReferencia;
-  if (!meses.includes(mesFicha) && !meses.includes(ficha.mesReferencia)) return false;
-  const notaTs = nota
-    ? notaReferenciaTemporalEscopoPagamento(nota, { incluirDataConferencia: true })
-    : Number.NaN;
-  const pagoTs = Date.parse(pagamento.pagoEm ?? pagamento.createdAt ?? "");
-  if (!Number.isNaN(notaTs) && !Number.isNaN(pagoTs)) {
-    return notaTs <= pagoTs;
-  }
   return true;
 }
 

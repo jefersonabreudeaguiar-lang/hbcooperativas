@@ -1,5 +1,4 @@
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
-import { COOPERADO_JEFERSON_CANARY_FINANCE_COMPLEMENTAR_REVISION } from "@/lib/cooperado/cooperadoJefersonCanary";
 
 export type CooperadoReleasePolicy = {
   minBuild: number;
@@ -7,8 +6,6 @@ export type CooperadoReleasePolicy = {
   releaseEpoch: number;
   message: string;
   serverBuild: number;
-  /** Revisão financeira só no canário Jeferson (0 = nenhuma). */
-  jefersonCanaryFinanceRevision?: number;
 };
 
 const DEFAULT_MESSAGE = "";
@@ -27,7 +24,6 @@ export function embeddedCooperadoReleasePolicy(): CooperadoReleasePolicy {
     releaseEpoch: serverBuild,
     message: DEFAULT_MESSAGE,
     serverBuild,
-    jefersonCanaryFinanceRevision: COOPERADO_JEFERSON_CANARY_FINANCE_COMPLEMENTAR_REVISION,
   };
 }
 
@@ -52,7 +48,6 @@ export function resolveCooperadoReleasePolicy(): CooperadoReleasePolicy {
     releaseEpoch,
     message,
     serverBuild,
-    jefersonCanaryFinanceRevision: COOPERADO_JEFERSON_CANARY_FINANCE_COMPLEMENTAR_REVISION,
   };
 }
 
@@ -67,8 +62,6 @@ export function mergeCooperadoReleasePolicy(
     releaseEpoch: Math.max(remote.releaseEpoch ?? 0, embedded.releaseEpoch),
     message: remote.message?.trim() || embedded.message,
     serverBuild: Math.max(remote.serverBuild ?? 0, embedded.serverBuild),
-    jefersonCanaryFinanceRevision:
-      remote.jefersonCanaryFinanceRevision ?? embedded.jefersonCanaryFinanceRevision,
   };
 }
 
