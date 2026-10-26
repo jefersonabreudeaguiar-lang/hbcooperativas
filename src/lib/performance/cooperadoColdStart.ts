@@ -140,6 +140,11 @@ export function ensureCooperadoAppDataEagerWarm(): void {
   const session = getSession();
   if (isStaffGestaoRole(session?.role)) {
     hydrateStaffGestaoFirstPaintFromLastro();
+    if (!isAppDataWarm()) {
+      preloadAppData({ eager: true });
+      return;
+    }
+    // PC: lastro no 1º quadro; `coopeagriplla_data:<CNPJ>` entra no idle (paridade Em aberto × Pagar).
     scheduleStaffGestaoPersistReloadAfterPaint();
     return;
   }

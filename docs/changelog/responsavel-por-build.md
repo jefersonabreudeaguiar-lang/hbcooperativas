@@ -6,6 +6,31 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v665
+
+- **T2:** F5 no PC volta a fundir `coopeagriplla_data:<CNPJ>` no idle (não pula reload só porque hidratou LKG); persist idle ~5s.
+- **T1:** Conferir só monta linhas completas de Em aberto na subaba «Em aberto»; reload do persist no PC não dispara `notify` se a riqueza não mudou.
+
+## v661
+
+- **T1:** `staffGestaoPerfilReconciliarLivroHookHabilitado` — hook de livro desmontado no PC fora de `/livro-caixa`; Conferir leitura no desktop sem merge `getDataOperationalTruth`.
+- **T2:** Em aberto usa `appDataParaPagarCooperadosResponsavel` (mesma projeção do Pagar); remove fallback da lista Pagar; fallback de valor quando resumo vem NaN.
+
+## v661
+
+- **T1:** reconcile ficha só quando necessário no PC; cache de leitura; Início sem hook de livro-caixa; uma passagem em `appDataParaPagar`.
+- **T2:** preservar ficha a partir da nota; motor Em aberto por candidatos; Início usa `dataPagar`; latch Em aberto não reidrata linha vazia.
+
+## v662
+
+- **T1:** `posProcessarIntegridade` não reconcilia Livro Caixa no PC por padrão; hook livro só em `/livro-caixa`; removido de Conferir/Notas.
+- **T2:** Conferir leitura no PC sem latch LKG; sem `reaplicarAbaLastGood` no Pagar/sync; cache painel zera após parse do persist; reconcile ficha quando notas cruas pedem.
+
+## v664
+
+- **T1:** F5 frio gestão — `preloadAppData({ eager: true })` quando não há LKG; PC com LKG não agenda segundo parse idle; sync com operacional vazio lê persist na hora.
+- **T2:** `totalValoresAPagarGestaoUnificado` (Início/relatório = linhas Em aberto); candidatos com `cooperados[]` vazio; cache leitura com `pendenteCents`; reparo integridade `forcar` no desktop.
+
 ## v660
 
 - **T1:** `useReconciliarLivroCaixaGestao` isolado no desktop (`isStaffMobileViewportActive`) — sem `subscribe` fora de `/livro-caixa`.

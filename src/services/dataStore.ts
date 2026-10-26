@@ -28,7 +28,10 @@ import {
   shouldAdoptStaffPersistHint,
   shouldFlushAppDataMemoryOnTenantChange,
 } from "@/lib/staff/staffGestaoTenantSwitch";
-import { staffGestaoPersistReloadIdleTimeoutMs } from "@/lib/staff/staffGestaoModoDesktop";
+import {
+  staffGestaoPerfilEhDesktop,
+  staffGestaoPersistReloadIdleTimeoutMs,
+} from "@/lib/staff/staffGestaoModoDesktop";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
 import { normalizeCreatorEmail, normalizeAuthEmail } from "@/lib/security/appCreator";
 import {
@@ -176,9 +179,23 @@ export function reloadStaffGestaoPersistAfterFirstPaint(): void {
     if (memoryCache) {
       data = preservarStaffGestaoContraWipe(memoryCache, data);
     }
+    const prev = memoryCache;
     memoryCache = data;
     noteStaffGestaoLastGood(data);
-    notifyImmediate();
+    void import("@/services/responsavelPainelIndex").then((m) => m.resetResponsavelPainelIndexCache());
+    if (
+      prev &&
+      staffGestaoPerfilEhDesktop() &&
+      staffGestaoRiquezaTotal(medirRiquezaStaffGestao(prev)) ===
+        staffGestaoRiquezaTotal(medirRiquezaStaffGestao(data))
+    ) {
+      return;
+    }
+    if (staffGestaoPerfilEhDesktop()) {
+      notify();
+    } else {
+      notifyImmediate();
+    }
   } catch {
     /* persist ilegível — lastro já está na tela */
   }

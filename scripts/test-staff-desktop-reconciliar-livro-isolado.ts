@@ -14,7 +14,7 @@ const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
 const hook = read("src/hooks/useReconciliarLivroCaixaGestao.ts");
 assert.ok(hook.includes("isStaffMobileViewportActive"));
-assert.ok(hook.includes("staffGestaoPerfilReconciliarLivroCaixaAtivo"));
+assert.ok(hook.includes("staffGestaoPerfilReconciliarLivroHookHabilitado"));
 assert.ok(hook.includes("subscribe(agendar)"));
 assert.ok(!hook.includes("staffGestaoPerfilReconciliarLivroForaDoLivroCaixa"));
 

@@ -6,7 +6,7 @@ import type { SyncRunOptions } from "@/services/syncRequest";
 import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewport";
 
 /** Bump + teste `test-staff-gestao-perfil-desktop.ts` a cada mudança de comportamento PC. */
-export const STAFF_GESTAO_DESKTOP_PERFIL_VERSION = 2;
+export const STAFF_GESTAO_DESKTOP_PERFIL_VERSION = 7;
 
 export function staffGestaoPerfilEhDesktop(): boolean {
   if (typeof window === "undefined") return false;
@@ -27,11 +27,16 @@ export function staffGestaoPerfilAberturaDelayMs(): number {
 }
 
 export function staffGestaoPerfilPersistReloadIdleTimeoutMs(): number {
-  return staffGestaoPerfilEhDesktop() ? 12_000 : 180;
+  return staffGestaoPerfilEhDesktop() ? 5_000 : 180;
 }
 
 /** Poll da fila Conferir — só mobile; PC usa Atualizar na tela. */
 export function staffGestaoPerfilNotasLivePollPermitido(): boolean {
+  return isStaffMobileViewportActive();
+}
+
+/** PC: Pagar/Em aberto usam a mesma leitura — sem reinjetar aba last-good após F5. */
+export function staffGestaoPerfilReaplicarAbaLastGoodPermitido(): boolean {
   return isStaffMobileViewportActive();
 }
 
@@ -52,6 +57,16 @@ export function staffGestaoPerfilReconciliarLivroCaixaAtivoForViewport(
 
 export function staffGestaoPerfilReconciliarLivroCaixaAtivo(pathname: string): boolean {
   return staffGestaoPerfilReconciliarLivroCaixaAtivoForViewport(staffGestaoPerfilEhDesktop(), pathname);
+}
+
+/** Monta `useReconciliarLivroCaixaGestao` só onde a política permite (PC = só livro-caixa). */
+export function staffGestaoPerfilReconciliarLivroHookHabilitado(
+  pathname: string,
+  baseEnabled: boolean
+): boolean {
+  if (!baseEnabled) return false;
+  if (!staffGestaoPerfilEhDesktop()) return true;
+  return staffGestaoPerfilReconciliarLivroCaixaAtivo(pathname);
 }
 
 export function staffGestaoPerfilAtributosDom(): Record<string, string> {

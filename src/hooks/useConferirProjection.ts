@@ -5,8 +5,10 @@ import { useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
 import { useResponsavelFilaConferencia } from "@/hooks/useResponsavelFilaConferencia";
 import {
   appDataParaConferirLeitura,
+  countCooperadosLancamentosEmAbertoResponsavel,
   getRelatorioLancamentosEmAbertoResponsavel,
 } from "@/services/responsavelPainelIndex";
+import { staffGestaoPerfilEhDesktop } from "@/lib/staff/staffGestaoPerfilDesktop";
 import type { AppData } from "@/types";
 import type { LinhaPagarCooperadoEmAberto } from "@/services/relatorioService";
 
@@ -48,11 +50,19 @@ export function useConferirProjection(opts: {
   if (dataLeituraRaw) lastDataRef.current = dataLeituraRaw;
   const dataLeitura = dataLeituraRaw ?? lastDataRef.current;
 
+  const lastAbertoRef = useRef<ConferirEmAbertoProjection | null>(null);
+  const precisaLinhasEmAberto = vista === "aberto";
+  const precisaBadgeEmAberto =
+    vista === "fila" || vista === "cooperado" || vista === "aberto";
   const emAbertoRaw = useAppDataSelectorForDomainsWhenActive(
-    staffActive && Boolean(coopId) && !conferirModal,
+    staffActive && Boolean(coopId) && !conferirModal && precisaBadgeEmAberto,
     ["financeiro", "notas"],
     (d) => {
       if (!coopId) return EMPTY_EM_ABERTO;
+      if (!precisaLinhasEmAberto) {
+        const count = countCooperadosLancamentosEmAbertoResponsavel(d, coopId);
+        return { linhas: [], count, total: 0 };
+      }
       const linhas = getRelatorioLancamentosEmAbertoResponsavel(d, coopId, cooperadoId);
       return {
         linhas,
@@ -60,11 +70,13 @@ export function useConferirProjection(opts: {
         total: linhas.reduce((s, l) => s + l.total, 0),
       };
     },
-    [coopId, cooperadoId]
+    [coopId, cooperadoId, precisaLinhasEmAberto]
   );
-  const lastAbertoRef = useRef<ConferirEmAbertoProjection | null>(null);
   if (emAbertoRaw) lastAbertoRef.current = emAbertoRaw;
-  const emAberto = emAbertoRaw ?? lastAbertoRef.current ?? EMPTY_EM_ABERTO;
+  const emAberto =
+    emAbertoRaw ??
+    (staffGestaoPerfilEhDesktop() ? EMPTY_EM_ABERTO : lastAbertoRef.current) ??
+    EMPTY_EM_ABERTO;
 
   return {
     filaDetalhada,

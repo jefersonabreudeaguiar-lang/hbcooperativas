@@ -19,6 +19,8 @@ assert.match(
 const cold = read("src/lib/performance/cooperadoColdStart.ts");
 assert.match(cold, /F5 do responsável: sempre hidrata na hora/);
 assert.match(cold, /isStaffGestaoRole\(session\?\.role\)/);
+assert.match(cold, /scheduleStaffGestaoPersistReloadAfterPaint\(\)/);
+assert.doesNotMatch(cold, /hydrated\) return/);
 assert.doesNotMatch(cold, /NEXT_PUBLIC_STAFF_DEFER_APPDATA_EAGER/);
 
 const warm = read("src/hooks/useEnsureAppDataWarm.ts");
