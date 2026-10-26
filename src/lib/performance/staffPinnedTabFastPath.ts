@@ -1,4 +1,5 @@
 import { isStaffBottomTabPath, staffBottomTabCacheKey } from "@/lib/performance/staffBottomTabRoutes";
+import { staffGestaoUsaNavegacaoOtimista } from "@/lib/performance/staffDesktopNavPolicy";
 import { setStaffOptimisticTab } from "@/lib/performance/staffOptimisticTabNavigation";
 
 let tabPanelCacheProbe: ((href: string) => boolean) | null = null;
@@ -15,6 +16,7 @@ export function staffTabPanelCached(href: string): boolean {
  * Troca instantânea: aba já visitada pinta do keep-alive; o Next só acompanha a URL.
  */
 export function tryStaffCachedInstantTabSwitch(currentEffectiveHref: string, targetHref: string): boolean {
+  if (!staffGestaoUsaNavegacaoOtimista()) return false;
   if (!isStaffBottomTabPath(currentEffectiveHref) || !isStaffBottomTabPath(targetHref)) {
     return false;
   }

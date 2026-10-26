@@ -15,6 +15,10 @@ function getStaffMobileViewportSnapshot(): boolean {
   return window.matchMedia(STAFF_MOBILE_MQ).matches;
 }
 
+export function isStaffMobileViewportActive(): boolean {
+  return getStaffMobileViewportSnapshot();
+}
+
 /** Gestão: keep-alive de abas só no mobile — desktop usa rota única (evita 4 árvores pesadas). */
 export function useStaffMobileViewport(): boolean {
   return useSyncExternalStore(

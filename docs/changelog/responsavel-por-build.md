@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v654
+
+- **PC gestão:** menu lateral com Link nativo (sem otimista/history.replace); limpa estado otimista no desktop; quiescência de sync só no mobile.
+
 ## v653
 
 - **Fix travamento:** keep-alive da gestão **só no celular**; **uma aba no DOM**; desktop volta à rota única (sem 4 telas pesadas paralelas). Troca otimista usa cache pinado.

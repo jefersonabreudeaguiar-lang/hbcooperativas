@@ -46,7 +46,11 @@ assert.ok(pinados.includes("/livro-caixa"));
 clearStaffOptimisticTab();
 assert.equal(resolveStaffEffectiveTabPath("/notas-pedido"), "/notas-pedido");
 setStaffOptimisticTab("/ficha-corrida");
-assert.equal(resolveStaffEffectiveTabPath("/notas-pedido"), "/ficha-corrida");
+assert.equal(
+  resolveStaffEffectiveTabPath("/notas-pedido"),
+  "/notas-pedido",
+  "fora do mobile gestão a URL prevalece (PC não trava menu)"
+);
 clearStaffOptimisticTab();
 
 assert.equal(

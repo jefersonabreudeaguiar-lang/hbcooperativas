@@ -1,4 +1,5 @@
 import { isStaffBottomTabPath, staffBottomTabCacheKey } from "@/lib/performance/staffBottomTabRoutes";
+import { staffGestaoUsaNavegacaoOtimista } from "@/lib/performance/staffDesktopNavPolicy";
 import { markStaffTabPathChange } from "@/lib/staff/staffTabSwitchQuiescence";
 
 let optimisticHref: string | null = null;
@@ -10,6 +11,7 @@ function notify(): void {
 
 /** Antes do Next aplicar pathname — mostra o painel já visitado no mesmo toque. */
 export function setStaffOptimisticTab(href: string): void {
+  if (!staffGestaoUsaNavegacaoOtimista()) return;
   if (!isStaffBottomTabPath(href)) return;
   const key = staffBottomTabCacheKey(href);
   if (optimisticHref === key) return;
@@ -47,6 +49,7 @@ export function subscribeStaffOptimisticTab(onChange: () => void): () => void {
 
 export function resolveStaffEffectiveTabPath(pathname: string): string {
   if (!isStaffBottomTabPath(pathname)) return pathname;
+  if (!staffGestaoUsaNavegacaoOtimista()) return staffBottomTabCacheKey(pathname);
   if (optimisticHref && isStaffBottomTabPath(optimisticHref)) return optimisticHref;
   return staffBottomTabCacheKey(pathname);
 }
