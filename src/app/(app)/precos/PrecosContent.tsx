@@ -36,10 +36,20 @@ import {
 } from "@/services/catalogoContratosService";
 import { getData, getSession } from "@/services/dataStore";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import { shouldRenderCooperadoJefersonRebuildShell } from "@/lib/cooperado/cooperadoJefersonRebuildPilot";
+import { CooperadoJefersonRebuildTabCorpo } from "@/components/cooperado/CooperadoJefersonRebuildTabCorpo";
 
 const PRECOS_APP_DATA_DOMAINS: AppDataNotifyDomain[] = ["operacional", "shell"];
 
 export default function PrecosPage() {
+  const { user } = usePermissions();
+  if (user?.role === "cooperado" && shouldRenderCooperadoJefersonRebuildShell("precos", user)) {
+    return <CooperadoJefersonRebuildTabCorpo tab="precos" user={user} />;
+  }
+  return <PrecosPageMain />;
+}
+
+function PrecosPageMain() {
   const ready = useAppDataReady();
   const tabActive = useCooperadoTabPanelActive("/precos");
   const { user, isCooperado, coopId: coopIdPerm } = usePermissions();

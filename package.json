@@ -24,6 +24,7 @@
     "restore:cooperado-backup-code": "node scripts/restore-cooperado-code-from-backup-tag.mjs",
     "test:sync-flows": "npx tsx scripts/simulate-sync-flows.ts",
     "test:cooperado-financeiro": "npx tsx scripts/test-cooperado-financeiro-guard.ts",
+    "test:cooperado-jeferson-rebuild-gate": "npx tsx scripts/test-cooperado-jeferson-rebuild-gate.ts",
     "test:h204-orlando-global": "npx tsx scripts/test-h204-orlando-global-simulation.ts",
     "test:bic-shadow": "npx tsx scripts/test-bic-shadow-compare.ts",
     "test:bic-shadow-real": "npx tsx scripts/test-bic-shadow-real.ts",

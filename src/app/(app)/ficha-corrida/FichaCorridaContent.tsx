@@ -47,6 +47,9 @@ import {
   RESPONSAVEL_PAGAR_COOPERADOS_TITULO,
 } from "@/lib/responsavel/responsavelPagarCooperadosContrato";
 import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
+import { useAuth } from "@/modules/auth/AuthProvider";
+import { shouldRenderCooperadoJefersonRebuildShell } from "@/lib/cooperado/cooperadoJefersonRebuildPilot";
+import { CooperadoJefersonRebuildTabCorpo } from "@/components/cooperado/CooperadoJefersonRebuildTabCorpo";
 import { getInstituicoesCatalogo } from "@/services/catalogoContratosService";
 import {
   resumoFromPagamento,
@@ -270,6 +273,10 @@ function FichaCorridaPageBody() {
 }
 
 export default function FichaCorridaPage() {
+  const { user } = useAuth();
+  if (user?.role === "cooperado" && shouldRenderCooperadoJefersonRebuildShell("financeiro", user)) {
+    return <CooperadoJefersonRebuildTabCorpo tab="financeiro" user={user} />;
+  }
   return (
     <CooperadoApresentacaoFinanceiraGate>
       <FichaCorridaPageBody />

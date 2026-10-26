@@ -152,6 +152,8 @@ import {
 import { isCooperadoAppUser } from "@/permissions";
 import { getSession } from "@/services/dataStore";
 import { cooperadoGaInicioSomenteCasca, isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { shouldRenderCooperadoJefersonRebuildShell } from "@/lib/cooperado/cooperadoJefersonRebuildPilot";
+import { CooperadoJefersonRebuildTabCorpo } from "@/components/cooperado/CooperadoJefersonRebuildTabCorpo";
 import { cooperadoMobilePilotSnapshotFirstInicio } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import {
   scheduleCooperadoHbCreditLimiteAndAccountWarmup,
@@ -214,6 +216,18 @@ function EnviarFotoEntregaInicioCard({ onEnviar }: { onEnviar: () => void }) {
 }
 
 function CooperadoDashboard() {
+  const { user } = useAuth();
+  if (user && shouldRenderCooperadoJefersonRebuildShell("inicio", user)) {
+    return (
+      <CooperadoInicioSafeRoot>
+        <CooperadoJefersonRebuildTabCorpo tab="inicio" user={user} />
+      </CooperadoInicioSafeRoot>
+    );
+  }
+  return <CooperadoDashboardMain />;
+}
+
+function CooperadoDashboardMain() {
   const tabActive = useCooperadoTabPanelActive("/dashboard");
   const messenger = isCooperadoPwaMessengerMode();
   const inicioPwaLeve = isCooperadoPwaMobileLeveUi();
