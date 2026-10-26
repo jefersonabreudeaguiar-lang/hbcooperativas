@@ -5,7 +5,9 @@
 ## Princípios
 
 - **Nuvem** = fonte da verdade; celular só recebe JSON pequeno (card, resumos).
-- **Sem** `CooperativaSyncProvider`, AppData pesado, keep-alive de abas v1.
+- **Sem** `CooperativaSyncProvider` nem keep-alive de abas v1 (rotas fora de `(app)/`).
+- **AppData local:** bloqueado em `/cooperado-v2/*` e em `/login?next=…/cooperado-v2…` (build ≥698).
+- **Não** redireciona Orlando automaticamente do PWA oficial — só pela URL v2 ou `next` no login.
 - **Aparência** = mesmos componentes visuais (card A receber, cores, abas).
 - **Piloto:** apenas `c_1782263929381_ncp55` (Orlando).
 

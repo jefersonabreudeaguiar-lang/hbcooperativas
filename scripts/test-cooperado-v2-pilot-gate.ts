@@ -7,8 +7,12 @@ import {
   COOPERADO_V2_PILOT_COOPERADO_ID,
   isCooperadoV2PilotUser,
 } from "../src/lib/cooperado-v2/cooperadoV2Pilot";
+import { isCooperadoV2Pathname } from "../src/lib/cooperado-v2/cooperadoV2ClientLite";
 
 assert.equal(COOPERADO_V2_PILOT_COOPERADO_ID, "c_1782263929381_ncp55");
+
+assert.equal(isCooperadoV2Pathname("/cooperado-v2/inicio"), true);
+assert.equal(isCooperadoV2Pathname("/dashboard"), false);
 
 assert.equal(
   isCooperadoV2PilotUser({

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
 import { repairBrowserProfileIfStale } from "@/lib/pwa/browserProfileRepair";
+import { isCooperadoV2Pathname } from "@/lib/cooperado-v2/cooperadoV2ClientLite";
 
 function isStandalonePwa(): boolean {
   if (typeof window === "undefined") return false;
@@ -35,8 +36,9 @@ export function GuestRoute({
         next && next.startsWith("/") && !next.startsWith("//") ? next : authenticatedRedirect;
       const onLoginWithPwaRepair =
         window.location.pathname === "/login" && params.has("hb-pwa");
+      const destinoV2 = isCooperadoV2Pathname(dest);
 
-      if (onLoginWithPwaRepair) {
+      if (onLoginWithPwaRepair && !destinoV2) {
         void repairBrowserProfileIfStale({ includeStandalone: true }).then((reloaded) => {
           if (reloaded) return;
           const pathOnly = dest.split("?")[0];
