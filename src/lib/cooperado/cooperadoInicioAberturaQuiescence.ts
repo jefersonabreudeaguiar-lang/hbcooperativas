@@ -1,6 +1,6 @@
 /** Após abrir o Início, UI interativa primeiro; sync/BIC pesado espera. */
 const UNTIL_KEY = "hb.coop.inicio-abertura-quiet-until";
-export const COOPERADO_INICIO_ABERTURA_QUIET_MS = 3_500;
+export const COOPERADO_INICIO_ABERTURA_QUIET_MS = 2_000;
 
 const listeners = new Set<() => void>();
 let endTimer: ReturnType<typeof setTimeout> | null = null;

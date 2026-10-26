@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v690
+
+- **Cooperado (travado com A receber visível):** GA volta ao **snapshot-first** no card (sem motor pesado a cada sync); rematerialização GA só se o cache ainda não tem valor.
+
 ## v689
 
 - **Cooperado (crash Chrome):** Início GA monta a view pesada no `requestIdleCallback` (não na mesma frame do card); celular sem dual-mount Início+Financeiro (menos RAM).

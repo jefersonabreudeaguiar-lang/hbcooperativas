@@ -220,10 +220,9 @@ function CooperadoDashboard() {
   const appDataUiOn = cooperadoPwaUiSubscribesAppData() && tabActive;
   const { user } = useAuth();
   const cooperadoMotorAoVivo = user?.role === "cooperado" && isCooperadoMobileGaPromoted(user);
+  /** GA: card e casca leves primeiro; viewLive em idle substitui sem motor pesado na thread principal. */
   const inicioSnapshotFirst =
-    cooperadoMotorAoVivo
-      ? false
-      : inicioPwaLeve || cooperadoMobilePilotSnapshotFirstInicio(user);
+    inicioPwaLeve || cooperadoMobilePilotSnapshotFirstInicio(user);
 
   const inicioAberturaQuiet = useCooperadoInicioAberturaQuiescenceActive();
   useLayoutEffect(() => {
@@ -380,7 +379,7 @@ function CooperadoDashboard() {
       syncing: syncingForUi,
       apresentacaoConsolidada,
       carregandoValoresFinanceiros,
-      leituraSomentePwa: cooperadoMotorAoVivo ? false : messenger || inicioSnapshotFirst,
+      leituraSomentePwa: messenger || inicioSnapshotFirst,
       tabAtiva: tabActive,
     });
 

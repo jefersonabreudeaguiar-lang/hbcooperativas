@@ -171,9 +171,16 @@ export function useCooperadoInicioValorReceberCardState(input: {
     if (!tabAtiva || !sessionUser || sessionUser.role !== "cooperado") return;
     if (!isCooperadoMobileGaPromoted(sessionUser)) return;
     if (!isAppDataWarm()) return;
+    if (leituraSomentePwa) return;
     const run = () => {
       if (inicioAberturaQuiet) {
         scheduleCooperadoBicHybridIdleTask(run, 1_500);
+        return;
+      }
+      const cache = input.cooperadoId
+        ? lerInicioCardFinanceiroExibicao(input.cooperadoId, input.cooperativaId)
+        : null;
+      if (cooperadoMotorTemObrigacaoReceber(cache?.display ?? SNAPSHOT_VAZIO)) {
         return;
       }
       rematerializarCooperadoValorCardLeve(sessionUser);
@@ -184,7 +191,16 @@ export function useCooperadoInicioValorReceberCardState(input: {
     }
     const t = window.setTimeout(run, 400);
     return () => window.clearTimeout(t);
-  }, [appDataWarmKey, tabAtiva, inicioAberturaQuiet, sessionUser?.id, sessionUser?.role]);
+  }, [
+    appDataWarmKey,
+    tabAtiva,
+    inicioAberturaQuiet,
+    leituraSomentePwa,
+    input.cooperadoId,
+    input.cooperativaId,
+    sessionUser?.id,
+    sessionUser?.role,
+  ]);
 
   const persistido = useMemo(() => {
     if (!input.cooperadoId) return null;
