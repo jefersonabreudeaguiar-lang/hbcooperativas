@@ -290,6 +290,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!accountUser || loading) return;
     setActiveCloudProfile(userToCloudProfile(accountUser));
     void ensureCloudSessionReady();
+    if (cooperadoV2ClientAppDataBlocked()) return;
     ensureCooperativaInCloudForUser(accountUser).catch(() => {});
   }, [accountUser?.id, loading]);
 

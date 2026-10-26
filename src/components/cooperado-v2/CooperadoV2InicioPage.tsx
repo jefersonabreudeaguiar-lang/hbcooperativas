@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { CooperadoInicioOláTitulo } from "@/components/cooperado/CooperadoInicioCooperadoLiveLeaf";
 import { CooperadoInicioValorReceberCard } from "@/components/cooperado/CooperadoInicioValorReceberCard";
 import type { CooperadoV2InicioCardPayload } from "@/lib/cooperado-v2/server/cooperadoV2InicioCard";
 import { CooperadoV2Shell } from "@/components/cooperado-v2/CooperadoV2Shell";
+import { fetchCooperadoV2Api } from "@/lib/cooperado-v2/cooperadoV2Fetch";
+import { ensureCloudSessionReady, getLastCloudSyncError } from "@/lib/security/clientSession";
 
 async function fetchInicioCard(): Promise<CooperadoV2InicioCardPayload> {
-  const res = await fetch("/api/cooperado-v2/inicio-card", {
+  const res = await fetchCooperadoV2Api("/api/cooperado-v2/inicio-card", {
     credentials: "include",
     cache: "no-store",
   });
@@ -25,14 +26,25 @@ export function CooperadoV2InicioPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [atualizando, setAtualizando] = useState(false);
   const [boot, setBoot] = useState(true);
+  const [lento, setLento] = useState(false);
 
   const carregar = useCallback(async (manual = false) => {
     setErro(null);
     if (manual) setAtualizando(true);
     else setBoot(true);
+    setLento(false);
+    const slowHint = window.setTimeout(() => setLento(true), 8_000);
     try {
+      const sessionOk = await ensureCloudSessionReady();
+      if (!sessionOk) {
+        throw new Error(
+          getLastCloudSyncError() ||
+            "Sessão na nuvem não pronta. Saia, entre de novo e aguarde alguns segundos."
+        );
+      }
+
       if (manual) {
-        const res = await fetch("/api/cooperado-v2/atualizar", {
+        const res = await fetchCooperadoV2Api("/api/cooperado-v2/atualizar", {
           method: "POST",
           credentials: "include",
           cache: "no-store",
@@ -49,24 +61,30 @@ export function CooperadoV2InicioPage() {
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar.");
     } finally {
+      window.clearTimeout(slowHint);
+      setLento(false);
       setAtualizando(false);
       setBoot(false);
     }
   }, []);
 
   useEffect(() => {
-    void carregar(false);
+    const start = () => void carregar(false);
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(start, { timeout: 800 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(start, 0);
+    return () => window.clearTimeout(t);
   }, [carregar]);
 
-  const nome = user?.name?.split(" ")[0];
+  const nome = user?.name?.split(" ")[0] ?? "Cooperado";
 
   return (
-    <CooperadoV2Shell onAtualizar={() => void carregar(true)} atualizando={atualizando}>
+    <CooperadoV2Shell onAtualizar={() => void carregar(true)} atualizando={atualizando || boot}>
       <div className="space-y-4">
         <div className="flex items-baseline justify-between gap-2">
-          <h1 className="text-2xl font-bold text-gray-900">
-            <CooperadoInicioOláTitulo nomeFromView={nome} />
-          </h1>
+          <h1 className="text-2xl font-bold text-gray-900">Olá, {nome}!</h1>
           <span className="text-[10px] uppercase tracking-wide text-green-700 font-semibold">v2 piloto</span>
         </div>
 
@@ -75,15 +93,46 @@ export function CooperadoV2InicioPage() {
         ) : null}
 
         {erro ? (
-          <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{erro}</p>
+          <div className="space-y-2">
+            <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{erro}</p>
+            <button
+              type="button"
+              onClick={() => void carregar(true)}
+              className="w-full text-sm font-medium text-green-800 underline"
+            >
+              Tentar de novo
+            </button>
+          </div>
         ) : null}
 
-        {boot && !payload ? (
-          <div className="rounded-2xl border-2 border-amber-200 bg-white p-6 text-center text-gray-500">
-            Carregando da nuvem…
+        {boot && !payload && !erro ? (
+          <div className="rounded-2xl border-2 border-amber-200 bg-white p-6 text-center text-gray-500 space-y-3">
+            <p>Carregando da nuvem…</p>
+            {lento ? (
+              <>
+                <p className="text-xs text-gray-400">
+                  Montando o valor na nuvem (sem usar o app antigo no celular). Isso costuma levar alguns segundos.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void carregar(true)}
+                  className="text-sm font-medium text-green-800 underline"
+                >
+                  Tentar de novo agora
+                </button>
+              </>
+            ) : null}
           </div>
         ) : payload ? (
           <CooperadoInicioValorReceberCard snapshot={payload.card} atualizando={atualizando} />
+        ) : !boot && !erro ? (
+          <button
+            type="button"
+            onClick={() => void carregar(true)}
+            className="w-full rounded-xl border border-gray-200 bg-white py-4 text-sm font-medium text-green-800"
+          >
+            Carregar valor da nuvem
+          </button>
         ) : null}
 
         {payload?.fetchedAt ? (

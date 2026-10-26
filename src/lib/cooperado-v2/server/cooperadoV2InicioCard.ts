@@ -13,9 +13,13 @@ export type CooperadoV2InicioCardPayload = {
 
 export async function fetchCooperadoV2InicioCardFromCloud(
   cnpjDigits: string,
-  cooperadoId: string
+  cooperadoId: string,
+  opts?: { bypassCache?: boolean }
 ): Promise<CooperadoV2InicioCardPayload | null> {
-  const built = await buildCooperadoV2CloudAppData(cnpjDigits);
+  const built = await buildCooperadoV2CloudAppData(cnpjDigits, {
+    bypassCache: opts?.bypassCache,
+    scope: "inicio",
+  });
   if (!built) return null;
 
   const { data, cooperativaId } = built;
