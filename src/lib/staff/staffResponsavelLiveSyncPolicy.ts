@@ -4,6 +4,7 @@
  */
 import type { AppData } from "@/types";
 import type { SyncRunOptions } from "@/services/syncRequest";
+import { staffGestaoEmViewportDesktop } from "@/lib/staff/staffGestaoModoDesktop";
 import { staffResponsavelLifecycleSyncRequest } from "@/lib/staff/staffResponsavelSyncPolicy";
 
 function readEnvMs(name: string, fallback: number): number {
@@ -15,6 +16,7 @@ function readEnvMs(name: string, fallback: number): number {
 }
 
 export function isStaffGestaoLiveSyncEnabled(): boolean {
+  if (staffGestaoEmViewportDesktop()) return false;
   if (typeof document !== "undefined") {
     if (document.documentElement.getAttribute("data-staff-gestao-live-sync-off") === "1") {
       return false;
@@ -63,6 +65,7 @@ export function staffResponsavelLiveSyncTickRequest(
 export function staffResponsavelLifecycleSyncRequestLive(
   data?: AppData | null
 ): SyncRunOptions | undefined {
+  if (staffGestaoEmViewportDesktop()) return undefined;
   const base = staffResponsavelLifecycleSyncRequest(data);
   if (!base) return base;
   if (base.tier === "pulse") {

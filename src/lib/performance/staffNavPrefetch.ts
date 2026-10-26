@@ -2,6 +2,7 @@ import { isLowMemoryDevice } from "@/services/imagePipelineService";
 import type { CooperadoNavPrefetchRouter } from "@/lib/performance/cooperadoNavPrefetch";
 import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 import { prefetchStaffTabRouteChunks } from "@/lib/performance/prefetchStaffTabRouteChunks";
+import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewport";
 
 /** Rotas do dia do responsável — Início, Conferir, Pagar, Livro. */
 export const STAFF_NAV_PREFETCH_PRIORITY: readonly string[] = [
@@ -38,8 +39,30 @@ function prefetchStaffNavRoutes(
   }
 }
 
+/** PC: um prefetch leve das rotas do dia — sem dynamic import de abas inteiras. */
+export function scheduleStaffNavPrefetchDesktop(router: CooperadoNavPrefetchRouter): () => void {
+  let cancelled = false;
+  const t = window.setTimeout(() => {
+    if (cancelled) return;
+    for (const href of STAFF_NAV_PREFETCH_PRIORITY) {
+      try {
+        router.prefetch(href);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, 1_400);
+  return () => {
+    cancelled = true;
+    window.clearTimeout(t);
+  };
+}
+
 /** Prefetch em camadas para gestão mobile — paridade com cooperadoNavPrefetch. */
 export function scheduleStaffNavPrefetchEarly(router: CooperadoNavPrefetchRouter): () => void {
+  if (typeof window !== "undefined" && !isStaffMobileViewportActive()) {
+    return () => {};
+  }
   let cancelled = false;
   const safe = (fn: () => void) => {
     if (!cancelled) fn();

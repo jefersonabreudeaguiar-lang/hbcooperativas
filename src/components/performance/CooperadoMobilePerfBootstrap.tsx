@@ -8,6 +8,7 @@ import { warmupCooperadoFinanceiroTabChunk } from "@/lib/performance/cooperadoFi
 import { scheduleCooperadoNavPrefetchEarly } from "@/lib/performance/cooperadoNavPrefetch";
 import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetch";
 import { isStaffGestaoRole } from "@/lib/performance/cooperadoColdStart";
+import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewport";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 
 /**
@@ -40,7 +41,7 @@ export function CooperadoMobilePerfBootstrap() {
       return scheduleCooperadoNavPrefetchEarly(router);
     }
 
-    if (isStaffGestaoRole(user.role)) {
+    if (isStaffGestaoRole(user.role) && isStaffMobileViewportActive()) {
       return scheduleStaffNavPrefetchEarly(router);
     }
 

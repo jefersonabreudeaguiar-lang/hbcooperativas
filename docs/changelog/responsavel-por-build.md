@@ -6,6 +6,11 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v655
+
+- **PC gestão (modo desktop):** sync automático de fundo desligado (live, idle, visibility, fila catch-up global); menu e UI não competem com rajadas de sync. Mobile inalterado.
+- **PC prefetch:** `scheduleStaffNavPrefetchEarly` só no mobile; desktop usa um prefetch leve adiado (sem `prefetchStaffTabRouteChunks` triplicado no login).
+
 ## v654
 
 - **PC gestão:** menu lateral com Link nativo (sem otimista/history.replace); limpa estado otimista no desktop; quiescência de sync só no mobile.

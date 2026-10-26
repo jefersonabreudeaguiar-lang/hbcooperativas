@@ -25,7 +25,7 @@ export const PRESERVAR_APP_CONTRATOS_TRAVADOS = {
   fotosFicha: 2,
   aberturaInstantanea: 1,
   trocaAbas: 1,
-  trocaAbasResponsavel: 2,
+  trocaAbasResponsavel: 3,
 } as const;
 
 export const PRESERVAR_APP_STAFF_LKG_PREFIX = "hb-staff-gestao-lkg-v1";

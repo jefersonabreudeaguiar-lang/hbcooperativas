@@ -146,6 +146,7 @@ import {
 import { scheduleStaffGestaoLiveSyncLoop } from "@/lib/performance/staffGestaoLiveSyncLoop";
 import { shouldBlockStaffAutoSyncDuringConferencia } from "@/lib/performance/staffConferenciaSyncTier";
 import { staffGestaoPausaTrabalhoPesadoAutomatico } from "@/lib/staff/staffGestaoPausaTrabalhoPesado";
+import { staffGestaoSyncBackgroundPermitido } from "@/lib/staff/staffGestaoModoDesktop";
 import {
   isStaffFilaNotasLivePollEnabled,
   resolveStaffFilaBackgroundCatchupMs,
@@ -1280,6 +1281,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (staff && Date.now() - lastSyncStartedAtRef.current < getSyncMinGapMs(user?.role ?? "cooperado")) {
         return;
       }
+      if (staff && !staffGestaoSyncBackgroundPermitido()) return;
       const staffOpts = staff
         ? staffResponsavelLifecycleSyncRequestLive(isAppDataWarm() ? getData() : null)
         : undefined;
@@ -1297,6 +1299,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       }
       markUserActivity();
       if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
+      if (staff && !staffGestaoSyncBackgroundPermitido()) return;
       if (staff && Date.now() - lastSyncStartedAtRef.current < getSyncMinGapMs(user?.role ?? "cooperado")) {
         return;
       }
@@ -1318,6 +1321,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       }
       markUserActivity();
       if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
+      if (staff && !staffGestaoSyncBackgroundPermitido()) return;
       const staffOpts = staff
         ? staffResponsavelLifecycleSyncRequestLive(isAppDataWarm() ? getData() : null)
         : undefined;
@@ -1361,6 +1365,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (!staffGestaoLive || !coopId) return;
+    if (!staffGestaoSyncBackgroundPermitido()) return;
     if (!isStaffFilaNotasLivePollEnabled()) return;
     const onConferir = (pathname ?? "").startsWith("/notas-pedido");
     const intervalMs = resolveStaffFilaBackgroundCatchupMs(onConferir);

@@ -17,5 +17,6 @@ assert.ok(read("src/lib/staff/staffGestaoPausaTrabalhoPesado.ts").includes("isSt
 
 const sidebar = read("src/components/layout/AppLayout.tsx");
 assert.ok(!sidebar.includes("tryStaffCachedInstantTabSwitch(pathname, item.href)"), "sidebar PC usa Link direto");
+assert.ok(sidebar.includes("scheduleStaffNavPrefetchDesktop"), "prefetch desktop isolado");
 
 console.log("OK test-staff-desktop-nav-policy");

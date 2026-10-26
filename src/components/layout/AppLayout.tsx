@@ -57,7 +57,10 @@ import {
   setStaffOptimisticTab,
 } from "@/lib/performance/staffOptimisticTabNavigation";
 import { tryStaffCachedInstantTabSwitch } from "@/lib/performance/staffPinnedTabFastPath";
-import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetch";
+import {
+  scheduleStaffNavPrefetchDesktop,
+  scheduleStaffNavPrefetchEarly,
+} from "@/lib/performance/staffNavPrefetch";
 import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 import { useMobileBottomTabSwitchFeedback } from "@/lib/performance/tabSwitchFeedback";
 import {
@@ -295,7 +298,13 @@ export function MobileNav() {
       scheduleCooperadoPinnedTabsEagerWarm(router);
       return scheduleCooperadoNavPrefetchEarly(router);
     }
-    return scheduleStaffNavPrefetchEarly(router);
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 1023px)").matches
+    ) {
+      return scheduleStaffNavPrefetchEarly(router);
+    }
+    return undefined;
   }, [navUser?.id, navUser?.role, router]);
 
   const bottomTabProfile = navUser
@@ -605,7 +614,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     ) {
       return;
     }
-    return scheduleStaffNavPrefetchEarly(router);
+    return scheduleStaffNavPrefetchDesktop(router);
   }, [navUser?.id, navUser?.role, router]);
 
   const routePanels = cooperadoKeepAliveShell
