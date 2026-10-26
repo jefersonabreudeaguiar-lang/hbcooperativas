@@ -14,7 +14,6 @@ import { requestAppSync, requestCooperadoFinanceiroRecoverySync } from "@/servic
 import { saveDataSafe, getData } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
-import { cooperadoTabSwitchQuiescenceActive } from "@/lib/cooperado/cooperadoTabSwitchQuiescence";
 
 const RECOVERY_GAP_MS = 30_000;
 let lastRecoveryRequestAt = 0;
@@ -90,12 +89,10 @@ export function avaliarIntegridadeFinanceiroCooperado(
   }
 
   const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, cooperativaId);
-  if (!cooperadoTabSwitchQuiescenceActive()) {
-    const limpo = limparFichaObsoletaCooperado(data, cooperadoId, cooperativaId);
-    if (limpo !== data) {
-      saveDataSafe(limpo);
-      data = getData();
-    }
+  const limpo = limparFichaObsoletaCooperado(data, cooperadoId, cooperativaId);
+  if (limpo !== data) {
+    saveDataSafe(limpo);
+    data = getData();
   }
   if (cooperadoPrecisaFullSyncFinanceiro(data, cooperadoId, cooperativaId)) {
     solicitarRecuperacaoFinanceiroCooperado();

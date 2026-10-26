@@ -4,17 +4,11 @@ import { useLayoutEffect } from "react";
 import { usePathname } from "next/navigation";
 import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
 
-function painelJaTemConteudo(pathname: string): boolean {
+function painelJaTemConteudo(): boolean {
   if (typeof document === "undefined") return false;
-  const p = pathname.toLowerCase();
-  const inicioGa =
-    p === "/dashboard" || p.startsWith("/dashboard/");
-  if (inicioGa) {
-    if (document.querySelector("[data-cooperado-inicio-loading='1']")) return false;
-    return Boolean(document.querySelector("[data-cooperado-inicio-ready='1']"));
-  }
   if (document.querySelector("[data-cooperado-tab-panel-active='1']")) return true;
-  if (document.querySelector("[data-cooperado-inicio-ready='1']")) return true;
+  if (document.querySelector("[data-cooperado-inicio-shell='1']")) return true;
+  if (document.querySelector("[data-cooperado-inicio-valor-card='1']")) return true;
   const header = document.querySelector("header");
   const main = document.querySelector("main");
   if (header && main) return true;
@@ -42,14 +36,14 @@ export function CooperadoBootShellDismiss() {
       dismissCooperadoBootShell();
       return;
     }
-    if (painelJaTemConteudo(pathname)) {
+    if (painelJaTemConteudo()) {
       dismissCooperadoBootShell();
       return;
     }
     let ticks = 0;
     const iv = window.setInterval(() => {
       ticks += 1;
-      if (painelJaTemConteudo(pathname)) {
+      if (painelJaTemConteudo()) {
         window.clearInterval(iv);
         dismissCooperadoBootShell();
         return;

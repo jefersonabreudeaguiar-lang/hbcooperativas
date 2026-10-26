@@ -6,6 +6,11 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v668
+
+- **Cooperado (código):** restaurado ao ponto de backup **`cooperado-mobile-fase3-v644`** (Fase 3 SIM) — Início/abas/sync/Financeiro como no piloto; gestão/responsável **não** revertidos.
+- **Dados na nuvem:** inalterados.
+
 ## v646
 
 - **Cooperado (Início):** após ~6s de abertura fluida, GA monta o **Início completo** (pendências, comunicados, etc.), não só Olá + A receber; splash inicial virou esqueleto com abas (sem valor cacheado enganoso).
