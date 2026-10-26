@@ -1,8 +1,10 @@
 # Piloto Jeferson — status
 
-**Último portão:** aguardando SIM/NÃO (26/10/2026) — **abriu mas travado** (685/686).
+**Último portão:** aguardando SIM/NÃO — **build 688** (complementar pós-PIX + baseline v644).
 
-**Correção build 687:** quiescência de abertura **não renova** a cada re-render (ficava eterna); repinta ao terminar (~3,5s); sync na abertura não fica preso em `cooperadoMobileUiQuiescence`.
+**Correção build 688 (dados):** valor a receber após 1º pagamento — entrega nova ou conferida depois do PIX não some por “mês já liquidado”.
+
+**Build 687:** quiescência de abertura sem renovar a cada render.
 
 **Correção build 685:** GA não usa mais `div` vazio enquanto `viewLive` carrega — pinta **Olá + cards** (`data-cooperado-inicio-shell`); splash some com casca ou após ~2,4s (não bloqueia em `inicio-loading`).
 

@@ -44,7 +44,15 @@ const KEEP_HEAD_POST_TAG = [
   "src/lib/cooperado/cooperadoAberturaInstantanea.ts",
   "src/lib/performance/cooperadoForegroundOperacionalSync.ts",
   "src/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery.ts",
+  "src/lib/cooperado/cooperadoGaGarantiaValorReceberSync.ts",
+  "src/lib/cooperado/cooperadoFinanceiroDisplayWarmup.ts",
   "src/components/cooperado/CooperadoFinanceiroGate.tsx",
+  "src/lib/cooperado/cooperadoInicioAberturaQuiescence.ts",
+  "src/lib/cooperado/cooperadoTabSwitchQuiescence.ts",
+  "src/lib/cooperado/cooperadoGaPausaTrabalhoPesado.ts",
+  "src/hooks/useCooperadoInicioAberturaQuiescenceActive.ts",
+  "src/hooks/useCooperadoInicioValorReceberCardState.ts",
+  "src/services/notaPedidoService.ts",
 ];
 
 /** Não sobrescrever — gestão + anti-travamento cooperado em camadas compartilhadas. */

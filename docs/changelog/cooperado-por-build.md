@@ -6,6 +6,12 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v688
+
+- **Dados (A receber):** entrega conferida **depois do PIX** ou **fora do escopo** do pagamento volta a aparecer no Início/Ficha (complementar pós-pagamento); conferência usa `dataConferencia` quando é posterior ao pagamento.
+- **Programa:** baseline cooperado v644 via `restore:cooperado-backup-code` + correções pós-tag (abertura, abas, gate) documentadas no script de restore.
+- **PWA:** fechar o app e reabrir (ou limpar dados do site) após o deploy para pegar o build novo.
+
 ## v671
 
 - **Cooperado (A receber automático):** revisão na nuvem (responsável lançou) → card repinta na hora + `scheduleCooperadoGaValorRevisionLightSync` (pull silencioso em idle, sem `operacional_full` imediato).

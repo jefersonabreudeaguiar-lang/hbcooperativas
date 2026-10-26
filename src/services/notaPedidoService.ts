@@ -1947,8 +1947,12 @@ export function notaQuitadaPorPagamentoCooperativaRegistrado(
       (p.fichaIds?.length ?? 0) > 0 || (p.notaPedidoIds?.length ?? 0) > 0;
     if (escopoExplicito) continue;
 
-    const notaTs = notaReferenciaTemporalEscopoPagamento(nota);
     const pagoTs = Date.parse(p.pagoEm ?? p.createdAt ?? "");
+    if (nota.dataConferencia && Number.isFinite(pagoTs)) {
+      const confTs = Date.parse(nota.dataConferencia);
+      if (Number.isFinite(confTs) && confTs > pagoTs) continue;
+    }
+    const notaTs = notaReferenciaTemporalEscopoPagamento(nota);
     if (!Number.isNaN(notaTs) && !Number.isNaN(pagoTs) && notaTs > pagoTs) continue;
     return true;
   }
@@ -2249,16 +2253,20 @@ export function fichaCobertaPorPagamentoCooperativa(
   if (nota && notaQuitadaPorPagamentoCooperativaRegistrado(data, nota, ficha.cooperadoId)) {
     return true;
   }
+  const escopoExplicitoPix =
+    pagamento.fichaIds?.includes(ficha.id) ||
+    pagamento.notaPedidoIds?.includes(ficha.notaPedidoId);
   const meses = getMesesReferenciaPagamento(pagamento);
   const mesFicha = nota?.mesReferencia ?? ficha.mesReferencia;
   if (!meses.includes(mesFicha) && !meses.includes(ficha.mesReferencia)) return false;
+  if (!escopoExplicitoPix) return false;
   const notaTs = nota ? notaReferenciaTemporalEscopoPagamento(nota) : Number.NaN;
   const pagoTs = Date.parse(pagamento.pagoEm ?? pagamento.createdAt ?? "");
   if (!Number.isNaN(notaTs) && !Number.isNaN(pagoTs)) {
     return notaTs <= pagoTs;
   }
-  /** Mesmo mês do PIX, sem data de entrega — mês já liquidado, não reabre. */
-  return true;
+  /** Sem data confiável: não assumir quitada — nova entrega no mês continua complementar. */
+  return false;
 }
 
 export function listarPagamentosConfirmadosQueCobremMes(
