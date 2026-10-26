@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v666
+
+- **Cooperado (cirúrgico):** abrir Financeiro não roda `posProcessarFinanceiroLocal`/reconcile da cooperativa no idle; integridade adia `limparFicha` na troca de aba; cooperado fora do `AbaLastGoodSafeRoot` do responsável.
+
 ## v665
 
 - **T2:** F5 no PC volta a fundir `coopeagriplla_data:<CNPJ>` no idle (não pula reload só porque hidratou LKG); persist idle ~5s.

@@ -40,6 +40,7 @@ import { getUserCooperativaId, resolveGestaoCooperativaId } from "@/utils/cooper
 import { AbaLastGoodSafeRoot } from "@/components/responsavel/AbaLastGoodSafeRoot";
 import { saveAbaLastGoodFromData } from "@/lib/responsavel/abaLastGoodCheckpoint";
 import { tryReaplicarPagarLastGoodSeRegrediuInStore } from "@/lib/responsavel/abaLastGoodStore";
+import { staffGestaoPerfilReaplicarAbaLastGoodPermitido } from "@/lib/staff/staffGestaoPerfilDesktop";
 import {
   abaInicialPagarCooperadosResponsavel,
   RESPONSAVEL_PAGAR_COOPERADOS_TITULO,
@@ -259,13 +260,18 @@ function TabelaResumoItens({
   );
 }
 
-/** Gate no próprio Pagar: o shell do responsável não envolve o cooperado, e a aba não pode cair. */
+/** Gate no próprio Pagar: cooperado não usa last-good do responsável (evita trabalho pesado na abertura). */
+function FichaCorridaPageBody() {
+  const { isCooperado } = usePermissions();
+  const inner = <FichaCorridaPageInner />;
+  if (isCooperado) return inner;
+  return <AbaLastGoodSafeRoot aba="pagar">{inner}</AbaLastGoodSafeRoot>;
+}
+
 export default function FichaCorridaPage() {
   return (
     <CooperadoApresentacaoFinanceiraGate>
-      <AbaLastGoodSafeRoot aba="pagar">
-        <FichaCorridaPageInner />
-      </AbaLastGoodSafeRoot>
+      <FichaCorridaPageBody />
     </CooperadoApresentacaoFinanceiraGate>
   );
 }
@@ -527,6 +533,7 @@ function FichaCorridaPageInner() {
 
   useEffect(() => {
     if (isCooperado || !coopId || !isAppDataWarm()) return;
+    if (!staffGestaoPerfilReaplicarAbaLastGoodPermitido()) return;
     tryReaplicarPagarLastGoodSeRegrediuInStore(coopId);
   }, [isCooperado, coopId]);
 
