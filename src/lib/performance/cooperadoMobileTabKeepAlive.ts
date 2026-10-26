@@ -6,8 +6,10 @@ import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMesseng
 import { isAppStandalone } from "@/services/cooperadoAppInstallService";
 import {
   isCooperadoTabPinnedForSession,
+  isCooperadoMobilePilotPerfActive,
   resolveCooperadoMobileTabCacheLimitPilotBonus,
 } from "@/lib/cooperado/cooperadoMobilePilotPerf";
+import { readCooperadoSessionLite } from "@/lib/cooperado/cooperadoSessionLite";
 
 export { COOPERADO_BOTTOM_TAB_HREFS, isCooperadoBottomTabPath };
 
@@ -24,6 +26,18 @@ function readKeepAliveEnvDefault(): boolean {
 /** RQL 8.6 — LRU de abas montadas no mobile cooperado. Default **ligado**; `NEXT_PUBLIC_COOPERADO_TAB_KEEP_ALIVE=false` desliga. */
 export function isCooperadoMobileTabKeepAliveEnabled(): boolean {
   if (typeof window !== "undefined" && isCooperadoPwaMessengerMode()) return true;
+  const session = readCooperadoSessionLite();
+  if (
+    session &&
+    isCooperadoMobilePilotPerfActive(session) &&
+    typeof window !== "undefined"
+  ) {
+    try {
+      if (window.matchMedia("(max-width: 1023px)").matches) return false;
+    } catch {
+      return false;
+    }
+  }
   if (typeof document !== "undefined") {
     const dom = document.documentElement.getAttribute("data-cooperado-tab-keep-alive");
     if (dom === "0") return false;

@@ -1,6 +1,10 @@
 # Piloto Jeferson — status
 
-**Último portão:** aguardando SIM/NÃO — **build 692+** (GA Início sem `viewLive` pesado; paridade a pagar responsável).
+**Último portão:** aguardando SIM/NÃO — **build 692** (`getData` não dispara parse do operacional nos primeiros 45s no celular; LRU de abas desligado no GA mobile).
+
+**Backup dados Jeferson (nuvem, 2026-10-26):** `backups/cooperado-mobile-fase3-v644-c_1781981564381_w67gg-2026-10-26_18-41-10/` (slice read-only; referência Fase 3 v644). Código “perfeito” Fase 3: tag `cooperado-mobile-fase3-v644` → `npm run restore:cooperado-backup-code` (não restaura aparelho/localStorage).
+
+**Último portão (anterior):** build 691/692 — GA Início sem `viewLive` pesado; paridade a pagar responsável.
 
 **Auditoria marco zero (read-only, 2026-10-26):** [`docs/diagnostico/MARCO-ZERO-POS-PAGAMENTO.md`](../diagnostico/MARCO-ZERO-POS-PAGAMENTO.md) e [`MARCO-ZERO-AUDITORIA-2026-10-26.md`](../diagnostico/MARCO-ZERO-AUDITORIA-2026-10-26.md) — Jeferson na nuvem: a receber app **R$ 2.520,38** vs base HB **R$ 3.232,56** (HB usado **R$ 550,55**).
 

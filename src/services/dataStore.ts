@@ -89,6 +89,7 @@ import {
   preserveOperationalTruthDuringConferenciaPushSave,
 } from "@/services/conferenciaOperacionalPushScope";
 import { takeInlineParsedAppData } from "@/lib/performance/cooperadoAppDataInlineWarm";
+import { cooperadoGaShouldDeferDataWarmFromGetData } from "@/lib/cooperado/cooperadoGaDataWarmDefer";
 
 export { generateId };
 
@@ -865,8 +866,9 @@ function scheduleAutomaticTasksIfNeeded(data: AppData): AppData {
 }
 
 /** Inicia leitura do localStorage — `eager` sincroniza no primeiro frame (HX 9.0 cooperado). */
-export function preloadAppData(opts?: { eager?: boolean }): void {
+export function preloadAppData(opts?: { eager?: boolean; force?: boolean }): void {
   if (typeof window === "undefined" || memoryCache) return;
+  if (!opts?.force && cooperadoGaShouldDeferDataWarmFromGetData()) return;
   if (dataWarmInFlight && !opts?.eager) return;
 
   const run = () => {
@@ -913,7 +915,9 @@ export function waitForAppDataWarm(timeoutMs = 5000): Promise<boolean> {
 }
 
 function scheduleDataWarmIfNeeded(): void {
-  if (memoryCache || dataWarmScheduled || typeof window === "undefined") return;
+  if (memoryCache || typeof window === "undefined") return;
+  if (cooperadoGaShouldDeferDataWarmFromGetData()) return;
+  if (dataWarmScheduled) return;
   dataWarmScheduled = true;
   preloadAppData();
 }

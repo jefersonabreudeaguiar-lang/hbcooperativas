@@ -7,6 +7,7 @@ import {
   requestCooperadoManualRefreshSync,
 } from "@/services/syncRequest";
 import { preloadAppData } from "@/services/dataStore";
+import { unlockCooperadoGaDataWarmForSession } from "@/lib/cooperado/cooperadoGaDataWarmDefer";
 import { runClientReleaseShield } from "@/lib/pwa/clientReleaseShield";
 import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
 import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
@@ -30,7 +31,8 @@ export async function executarCooperadoAtualizarManual(): Promise<boolean> {
     clearCooperadoPwaDadosDesatualizados();
   }
   grantCooperadoEventDrivenSync();
-  preloadAppData();
+  unlockCooperadoGaDataWarmForSession();
+  preloadAppData({ force: true });
   if (isCooperadoEventDrivenSync()) {
     requestCooperadoManualRefreshSync();
   } else {

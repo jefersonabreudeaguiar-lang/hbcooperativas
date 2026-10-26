@@ -34,6 +34,12 @@ const quiet = readFileSync(
 );
 assert.match(quiet, /COOPERADO_INICIO_ABERTURA_QUIET_MS_MOBILE_GA/);
 
+const dataStore = readFileSync(
+  join(import.meta.dirname ?? __dirname, "..", "src/services/dataStore.ts"),
+  "utf8"
+);
+assert.match(dataStore, /cooperadoGaShouldDeferDataWarmFromGetData/);
+
 const snap = readFileSync(
   join(import.meta.dirname ?? __dirname, "..", "src/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh.ts"),
   "utf8"

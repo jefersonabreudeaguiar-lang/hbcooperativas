@@ -1,8 +1,7 @@
-import { getSession } from "@/services/dataStore";
 import {
-  cooperadoGaMobileViewportAtivo,
-  isCooperadoMobileGaPromoted,
-} from "@/lib/cooperado/cooperadoMobilePilot";
+  cooperadoGaMobileViewportAtivoLite,
+  readCooperadoSessionLite,
+} from "@/lib/cooperado/cooperadoSessionLite";
 
 /** Após abrir o Início, UI interativa primeiro; sync/BIC pesado espera. */
 const UNTIL_KEY = "hb.coop.inicio-abertura-quiet-until";
@@ -11,12 +10,8 @@ export const COOPERADO_INICIO_ABERTURA_QUIET_MS = 2_000;
 export const COOPERADO_INICIO_ABERTURA_QUIET_MS_MOBILE_GA = 45_000;
 
 function resolveInicioAberturaQuietMs(): number {
-  const session = getSession();
-  if (
-    session?.role === "cooperado" &&
-    isCooperadoMobileGaPromoted(session) &&
-    cooperadoGaMobileViewportAtivo()
-  ) {
+  const session = readCooperadoSessionLite();
+  if (session?.role === "cooperado" && cooperadoGaMobileViewportAtivoLite()) {
     return COOPERADO_INICIO_ABERTURA_QUIET_MS_MOBILE_GA;
   }
   return COOPERADO_INICIO_ABERTURA_QUIET_MS;

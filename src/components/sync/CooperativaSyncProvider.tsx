@@ -646,7 +646,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     let warm = await waitForAppDataWarm();
     if (!warm && userInitiatedRun) {
-      preloadAppData({ eager: true });
+      preloadAppData({ eager: true, force: true });
       warm = await waitForAppDataWarm(12_000);
     }
     if (!warm) return;
