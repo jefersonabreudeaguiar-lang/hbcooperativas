@@ -146,7 +146,12 @@ import {
 import { scheduleStaffGestaoLiveSyncLoop } from "@/lib/performance/staffGestaoLiveSyncLoop";
 import { shouldBlockStaffAutoSyncDuringConferencia } from "@/lib/performance/staffConferenciaSyncTier";
 import { staffGestaoPausaTrabalhoPesadoAutomatico } from "@/lib/staff/staffGestaoPausaTrabalhoPesado";
-import { staffGestaoSyncBackgroundPermitido } from "@/lib/staff/staffGestaoModoDesktop";
+import {
+  staffGestaoAberturaSyncDelayMs,
+  staffGestaoEmViewportDesktop,
+  staffGestaoSyncBackgroundPermitido,
+} from "@/lib/staff/staffGestaoModoDesktop";
+import { scheduleStaffGestaoPersistReloadAfterPaint } from "@/services/dataStore";
 import {
   isStaffFilaNotasLivePollEnabled,
   resolveStaffFilaBackgroundCatchupMs,
@@ -654,7 +659,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       try {
         const raw = readAppDataPersistRaw();
         if (raw && raw.length > 10_000) {
-          data = refreshData();
+          if (staffGestaoEmViewportDesktop()) {
+            scheduleStaffGestaoPersistReloadAfterPaint();
+          } else {
+            data = refreshData();
+          }
         }
       } catch {
         /* storage */
@@ -1261,18 +1270,24 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     } else if (staff && isCooperadoInstantResumeEnabled()) {
       if (!document.hidden) {
         markUserActivity();
-        scheduleStaffPostInteractiveTask(() => {
+        const runStaffOpen = () => {
           markNextCooperadoSyncSilent();
           void runSync(staffResponsavelOpeningSyncRequest(isAppDataWarm() ? getData() : null));
+        };
+        const delayOpen = staffGestaoAberturaSyncDelayMs();
+        scheduleStaffPostInteractiveTask(() => {
+          if (delayOpen <= 0) runStaffOpen();
+          else window.setTimeout(runStaffOpen, delayOpen);
         });
       }
     } else if (staff) {
+      const delayOpen = staffGestaoAberturaSyncDelayMs();
       initialDelay = setTimeout(() => {
         if (!document.hidden) {
           markUserActivity();
           void runSync(staffResponsavelOpeningSyncRequest(isAppDataWarm() ? getData() : null));
         }
-      }, 400);
+      }, delayOpen);
     } else {
       initialDelay = setTimeout(() => {
         if (!document.hidden) {

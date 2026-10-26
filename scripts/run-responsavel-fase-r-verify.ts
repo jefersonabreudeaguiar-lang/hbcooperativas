@@ -26,6 +26,7 @@ const steps: { title: string; cmd: string; args: string[] }[] = [
   { title: "Desktop nav policy", cmd: "npx", args: ["tsx", "scripts/test-staff-desktop-nav-policy.ts"] },
   { title: "Desktop sync off", cmd: "npx", args: ["tsx", "scripts/test-staff-gestao-desktop-sync-off.ts"] },
   { title: "Desktop prefetch policy", cmd: "npx", args: ["tsx", "scripts/test-staff-desktop-prefetch-policy.ts"] },
+  { title: "Desktop abertura leve", cmd: "npx", args: ["tsx", "scripts/test-staff-desktop-abertura-leve.ts"] },
   {
     title: "Homolog operacional cooperativa (read-only)",
     cmd: "npx",

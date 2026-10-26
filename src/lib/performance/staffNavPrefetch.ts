@@ -51,7 +51,7 @@ export function scheduleStaffNavPrefetchDesktop(router: CooperadoNavPrefetchRout
         /* ignore */
       }
     }
-  }, 1_400);
+  }, 12_000);
   return () => {
     cancelled = true;
     window.clearTimeout(t);

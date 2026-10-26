@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v657
+
+- **PC abertura:** sync automático adiado (~6s) e tier `pulse` (sem `financeiro_delta` forçado); parse do `localStorage` no idle (~4,5s); prefetch de rotas só após 12s.
+
 ## v656
 
 - **PC menu:** marca troca de rota e pausa sync/poll automático ~2,4s; `runSync` respeita a mesma pausa; removido aquecimento por hover no sidebar (imports pesados).

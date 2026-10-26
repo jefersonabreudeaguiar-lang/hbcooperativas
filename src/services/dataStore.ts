@@ -28,6 +28,7 @@ import {
   shouldAdoptStaffPersistHint,
   shouldFlushAppDataMemoryOnTenantChange,
 } from "@/lib/staff/staffGestaoTenantSwitch";
+import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewport";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
 import { normalizeCreatorEmail, normalizeAuthEmail } from "@/lib/security/appCreator";
 import {
@@ -185,6 +186,7 @@ export function reloadStaffGestaoPersistAfterFirstPaint(): void {
 
 /** Teto do idle após o paint — parse do persist não briga com a 1ª pintura nem com o pull da fila. */
 export const STAFF_GESTAO_PERSIST_RELOAD_IDLE_TIMEOUT_MS = 180;
+export const STAFF_GESTAO_PERSIST_RELOAD_IDLE_TIMEOUT_DESKTOP_MS = 4_500;
 
 export function scheduleStaffGestaoPersistReloadAfterPaint(): void {
   if (typeof window === "undefined" || staffPersistReloadScheduled) return;
@@ -197,12 +199,16 @@ export function scheduleStaffGestaoPersistReloadAfterPaint(): void {
       staffPersistReloadScheduled = false;
     }
   };
+  const idleTimeout =
+    typeof window !== "undefined" && !isStaffMobileViewportActive()
+      ? STAFF_GESTAO_PERSIST_RELOAD_IDLE_TIMEOUT_DESKTOP_MS
+      : STAFF_GESTAO_PERSIST_RELOAD_IDLE_TIMEOUT_MS;
   const armIdle = () => {
     if (typeof requestIdleCallback === "function") {
-      requestIdleCallback(run, { timeout: STAFF_GESTAO_PERSIST_RELOAD_IDLE_TIMEOUT_MS });
+      requestIdleCallback(run, { timeout: idleTimeout });
       return;
     }
-    window.setTimeout(run, STAFF_GESTAO_PERSIST_RELOAD_IDLE_TIMEOUT_MS);
+    window.setTimeout(run, idleTimeout);
   };
   if (typeof requestAnimationFrame === "function") {
     requestAnimationFrame(() => {

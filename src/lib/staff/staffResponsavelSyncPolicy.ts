@@ -7,6 +7,7 @@
 import type { AppData, UserRole } from "@/types";
 import type { SyncRunOptions } from "@/services/syncRequest";
 import { staffPrecisaHydrateOperacionalPull } from "@/lib/staff/staffOperacionalColdHydrate";
+import { staffGestaoEmViewportDesktop } from "@/lib/staff/staffGestaoModoDesktop";
 
 const STAFF_GESTAO_ROLES: UserRole[] = ["responsavel", "tesoureiro", "admin"];
 
@@ -21,6 +22,10 @@ export function isStaffGestaoRole(role: UserRole | string | undefined | null): b
  * Aparelho já hidratado: notas_delta.
  */
 export function staffResponsavelOpeningSyncRequest(data?: AppData | null): SyncRunOptions {
+  /** PC: shell primeiro; operacional pesado só em «Atualizar». */
+  if (staffGestaoEmViewportDesktop()) {
+    return { silent: true, tier: "pulse" };
+  }
   if (staffPrecisaHydrateOperacionalPull(data)) {
     return { silent: true, force: true, tier: "financeiro_delta" };
   }

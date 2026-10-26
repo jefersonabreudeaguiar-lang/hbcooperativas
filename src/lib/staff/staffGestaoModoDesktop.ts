@@ -13,3 +13,8 @@ export function staffGestaoEmViewportDesktop(): boolean {
 export function staffGestaoSyncBackgroundPermitido(): boolean {
   return isStaffMobileViewportActive();
 }
+
+/** Abertura automática no PC — depois do shell interativo (ms). */
+export function staffGestaoAberturaSyncDelayMs(): number {
+  return staffGestaoEmViewportDesktop() ? 6_000 : 400;
+}
