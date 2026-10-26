@@ -38,7 +38,6 @@ import { cooperadoGaShouldDeferDataWarmFromGetData } from "@/lib/cooperado/coope
 import { markCooperadoInicioAberturaQuiescence } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
 import { armCooperadoGaMobileDataWarmDefer } from "@/lib/cooperado/cooperadoGaDataWarmDefer";
 import { cooperadoGaMobileViewportAtivoLite } from "@/lib/cooperado/cooperadoSessionLite";
-import { cooperadoV2ClientAppDataBlocked } from "@/lib/cooperado-v2/cooperadoV2ClientLite";
 import { scheduleEmpacotarModeloAparelhoJeferson } from "@/lib/cooperado/cooperadoAparelhoJefersonPacote";
 import {
   getSession,
@@ -150,16 +149,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useLayoutEffect(() => {
-    if (cooperadoV2ClientAppDataBlocked()) {
-      dismissCooperadoBootShell();
-    }
     const sessionLite = readCooperadoSessionLite();
     if (sessionLite?.role === "cooperado" && cooperadoGaMobileViewportAtivoLite()) {
       markCooperadoInicioAberturaQuiescence();
       armCooperadoGaMobileDataWarmDefer();
     }
     if (
-      !cooperadoV2ClientAppDataBlocked() &&
       isCooperadoInstantResumeEnabled() &&
       !cooperadoGaShouldDeferDataWarmFromGetData()
     ) {
@@ -184,15 +179,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       path === "/login" ||
       path === "/cadastro" ||
       path === "/esqueci-senha" ||
-      path.startsWith("/register") ||
-      path.startsWith("/cooperado-v2")
+      path.startsWith("/register")
     ) {
       dismissCooperadoBootShell();
     }
   }, [loading, accountUser?.id]);
 
   useEffect(() => {
-    if (cooperadoV2ClientAppDataBlocked()) return;
     const warm = () => {
       if (isCooperadoInstantResumeEnabled()) {
         ensureCooperadoAppDataEagerWarm();
@@ -222,7 +215,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsub = subscribe(() => {
-      if (cooperadoV2ClientAppDataBlocked()) return;
       const messenger = isCooperadoPwaMessengerMode();
       const warm = isAppDataWarm();
       const justWarmed = warm && !appDataWarmRef.current;
@@ -290,7 +282,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!accountUser || loading) return;
     setActiveCloudProfile(userToCloudProfile(accountUser));
     void ensureCloudSessionReady();
-    if (cooperadoV2ClientAppDataBlocked()) return;
     ensureCooperativaInCloudForUser(accountUser).catch(() => {});
   }, [accountUser?.id, loading]);
 

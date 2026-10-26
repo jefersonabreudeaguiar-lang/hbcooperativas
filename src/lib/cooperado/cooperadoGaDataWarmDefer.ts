@@ -6,7 +6,6 @@ import {
   cooperadoGaMobileViewportAtivoLite,
   readCooperadoSessionLite,
 } from "@/lib/cooperado/cooperadoSessionLite";
-import { cooperadoV2ClientAppDataBlocked } from "@/lib/cooperado-v2/cooperadoV2ClientLite";
 import { COOPERADO_INICIO_ABERTURA_QUIET_MS_MOBILE_GA } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
 
 const SESSION_UNLOCK_KEY = "hb.coop.gaDataWarmUnlocked.v1";
@@ -60,7 +59,6 @@ export function unlockCooperadoGaDataWarmForSession(): void {
 
 export function cooperadoGaShouldDeferDataWarmFromGetData(): boolean {
   if (typeof window === "undefined") return false;
-  if (cooperadoV2ClientAppDataBlocked()) return true;
   if (sessionUnlocked()) return false;
   const session = readCooperadoSessionLite();
   if (!session || session.role !== "cooperado") return false;

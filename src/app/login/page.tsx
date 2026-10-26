@@ -19,7 +19,6 @@ import { prepareBrowserProfileForPwaInstall } from "@/lib/pwa/cooperadoPwaInstal
 import { shouldShowBaixarAppInstallPromo } from "@/lib/pwa/baixarAppInstallPromo";
 import { PwaRepararAtalhoPanel } from "@/components/pwa/PwaRepararAtalhoPanel";
 import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
-import { isCooperadoV2Pathname } from "@/lib/cooperado-v2/cooperadoV2ClientLite";
 
 const SEGMENTOS_ATENDIDOS = [
   "Agrícola e agroindustrial",
@@ -107,13 +106,10 @@ function LoginForm() {
       router.replace(`/login?${params.toString()}`);
       return;
     }
-    const destinoV2 = nextPath ? isCooperadoV2Pathname(nextPath) : false;
-    if (!destinoV2) {
-      void repairBrowserProfileIfStale({ includeStandalone: true }).then((reloaded) => {
-        if (!reloaded) void prepareBrowserProfileForPwaInstall("login-canonical");
-      });
-    }
-  }, [router, searchParams, nextPath]);
+    void repairBrowserProfileIfStale({ includeStandalone: true }).then((reloaded) => {
+      if (!reloaded) void prepareBrowserProfileForPwaInstall("login-canonical");
+    });
+  }, [router, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
