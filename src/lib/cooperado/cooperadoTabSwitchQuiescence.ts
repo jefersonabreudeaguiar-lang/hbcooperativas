@@ -1,5 +1,3 @@
-import { cooperadoInicioAberturaQuiescenceActive } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
-
 /**
  * Janela após troca de aba — UI fluida; sync/rematerialização pesada espera.
  */
@@ -32,7 +30,7 @@ export function cooperadoTabSwitchQuiescenceActive(): boolean {
   }
 }
 
-/** Troca de aba ou abertura do Início — não rodar sync pesado na thread principal. */
+/** Troca de aba — não rodar sync/rematerialização pesada na thread principal. */
 export function cooperadoMobileUiQuiescenceActive(): boolean {
-  return cooperadoTabSwitchQuiescenceActive() || cooperadoInicioAberturaQuiescenceActive();
+  return cooperadoTabSwitchQuiescenceActive();
 }

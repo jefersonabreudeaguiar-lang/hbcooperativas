@@ -68,12 +68,34 @@ assert.match(dismiss, /data-cooperado-inicio-loading/, "splash some com casca GA
 const card = readFileSync(join(root, "src/hooks/useCooperadoInicioValorReceberCardState.ts"), "utf8");
 assert.match(
   card,
-  /cooperadoInicioAberturaQuiescenceActive\(\)/,
+  /useCooperadoInicioAberturaQuiescenceActive/,
   "card A receber evita motor pesado na abertura GA"
 );
 
+const aberturaQuiet = readFileSync(
+  join(root, "src/lib/cooperado/cooperadoInicioAberturaQuiescence.ts"),
+  "utf8"
+);
+assert.match(aberturaQuiet, /until > Date\.now\(\)\) return/, "quiescência de abertura não renova a cada chamada");
+assert.match(
+  readFileSync(join(root, "src/lib/cooperado/cooperadoTabSwitchQuiescence.ts"), "utf8"),
+  /cooperadoTabSwitchQuiescenceActive\(\)/,
+  "pausa pesada na troca de aba só usa tab-hop"
+);
+assert.doesNotMatch(
+  readFileSync(join(root, "src/lib/cooperado/cooperadoTabSwitchQuiescence.ts"), "utf8"),
+  /cooperadoInicioAberturaQuiescenceActive/,
+  "abertura não entra em cooperadoMobileUiQuiescence"
+);
+
 const dash = readFileSync(join(root, "src/app/(app)/dashboard/DashboardContent.tsx"), "utf8");
-assert.match(dash, /markCooperadoInicioAberturaQuiescence\(\)/, "quiescência de abertura antes do motor");
+assert.match(dash, /useLayoutEffect\([\s\S]*markCooperadoInicioAberturaQuiescence\(\)/, "quiescência de abertura uma vez, não a cada render");
+assert.match(dash, /useCooperadoInicioAberturaQuiescenceActive/, "repinta Início quando a quiescência termina");
+assert.doesNotMatch(
+  dash,
+  /if \(user\?\.role === "cooperado"\) \{\s*markCooperadoInicioAberturaQuiescence\(\);\s*\}/,
+  "não renovar quiescência no corpo do render"
+);
 assert.match(dash, /data-cooperado-inicio-ready="1"/, "Início completo marca pronto para dismiss");
 assert.match(dash, /data-cooperado-inicio-shell="1"/, "casca do Início visível antes do viewLive");
 assert.match(dash, /data-cooperado-inicio-loading/, "GA marca loading na casca sem tela vazia");

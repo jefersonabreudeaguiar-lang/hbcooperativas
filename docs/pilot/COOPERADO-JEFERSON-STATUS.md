@@ -1,8 +1,8 @@
 # Piloto Jeferson — status
 
-**Último portão:** aguardando SIM/NÃO (26/10/2026) — **abriu mas travado** no Início (build 685).
+**Último portão:** aguardando SIM/NÃO (26/10/2026) — **abriu mas travado** (685/686).
 
-**Correção build 686:** quiescência de abertura **antes** do motor do card; leitura leve (cache) 8s; `viewLive` e rematerialização GA adiados na thread ociosa.
+**Correção build 687:** quiescência de abertura **não renova** a cada re-render (ficava eterna); repinta ao terminar (~3,5s); sync na abertura não fica preso em `cooperadoMobileUiQuiescence`.
 
 **Correção build 685:** GA não usa mais `div` vazio enquanto `viewLive` carrega — pinta **Olá + cards** (`data-cooperado-inicio-shell`); splash some com casca ou após ~2,4s (não bloqueia em `inicio-loading`).
 

@@ -60,7 +60,7 @@ import { getData, isAppDataWarm, preloadAppData, subscribe } from "@/services/da
 import { cooperadoPilotCardInicioLeituraRapida } from "@/lib/cooperado/cooperadoMobilePilotInicioValorLocal";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { rematerializarCooperadoValorCardLeve } from "@/lib/cooperado/cooperadoGaRevisionLightSync";
-import { cooperadoInicioAberturaQuiescenceActive } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
+import { useCooperadoInicioAberturaQuiescenceActive } from "@/hooks/useCooperadoInicioAberturaQuiescenceActive";
 import { scheduleCooperadoBicHybridIdleTask } from "@/lib/cooperado/cooperadoBicHybridLight";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { cooperadoPwaFinanceiroSnapshotsAusentes } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
@@ -106,6 +106,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
   atualizando: boolean;
 } {
   const { user: sessionUser } = useAuth();
+  const inicioAberturaQuiet = useCooperadoInicioAberturaQuiescenceActive();
   const latchRef = useRef<InicioCardLatchState | null>(null);
   const tenantKeyRef = useRef("");
 
@@ -171,7 +172,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
     if (!isCooperadoMobileGaPromoted(sessionUser)) return;
     if (!isAppDataWarm()) return;
     const run = () => {
-      if (cooperadoInicioAberturaQuiescenceActive()) {
+      if (inicioAberturaQuiet) {
         scheduleCooperadoBicHybridIdleTask(run, 1_500);
         return;
       }
@@ -183,7 +184,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
     }
     const t = window.setTimeout(run, 400);
     return () => window.clearTimeout(t);
-  }, [appDataWarmKey, tabAtiva, sessionUser?.id, sessionUser?.role]);
+  }, [appDataWarmKey, tabAtiva, inicioAberturaQuiet, sessionUser?.id, sessionUser?.role]);
 
   const persistido = useMemo(() => {
     if (!input.cooperadoId) return null;
@@ -210,7 +211,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
       tabAtiva &&
       sessionUser?.role === "cooperado" &&
       isCooperadoMobileGaPromoted(sessionUser) &&
-      cooperadoInicioAberturaQuiescenceActive()
+      inicioAberturaQuiet
     ) {
       const persistidoLeve = persistidoExibicaoPwaLeve(persistido);
       if (persistidoLeve?.display) {
@@ -617,6 +618,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
     persistidoTick,
     leituraSomentePwa,
     tabAtiva,
+    inicioAberturaQuiet,
     appDataWarmKey,
     sessionUser?.id,
     sessionUser?.cooperativaId,
