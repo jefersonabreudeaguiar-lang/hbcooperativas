@@ -1904,8 +1904,11 @@ function mesComPagamentoCooperativaRegistrado(
 
 /** Só data de entrega — createdAt/conferência refeitos no sync não reabrem o pago. */
 function notaReferenciaTemporalEscopoPagamento(nota: NotaPedido): number {
-  if (nota.dataEntrega) {
-    const raw = nota.dataEntrega.length === 10 ? `${nota.dataEntrega}T00:00:00.000Z` : nota.dataEntrega;
+  const stamps: string[] = [];
+  if (nota.dataConferencia) stamps.push(nota.dataConferencia);
+  if (nota.dataEntrega) stamps.push(nota.dataEntrega);
+  for (const stamp of stamps) {
+    const raw = stamp.length === 10 ? `${stamp}T00:00:00.000Z` : stamp;
     const dia = Date.parse(raw);
     if (Number.isFinite(dia)) return dia;
   }
@@ -2249,6 +2252,11 @@ export function fichaCobertaPorPagamentoCooperativa(
   if (nota && notaQuitadaPorPagamentoCooperativaRegistrado(data, nota, ficha.cooperadoId)) {
     return true;
   }
+  const escopoExplicito =
+    (pagamento.fichaIds?.length ?? 0) > 0 || (pagamento.notaPedidoIds?.length ?? 0) > 0;
+  if (escopoExplicito) {
+    return false;
+  }
   const meses = getMesesReferenciaPagamento(pagamento);
   const mesFicha = nota?.mesReferencia ?? ficha.mesReferencia;
   if (!meses.includes(mesFicha) && !meses.includes(ficha.mesReferencia)) return false;
@@ -2257,7 +2265,7 @@ export function fichaCobertaPorPagamentoCooperativa(
   if (!Number.isNaN(notaTs) && !Number.isNaN(pagoTs)) {
     return notaTs <= pagoTs;
   }
-  /** Mesmo mês do PIX, sem data de entrega — mês já liquidado, não reabre. */
+  /** PIX sem escopo explícito e sem data de entrega — mês liquidado não reabre. */
   return true;
 }
 

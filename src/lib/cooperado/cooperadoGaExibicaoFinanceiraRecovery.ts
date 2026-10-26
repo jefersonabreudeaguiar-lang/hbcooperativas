@@ -124,7 +124,6 @@ export function cooperadoGaValorReceberExibicaoResolvida(
   if (cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId)) return false;
   const paridade = cooperadoLeituraFinanceiraExibicao(data, cooperadoId, coopId);
   if (paridade.valorLiquido > 0.01) {
-    if (cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId)) return true;
     if (cooperadoPilotMotorCardInicioTemValor(data, cooperadoId, coopId)) return true;
     if (!cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId)) return true;
     return false;

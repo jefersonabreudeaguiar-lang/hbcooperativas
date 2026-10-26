@@ -58,8 +58,6 @@ import {
 } from "@/lib/cooperado/cooperadoBicHybridLight";
 import { getData, isAppDataWarm, preloadAppData, subscribe } from "@/services/dataStore";
 import { cooperadoPilotCardInicioLeituraRapida } from "@/lib/cooperado/cooperadoMobilePilotInicioValorLocal";
-import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
-import { rematerializarCooperadoValorCardLeve } from "@/lib/cooperado/cooperadoGaRevisionLightSync";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { cooperadoPwaFinanceiroSnapshotsAusentes } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
@@ -148,34 +146,15 @@ export function useCooperadoInicioValorReceberCardState(input: {
   }, [leituraSomentePwa, appDataWarmKey]);
 
   useEffect(() => {
-    const gaAuto =
-      sessionUser?.role === "cooperado" && isCooperadoMobileGaPromoted(sessionUser);
-    if (!leituraSomentePwa && !gaAuto) return;
-    const onRefresh = () => {
-      setPersistidoTick((n) => n + 1);
-      if (gaAuto && sessionUser) rematerializarCooperadoValorCardLeve(sessionUser);
-    };
+    if (!leituraSomentePwa) return;
+    const onRefresh = () => setPersistidoTick((n) => n + 1);
     window.addEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
     window.addEventListener(HB_A_RECEBER_HIBRIDO_EVENT, onRefresh);
     return () => {
       window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
       window.removeEventListener(HB_A_RECEBER_HIBRIDO_EVENT, onRefresh);
     };
-  }, [leituraSomentePwa, sessionUser?.id, sessionUser?.role]);
-
-  /** GA: AppData/sync leve mudou — repinta o card sem operacional_full na thread principal. */
-  useEffect(() => {
-    if (!tabAtiva || !sessionUser || sessionUser.role !== "cooperado") return;
-    if (!isCooperadoMobileGaPromoted(sessionUser)) return;
-    if (!isAppDataWarm()) return;
-    const run = () => rematerializarCooperadoValorCardLeve(sessionUser);
-    if (typeof requestIdleCallback !== "undefined") {
-      const id = requestIdleCallback(run, { timeout: 400 });
-      return () => cancelIdleCallback(id);
-    }
-    const t = window.setTimeout(run, 0);
-    return () => window.clearTimeout(t);
-  }, [appDataWarmKey, tabAtiva, sessionUser?.id, sessionUser?.role]);
+  }, [leituraSomentePwa]);
 
   const persistido = useMemo(() => {
     if (!input.cooperadoId) return null;
