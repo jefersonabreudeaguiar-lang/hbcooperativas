@@ -36,6 +36,7 @@ import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilo
 import { readCooperadoSessionLite } from "@/lib/cooperado/cooperadoSessionLite";
 import { cooperadoGaShouldDeferDataWarmFromGetData } from "@/lib/cooperado/cooperadoGaDataWarmDefer";
 import { markCooperadoInicioAberturaQuiescence } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
+import { armCooperadoGaMobileDataWarmDefer } from "@/lib/cooperado/cooperadoGaDataWarmDefer";
 import { cooperadoGaMobileViewportAtivoLite } from "@/lib/cooperado/cooperadoSessionLite";
 import { scheduleEmpacotarModeloAparelhoJeferson } from "@/lib/cooperado/cooperadoAparelhoJefersonPacote";
 import {
@@ -87,9 +88,15 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-function enrichAccountSession(session: Omit<User, "password">): Omit<User, "password"> {
+function enrichAccountSession(
+  session: Omit<User, "password">,
+  opts?: { skipAppData?: boolean }
+): Omit<User, "password"> {
   const mobileCooperadoId = resolveMobileCooperadoId(session);
-  const data = getData();
+  const data =
+    opts?.skipAppData || cooperadoGaShouldDeferDataWarmFromGetData() || !isAppDataWarm()
+      ? null
+      : getData();
   return {
     ...session,
     role: resolveAppUserRole(session, data),
@@ -110,16 +117,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const experienceSigRef = useRef("");
   const appDataWarmRef = useRef(isAppDataWarm());
 
-  const user = useMemo(
-    () => resolveExperienceUser(accountUser, getData()),
-    [accountUser, viewportTick, dataTick, painelPrefTick]
-  );
+  const user = useMemo(() => {
+    const data =
+      cooperadoGaShouldDeferDataWarmFromGetData() || !isAppDataWarm() ? null : getData();
+    return resolveExperienceUser(accountUser, data);
+  }, [accountUser, viewportTick, dataTick, painelPrefTick]);
 
   const refresh = useCallback(() => {
-    const session = getSession();
+    const deferWarm = cooperadoGaShouldDeferDataWarmFromGetData();
+    const session = deferWarm ? readCooperadoSessionLite() : getSession();
+    if (!session) {
+      setAccountUser(null);
+      setLoading(false);
+      return;
+    }
     setAccountUser((prev) => {
-      if (!session) return null;
-      const normalized = enrichAccountSession(session);
+      const normalized = enrichAccountSession(session, { skipAppData: deferWarm });
       if (
         prev?.id === normalized.id &&
         prev?.email === normalized.email &&
@@ -139,6 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const sessionLite = readCooperadoSessionLite();
     if (sessionLite?.role === "cooperado" && cooperadoGaMobileViewportAtivoLite()) {
       markCooperadoInicioAberturaQuiescence();
+      armCooperadoGaMobileDataWarmDefer();
     }
     if (
       isCooperadoInstantResumeEnabled() &&
@@ -147,10 +161,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ensureCooperadoAppDataEagerWarm();
     }
     refresh();
-    const session = sessionLite ?? getSession();
-    applyCooperadoMobilePilotPerfDomFlag(session);
-    if (session?.role === "cooperado") {
-      if (resetCooperadoAposVazamentoPainelGestao(session)) return;
+    const session =
+      sessionLite ??
+      (cooperadoGaShouldDeferDataWarmFromGetData() ? null : getSession());
+    const effectiveSession = sessionLite ?? session;
+    applyCooperadoMobilePilotPerfDomFlag(effectiveSession);
+    if (effectiveSession?.role === "cooperado") {
+      if (resetCooperadoAposVazamentoPainelGestao(effectiveSession)) return;
       setPreferPainelResponsavelMobile(false);
     }
   }, [refresh]);
@@ -177,7 +194,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
     if (isCooperadoInstantResumeEnabled()) {
-      const session = getSession();
+      if (cooperadoGaShouldDeferDataWarmFromGetData()) return;
+      const session = readCooperadoSessionLite() ?? getSession();
       if (
         !isAppDataWarm() &&
         !isCooperadoPwaMessengerMode() &&

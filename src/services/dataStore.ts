@@ -935,7 +935,10 @@ function loadData(forceReload = false): AppData {
     return memoryCache;
   }
 
-  const inlineRaw = !forceReload ? takeInlineParsedAppData() : null;
+  const inlineRaw =
+    !forceReload && !cooperadoGaShouldDeferDataWarmFromGetData()
+      ? takeInlineParsedAppData()
+      : null;
   const stored = inlineRaw == null ? readAppDataPersistRaw() : null;
   if (!stored && inlineRaw == null) {
     const lkg = sessionRoleLooksStaffGestao() ? peekStaffGestaoLastGood() : null;
@@ -1736,7 +1739,9 @@ export function getSession(): Omit<User, "password"> | null {
     return normalizedParsed;
   }
 
-  scheduleDataWarmIfNeeded();
+  if (!cooperadoGaShouldDeferDataWarmFromGetData()) {
+    scheduleDataWarmIfNeeded();
+  }
   return normalizedParsed;
 }
 
