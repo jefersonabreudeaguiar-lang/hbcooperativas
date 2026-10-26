@@ -619,6 +619,15 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       currentUser.role === "tesoureiro" ||
       currentUser.role === "admin";
 
+    if (
+      isStaffGestao &&
+      opts?.userInitiated !== true &&
+      opts?.eventDriven !== true &&
+      staffGestaoPausaTrabalhoPesadoAutomatico()
+    ) {
+      return;
+    }
+
     if (!opts?.force && isAppIdle() && !isStaffGestao) return;
 
     let warm = await waitForAppDataWarm();

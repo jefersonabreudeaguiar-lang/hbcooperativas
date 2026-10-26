@@ -61,7 +61,7 @@ import {
   scheduleStaffNavPrefetchDesktop,
   scheduleStaffNavPrefetchEarly,
 } from "@/lib/performance/staffNavPrefetch";
-import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
+import { markStaffTabPathChange } from "@/lib/staff/staffTabSwitchQuiescence";
 import { useMobileBottomTabSwitchFeedback } from "@/lib/performance/tabSwitchFeedback";
 import {
   COOPERADO_PILOT_HB_PAY_TAB_HREF,
@@ -210,16 +210,6 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
               key={item.href}
               href={item.href}
               prefetch={shouldPrefetchHbCreditNav(item.href)}
-              onPointerEnter={
-                staffUser && isStaffBottomTabPath(item.href)
-                  ? () => {
-                      if (item.href === "/notas-pedido") prefetchStaffNotasPedidoRouteBundle();
-                      else if (item.href === "/dashboard") void import("@/app/(app)/dashboard/DashboardContent");
-                      else if (item.href === "/ficha-corrida") void import("@/app/(app)/ficha-corrida/FichaCorridaContent");
-                      else if (item.href === "/livro-caixa") void import("@/app/(app)/livro-caixa/LivroCaixaContent");
-                    }
-                  : undefined
-              }
               onClick={() => onClose?.()}
               scroll={false}
               className={cn(
@@ -606,6 +596,12 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   useHbCreditDescontosWarmup(navUser);
 
   const router = useRouter();
+
+  useEffect(() => {
+    if (!navUser || isCooperadoAppUser(navUser)) return;
+    markStaffTabPathChange(pathname);
+  }, [pathname, navUser?.id]);
+
   useEffect(() => {
     if (!navUser || isCooperadoAppUser(navUser)) return;
     if (

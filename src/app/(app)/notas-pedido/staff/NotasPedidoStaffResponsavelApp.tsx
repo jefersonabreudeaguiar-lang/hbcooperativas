@@ -79,6 +79,7 @@ import {
   STAFF_FILA_UPLOAD_PROGRESS_MAX_NOTAS,
 } from "@/lib/performance/staffFilaNotasLivePoll";
 import { markRqlColdStartPhase, markRqlStaffNotasSubviewTransition } from "@/lib/performance/rqlMarks";
+import { staffGestaoPausaTrabalhoPesadoAutomatico } from "@/lib/staff/staffGestaoPausaTrabalhoPesado";
 import {
   loadCooperadoAnexarPipeline,
   prefetchCooperadoAnexarPipeline,
@@ -2326,10 +2327,14 @@ export default function NotasPedidoStaffMain() {
     if (!isStaffFilaNotasLivePollEnabled()) return;
     const pollMs = resolveStaffNotasPollIntervalMs(true);
     puxarFilaLiveResponsavel();
+    const pollFilaSeLivre = () => {
+      if (staffGestaoPausaTrabalhoPesadoAutomatico()) return;
+      puxarFilaLiveResponsavel();
+    };
     return scheduleStaffResponsavelNotasPollLoop({
       pollIntervalMs: pollMs,
-      onPoll: () => puxarFilaLiveResponsavel(),
-      onVisible: () => puxarFilaLiveResponsavel(),
+      onPoll: pollFilaSeLivre,
+      onVisible: pollFilaSeLivre,
     });
   }, [isCooperado, coopId, tabActive, puxarFilaLiveResponsavel]);
 

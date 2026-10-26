@@ -13,7 +13,9 @@ assert.ok(read("src/lib/performance/staffDesktopNavPolicy.ts").includes("staffGe
 assert.ok(read("src/lib/performance/staffOptimisticTabNavigation.ts").includes("staffGestaoUsaNavegacaoOtimista"));
 assert.ok(read("src/lib/performance/staffPinnedTabFastPath.ts").includes("staffGestaoUsaNavegacaoOtimista"));
 assert.ok(read("src/hooks/useStaffEffectiveTabPath.ts").includes("clearStaffOptimisticTab"));
-assert.ok(read("src/lib/staff/staffGestaoPausaTrabalhoPesado.ts").includes("isStaffMobileViewportActive"));
+assert.ok(read("src/components/layout/AppLayout.tsx").includes("markStaffTabPathChange"));
+assert.ok(read("src/components/sync/CooperativaSyncProvider.tsx").includes("staffGestaoPausaTrabalhoPesadoAutomatico"));
+assert.ok(!read("src/components/layout/AppLayout.tsx").includes("onPointerEnter"), "sidebar PC sem import no hover");
 
 const sidebar = read("src/components/layout/AppLayout.tsx");
 assert.ok(!sidebar.includes("tryStaffCachedInstantTabSwitch(pathname, item.href)"), "sidebar PC usa Link direto");

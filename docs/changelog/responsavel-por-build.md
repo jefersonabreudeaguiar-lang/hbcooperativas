@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v656
+
+- **PC menu:** marca troca de rota e pausa sync/poll automático ~2,4s; `runSync` respeita a mesma pausa; removido aquecimento por hover no sidebar (imports pesados).
+
 ## v655
 
 - **PC gestão (modo desktop):** sync automático de fundo desligado (live, idle, visibility, fila catch-up global); menu e UI não competem com rajadas de sync. Mobile inalterado.
