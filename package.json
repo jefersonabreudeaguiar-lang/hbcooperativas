@@ -22,6 +22,7 @@
     "backup:cloud": "node scripts/backup-cloud.mjs",
     "backup:cooperado-slice": "node scripts/backup-cooperado-dados-slice.mjs",
     "restore:cooperado-backup-code": "node scripts/restore-cooperado-code-from-backup-tag.mjs",
+    "pilot:cooperado-baseline": "node scripts/restore-cooperado-pilot-baseline.mjs",
     "test:sync-flows": "npx tsx scripts/simulate-sync-flows.ts",
     "test:cooperado-financeiro": "npx tsx scripts/test-cooperado-financeiro-guard.ts",
     "test:h204-orlando-global": "npx tsx scripts/test-h204-orlando-global-simulation.ts",

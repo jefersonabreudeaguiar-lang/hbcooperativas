@@ -13,10 +13,9 @@ import {
 import type { AppData, User } from "@/types";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   useAppDataSelector,
-  useAppDataSelectorWhenActive,
   useAppDataReady,
   useAppDataDomainsRevisionWhenActive,
   useAppDataSelectorForDomainsWhenActive,
@@ -225,6 +224,7 @@ function CooperadoDashboard() {
       : inicioPwaLeve || cooperadoMobilePilotSnapshotFirstInicio(user);
 
   useLayoutEffect(() => {
+    dismissCooperadoBootShell();
     if (user?.role === "cooperado") markCooperadoInicioAberturaQuiescence();
   }, [user?.role]);
 
@@ -472,6 +472,7 @@ function CooperadoDashboard() {
   const deferredInicioRevision = useDeferredValue(inicioDomainsRevision);
 
   const viewLive = useMemo(() => {
+    if (cooperadoMotorAoVivo) return null;
     if (!tabActive || !appDataUiOn || !deferredInicioRevision || !isAppDataWarm() || !user?.cooperadoId) {
       return null;
     }
@@ -500,10 +501,8 @@ function CooperadoDashboard() {
       ? pwaInicioView ?? pwaInicioViewStickyRef.current
       : viewLive;
   const view = tabActive ? viewRaw : null;
-  /** GA: snapshot do Início na 1ª pintura; viewLive substitui quando pronto (quiescência só adia recálculo pesado). */
-  const viewUi = cooperadoMotorAoVivo
-    ? viewLive ?? pwaInicioView ?? pwaInicioViewStickyRef.current
-    : view;
+  /** GA mobile: painel leve com card ao vivo — evita snapshot pesado que some após rollback. */
+  const viewUi = cooperadoMotorAoVivo ? null : view;
 
   const mesAtual = getCurrentMesReferencia();
   const nomeFromSnapshot =
@@ -512,11 +511,6 @@ function CooperadoDashboard() {
   const coopNomeEarly =
     view?.coopNome ?? (user && isAppDataWarm() ? getUserCooperativaNome(user, getData()) : "");
 
-  useEffect(() => {
-    if (!viewUi) return;
-    dismissCooperadoBootShell();
-  }, [viewUi]);
-
   return (
     <CooperadoInicioSafeRoot>
       <CooperadoInicioCooperadoLiveRoot
@@ -524,13 +518,6 @@ function CooperadoDashboard() {
         cooperativaIdCard={cooperativaIdCard}
       >
         {!viewUi ? (
-        cooperadoMotorAoVivo ? (
-          <div
-            className="min-h-[12rem] max-w-3xl"
-            data-cooperado-inicio-loading="1"
-            aria-hidden="true"
-          />
-        ) : (
         <div className="space-y-6 max-w-3xl" data-cooperado-inicio-shell="1">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
@@ -551,7 +538,6 @@ function CooperadoDashboard() {
           </div>
           <CooperadoHbCreditInicioSection hbCredit={hbCredit} cnpjDigits={cnpjHbDigits} />
         </div>
-        )
       ) : (
         <CooperadoDashboardInicioView
           view={viewUi!}
@@ -604,11 +590,7 @@ function CooperadoDashboardInicioView({
   const nomePrimeiro = cooperado?.nomeCompleto?.split(" ")[0];
 
   return (
-    <div
-      className="space-y-6 max-w-3xl"
-      data-cooperado-inicio-shell="1"
-      data-cooperado-inicio-ready="1"
-    >
+    <div className="space-y-6 max-w-3xl" data-cooperado-inicio-shell="1">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">
           <CooperadoInicioOláTitulo nomeFromView={nomePrimeiro} />
@@ -675,15 +657,9 @@ function CooperadoDashboardInicioView({
 }
 
 function AdminDashboard() {
-  const tabActive = useCooperadoTabPanelActive("/dashboard");
-  const pathname = usePathname() ?? "";
   const { user, accountUser } = useAuth();
   const gestaoUser = accountUser ?? user;
-  const adminDataRevision = useAppDataSelectorWhenActive(
-    tabActive,
-    () => (isAppDataWarm() ? getDataRevision() : -1),
-    []
-  );
+  const adminDataRevision = useAppDataSelector(() => (isAppDataWarm() ? getDataRevision() : -1), []);
   const navUser = useMemo(() => {
     if (!gestaoUser) return null;
     if (canAccessPainelResponsavelSession(gestaoUser, isAppDataWarm() ? getData() : null)) {
@@ -758,9 +734,9 @@ function AdminDashboard() {
       return false;
     }
   }, [navUser?.id, navUser?.role, navUser?.cooperativaId, adminDataRevision]);
-  useReconciliarLivroCaixaGestao(meta?.coopId, false);
+  useReconciliarLivroCaixaGestao(meta?.coopId, Boolean(navUser && meta?.coopId));
 
-  const dataRevision = tabActive ? adminDataRevision : null;
+  const dataRevision = adminDataRevision;
   const deferredRevision = useDeferredValue(dataRevision ?? -1);
 
   const adminStatsWorker = isRqlAdminStatsWorkerEnabled();
@@ -822,11 +798,10 @@ function AdminDashboard() {
   if (!navUser || !meta) return <PageSkeleton />;
 
   const { coopNome, mes, instalacao, assinatura, cnpj, coopId } = meta;
-  const statsComValores = workerHeavy?.stats ?? heavy?.stats;
-  const stats = statsComValores ?? quickStats;
+  const stats = workerHeavy?.stats ?? heavy?.stats ?? quickStats;
   const fila = workerHeavy?.fila ?? heavy?.fila ?? [];
   const totaisFinanceirosPendentes =
-    adminStatsWorker ? !workerHeavy?.stats : !statsComValores && Boolean(quickStats);
+    adminStatsWorker ? !workerHeavy?.stats : !heavy?.stats && Boolean(quickStats);
 
   const primeiroDiaOpts = {
     role: navUser.role,

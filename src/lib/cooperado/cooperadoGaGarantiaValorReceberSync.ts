@@ -18,13 +18,14 @@ import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooper
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { requestCooperadoGaFinanceiroExibicaoRecoverySync } from "@/services/syncRequest";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { cooperadoRematerializarFinanceiroLocalSePossivel } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import { scheduleCooperadoHbCreditLimiteAndAccountWarmup } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
 import { markCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
 import { requestSyncTier } from "@/services/syncRequest";
-import { scheduleCooperadoGaValorRevisionLightSync } from "@/lib/cooperado/cooperadoGaRevisionLightSync";
+import { runCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
 import {
   cooperadoFinanceiroDesatualizado,
   cooperadoFinanceiroStaleRecuperavelEmBackground,
@@ -76,8 +77,6 @@ function pullNuvemFinanceiro(user: Omit<User, "password">, attempt: number): voi
   cooperadoMobileSyncTrace("garantia_pull_nuvem", `attempt=${attempt}`);
   cooperadoGaDispatchPrimeiraCargaSilenciosa(user, { allowRepeat: attempt > 0 });
 
-  scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
-  scheduleCooperadoGaValorRevisionLightSync(user);
   if (attempt >= 3) {
     markCooperadoUserSyncVisible();
     requestSyncTier("operacional_full", {
@@ -85,7 +84,11 @@ function pullNuvemFinanceiro(user: Omit<User, "password">, attempt: number): voi
       immediate: true,
       eventDriven: true,
     });
+  } else {
+    requestCooperadoGaFinanceiroExibicaoRecoverySync({ garantia: true });
   }
+  scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
+  void runCooperadoGaSyncBaseInformacoesFinanceiras(user, { force: attempt >= 1, silent: true });
 
   if (!isAppDataWarm() || !user.cooperadoId) return;
   const data = getData();
