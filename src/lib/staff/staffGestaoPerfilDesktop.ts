@@ -120,7 +120,7 @@ export function staffGestaoPerfilCapSyncAutomaticoForViewport(
   ) {
     return opts;
   }
-  if (opts?.tier === "notas_delta" && opts?.silent === true && opts?.userInitiated !== true) {
+  if (opts?.tier === "notas_delta" && opts?.silent === true) {
     return opts;
   }
   return null;
