@@ -11,6 +11,7 @@ import {
   setManualValorBrutoCooperado,
   syncLimiteCooperadoFromCreditoBase,
 } from "@/lib/supabase/contaCoopStorage";
+import { isV2HbOnlyServer } from "@/lib/hb-credit/hbCreditV2LimiteBase";
 
 function mapRow(row: Record<string, unknown>): HbCreditFichaPlano {
   const mensalidadesRaw = row.mensalidades;
@@ -193,4 +194,64 @@ export async function aplicarFichaPlanoAposUsoCreditoHb(
         .eq("id", acc.id);
     }
   }
+}
+
+/**
+ * V2: alinha manual_valor_bruto_cents + limite HB ao bruto da ficha plano na nuvem.
+ * Só roda quando existe linha em hb_credit_cooperado_ficha_plano.
+ */
+export async function reconcileHbBrutoFromFichaPlano(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  actorUserId: string
+): Promise<{ brutoFichaPlanoCents: number | null }> {
+  if (!isV2HbOnlyServer()) return { brutoFichaPlanoCents: null };
+  const digits = normalizeCnpj(cnpj);
+  const { data: fichaRow } = await supabase
+    .from("hb_credit_cooperado_ficha_plano")
+    .select("*")
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", cooperadoId)
+    .maybeSingle();
+  if (!fichaRow) return { brutoFichaPlanoCents: null };
+
+  const plano = mapRow(fichaRow as Record<string, unknown>);
+  const bruto = brutoFichaPlanoCents(plano);
+  const targetManual = bruto > 0 ? bruto : null;
+
+  const { data: acc } = await supabase
+    .from("hb_credit_accounts")
+    .select("manual_valor_bruto_cents")
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", cooperadoId)
+    .maybeSingle();
+
+  const atualRaw = acc?.manual_valor_bruto_cents;
+  const atual =
+    atualRaw == null || atualRaw === ""
+      ? null
+      : Math.max(0, Math.round(Number(atualRaw)));
+
+  if ((targetManual ?? 0) !== (atual ?? 0)) {
+    const manual = await setManualValorBrutoCooperado(
+      supabase,
+      digits,
+      cooperadoId,
+      targetManual,
+      actorUserId
+    );
+    if (manual.ok && bruto > 0) {
+      await syncLimiteCooperadoFromCreditoBase(
+        supabase,
+        digits,
+        cooperadoId,
+        bruto,
+        actorUserId,
+        { [cooperadoId]: bruto }
+      );
+    }
+  }
+
+  return { brutoFichaPlanoCents: bruto };
 }

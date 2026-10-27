@@ -55,8 +55,10 @@ export function useHbV2InicioValorReceberCard(opts: {
       }
       const apiCooperadoId =
         resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId) ?? cooperadoId;
-      const { account } = await fetchCreditAccount(cnpj, apiCooperadoId);
-      const totais = hbCreditCooperadoInicioV2Totais(account ?? null);
+      const { account, fichaPlanoBrutoCents } = await fetchCreditAccount(cnpj, apiCooperadoId);
+      const totais = hbCreditCooperadoInicioV2Totais(account ?? null, {
+        brutoFichaPlanoCents: fichaPlanoBrutoCents ?? null,
+      });
       const snap = hbV2InicioCardSnapshotFromHbAccount(account ?? null, mesLabel);
       if (totais) {
         snap.valor = totais.aReceberCents / 100;

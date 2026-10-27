@@ -74,6 +74,10 @@ import {
   isCooperadoMobilePilotHbCreditUi,
 } from "@/lib/cooperado/cooperadoMobilePilotHbCredit";
 import { resolveCooperadoHbCreditCnpjDigits } from "@/lib/hb-credit/resolveCooperadoHbCreditCnpj";
+import { isV2HbOnlyClient } from "@/lib/product/v2HbOnly";
+import { hbCreditCooperadoInicioV2Totais } from "@/lib/hb-credit/hbCreditCooperadoInicioV2";
+import { HB_FICHA_PLANO_UPDATED_EVENT } from "@/lib/hb-credit/hbCreditFichaPlanoEvents";
+import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 
 type Tab = "inicio" | "pagar" | "receber" | "extrato";
 
@@ -122,6 +126,7 @@ function MinhaContaCoopContent() {
   const [busy, setBusy] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [accountRefreshing, setAccountRefreshing] = useState(false);
+  const [planoBrutoCents, setPlanoBrutoCents] = useState<number | null>(null);
   /** Aux syncs (ficha) só após o primeiro fetchCreditAccount — limite vem da nuvem + poll (aba Limites do responsável). */
   const [auxSyncEnabled, setAuxSyncEnabled] = useState(false);
   const auxEntrySignaledRef = useRef(false);
@@ -130,6 +135,7 @@ function MinhaContaCoopContent() {
   const [descricaoReceber, setDescricaoReceber] = useState("");
 
   const transferenciaCooperadoAtiva = isCooperadoTransferenciaCreditoEnabled();
+  const v2HbOnly = isV2HbOnlyClient();
   const pilotHbUi = isCooperadoMobilePilotHbCreditUi(user);
   const hbIntroPendente = pilotHbUi && user?.id ? !cooperadoPilotHbCreditHubIntroDone(user.id) : false;
 
@@ -207,7 +213,9 @@ function MinhaContaCoopContent() {
   }, [transferenciaCooperadoAtiva]);
 
   useSyncContaCoopValorReceberPilot(
-    contaCoopValorSync ? { ...contaCoopValorSync, initialDelayMs: VALOR_RECEBER_SYNC_DEFER_MS } : undefined
+    !v2HbOnly && contaCoopValorSync
+      ? { ...contaCoopValorSync, initialDelayMs: VALOR_RECEBER_SYNC_DEFER_MS }
+      : undefined
   );
 
   useEffect(() => {
@@ -279,6 +287,9 @@ function MinhaContaCoopContent() {
         savedAt: new Date().toISOString(),
       });
       notifyHbCreditAccountCacheUpdated();
+      setPlanoBrutoCents(
+        v2HbOnly ? (acc.fichaPlanoBrutoCents ?? accObj?.manualValorBrutoCents ?? null) : null
+      );
     } catch (e) {
       if (!background) {
         setError(e instanceof Error ? e.message : "Erro ao carregar conta.");
@@ -292,7 +303,7 @@ function MinhaContaCoopContent() {
         notifyHbCreditAccountLoaded();
       }
     }
-  }, [cnpj, hbApiCooperadoId]);
+  }, [cnpj, hbApiCooperadoId, v2HbOnly]);
 
   useEffect(() => {
     preloadAppData();
@@ -377,6 +388,13 @@ function MinhaContaCoopContent() {
     window.addEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
     return () => window.removeEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
   }, [reload, loadLedger]);
+
+  useEffect(() => {
+    if (!v2HbOnly) return;
+    const onFicha = () => void reload({ background: true });
+    window.addEventListener(HB_FICHA_PLANO_UPDATED_EVENT, onFicha);
+    return () => window.removeEventListener(HB_FICHA_PLANO_UPDATED_EVENT, onFicha);
+  }, [v2HbOnly, reload]);
 
   useHbCreditAccountRevisionPoll({
     cnpj,
@@ -549,9 +567,32 @@ function MinhaContaCoopContent() {
     );
   }
 
+  const v2HbTotais =
+    account && v2HbOnly
+      ? hbCreditCooperadoInicioV2Totais(account, { brutoFichaPlanoCents: planoBrutoCents })
+      : null;
+
   const saldoHb = account
-    ? normalizeHbPaymentLimiteDisponivel(account).valorDisponivelCents
+    ? v2HbTotais
+      ? v2HbTotais.saldoMercadoCents
+      : normalizeHbPaymentLimiteDisponivel(account).valorDisponivelCents
     : 0;
+
+  const mesLabelV2 = formatMesReferencia(getCurrentMesReferencia());
+  const exibicaoFichaHb = v2HbTotais
+    ? {
+        brutoCents: v2HbTotais.brutoFichaCents,
+        aReceberCents: v2HbTotais.aReceberCents,
+        mesLabel: mesLabelV2,
+      }
+    : {
+        brutoCents: 0,
+        aReceberCents: Math.round(valorAReceberFicha.valor * 100),
+        mesLabel: valorAReceberFicha.mesLabel,
+      };
+  const mostrarBlocoFichaHb = v2HbOnly
+    ? exibicaoFichaHb.brutoCents > 0 || exibicaoFichaHb.aReceberCents > 0
+    : exibicaoFichaHb.aReceberCents > 0;
   const cashback = account?.cashbackDisponivelCents ?? 0;
   const podeLiberarCashback =
     cashback > 0 && !cashbackJaNaFicha && Boolean(mesReferenciaReceber) && !isOffline && !busy;
@@ -645,19 +686,32 @@ function MinhaContaCoopContent() {
         <p className="relative mt-1 text-4xl font-bold tracking-tight tabular-nums sm:text-5xl">
           {formatCentsBRL(saldoHb)}
         </p>
-        {valorAReceberFicha.valor > 0 && (
-          <div className="relative mt-4 rounded-2xl border border-white/20 bg-white/10 px-3 py-2.5">
-            <p className="text-xs font-medium text-green-100">Valor a receber (ficha)</p>
-            <p className="text-lg font-bold tabular-nums">
-              {formatCentsBRL(Math.round(valorAReceberFicha.valor * 100))}
-              {valorAReceberFicha.mesLabel ? (
-                <span className="ml-2 text-sm font-medium text-green-100/90">
-                  · {valorAReceberFicha.mesLabel}
-                </span>
-              ) : null}
-            </p>
-            {saldoHb <= 0 ? (
-              <p className="mt-1 text-xs text-green-100/90">
+        {mostrarBlocoFichaHb && (
+          <div className="relative mt-4 space-y-2.5 rounded-2xl border border-white/20 bg-white/10 px-3 py-2.5">
+            {v2HbOnly && exibicaoFichaHb.brutoCents > 0 ? (
+              <div>
+                <p className="text-xs font-medium text-green-100">Bruto da ficha HB</p>
+                <p className="text-base font-bold tabular-nums">{formatCentsBRL(exibicaoFichaHb.brutoCents)}</p>
+                <p className="text-[11px] text-green-100/85">Mesmo valor lançado pelo responsável (entregas 1–5 − desconto).</p>
+              </div>
+            ) : null}
+            {exibicaoFichaHb.aReceberCents > 0 ? (
+              <div>
+                <p className="text-xs font-medium text-green-100">
+                  {v2HbOnly ? "A receber (ficha HB)" : "Valor a receber (ficha)"}
+                </p>
+                <p className="text-lg font-bold tabular-nums">
+                  {formatCentsBRL(exibicaoFichaHb.aReceberCents)}
+                  {exibicaoFichaHb.mesLabel ? (
+                    <span className="ml-2 text-sm font-medium text-green-100/90">
+                      · {exibicaoFichaHb.mesLabel}
+                    </span>
+                  ) : null}
+                </p>
+              </div>
+            ) : null}
+            {saldoHb <= 0 && exibicaoFichaHb.brutoCents > 0 ? (
+              <p className="text-xs text-green-100/90">
                 A cooperativa ainda não liberou o percentual deste valor na aba Limites.
               </p>
             ) : null}

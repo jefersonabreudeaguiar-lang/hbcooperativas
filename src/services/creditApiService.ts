@@ -294,6 +294,8 @@ export async function fetchCreditAccount(cnpj: string, cooperadoId: string) {
     updatedAt?: string | null;
     hasPin?: boolean;
     pinResetPending?: boolean;
+    /** V2: bruto entregas 1–5 − desconto (alinhado à ficha na nuvem). */
+    fichaPlanoBrutoCents?: number | null;
   }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar conta.");
   return data;

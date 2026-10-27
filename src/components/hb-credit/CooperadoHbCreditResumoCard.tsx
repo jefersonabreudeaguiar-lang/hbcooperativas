@@ -28,6 +28,7 @@ import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import { clearCooperadoOptimisticTab } from "@/lib/performance/cooperadoOptimisticTabNavigation";
 import { isV2HbOnlyClient } from "@/lib/product/v2HbOnly";
 import { hbCreditCooperadoInicioV2Totais } from "@/lib/hb-credit/hbCreditCooperadoInicioV2";
+import { HB_FICHA_PLANO_UPDATED_EVENT } from "@/lib/hb-credit/hbCreditFichaPlanoEvents";
 
 type Props = {
   cnpj: string;
@@ -42,6 +43,8 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
     return resolveCooperadoHbCreditCnpjDigits(user);
   }, [cnpj, user]);
   const [snap, setSnap] = useState<HbCreditAccountPersistido | null>(null);
+  const [planoBrutoCents, setPlanoBrutoCents] = useState<number | null>(null);
+  const v2Hb = isV2HbOnlyClient();
 
   /** Push explícito — Link sozinho falha depois do replaceState das abas. */
   const onHbNavClick = useCallback(
@@ -86,12 +89,24 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
       if (user?.role === "cooperado") {
         await persistirHbCreditAccountCooperado(user);
         refreshFromCache();
+        if (v2Hb && cnpjResolved.length === 14) {
+          try {
+            const acc = await fetchCreditAccount(cnpjResolved, hbApiCooperadoId);
+            const account = (acc.account as ContaCoopLimiteCooperado | null) ?? null;
+            setPlanoBrutoCents(acc.fichaPlanoBrutoCents ?? account?.manualValorBrutoCents ?? null);
+          } catch {
+            setPlanoBrutoCents(null);
+          }
+        }
         return;
       }
       if (cnpjResolved.length !== 14) return;
       try {
         const acc = await fetchCreditAccount(cnpjResolved, hbApiCooperadoId);
         const account = (acc.account as ContaCoopLimiteCooperado | null) ?? null;
+        setPlanoBrutoCents(
+          v2Hb ? (acc.fichaPlanoBrutoCents ?? account?.manualValorBrutoCents ?? null) : null
+        );
         const payload: HbCreditAccountPersistido = {
           v: HB_CREDIT_ACCOUNT_STORAGE_VERSION,
           account,
@@ -114,21 +129,27 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
       refreshFromCache();
       void syncAccountFromCloud();
     };
+    const onFichaUpdated = () => {
+      refreshFromCache();
+      void syncAccountFromCloud();
+    };
     window.addEventListener(HB_CREDIT_ACCOUNT_CACHE_EVENT, onCache);
     window.addEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
+    window.addEventListener(HB_FICHA_PLANO_UPDATED_EVENT, onFichaUpdated);
     return () => {
       window.removeEventListener(HB_CREDIT_ACCOUNT_CACHE_EVENT, onCache);
       window.removeEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
+      window.removeEventListener(HB_FICHA_PLANO_UPDATED_EVENT, onFichaUpdated);
     };
-  }, [hbApiCooperadoId, cooperadoId, cnpjResolved, user]);
-
-  const v2Hb = isV2HbOnlyClient();
+  }, [hbApiCooperadoId, cooperadoId, cnpjResolved, user, v2Hb]);
 
   const totals = useMemo(() => {
     const acc = snap?.account;
     if (!acc) return null;
     if (v2Hb) {
-      const v2 = hbCreditCooperadoInicioV2Totais(acc);
+      const v2 = hbCreditCooperadoInicioV2Totais(acc, {
+        brutoFichaPlanoCents: planoBrutoCents,
+      });
       if (!v2) return null;
       return {
         saldo: v2.saldoMercadoCents,
@@ -146,7 +167,7 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
       brutoFicha: null as number | null,
       aReceber: null as number | null,
     };
-  }, [snap, v2Hb]);
+  }, [snap, v2Hb, planoBrutoCents]);
 
   if (!totals) {
     return (
@@ -185,6 +206,11 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
               : "Saldo para pagar nos mercados parceiros"}
           </p>
           <p className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">{formatCentsBRL(totals.saldo)}</p>
+          {v2Hb && totals.brutoFicha != null && totals.brutoFicha > 0 ? (
+            <p className="mt-2 text-xs text-emerald-100/95 leading-relaxed">
+              Bruto da ficha HB {formatCentsBRL(totals.brutoFicha)} — mesmo valor da Minha ficha HB
+            </p>
+          ) : null}
         </div>
         <span className="shrink-0 text-sm font-semibold text-white/90 pt-1">Detalhes →</span>
       </div>

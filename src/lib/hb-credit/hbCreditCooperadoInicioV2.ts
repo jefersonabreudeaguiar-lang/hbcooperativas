@@ -12,17 +12,31 @@ export type HbCreditCooperadoInicioV2Totais = {
   limiteLiberadoCents: number;
 };
 
-/** Início cooperado V2 — só bruto da ficha HB (manual) e limite capado nessa base. */
+export type HbCreditCooperadoInicioV2TotaisOpts = {
+  /** Bruto calculado da ficha plano (entregas − desconto) — prioridade sobre manual na nuvem. */
+  brutoFichaPlanoCents?: number | null;
+};
+
+/** Fonte única do bruto V2: ficha plano quando informada; senão manual na conta HB. */
+export function resolveBrutoFichaHbV2Cents(
+  account: Pick<ContaCoopLimiteCooperado, "manualValorBrutoCents">,
+  brutoFichaPlanoCents?: number | null
+): number {
+  if (brutoFichaPlanoCents != null) {
+    return Math.max(0, Math.round(brutoFichaPlanoCents));
+  }
+  return creditoBaseCentsV2FromLimite(account);
+}
+
+/** Início cooperado V2 — bruto da ficha HB e limite capado nessa base. */
 export function hbCreditCooperadoInicioV2Totais(
-  account: ContaCoopLimiteCooperado | null | undefined
+  account: ContaCoopLimiteCooperado | null | undefined,
+  opts?: HbCreditCooperadoInicioV2TotaisOpts
 ): HbCreditCooperadoInicioV2Totais | null {
   if (!account) return null;
-  const brutoFichaCents = creditoBaseCentsV2FromLimite(account);
+  const brutoFichaCents = resolveBrutoFichaHbV2Cents(account, opts?.brutoFichaPlanoCents);
   const usadoCents = Math.max(0, Math.round(account.valorUsadoCents ?? 0));
-  const aReceberReais = hbCreditValorAReceberReaisFromManualBruto(
-    account.manualValorBrutoCents,
-    usadoCents
-  );
+  const aReceberReais = hbCreditValorAReceberReaisFromManualBruto(brutoFichaCents, usadoCents);
   const aReceberCents = Math.round(aReceberReais * 100);
 
   const eff = resolveLimiteHbCooperadoEfetivo(account, brutoFichaCents, 100, 100);

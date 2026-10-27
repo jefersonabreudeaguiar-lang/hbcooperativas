@@ -826,6 +826,8 @@ function mapLimiteRow(row: Record<string, unknown>, cashbackDisponivelCents = 0)
     manualRaw == null || manualRaw === ""
       ? null
       : Math.max(0, Math.round(Number(manualRaw)));
+  const capParaDisponivel =
+    manualValorBrutoCents != null && manualValorBrutoCents > 0 ? manualValorBrutoCents : cap;
 
   return {
     id: String(row.id),
@@ -834,7 +836,7 @@ function mapLimiteRow(row: Record<string, unknown>, cashbackDisponivelCents = 0)
     manualValorBrutoCents,
     limiteLiberadoCents: limite,
     valorUsadoCents: usado,
-    valorDisponivelCents: hbCreditEffectiveDisponivelCents(limite, cap, usado),
+    valorDisponivelCents: hbCreditEffectiveDisponivelCents(limite, capParaDisponivel, usado),
     bloqueado: status === "blocked",
     hasFinancialPin: Boolean(row.pin_hash),
     pinLockedUntil: row.pin_locked_until ? String(row.pin_locked_until) : null,

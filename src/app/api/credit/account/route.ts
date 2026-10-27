@@ -17,6 +17,8 @@ import {
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 import { resolveCreditAccountCooperadoIdForRequest } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
+import { reconcileHbBrutoFromFichaPlano } from "@/lib/supabase/hbCreditFichaPlanoStorage";
+import { isV2HbOnlyServer } from "@/lib/hb-credit/hbCreditV2LimiteBase";
 
 export async function GET(request: Request) {
   const gate = await requireCreditApi(request);
@@ -50,6 +52,16 @@ export async function GET(request: Request) {
   }
 
   try {
+    let fichaPlanoBrutoCents: number | null = null;
+    if (isV2HbOnlyServer()) {
+      const reconciled = await reconcileHbBrutoFromFichaPlano(
+        gate.ctx.supabase,
+        cnpj,
+        cooperadoId,
+        gate.ctx.session?.sub ?? "account_get"
+      );
+      fichaPlanoBrutoCents = reconciled.brutoFichaPlanoCents;
+    }
     /** Paridade com aba Limites (lista rápida): saldo/limit_released da conta na nuvem. */
     const limite = await getLimiteCooperadoExibicaoParidadeLimites(
       gate.ctx.supabase,
@@ -76,6 +88,7 @@ export async function GET(request: Request) {
       updatedAt: limite?.updatedAt ?? null,
       hasPin,
       pinResetPending,
+      fichaPlanoBrutoCents,
     });
   } catch (e) {
     console.error("[GET /api/credit/account]", e);
