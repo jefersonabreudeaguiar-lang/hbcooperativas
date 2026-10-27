@@ -139,10 +139,12 @@
 
         function runLaunch(pageBuild) {
           var target = resolveTarget(pageBuild);
-          if (hasSession) {
+          var forcePurge = params.get("purge") === "1";
+          /** WebAPK: purge+navigate quebra com “This page couldn’t load”. Purge só em ?purge=1 (rescue). */
+          if (!forcePurge) {
             window.setTimeout(function () {
               goWithRetry(pageBuild, target, 0);
-            }, 120);
+            }, hasSession ? 120 : 80);
             return;
           }
           purgeCaches()

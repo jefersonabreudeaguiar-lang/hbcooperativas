@@ -40,6 +40,20 @@ assert.deepEqual(
   { action: "launch", nextPath: "/dashboard" }
 );
 
+const launchHtml = readFileSync(new URL("../public/pwa-launch.html", import.meta.url), "utf8");
+assert.match(launchHtml, /forcePurge = params\.get\("purge"\) === "1"/, "pwa-launch só faz purge com ?purge=1");
+assert.match(launchHtml, /if \(!forcePurge\)/, "caminho rápido sem purge no ícone");
+
+const registerSw = readFileSync(
+  new URL("../src/lib/pwa/registerHbServiceWorker.ts", import.meta.url),
+  "utf8"
+);
+assert.match(
+  registerSw,
+  /PWA_SERVICE_WORKER_REGISTRATION_ENABLED[\s\S]*purgeLegacyHbServiceWorkers/,
+  "PWA desligado não apaga passthrough no paint"
+);
+
 assert.deepEqual(
   evaluatePwaStandaloneLaunchGuard({
     pageBuild: 349,

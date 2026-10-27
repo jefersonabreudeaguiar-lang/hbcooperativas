@@ -36,7 +36,8 @@ export function registerHbServiceWorker(): Promise<ServiceWorkerRegistration | n
     return Promise.resolve(null);
   }
   if (!PWA_SERVICE_WORKER_REGISTRATION_ENABLED) {
-    return purgeAllHbServiceWorkers().then(() => null);
+    /** Não apagar /sw.js passthrough no meio do paint — só legado ?build=. */
+    return purgeLegacyHbServiceWorkers().then(() => null);
   }
   const standalone =
     typeof window !== "undefined" &&
