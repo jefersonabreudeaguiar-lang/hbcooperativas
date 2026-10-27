@@ -10,6 +10,7 @@ import {
   somaEntregasPlanoCents,
 } from "@/lib/hb-credit/hbCreditFichaPlano";
 import {
+  resetContaCoopCooperadoCredit,
   resolveHbCreditPayCooperadoId,
   setManualValorBrutoCooperado,
   syncLimiteCooperadoFromCreditoBase,
@@ -198,8 +199,9 @@ export async function saveFichaPlanoCooperado(
     return { ok: false, error: manual.error };
   }
 
+  /** V2: só grava ficha + bruto na conta (aba Limites). Liberação = percentual na aba Limites. */
   let limiteWarning: string | undefined;
-  if (bruto > 0) {
+  if (!isV2HbOnlyServer() && bruto > 0) {
     const sync = await syncLimiteCooperadoFromCreditoBase(
       supabase,
       digits,
@@ -267,19 +269,32 @@ export async function archiveFichaPlanoEntregasCooperado(
   const saved = await saveFichaPlanoCooperado(supabase, cnpj, cleared, actorUserId);
   if (!saved.ok) return saved;
 
-  const digits = normalizeCnpj(cnpj);
-  const storageCooperadoId = saved.storageCooperadoId;
-  await setManualValorBrutoCooperado(supabase, digits, storageCooperadoId, null, actorUserId);
-  await syncLimiteCooperadoFromCreditoBase(
-    supabase,
-    digits,
-    storageCooperadoId,
-    0,
-    actorUserId,
-    { [storageCooperadoId]: 0 }
-  ).catch(() => {});
+  return { ok: true, plano: saved.plano, storageCooperadoId: saved.storageCooperadoId };
+}
 
-  return { ok: true, plano: saved.plano, storageCooperadoId };
+/**
+ * V2: responsável marcou pagamento do mês — arquiva ficha, zera bruto HB e reinicia crédito na nuvem.
+ */
+export async function closeHbV2FichaMesAposPagamentoResponsavel(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  actorUserId: string,
+  metadata?: Record<string, unknown>
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!isV2HbOnlyServer()) return { ok: true };
+  const archived = await archiveFichaPlanoEntregasCooperado(supabase, cnpj, cooperadoId, actorUserId);
+  if (!archived.ok) return archived;
+  const digits = normalizeCnpj(cnpj);
+  const storageId = archived.storageCooperadoId;
+  const manual = await setManualValorBrutoCooperado(supabase, digits, storageId, null, actorUserId);
+  if (!manual.ok) return { ok: false, error: manual.error };
+  const reset = await resetContaCoopCooperadoCredit(supabase, digits, storageId, actorUserId, {
+    motivo: "v2_pagamento_mes_responsavel",
+    ...metadata,
+  });
+  if (!reset.ok) return { ok: false, error: reset.error };
+  return { ok: true };
 }
 
 /** Após compra HB: incrementa entregas e cobra mensalidades vencidas (amount_used). */
@@ -385,16 +400,6 @@ export async function reconcileHbBrutoFromFichaPlano(
       targetManual,
       actorUserId
     );
-    if (manual.ok && bruto > 0) {
-      await syncLimiteCooperadoFromCreditoBase(
-        supabase,
-        digits,
-        storageCooperadoId,
-        bruto,
-        actorUserId,
-        { [storageCooperadoId]: bruto }
-      );
-    }
   }
 
   return { brutoFichaPlanoCents: bruto };

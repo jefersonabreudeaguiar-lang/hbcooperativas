@@ -195,10 +195,10 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
       notifyHbCreditAccountCacheUpdated();
       if (limiteWarning) {
         setLimiteAviso(limiteWarning);
-        setSuccess("Ficha salva na nuvem. Bruto e a receber do cooperado já foram atualizados.");
-      } else {
-        setSuccess("Ficha salva. Limite HB liberado e visível para o cooperado.");
       }
+      setSuccess(
+        "Ficha salva na nuvem. O bruto aparece em HB Créditos → Limites; libere o % quando quiser. Ao marcar o mês como pago, a ficha zera para o próximo ciclo."
+      );
       await reload({ preserveFeedback: true, background: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar.");

@@ -34,10 +34,8 @@ export function formatCentsBRL(cents: MoneyCents | number): string {
 
 /** Regra dos três valores: available = limit - used */
 export function computeAvailableCents(limitReleased: MoneyCents, amountUsed: MoneyCents): MoneyCents {
-  if (amountUsed > limitReleased) {
-    throw new Error("Valor usado não pode exceder limite liberado.");
-  }
-  return toMoneyCents(limitReleased - amountUsed);
+  const available = Math.max(0, limitReleased - amountUsed);
+  return toMoneyCents(available);
 }
 
 export function assertTresValores(limitReleased: MoneyCents, amountUsed: MoneyCents, available: MoneyCents): void {

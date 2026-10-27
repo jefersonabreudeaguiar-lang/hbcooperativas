@@ -20,6 +20,8 @@ import {
 import { recordPostPaymentHbSyncAudit } from "@/lib/security/platformSecurityEvents";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { markHbCreditLimitSynced } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
+import { isV2HbOnlyServer } from "@/lib/hb-credit/hbCreditV2LimiteBase";
+import { closeHbV2FichaMesAposPagamentoResponsavel } from "@/lib/supabase/hbCreditFichaPlanoStorage";
 
 export type PostPaymentHbLimitSyncStatus = "SYNCED" | "FAILED" | "DIVERGENT";
 
@@ -93,6 +95,36 @@ export async function syncHbLimitAfterCooperadoPayment(
       ...baseResult,
       errorCode: "INVALID_INPUT",
       errorMessage: "CNPJ ou cooperado inválido.",
+    };
+  }
+
+  if (isV2HbOnlyServer() && opts.liquidacaoConfirmadaPeloResponsavel) {
+    const closed = await closeHbV2FichaMesAposPagamentoResponsavel(
+      supabase,
+      digits,
+      cooperadoId,
+      opts.actorUserId,
+      { pagamentoId: opts.paymentId }
+    );
+    if (!closed.ok) {
+      return {
+        ...baseResult,
+        errorCode: "HB_V2_FICHA_CLOSE_FAILED",
+        errorMessage: closed.error,
+      };
+    }
+    const limiteAfter = await getLimiteCooperado(supabase, digits, cooperadoId, {
+      skipAmountUsedReconcile: true,
+      skipCycleHeal: true,
+      fastPreview: true,
+    });
+    return {
+      ...baseResult,
+      status: "SYNCED",
+      reconciliationStatus: "SKIPPED",
+      creditoBaseAfterCents: 0,
+      limiteAfterCents: limiteAfter?.limiteLiberadoCents ?? 0,
+      limiteExpectedCents: 0,
     };
   }
 
