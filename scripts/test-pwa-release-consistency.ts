@@ -65,8 +65,12 @@ assert.deepEqual(
   { action: "launch", nextPath: "/login?hb-pwa=349&next=%2Fdashboard" }
 );
 
+const guardInline = readFileSync(
+  new URL("../src/lib/pwa/pwaStandaloneLaunchGuardInline.ts", import.meta.url),
+  "utf8"
+);
+assert.match(guardInline, /pwa-launch\.html\?next=/);
 const boot = readFileSync(new URL("../src/lib/pwa/clientRelease.ts", import.meta.url), "utf8");
-assert.match(boot, /pwa-launch\.html\?next=/);
 assert.match(boot, /hbAlignUrl/);
 assert.match(boot, /hbEpisodeBlocked/);
 assert.match(boot, /hardAlign\("mixed_dpl"/);

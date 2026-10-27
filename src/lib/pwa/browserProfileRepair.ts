@@ -43,6 +43,8 @@ export async function repairBrowserProfileIfStale(
   if (typeof window === "undefined") return false;
   const standalone = window.matchMedia("(display-mode: standalone)").matches;
   if (standalone && !options?.includeStandalone) return false;
+  /** WebAPK: nunca hard-reload automático no login (GuestRoute marca reparo no ícone). */
+  if (standalone) return false;
   if (profileRepairCheckedRecently()) return false;
 
   const session = getSession();
@@ -81,6 +83,20 @@ export async function repairBrowserProfileIfStale(
   const neverSeen = !seenRaw && cloudBuild > 0;
 
   if (!htmlStale && !profileStale && !neverSeen) {
+    try {
+      localStorage.setItem(BUILD_SEEN_KEY, String(cloudBuild));
+    } catch {
+      /* ignore */
+    }
+    markProfileRepairChecked();
+    return false;
+  }
+
+  const standalonePwa =
+    typeof window !== "undefined" &&
+    (window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true);
+  if (standalonePwa && session?.role === "cooperado") {
     try {
       localStorage.setItem(BUILD_SEEN_KEY, String(cloudBuild));
     } catch {

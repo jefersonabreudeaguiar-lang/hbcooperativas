@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
 import { repairBrowserProfileIfStale } from "@/lib/pwa/browserProfileRepair";
+import { markPwaRepairSessionForBuild } from "@/lib/pwa/cooperadoPwaInstallPrepare";
 
 function isStandalonePwa(): boolean {
   if (typeof window === "undefined") return false;
@@ -36,15 +37,19 @@ export function GuestRoute({
       const onLoginWithPwaRepair =
         window.location.pathname === "/login" && params.has("hb-pwa");
       if (onLoginWithPwaRepair) {
+        if (isStandalonePwa()) {
+          markPwaRepairSessionForBuild();
+          const pathOnly = dest.split("?")[0];
+          if (window.location.pathname !== pathOnly) {
+            window.location.replace(dest);
+          }
+          return;
+        }
         void repairBrowserProfileIfStale({ includeStandalone: true }).then((reloaded) => {
           if (reloaded) return;
           const pathOnly = dest.split("?")[0];
           if (window.location.pathname === pathOnly) return;
-          if (isStandalonePwa()) {
-            window.location.replace(dest);
-          } else {
-            router.replace(dest);
-          }
+          router.replace(dest);
         });
         return;
       }

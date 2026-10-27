@@ -1,13 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
-import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
-import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
-import { registerHbServiceWorker } from "@/lib/pwa/registerHbServiceWorker";
 
 /**
- * PWA instalado: substitui SW legado por /sw.js de passthrough (navigate → rede).
- * Atualização de versão fica no ClientReleaseShieldHost.
+ * PWA instalado: registro de SW ficou só no script inline do layout (browser).
+ * No WebAPK, registrar aqui competia com o head e causava "couldn't load" (cac23f4d).
  */
 export function PwaSilentServiceWorker() {
   useEffect(() => {
@@ -15,17 +12,7 @@ export function PwaSilentServiceWorker() {
     const standalone =
       window.matchMedia("(display-mode: standalone)").matches ||
       (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
-    if (!standalone) return;
-
-    const purgeLegacySw = () => {
-      void registerHbServiceWorker();
-    };
-
-    if (isCooperadoPwaMessengerMode()) {
-      scheduleCooperadoPostInteractiveTask(purgeLegacySw);
-    } else {
-      purgeLegacySw();
-    }
+    if (standalone) return;
   }, []);
 
   return null;

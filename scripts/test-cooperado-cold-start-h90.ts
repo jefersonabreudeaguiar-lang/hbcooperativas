@@ -129,8 +129,8 @@ assert(
 const silentSw = read("src/components/pwa/PwaSilentServiceWorker.tsx");
 const registerSw = read("src/lib/pwa/registerHbServiceWorker.ts");
 assert(
-  silentSw.includes("registerHbServiceWorker") && !silentSw.includes("Atualizar"),
-  "PWA sem registro ativo de SW no cold start"
+  silentSw.includes("standalone") && !silentSw.includes("registerHbServiceWorker"),
+  "PWA ícone sem registro SW no React (cac23f4d)"
 );
 assert(
   registerSw.includes("PWA_SERVICE_WORKER_REGISTRATION_ENABLED") &&

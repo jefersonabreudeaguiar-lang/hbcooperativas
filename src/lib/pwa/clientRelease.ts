@@ -644,19 +644,7 @@ export const PWA_STANDALONE_GUARD_DEDUP_MS = 12_000;
 export const PWA_STANDALONE_GUARD_BURST_MAX = 3;
 export const PWA_STANDALONE_GUARD_BURST_WINDOW_MS = 120_000;
 
-/**
- * Ícone instalado (WebAPK): build antigo → launch ou reparo silencioso (cooperado).
- */
-export function buildInlinePwaStandaloneLaunchGuardScript(): string {
-  const repairKey = PWA_REPAIR_SESSION_KEY;
-  const repairVer = PWA_REPAIR_SESSION_VERSION;
-  const buildSeenKey = BUILD_SEEN_KEY;
-  const appBuild = APP_BUILD_VERSION;
-  const repairLocalKey = "hb-coop-pwa-repair-done-build";
-  const directKey = PWA_DIRECT_ENTRY_SESSION_KEY;
-  const silent = buildInlineCooperadoPwaSilentRepairBlock();
-  return `(function(){try{${silent}var standalone=window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;if(!standalone)return;try{if(sessionStorage.getItem("${directKey}")==="1")return;}catch(e){}var path=location.pathname||"";if(path.indexOf("pwa-rescue")>=0||path.indexOf("pwa-launch")>=0||path.indexOf("pwa-diag")>=0)return;var repairKey="${repairKey}";var repairVer="${repairVer}";var repairLocalKey="${repairLocalKey}";var buildSeenKey="${buildSeenKey}";var pageBuild=parseInt(document.documentElement.getAttribute("data-app-build")||"0",10)||${appBuild};function repairMarkOk(v){if(!v)return false;var s=String(v);if(s===repairVer||s===String(pageBuild))return true;var n=parseInt(s,10);return n>0&&n>=pageBuild-1;}var seen=0;try{seen=parseInt(localStorage.getItem(buildSeenKey)||"0",10);}catch(e){}var repairLocal=false;var repairSession=false;try{repairLocal=repairMarkOk(localStorage.getItem(repairLocalKey));}catch(e){}try{repairSession=repairMarkOk(sessionStorage.getItem(repairKey));}catch(e){}var repairOk=repairLocal||repairSession;var buildOk=!seen||seen>=pageBuild-1;var veryStale=seen>0&&seen<pageBuild-1;var loginNext="/login?hb-pwa="+pageBuild;var nextPath=path+location.search;if(!nextPath||nextPath==="/")nextPath=loginNext;if(repairOk&&buildOk)return;if(path.indexOf("/login")>=0&&buildOk)return;if((path.indexOf("/login")>=0||path.indexOf("/dashboard")>=0)&&repairOk)return;if(!buildOk||veryStale){hbCoopPwaStaleRepairOrLaunch(pageBuild,loginNext);return;}if(path.indexOf("/login")>=0||path.indexOf("/dashboard")>=0)return;location.replace("/pwa-launch.html?next="+encodeURIComponent(nextPath));}catch(e){}})();`;
-}
+export { buildInlinePwaStandaloneLaunchGuardScript } from "@/lib/pwa/pwaStandaloneLaunchGuardInline";
 
 /** 1º paint: no atalho remove todo SW legado; registra /sw.js passthrough. */
 export function buildInlineServiceWorkerMigrationScript(): string {
