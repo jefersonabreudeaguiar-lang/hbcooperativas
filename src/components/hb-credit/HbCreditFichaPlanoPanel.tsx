@@ -53,6 +53,10 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [hbCredito, setHbCredito] = useState<{
+    valorLiberadoCents: number;
+    liberacaoPercent: number | null;
+  } | null>(null);
   const planoLiveRef = useRef(plano);
   planoLiveRef.current = plano;
 
@@ -69,9 +73,10 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
     setLoading(true);
     setError("");
     try {
-      const p = await fetchHbCreditFichaPlano(cnpj, cooperadoId);
-      planoLiveRef.current = p;
-      setPlano(p);
+      const loaded = await fetchHbCreditFichaPlano(cnpj, cooperadoId);
+      planoLiveRef.current = loaded.plano;
+      setPlano(loaded.plano);
+      setHbCredito(loaded.hbCredito);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar ficha HB.");
     } finally {
@@ -231,12 +236,34 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
             )}
           </div>
         </div>
-        <div className="mt-4 rounded-lg bg-green-50 border border-green-200 p-4">
-          <p className="text-sm text-green-800">Bruto da ficha HB (base do limite liberado)</p>
-          <p className="text-2xl font-bold text-green-900">
-            R$ {brutoReais.toFixed(2).replace(".", ",")} <span className="text-sm font-normal">({formatCentsBRL(brutoCents)})</span>
-          </p>
-          <p className="text-xs text-green-700 mt-1">
+        <div className="mt-4 rounded-lg bg-green-50 border border-green-200 p-4 space-y-3">
+          <div>
+            <p className="text-sm text-green-800">Bruto da ficha HB</p>
+            <p className="text-2xl font-bold text-green-900">
+              R$ {brutoReais.toFixed(2).replace(".", ",")}{" "}
+              <span className="text-sm font-normal">({formatCentsBRL(brutoCents)})</span>
+            </p>
+          </div>
+          {brutoCents > 0 && hbCredito ? (
+            <div className="border-t border-green-200/80 pt-3">
+              <p className="text-sm text-green-800">Valor liberado (HB Créditos)</p>
+              {hbCredito.valorLiberadoCents > 0 && hbCredito.liberacaoPercent != null ? (
+                <>
+                  <p className="text-xl font-bold text-green-900 tabular-nums">
+                    {formatCentsBRL(hbCredito.valorLiberadoCents)}
+                  </p>
+                  <p className="text-xs text-green-700 mt-1">
+                    {hbCredito.liberacaoPercent}% do bruto da ficha — percentual definido em HB Créditos → Limites.
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-amber-800 mt-1">
+                  Ainda não há liberação: configure o percentual em HB Créditos → Limites (com bruto lançado).
+                </p>
+              )}
+            </div>
+          ) : null}
+          <p className="text-xs text-green-700">
             Entregas com crédito HB registradas no ciclo: {plano.entregasConsumidas ?? 0} de 5
           </p>
         </div>

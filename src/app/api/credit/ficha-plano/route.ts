@@ -4,6 +4,10 @@ import {
   saveFichaPlanoCooperado,
 } from "@/lib/supabase/hbCreditFichaPlanoStorage";
 import type { HbCreditFichaPlano } from "@/lib/hb-credit/hbCreditFichaPlano";
+import { brutoFichaPlanoCents } from "@/lib/hb-credit/hbCreditFichaPlano";
+import { getLimiteCooperadoExibicaoParidadeLimites } from "@/lib/supabase/contaCoopStorage";
+import { resolveHbV2FichaLimiteExibicao } from "@/lib/hb-credit/hbCreditV2CooperadoLimiteExibicao";
+import { isV2HbOnlyServer } from "@/lib/hb-credit/hbCreditV2LimiteBase";
 import {
   requireCreditApi,
   requireCreditCnpj,
@@ -37,7 +41,28 @@ export async function GET(request: Request) {
   }
 
   const plano = await getFichaPlanoCooperado(gate.ctx.supabase, cnpj, cooperadoId);
-  return NextResponse.json({ ok: true, plano });
+  const brutoCents = brutoFichaPlanoCents(plano);
+  let hbCredito: { valorLiberadoCents: number; liberacaoPercent: number | null } | null = null;
+  if (isV2HbOnlyServer()) {
+    const limite = await getLimiteCooperadoExibicaoParidadeLimites(
+      gate.ctx.supabase,
+      cnpj,
+      cooperadoId
+    );
+    if (limite) {
+      const capped = await resolveHbV2FichaLimiteExibicao(
+        gate.ctx.supabase,
+        cnpj,
+        cooperadoId,
+        limite,
+        brutoCents
+      );
+      hbCredito = capped.exibicao;
+    } else {
+      hbCredito = { valorLiberadoCents: 0, liberacaoPercent: null };
+    }
+  }
+  return NextResponse.json({ ok: true, plano, brutoCents, hbCredito });
 }
 
 export async function POST(request: Request) {

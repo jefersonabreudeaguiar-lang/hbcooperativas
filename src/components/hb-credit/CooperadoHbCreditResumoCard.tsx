@@ -44,6 +44,7 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
   }, [cnpj, user]);
   const [snap, setSnap] = useState<HbCreditAccountPersistido | null>(null);
   const [planoBrutoCents, setPlanoBrutoCents] = useState<number | null>(null);
+  const [hbV2ValorLiberadoCents, setHbV2ValorLiberadoCents] = useState<number | null>(null);
   const v2Hb = isV2HbOnlyClient();
 
   /** Push explícito — Link sozinho falha depois do replaceState das abas. */
@@ -94,8 +95,10 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
             const acc = await fetchCreditAccount(cnpjResolved, hbApiCooperadoId);
             const account = (acc.account as ContaCoopLimiteCooperado | null) ?? null;
             setPlanoBrutoCents(acc.fichaPlanoBrutoCents ?? account?.manualValorBrutoCents ?? null);
+            setHbV2ValorLiberadoCents(acc.hbV2ValorLiberadoCents ?? null);
           } catch {
             setPlanoBrutoCents(null);
+            setHbV2ValorLiberadoCents(null);
           }
         }
         return;
@@ -107,6 +110,7 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
         setPlanoBrutoCents(
           v2Hb ? (acc.fichaPlanoBrutoCents ?? account?.manualValorBrutoCents ?? null) : null
         );
+        setHbV2ValorLiberadoCents(v2Hb ? (acc.hbV2ValorLiberadoCents ?? null) : null);
         const payload: HbCreditAccountPersistido = {
           v: HB_CREDIT_ACCOUNT_STORAGE_VERSION,
           account,
@@ -149,6 +153,7 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
     if (v2Hb) {
       const v2 = hbCreditCooperadoInicioV2Totais(acc, {
         brutoFichaPlanoCents: planoBrutoCents,
+        valorLiberadoCents: hbV2ValorLiberadoCents,
       });
       if (!v2) return null;
       return {
@@ -167,7 +172,7 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
       brutoFicha: null as number | null,
       aReceber: null as number | null,
     };
-  }, [snap, v2Hb, planoBrutoCents]);
+  }, [snap, v2Hb, planoBrutoCents, hbV2ValorLiberadoCents]);
 
   if (!totals) {
     return (

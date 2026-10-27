@@ -227,12 +227,28 @@ export async function resetMercadoFinancialPin(cnpj: string, parceiroId: string)
   return data;
 }
 
-export async function fetchHbCreditFichaPlano(cnpj: string, cooperadoId: string) {
+export type HbCreditFichaPlanoLoad = {
+  plano: HbCreditFichaPlano;
+  brutoCents: number;
+  hbCredito: { valorLiberadoCents: number; liberacaoPercent: number | null } | null;
+};
+
+export async function fetchHbCreditFichaPlano(cnpj: string, cooperadoId: string): Promise<HbCreditFichaPlanoLoad> {
   const q = new URLSearchParams({ cnpj, cooperadoId });
   const res = await secureApiFetch(`/api/credit/ficha-plano?${q}`);
-  const data = await parseJson<{ ok?: boolean; error?: string; plano?: HbCreditFichaPlano }>(res);
+  const data = await parseJson<{
+    ok?: boolean;
+    error?: string;
+    plano?: HbCreditFichaPlano;
+    brutoCents?: number;
+    hbCredito?: { valorLiberadoCents: number; liberacaoPercent: number | null } | null;
+  }>(res);
   if (!res.ok || !data.ok || !data.plano) throw new Error(data.error ?? "Não foi possível carregar a ficha.");
-  return data.plano;
+  return {
+    plano: data.plano,
+    brutoCents: Math.max(0, Math.round(data.brutoCents ?? 0)),
+    hbCredito: data.hbCredito ?? null,
+  };
 }
 
 export async function saveHbCreditFichaPlano(cnpj: string, plano: HbCreditFichaPlano) {
@@ -296,6 +312,8 @@ export async function fetchCreditAccount(cnpj: string, cooperadoId: string) {
     pinResetPending?: boolean;
     /** V2: bruto entregas 1–5 − desconto (alinhado à ficha na nuvem). */
     fichaPlanoBrutoCents?: number | null;
+    hbV2ValorLiberadoCents?: number | null;
+    hbV2LiberacaoPercent?: number | null;
   }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar conta.");
   return data;

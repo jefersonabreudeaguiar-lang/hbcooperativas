@@ -35,4 +35,18 @@ const comPlano = hbCreditCooperadoInicioV2Totais(
 assert.equal(comPlano?.brutoFichaCents, 12_500);
 assert.equal(comPlano?.aReceberCents, 12_500);
 
+const semBruto = hbCreditCooperadoInicioV2Totais({
+  id: "a1",
+  cooperativaCnpj: "62351750000165",
+  cooperadoId: "c1",
+  manualValorBrutoCents: 0,
+  limiteLiberadoCents: 5_000,
+  valorUsadoCents: 0,
+  valorDisponivelCents: 5_000,
+  bloqueado: false,
+  updatedAt: "",
+});
+assert.equal(semBruto?.limiteLiberadoCents, 0);
+assert.equal(semBruto?.saldoMercadoCents, 0);
+
 console.log("ok: hb cooperado inicio v2 totais");

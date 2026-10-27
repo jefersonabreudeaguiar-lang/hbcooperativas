@@ -19,6 +19,8 @@ import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 import { resolveCreditAccountCooperadoIdForRequest } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 import { reconcileHbBrutoFromFichaPlano } from "@/lib/supabase/hbCreditFichaPlanoStorage";
 import { isV2HbOnlyServer } from "@/lib/hb-credit/hbCreditV2LimiteBase";
+import { resolveHbV2FichaLimiteExibicao } from "@/lib/hb-credit/hbCreditV2CooperadoLimiteExibicao";
+import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 
 export async function GET(request: Request) {
   const gate = await requireCreditApi(request);
@@ -76,19 +78,54 @@ export async function GET(request: Request) {
 
     const hasPin = await hasFinancialPin(gate.ctx.supabase, cnpj, cooperadoId);
 
-    return NextResponse.json({
-      ok: true,
-      account: limite ?? {
+    let accountOut: ContaCoopLimiteCooperado =
+      limite ?? {
+        id: "",
+        cooperativaCnpj: cnpj,
         cooperadoId,
         limiteLiberadoCents: 0,
         valorUsadoCents: 0,
         valorDisponivelCents: 0,
         bloqueado: false,
-      },
-      updatedAt: limite?.updatedAt ?? null,
+        updatedAt: new Date().toISOString(),
+      };
+
+    let hbV2ValorLiberadoCents: number | null = null;
+    let hbV2LiberacaoPercent: number | null = null;
+
+    if (isV2HbOnlyServer()) {
+      const brutoBase = Math.max(
+        0,
+        Math.round(
+          fichaPlanoBrutoCents ??
+            accountOut.manualValorBrutoCents ??
+            0
+        )
+      );
+      if (fichaPlanoBrutoCents == null && brutoBase > 0) {
+        fichaPlanoBrutoCents = brutoBase;
+      }
+      const capped = await resolveHbV2FichaLimiteExibicao(
+        gate.ctx.supabase,
+        cnpj,
+        cooperadoId,
+        accountOut,
+        brutoBase
+      );
+      accountOut = capped.limite;
+      hbV2ValorLiberadoCents = capped.exibicao.valorLiberadoCents;
+      hbV2LiberacaoPercent = capped.exibicao.liberacaoPercent;
+    }
+
+    return NextResponse.json({
+      ok: true,
+      account: accountOut,
+      updatedAt: accountOut.updatedAt ?? limite?.updatedAt ?? null,
       hasPin,
       pinResetPending,
       fichaPlanoBrutoCents,
+      hbV2ValorLiberadoCents,
+      hbV2LiberacaoPercent,
     });
   } catch (e) {
     console.error("[GET /api/credit/account]", e);

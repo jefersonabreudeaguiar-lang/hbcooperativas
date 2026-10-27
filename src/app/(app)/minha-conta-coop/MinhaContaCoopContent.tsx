@@ -127,6 +127,7 @@ function MinhaContaCoopContent() {
   const [isOffline, setIsOffline] = useState(false);
   const [accountRefreshing, setAccountRefreshing] = useState(false);
   const [planoBrutoCents, setPlanoBrutoCents] = useState<number | null>(null);
+  const [hbV2ValorLiberadoCents, setHbV2ValorLiberadoCents] = useState<number | null>(null);
   /** Aux syncs (ficha) só após o primeiro fetchCreditAccount — limite vem da nuvem + poll (aba Limites do responsável). */
   const [auxSyncEnabled, setAuxSyncEnabled] = useState(false);
   const auxEntrySignaledRef = useRef(false);
@@ -287,9 +288,13 @@ function MinhaContaCoopContent() {
         savedAt: new Date().toISOString(),
       });
       notifyHbCreditAccountCacheUpdated();
-      setPlanoBrutoCents(
-        v2HbOnly ? (acc.fichaPlanoBrutoCents ?? accObj?.manualValorBrutoCents ?? null) : null
-      );
+      if (v2HbOnly) {
+        setPlanoBrutoCents(acc.fichaPlanoBrutoCents ?? accObj?.manualValorBrutoCents ?? null);
+        setHbV2ValorLiberadoCents(acc.hbV2ValorLiberadoCents ?? null);
+      } else {
+        setPlanoBrutoCents(null);
+        setHbV2ValorLiberadoCents(null);
+      }
     } catch (e) {
       if (!background) {
         setError(e instanceof Error ? e.message : "Erro ao carregar conta.");
@@ -569,7 +574,10 @@ function MinhaContaCoopContent() {
 
   const v2HbTotais =
     account && v2HbOnly
-      ? hbCreditCooperadoInicioV2Totais(account, { brutoFichaPlanoCents: planoBrutoCents })
+      ? hbCreditCooperadoInicioV2Totais(account, {
+          brutoFichaPlanoCents: planoBrutoCents,
+          valorLiberadoCents: hbV2ValorLiberadoCents,
+        })
       : null;
 
   const saldoHb = account
@@ -689,10 +697,23 @@ function MinhaContaCoopContent() {
         {mostrarBlocoFichaHb && (
           <div className="relative mt-4 space-y-2.5 rounded-2xl border border-white/20 bg-white/10 px-3 py-2.5">
             {v2HbOnly && exibicaoFichaHb.brutoCents > 0 ? (
-              <div>
-                <p className="text-xs font-medium text-green-100">Bruto da ficha HB</p>
-                <p className="text-base font-bold tabular-nums">{formatCentsBRL(exibicaoFichaHb.brutoCents)}</p>
-                <p className="text-[11px] text-green-100/85">Mesmo valor lançado pelo responsável (entregas 1–5 − desconto).</p>
+              <div className="space-y-2">
+                <div>
+                  <p className="text-xs font-medium text-green-100">Bruto da ficha HB</p>
+                  <p className="text-base font-bold tabular-nums">{formatCentsBRL(exibicaoFichaHb.brutoCents)}</p>
+                  <p className="text-[11px] text-green-100/85">
+                    Mesmo valor lançado pelo responsável (entregas 1–5 − desconto).
+                  </p>
+                </div>
+                {v2HbTotais && v2HbTotais.limiteLiberadoCents > 0 ? (
+                  <div>
+                    <p className="text-xs font-medium text-green-100">Valor liberado (HB Créditos)</p>
+                    <p className="text-base font-bold tabular-nums">
+                      {formatCentsBRL(v2HbTotais.limiteLiberadoCents)}
+                    </p>
+                    <p className="text-[11px] text-green-100/85">Percentual aplicado sobre o bruto da ficha.</p>
+                  </div>
+                ) : null}
               </div>
             ) : null}
             {exibicaoFichaHb.aReceberCents > 0 ? (

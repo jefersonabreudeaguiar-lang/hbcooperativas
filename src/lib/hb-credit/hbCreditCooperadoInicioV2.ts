@@ -1,5 +1,4 @@
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
-import { resolveLimiteHbCooperadoEfetivo } from "@/modules/hb-credit/engine/creditBaseHbGuard";
 import { hbCreditEffectiveDisponivelCents } from "@/modules/hb-credit/engine/paymentAffordability";
 import { hbCreditValorAReceberReaisFromManualBruto } from "@/lib/hb-credit/hbCreditManualValorBruto";
 import { creditoBaseCentsV2FromLimite } from "@/lib/hb-credit/hbCreditV2LimiteBase";
@@ -15,6 +14,8 @@ export type HbCreditCooperadoInicioV2Totais = {
 export type HbCreditCooperadoInicioV2TotaisOpts = {
   /** Bruto calculado da ficha plano (entregas − desconto) — prioridade sobre manual na nuvem. */
   brutoFichaPlanoCents?: number | null;
+  /** Liberado já capado na API (% × bruto); omitir = usa conta (após cap no servidor). */
+  valorLiberadoCents?: number | null;
 };
 
 /** Fonte única do bruto V2: ficha plano quando informada; senão manual na conta HB. */
@@ -39,13 +40,21 @@ export function hbCreditCooperadoInicioV2Totais(
   const aReceberReais = hbCreditValorAReceberReaisFromManualBruto(brutoFichaCents, usadoCents);
   const aReceberCents = Math.round(aReceberReais * 100);
 
-  const eff = resolveLimiteHbCooperadoEfetivo(account, brutoFichaCents, 100, 100);
-  const limiteLiberadoCents = Math.max(0, eff.limiteLiberadoCents ?? 0);
-  const saldoMercadoCents = hbCreditEffectiveDisponivelCents(
-    limiteLiberadoCents,
-    brutoFichaCents > 0 ? brutoFichaCents : limiteLiberadoCents,
-    usadoCents
-  );
+  const limiteLiberadoCents =
+    brutoFichaCents > 0
+      ? Math.max(
+          0,
+          Math.round(
+            opts?.valorLiberadoCents != null
+              ? opts.valorLiberadoCents
+              : account.limiteLiberadoCents ?? 0
+          )
+        )
+      : 0;
+  const saldoMercadoCents =
+    brutoFichaCents > 0
+      ? hbCreditEffectiveDisponivelCents(limiteLiberadoCents, brutoFichaCents, usadoCents)
+      : 0;
 
   return {
     brutoFichaCents,
