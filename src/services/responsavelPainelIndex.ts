@@ -67,6 +67,7 @@ type GestaoLeituraCacheFootprint = {
 
 let pagarProjCache: (GestaoLeituraCacheFootprint & { data: AppData }) | null = null;
 let leituraFichaCache: (GestaoLeituraCacheFootprint & { data: AppData }) | null = null;
+let conferirDesktopLeituraCache: (GestaoLeituraCacheFootprint & { data: AppData }) | null = null;
 
 function gestaoLeituraPendenteCentsFootprint(data: AppData, coopId: string): number {
   let sum = 0;
@@ -130,6 +131,7 @@ function garantirCacheDoBuildAtual(): void {
   painelCache = null;
   pagarProjCache = null;
   leituraFichaCache = null;
+  conferirDesktopLeituraCache = null;
   relatorioAbertoCache = null;
   relatorioAbertoLatch = null;
   conferirLeituraLatchByKey.clear();
@@ -277,13 +279,13 @@ function appDataParaLeituraFichaEmAbertoResponsavel(data: AppData, coopId?: stri
   const leituraConferir = appDataParaConferirLeitura(data, coopId);
   const reparado = repararIntegridadePagamentosCooperativa(leituraConferir, { forcar: true });
   const precisaReconciliar =
-    !staffGestaoPerfilEhDesktop() ||
     !coopId ||
     gestaoLeituraPrecisaReconciliarFicha(reparado, coopId) ||
     gestaoLeituraPrecisaReconciliarFicha(data, coopId);
-  const comFicha = precisaReconciliar
-    ? reconciliarFichaFromNotasConferidas(reparado)
-    : reparado;
+  const comFicha =
+    coopId && (precisaReconciliar || staffGestaoPerfilEhDesktop())
+      ? reconciliarFichaFromNotasConferidas(reparado)
+      : reparado;
   const pipeline = completarFichaProjetadaComNota(
     alinharFichaComPagamentosCooperativa(comFicha)
   );
@@ -618,9 +620,17 @@ export function appDataParaConferirLeitura(data: AppData, coopId?: string): AppD
       }
     }
   }
-  // PC: sem merge/align a cada notify — leitura financeira alinha uma vez no pipeline de Pagar/Em aberto.
+  // PC: alinha PIX/ficha uma vez por revisão (cache) — paridade Conferir × Pagar × Início.
   if (staffGestaoPerfilEhDesktop()) {
-    return data;
+    const fp = gestaoLeituraCacheFootprint(data, key === "_" ? "" : key);
+    if (gestaoLeituraCacheHit(conferirDesktopLeituraCache, fp)) {
+      return conferirDesktopLeituraCache!.data;
+    }
+    const truth = getDataOperationalTruth();
+    const merged = escolherSnapshotMaisCompleto(truth, data);
+    const next = alinharFichaComPagamentosCooperativa(merged);
+    conferirDesktopLeituraCache = { ...fp, data: next };
+    return next;
   }
   const truth = getDataOperationalTruth();
   const merged = escolherSnapshotMaisCompleto(truth, data);
@@ -1131,6 +1141,7 @@ export function resetResponsavelPainelIndexCache(): void {
   painelCache = null;
   pagarProjCache = null;
   leituraFichaCache = null;
+  conferirDesktopLeituraCache = null;
   relatorioAbertoCache = null;
   relatorioAbertoLatch = null;
   conferirLeituraLatchByKey.clear();

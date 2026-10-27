@@ -8,7 +8,6 @@ import {
   countCooperadosLancamentosEmAbertoResponsavel,
   getRelatorioLancamentosEmAbertoResponsavel,
 } from "@/services/responsavelPainelIndex";
-import { staffGestaoPerfilEhDesktop } from "@/lib/staff/staffGestaoPerfilDesktop";
 import type { AppData } from "@/types";
 import type { LinhaPagarCooperadoEmAberto } from "@/services/relatorioService";
 
@@ -73,10 +72,7 @@ export function useConferirProjection(opts: {
     [coopId, cooperadoId, precisaLinhasEmAberto]
   );
   if (emAbertoRaw) lastAbertoRef.current = emAbertoRaw;
-  const emAberto =
-    emAbertoRaw ??
-    (staffGestaoPerfilEhDesktop() ? EMPTY_EM_ABERTO : lastAbertoRef.current) ??
-    EMPTY_EM_ABERTO;
+  const emAberto = emAbertoRaw ?? lastAbertoRef.current ?? EMPTY_EM_ABERTO;
 
   return {
     filaDetalhada,

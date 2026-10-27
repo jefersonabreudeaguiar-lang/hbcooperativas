@@ -100,7 +100,7 @@ export function computeAdminStatsPure(
   const valoresAPagar = opts?.skipValoresAPagar
     ? 0
     : cooperativaId
-      ? totalValoresAPagarGestaoUnificado(d, cooperativaId)
+      ? totalValoresAPagarGestaoUnificado(dataPagar, cooperativaId)
       : getTotalValoresAPagarGestaoCooperativa(dataPagar, cooperativaId);
 
   return {
