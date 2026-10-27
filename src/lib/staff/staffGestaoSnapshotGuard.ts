@@ -299,6 +299,27 @@ export function peekStaffGestaoLastGood(cnpjHint?: string): AppData | null {
   return lastGoodByCnpj.get(cnpj) ?? null;
 }
 
+/** Persist/LKG ilegível — libera F5 sem tela branca (Chrome com blob corrompido). */
+export function discardStaffGestaoLocalForCnpj(cnpj: string): void {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return;
+  lastGoodByCnpj.delete(digits);
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem(staffLkgSessionKey(digits));
+  } catch {
+    /* ignore */
+  }
+  try {
+    const { staffGestaoPersistKey } = require("@/lib/staff/staffGestaoPersistKey") as {
+      staffGestaoPersistKey: (c: string) => string;
+    };
+    localStorage.removeItem(staffGestaoPersistKey(digits));
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Somente testes. */
 export function resetStaffGestaoSnapshotGuardForTests(): void {
   lastGoodByCnpj.clear();

@@ -12,7 +12,7 @@ import {
 } from "@/lib/staff/staffOperacionalColdHydrate";
 
 /** Bump + teste `test-staff-gestao-perfil-desktop.ts` a cada mudança de comportamento PC. */
-export const STAFF_GESTAO_DESKTOP_PERFIL_VERSION = 11;
+export const STAFF_GESTAO_DESKTOP_PERFIL_VERSION = 12;
 
 export function staffGestaoPerfilEhDesktop(): boolean {
   if (typeof window === "undefined") return false;
