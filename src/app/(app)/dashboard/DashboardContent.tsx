@@ -763,6 +763,7 @@ function AdminDashboard() {
     if (!isAppDataWarm()) return gestaoUser;
     const data = getData();
     if (shouldRenderStaffPainelUi(gestaoUser, data)) return gestaoUser;
+    if (canAccessPainelResponsavelSession(gestaoUser, null)) return gestaoUser;
     return null;
   }, [
     gestaoUser?.id,

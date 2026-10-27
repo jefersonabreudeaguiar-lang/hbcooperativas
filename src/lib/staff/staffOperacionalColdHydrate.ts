@@ -6,8 +6,10 @@ import type { AppData } from "@/types";
 import type { SyncTierPlan84 } from "@/lib/performance/syncPlan84";
 
 const STAFF_OPERACIONAL_PULL_APLICADO_KEY = "hb-staff-operacional-pull-aplicado";
+const STAFF_GESTAO_ABERTURA_SYNC_KEY = "hb-staff-gestao-abertura-sync";
 
 let staffOperacionalPullAplicadoMem = false;
+let staffGestaoAberturaSyncMem = false;
 
 function staffOperacionalPullStorage(): Storage | null {
   if (typeof window === "undefined") return null;
@@ -40,13 +42,38 @@ export function staffOperacionalPullJaAplicado(): boolean {
   }
 }
 
+/** Uma abertura automática por sessão no PC (notas_delta ou financeiro_delta). */
+export function markStaffGestaoAberturaSyncConcluido(): void {
+  staffGestaoAberturaSyncMem = true;
+  const storage = staffOperacionalPullStorage();
+  if (!storage) return;
+  try {
+    storage.setItem(STAFF_GESTAO_ABERTURA_SYNC_KEY, "1");
+  } catch {
+    /* quota */
+  }
+}
+
+export function staffGestaoAberturaSyncJaConcluido(): boolean {
+  if (staffGestaoAberturaSyncMem) return true;
+  const storage = staffOperacionalPullStorage();
+  if (!storage) return false;
+  try {
+    return storage.getItem(STAFF_GESTAO_ABERTURA_SYNC_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 /** Somente testes. */
 export function resetStaffOperacionalColdHydrateForTests(): void {
   staffOperacionalPullAplicadoMem = false;
+  staffGestaoAberturaSyncMem = false;
   const storage = staffOperacionalPullStorage();
   if (!storage) return;
   try {
     storage.removeItem(STAFF_OPERACIONAL_PULL_APLICADO_KEY);
+    storage.removeItem(STAFF_GESTAO_ABERTURA_SYNC_KEY);
   } catch {
     /* ignore */
   }

@@ -28,6 +28,11 @@ export function lerStaffDocumentoPageBuild(): number {
 export function staffAbaDeveRecarregarDocumento(): boolean {
   if (typeof window === "undefined") return false;
   if (!isStaffSessionActiveInStorage()) return false;
+  try {
+    if (window.location.search.includes("_hbStaffAba=")) return false;
+  } catch {
+    /* ignore */
+  }
   let jaTentou = false;
   try {
     jaTentou = sessionStorage.getItem(STAFF_PAINEL_RECARREGAR_ABA_SESSION_KEY) === String(APP_BUILD_VERSION);

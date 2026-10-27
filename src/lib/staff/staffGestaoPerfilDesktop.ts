@@ -5,10 +5,13 @@
 import type { AppData } from "@/types";
 import type { SyncRunOptions } from "@/services/syncRequest";
 import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewportCore";
-import { staffPrecisaHydrateOperacionalPull } from "@/lib/staff/staffOperacionalColdHydrate";
+import {
+  staffGestaoAberturaSyncJaConcluido,
+  staffPrecisaHydrateOperacionalPull,
+} from "@/lib/staff/staffOperacionalColdHydrate";
 
 /** Bump + teste `test-staff-gestao-perfil-desktop.ts` a cada mudança de comportamento PC. */
-export const STAFF_GESTAO_DESKTOP_PERFIL_VERSION = 9;
+export const STAFF_GESTAO_DESKTOP_PERFIL_VERSION = 10;
 
 export function staffGestaoPerfilEhDesktop(): boolean {
   if (typeof window === "undefined") return false;
@@ -26,6 +29,7 @@ export function staffGestaoPerfilAberturaSyncPermitidoForViewport(
   coopId?: string
 ): boolean {
   if (!desktop) return true;
+  if (!staffGestaoAberturaSyncJaConcluido()) return true;
   return staffPrecisaHydrateOperacionalPull(data, coopId);
 }
 

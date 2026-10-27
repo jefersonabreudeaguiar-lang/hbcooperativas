@@ -154,6 +154,7 @@ import {
   staffGestaoSyncBackgroundPermitido,
 } from "@/lib/staff/staffGestaoModoDesktop";
 import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
+import { markStaffGestaoAberturaSyncConcluido } from "@/lib/staff/staffOperacionalColdHydrate";
 import {
   isStaffFilaNotasLivePollEnabled,
   resolveStaffFilaBackgroundCatchupMs,
@@ -931,6 +932,14 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       );
 
       completed = true;
+
+      if (
+        isStaffGestao &&
+        opts?.userInitiated !== true &&
+        opts?.eventDriven !== true
+      ) {
+        markStaffGestaoAberturaSyncConcluido();
+      }
 
       if (!cooperadoLogado) {
         const align = await ensureOperacionalAlinhadoComNuvem(cnpj, currentCoopId);

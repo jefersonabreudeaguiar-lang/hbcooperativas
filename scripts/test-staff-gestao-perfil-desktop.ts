@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { emptyInitialData } from "../src/mock/data.ts";
+import { markStaffGestaoAberturaSyncConcluido } from "../src/lib/staff/staffOperacionalColdHydrate.ts";
 import {
   STAFF_GESTAO_DESKTOP_PERFIL_VERSION,
   staffGestaoPerfilAberturaSyncPermitidoForViewport,
@@ -15,12 +16,14 @@ import {
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.equal(STAFF_GESTAO_DESKTOP_PERFIL_VERSION, 9);
+assert.equal(STAFF_GESTAO_DESKTOP_PERFIL_VERSION, 10);
 assert.equal(staffGestaoPerfilAberturaSyncPermitidoForViewport(true, emptyInitialData), true);
 const comPixDesktop = {
   ...emptyInitialData,
   pagamentosCooperado: [{ id: "p1", cooperativaId: "coop1", status: "confirmado" } as never],
 };
+assert.equal(staffGestaoPerfilAberturaSyncPermitidoForViewport(true, comPixDesktop), true);
+markStaffGestaoAberturaSyncConcluido();
 assert.equal(staffGestaoPerfilAberturaSyncPermitidoForViewport(true, comPixDesktop), false);
 assert.ok(read("src/lib/performance/cooperadoColdStart.ts").includes("preloadAppData({ eager: true })"));
 assert.ok(read("src/lib/responsavel/responsavelGestaoTotais.ts").includes("getRelatorioLancamentosEmAbertoResponsavel"));

@@ -30,7 +30,12 @@ export function staffGestaoAppDataParaPainel(coopId?: string): AppData | null {
   const base = escolherStaffGestaoSnapshotBase(coopId);
   if (!base) return null;
   if (!coopId) return base;
-  return appDataParaPagarCooperadosResponsavel(base, coopId);
+  try {
+    return appDataParaPagarCooperadosResponsavel(base, coopId);
+  } catch (err) {
+    console.warn("[staffGestaoAppDataParaPainel] projeção Pagar falhou — usa snapshot base", err);
+    return base;
+  }
 }
 
 /** Revisão para stats do Início — lastro no 1º quadro antes do persist. */
