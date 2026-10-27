@@ -51,7 +51,7 @@ import { refreshHbCreditLimitesStaff } from "@/lib/hb-credit/hbCreditLimitesRefr
 import { notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import { mensagemAvisoBaseAuthoritativeLimites, mensagemErroListaLimitesStaff } from "@/lib/hb-credit/hbCreditLimitesStaffMessages";
 import { isV2HbOnlyClient } from "@/lib/product/v2HbOnly";
-import { hbCreditValorAReceberReaisFromManualBruto } from "@/lib/hb-credit/hbCreditManualValorBruto";
+import { hbCreditCooperadoInicioV2Totais } from "@/lib/hb-credit/hbCreditCooperadoInicioV2";
 import { ensureHbCreditLabLiberacaoPadrao } from "@/lib/hb-credit/ensureHbCreditLabLiberacaoPadrao";
 import {
   HB_CREDIT_LAB_LIBERACAO_PERCENT_DEFAULT,
@@ -1579,16 +1579,14 @@ function ContaCoopContent() {
                 <tbody>
                   {limitesLinhasRender.map((l) => {
                     const baseFichaCents = creditosBaseColetivo[l.cooperadoId] ?? 0;
-                    const baseCents = isV2HbOnlyClient()
-                      ? Math.max(0, Math.round(Number(l.manualValorBrutoCents) || 0))
-                      : baseFichaCents;
+                    const paridadeV2 = isV2HbOnlyClient()
+                      ? hbCreditCooperadoInicioV2Totais(l, {
+                          brutoFichaPlanoCents: l.manualValorBrutoCents,
+                        })
+                      : null;
+                    const baseCents = paridadeV2?.brutoFichaCents ?? baseFichaCents;
                     const exib = valoresLimiteExibidos(l, baseCents);
-                    const aReceberV2 = isV2HbOnlyClient()
-                      ? hbCreditValorAReceberReaisFromManualBruto(
-                          l.manualValorBrutoCents,
-                          l.valorUsadoCents
-                        )
-                      : 0;
+                    const aReceberV2Cents = paridadeV2?.aReceberCents ?? 0;
                     return (
                     <tr key={l.cooperadoId} className="border-t">
                       <td className="p-3">
@@ -1620,7 +1618,7 @@ function ContaCoopContent() {
                       </td>
                       {isV2HbOnlyClient() ? (
                         <td className="p-3 font-medium text-green-800">
-                          {aReceberV2 > 0 ? `R$ ${aReceberV2.toFixed(2).replace(".", ",")}` : "—"}
+                          {aReceberV2Cents > 0 ? formatCentsBRL(aReceberV2Cents) : "—"}
                         </td>
                       ) : null}
                       <td className="p-3">{formatCentsBRL(exib.liberado)}</td>

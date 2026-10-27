@@ -30,6 +30,7 @@ import {
 import { notifyHbFichaPlanoUpdated } from "@/lib/hb-credit/hbCreditFichaPlanoEvents";
 import { generateId } from "@/services/dataStore";
 import { formatDate } from "@/utils/format";
+import type { HbCreditCooperadoInicioV2Totais } from "@/lib/hb-credit/hbCreditCooperadoInicioV2";
 
 type Mode = "edit" | "readonly";
 
@@ -64,6 +65,7 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
     valorLiberadoCents: number;
     liberacaoPercent: number | null;
   } | null>(null);
+  const [paridadeV2, setParidadeV2] = useState<HbCreditCooperadoInicioV2Totais | null>(null);
   const planoLiveRef = useRef(plano);
   planoLiveRef.current = plano;
 
@@ -87,6 +89,7 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
         planoLiveRef.current = loaded.plano;
         setPlano(loaded.plano);
         setHbCredito(loaded.hbCredito);
+        setParidadeV2(loaded.paridadeV2);
         setArchivedCyclesCount(loaded.archivedCyclesCount);
       } catch (e) {
         if (!opts?.preserveFeedback) {
@@ -305,16 +308,27 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
               <span className="text-sm font-normal">({formatCentsBRL(brutoCents)})</span>
             </p>
           </div>
-          {brutoCents > 0 && hbCredito ? (
+          {paridadeV2 && paridadeV2.aReceberCents > 0 ? (
+            <div className="border-t border-green-200/80 pt-3">
+              <p className="text-sm text-green-800">A receber (ficha HB) — igual ao cooperado</p>
+              <p className="text-xl font-bold text-green-900 tabular-nums">
+                {formatCentsBRL(paridadeV2.aReceberCents)}
+              </p>
+              <p className="text-xs text-green-700 mt-1">Bruto da ficha − crédito HB já usado no mercado.</p>
+            </div>
+          ) : null}
+          {brutoCents > 0 && (paridadeV2 || hbCredito) ? (
             <div className="border-t border-green-200/80 pt-3">
               <p className="text-sm text-green-800">Valor liberado (HB Créditos)</p>
-              {hbCredito.valorLiberadoCents > 0 && hbCredito.liberacaoPercent != null ? (
+              {(paridadeV2?.limiteLiberadoCents ?? hbCredito?.valorLiberadoCents ?? 0) > 0 ? (
                 <>
                   <p className="text-xl font-bold text-green-900 tabular-nums">
-                    {formatCentsBRL(hbCredito.valorLiberadoCents)}
+                    {formatCentsBRL(paridadeV2?.limiteLiberadoCents ?? hbCredito?.valorLiberadoCents ?? 0)}
                   </p>
                   <p className="text-xs text-green-700 mt-1">
-                    {hbCredito.liberacaoPercent}% do bruto da ficha — percentual definido em HB Créditos → Limites.
+                    {hbCredito?.liberacaoPercent != null
+                      ? `${hbCredito.liberacaoPercent}% do bruto — definido em HB Créditos → Limites.`
+                      : "Percentual em HB Créditos → Limites."}
                   </p>
                 </>
               ) : (

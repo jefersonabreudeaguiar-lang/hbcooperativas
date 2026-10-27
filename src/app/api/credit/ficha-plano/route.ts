@@ -8,6 +8,7 @@ import type { HbCreditFichaPlano } from "@/lib/hb-credit/hbCreditFichaPlano";
 import { brutoFichaPlanoCents } from "@/lib/hb-credit/hbCreditFichaPlano";
 import { getLimiteCooperadoExibicaoParidadeLimites } from "@/lib/supabase/contaCoopStorage";
 import { resolveHbV2FichaLimiteExibicao } from "@/lib/hb-credit/hbCreditV2CooperadoLimiteExibicao";
+import { hbCreditCooperadoInicioV2Totais } from "@/lib/hb-credit/hbCreditCooperadoInicioV2";
 import { isV2HbOnlyServer } from "@/lib/hb-credit/hbCreditV2LimiteBase";
 import {
   requireCreditApi,
@@ -54,14 +55,16 @@ export async function GET(request: Request) {
     const brutoCents = brutoFichaPlanoCents(plano);
     const accountCooperadoId = plano.cooperadoId || cooperadoId;
     let hbCredito: { valorLiberadoCents: number; liberacaoPercent: number | null } | null = null;
-    /** Responsável lançando ficha: só plano na nuvem — limite HB vem da aba Limites (abertura mais rápida). */
-    if (isV2HbOnlyServer() && forCooperadoView) {
+    let paridadeV2: ReturnType<typeof hbCreditCooperadoInicioV2Totais> = null;
+
+    if (isV2HbOnlyServer()) {
       const limite = await getLimiteCooperadoExibicaoParidadeLimites(
         gate.ctx.supabase,
         cnpj,
         accountCooperadoId
       );
-      if (limite) {
+      let valorLiberadoCapado: number | null = null;
+      if (limite && brutoCents > 0 && forCooperadoView) {
         const capped = await resolveHbV2FichaLimiteExibicao(
           gate.ctx.supabase,
           cnpj,
@@ -69,12 +72,27 @@ export async function GET(request: Request) {
           limite,
           brutoCents
         );
+        valorLiberadoCapado = capped.exibicao.valorLiberadoCents;
         hbCredito = capped.exibicao;
-      } else {
+      } else if (forCooperadoView) {
         hbCredito = { valorLiberadoCents: 0, liberacaoPercent: null };
       }
+      if (limite) {
+        paridadeV2 = hbCreditCooperadoInicioV2Totais(limite, {
+          brutoFichaPlanoCents: brutoCents,
+          valorLiberadoCents: forCooperadoView ? valorLiberadoCapado : null,
+        });
+      }
     }
-    return NextResponse.json({ ok: true, plano, brutoCents, hbCredito, archivedCyclesCount });
+
+    return NextResponse.json({
+      ok: true,
+      plano,
+      brutoCents,
+      hbCredito,
+      paridadeV2,
+      archivedCyclesCount,
+    });
   } catch (e) {
     console.error("[GET /api/credit/ficha-plano]", e);
     const message = e instanceof Error ? e.message : "Erro ao carregar ficha HB.";

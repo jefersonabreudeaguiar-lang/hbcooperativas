@@ -26,6 +26,7 @@ import { getData } from "@/services/dataStore";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { isCooperadoTransferIntentId } from "@/config/cooperadoTransferenciaCredito";
 import type { HbCreditFichaPlano } from "@/lib/hb-credit/hbCreditFichaPlano";
+import type { HbCreditCooperadoInicioV2Totais } from "@/lib/hb-credit/hbCreditCooperadoInicioV2";
 
 function mensagemCorpoNaoJson(res: Response, raw: string): string {
   const trimmed = raw.trim();
@@ -231,6 +232,7 @@ export type HbCreditFichaPlanoLoad = {
   plano: HbCreditFichaPlano;
   brutoCents: number;
   hbCredito: { valorLiberadoCents: number; liberacaoPercent: number | null } | null;
+  paridadeV2: HbCreditCooperadoInicioV2Totais | null;
   archivedCyclesCount: number;
 };
 
@@ -243,6 +245,7 @@ export async function fetchHbCreditFichaPlano(cnpj: string, cooperadoId: string)
     plano?: HbCreditFichaPlano;
     brutoCents?: number;
     hbCredito?: { valorLiberadoCents: number; liberacaoPercent: number | null } | null;
+    paridadeV2?: HbCreditCooperadoInicioV2Totais | null;
     archivedCyclesCount?: number;
   }>(res);
   if (!res.ok || !data.ok || !data.plano) throw new Error(data.error ?? "Não foi possível carregar a ficha.");
@@ -250,6 +253,7 @@ export async function fetchHbCreditFichaPlano(cnpj: string, cooperadoId: string)
     plano: data.plano,
     brutoCents: Math.max(0, Math.round(data.brutoCents ?? 0)),
     hbCredito: data.hbCredito ?? null,
+    paridadeV2: data.paridadeV2 ?? null,
     archivedCyclesCount: Math.max(0, Math.round(data.archivedCyclesCount ?? 0)),
   };
 }

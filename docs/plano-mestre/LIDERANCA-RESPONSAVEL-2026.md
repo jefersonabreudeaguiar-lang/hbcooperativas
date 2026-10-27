@@ -1,7 +1,9 @@
 # Liderança do app responsável (gestão) — plano de lançamento
 
+**Marco zero (norte do programa):** [`MARCO-ZERO-PROGRAMA-2026.md`](./MARCO-ZERO-PROGRAMA-2026.md)
+
 **Responsável técnico:** agente · **Produção:** https://hbcooperativas.vercel.app  
-**Build live (26/10/2026):** **721** (`445d956e` hidratação/sync; `50333e9d` anti-loop; `716+` paridade R$)  
+**Build live (27/10/2026):** **725** (gestão 724 hidratação; 725 PWA cooperado entrada)  
 **Papel do operador (você):** validar **SIM/NÃO** por aba no celular **e** no desktop — mesmo modelo do cooperado.
 
 **Regra de ouro:** não mexer no fluxo **cooperado** enquanto estabilizamos a gestão; cada entrega = gate `responsavel:verify:lancamento` + `confirm:production:wait`.
@@ -104,7 +106,7 @@ Checklist humano: `docs/plano-mestre/FASE-R-RESPONSAVEL-CHECKLIST.md`.
 2. **Event-driven na nuvem** — responsável grava na nuvem; cooperado puxa por revisão (645+).
 3. **Staff nunca mistura tenants** — LKG + persist por CNPJ (lei `OPERACAO-HB-PLATAFORMA`).
 4. **Correção cirúrgica** — bump de contrato (`RESPONSAVEL_*_VERSION`) + teste; sem rollback gigante.
-5. **HB Crédito / mercado** — escopo **R6** separado após R5 **SIM** (não bloquear lançamento do núcleo).
+5. **HB Crédito V2** — escopo **R6** após R5 **SIM**; paridade responsável × cooperado: [`V2-HB-PARIDADE-RESPONSAVEL-COOPERADO.md`](./V2-HB-PARIDADE-RESPONSAVEL-COOPERADO.md).
 
 ---
 

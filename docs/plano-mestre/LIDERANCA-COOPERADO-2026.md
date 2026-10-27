@@ -1,5 +1,7 @@
 # Liderança do app cooperado — plano de trabalho
 
+**Marco zero (norte do programa):** [`MARCO-ZERO-PROGRAMA-2026.md`](./MARCO-ZERO-PROGRAMA-2026.md)
+
 **Responsável técnico:** agente (Cursor) + repositório `coopeagriplla-gestao`  
 **Papel do cooperado piloto (Jeferson):** testar primeiro no próprio celular; responder **SIM** ou **NÃO** nos portões — sem julgar “está bom” no meio do caminho. Só após **SIM** do piloto, a mesma mudança vale para todos os cooperados.  
 **Produção:** https://hbcooperativas.vercel.app — cada entrega: build `v{N}`, `confirm:production:wait`, changelog.  
@@ -88,7 +90,7 @@
 
 **Plano dedicado:** `docs/plano-mestre/LIDERANCA-RESPONSAVEL-2026.md` · gate `npm run responsavel:verify:lancamento`.
 
-Somente após Fase 4 cooperado **SIM**. HB Crédito / mercado = fase **R6** (após R5 responsável **SIM**).
+Somente após Fase 4 cooperado **SIM**. HB Crédito V2 = fase **R6** (após R5 responsável **SIM**) — [`V2-HB-PARIDADE-RESPONSAVEL-COOPERADO.md`](./V2-HB-PARIDADE-RESPONSAVEL-COOPERADO.md).
 
 ---
 
