@@ -85,7 +85,7 @@ export type CooperadoJefersonSyncGateOpts = {
 
 /**
  * Verdadeiro = bloquear sync/pull pesado automático.
- * Permite: Atualizar manual e janela `withCooperadoJefersonEntregaSyncPermitido`.
+ * Permite: auto-atualizar (2ª entrada) e janela `withCooperadoJefersonEntregaSyncPermitido`.
  */
 export function cooperadoJefersonBloqueiaSyncAutomatico(
   user: Omit<User, "password"> | null | undefined,

@@ -129,14 +129,6 @@ export function scheduleCooperadoJefersonAutoAtualizar(
   });
 }
 
-/** Toque manual no chip — mesmo caminho suave do automático. */
-export function scheduleCooperadoJefersonAtualizarManualSuave(
-  user: Omit<User, "password"> | null | undefined
-): void {
-  if (!user || !isCooperadoJefersonSomenteAtualizarPilot(user)) return;
-  scheduleCooperadoJefersonAutoAtualizar(user, { motivo: "manual" });
-}
-
 /** @internal testes */
 export function resetCooperadoJefersonDuplaEntradaForTests(userId?: string): void {
   if (typeof sessionStorage === "undefined") return;

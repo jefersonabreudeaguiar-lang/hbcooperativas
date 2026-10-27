@@ -15,7 +15,6 @@ import {
   isCooperadoJefersonRebuildInicioAtivo,
 } from "@/lib/cooperado/cooperadoJefersonRebuildPilot";
 import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
-import { scheduleCooperadoJefersonAtualizarManualSuave } from "@/lib/cooperado/cooperadoJefersonDuplaEntradaAutoAtualizar";
 import {
   COOPERADO_JEFERSON_REBUILD_INICIO_ATUALIZAR_EVENT,
   COOPERADO_JEFERSON_REBUILD_INICIO_DONE_EVENT,
@@ -186,6 +185,10 @@ export function CooperadoAtualizarButton({
   const rebuildInicioAtualizar =
     user && isCooperadoJefersonRebuildInicioAtivo(user) && pathname === "/dashboard";
   const rebuildLeveAtualizar = rebuildEntregasAtualizar || rebuildInicioAtualizar;
+  const jefersonSomenteAutomatico =
+    user &&
+    isCooperadoJefersonSomenteAtualizarPilot(user) &&
+    !rebuildLeveAtualizar;
 
   useEffect(() => {
     if (rebuildLeveAtualizar) return;
@@ -222,6 +225,10 @@ export function CooperadoAtualizarButton({
 
   const loveVisible = showLoveMessage && spinning;
 
+  if (jefersonSomenteAutomatico) {
+    return null;
+  }
+
   return (
     <>
     <button
@@ -236,10 +243,6 @@ export function CooperadoAtualizarButton({
         }
         if (rebuildInicioAtualizar) {
           window.dispatchEvent(new Event(COOPERADO_JEFERSON_REBUILD_INICIO_ATUALIZAR_EVENT));
-          return;
-        }
-        if (user && isCooperadoJefersonSomenteAtualizarPilot(user)) {
-          scheduleCooperadoJefersonAtualizarManualSuave(user);
           return;
         }
         void executarCooperadoAtualizarManual().then((ok) => {

@@ -11,6 +11,8 @@ import { fetchOfficialClientRelease } from "@/lib/pwa/fetchOfficialClientRelease
 import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
 import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { ackCooperadoPwaReleaseWhenCanonicalMatch } from "@/lib/cooperado/cooperadoMobileReleaseLocalAck";
+import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
+import { RefreshCw } from "lucide-react";
 
 /**
  * Versão do bundle no celular do cooperado + Atualizar sutil (snapshots A receber / Financeiro).
@@ -42,6 +44,7 @@ export function CooperadoMobileBuildBadge() {
   }, [user?.role, user?.id]);
 
   const bundleBehindCloud = cloudBuild != null && cloudBuild > APP_BUILD_VERSION;
+  const jefersonAuto = user && isCooperadoJefersonSomenteAtualizarPilot(user);
 
   return (
     <div className="flex items-center gap-0.5 shrink-0" role="group" aria-label="Versão e atualização">
@@ -53,7 +56,9 @@ export function CooperadoMobileBuildBadge() {
         }
         title={
           bundleBehindCloud
-            ? `Seu app: v${APP_BUILD_VERSION} · Produção: v${cloudBuild} — toque Atualizar`
+            ? jefersonAuto
+              ? `Seu app: v${APP_BUILD_VERSION} · Produção: v${cloudBuild} — atualiza ao reabrir o app`
+              : `Seu app: v${APP_BUILD_VERSION} · Produção: v${cloudBuild} — toque Atualizar`
             : cloudBuild != null
               ? `App v${APP_BUILD_VERSION} (nuvem v${cloudBuild})`
               : `Versão do app: ${APP_BUILD_VERSION}`
@@ -65,7 +70,11 @@ export function CooperadoMobileBuildBadge() {
       {degraded && (
         <span
           className="rounded-md bg-amber-400/95 px-1 py-0.5 text-[9px] font-semibold text-amber-950"
-          title="Sincronização em segundo plano — toque Atualizar"
+          title={
+            jefersonAuto
+              ? "Sincronização em segundo plano — aguarde a atualização automática"
+              : "Sincronização em segundo plano — toque Atualizar"
+          }
         >
           sync…
         </span>
@@ -73,12 +82,26 @@ export function CooperadoMobileBuildBadge() {
       {showStaleBadge && (
         <span
           className="max-w-[5.5rem] truncate rounded-md bg-amber-500/95 px-1 py-0.5 text-[9px] font-semibold leading-tight text-amber-950"
-          title="Há dados mais recentes na cooperativa — toque Atualizar ou aguarde a sincronização"
+          title={
+            jefersonAuto
+              ? "Há dados mais recentes — na 2ª entrada (após 30s) atualiza sozinho"
+              : "Há dados mais recentes na cooperativa — toque Atualizar ou aguarde a sincronização"
+          }
         >
           desatualizado
         </span>
       )}
-      <CooperadoAtualizarButton variant="header" showLoveMessage />
+      {jefersonAuto ? (
+        syncingForUi ? (
+          <RefreshCw
+            size={11}
+            className="shrink-0 animate-spin text-green-50"
+            aria-hidden
+          />
+        ) : null
+      ) : (
+        <CooperadoAtualizarButton variant="header" showLoveMessage />
+      )}
     </div>
   );
 }
