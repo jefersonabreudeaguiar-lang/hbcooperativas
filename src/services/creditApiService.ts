@@ -261,10 +261,15 @@ export async function saveHbCreditFichaPlano(cnpj: string, plano: HbCreditFichaP
     ok?: boolean;
     error?: string;
     plano?: HbCreditFichaPlano;
+    storageCooperadoId?: string;
     limiteWarning?: string | null;
   }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Não foi possível salvar a ficha.");
-  return { plano: data.plano ?? plano, limiteWarning: data.limiteWarning ?? undefined };
+  return {
+    plano: data.plano ?? plano,
+    storageCooperadoId: data.storageCooperadoId ?? plano.cooperadoId,
+    limiteWarning: data.limiteWarning ?? undefined,
+  };
 }
 
 export async function postManualValorBrutoCooperado(

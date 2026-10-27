@@ -90,6 +90,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     plano: saved.plano,
+    storageCooperadoId: saved.storageCooperadoId,
     limiteWarning: saved.limiteWarning ?? null,
   });
 }

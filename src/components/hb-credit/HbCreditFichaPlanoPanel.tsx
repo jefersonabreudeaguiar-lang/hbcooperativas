@@ -135,11 +135,16 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
     try {
       if (typeof document !== "undefined") {
         (document.activeElement as HTMLElement | null)?.blur?.();
-        await new Promise((r) => setTimeout(r, 0));
+        await new Promise<void>((r) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => r()));
+        });
       }
       const toSave = { ...planoLiveRef.current, cooperadoId };
-      const { limiteWarning } = await saveHbCreditFichaPlano(cnpj, toSave);
+      const { limiteWarning, storageCooperadoId } = await saveHbCreditFichaPlano(cnpj, toSave);
       notifyHbFichaPlanoUpdated(cooperadoId);
+      if (storageCooperadoId && storageCooperadoId !== cooperadoId) {
+        notifyHbFichaPlanoUpdated(storageCooperadoId);
+      }
       notifyHbCreditLimiteSynced({ immediate: true });
       notifyHbCreditAccountCacheUpdated();
       setSuccess(

@@ -37,7 +37,11 @@ export function HbCreditEntregaReaisInput({ cents, disabled, onCommit, placehold
         onCommit(parsed);
         setDraft(reaisDraftFromCents(parsed));
       }}
-      onChange={(e) => setDraft(e.target.value)}
+      onChange={(e) => {
+        const v = e.target.value;
+        setDraft(v);
+        onCommit(parseReaisToCentsInput(v));
+      }}
     />
   );
 }

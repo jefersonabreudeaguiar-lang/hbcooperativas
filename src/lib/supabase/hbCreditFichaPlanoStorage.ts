@@ -8,6 +8,7 @@ import {
   mensalidadesPendentesPlano,
 } from "@/lib/hb-credit/hbCreditFichaPlano";
 import {
+  resolveHbCreditPayCooperadoId,
   setManualValorBrutoCooperado,
   syncLimiteCooperadoFromCreditoBase,
 } from "@/lib/supabase/contaCoopStorage";
@@ -46,20 +47,47 @@ export function emptyFichaPlano(cooperadoId: string): HbCreditFichaPlano {
   return { cooperadoId, ...HB_FICHA_PLANO_EMPTY };
 }
 
+/** Mesmo ID da conta HB (titular) — ficha e “a receber” ficam no cooperado certo. */
+export async function resolveFichaPlanoStorageCooperadoId(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string
+): Promise<string> {
+  return resolveHbCreditPayCooperadoId(supabase, cnpj, cooperadoId);
+}
+
+async function fetchFichaPlanoRow(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string
+): Promise<{ row: Record<string, unknown> | null; storageCooperadoId: string }> {
+  const digits = normalizeCnpj(cnpj);
+  const storageCooperadoId = await resolveFichaPlanoStorageCooperadoId(supabase, cnpj, cooperadoId);
+  const candidateIds = [...new Set([storageCooperadoId, cooperadoId].filter(Boolean))];
+
+  for (const id of candidateIds) {
+    const { data } = await supabase
+      .from("hb_credit_cooperado_ficha_plano")
+      .select("*")
+      .eq("cooperative_cnpj", digits)
+      .eq("cooperado_id", id)
+      .maybeSingle();
+    if (data) {
+      return { row: data as Record<string, unknown>, storageCooperadoId };
+    }
+  }
+  return { row: null, storageCooperadoId };
+}
+
 export async function getFichaPlanoCooperado(
   supabase: SupabaseClient,
   cnpj: string,
   cooperadoId: string
 ): Promise<HbCreditFichaPlano> {
-  const digits = normalizeCnpj(cnpj);
-  const { data } = await supabase
-    .from("hb_credit_cooperado_ficha_plano")
-    .select("*")
-    .eq("cooperative_cnpj", digits)
-    .eq("cooperado_id", cooperadoId)
-    .maybeSingle();
-  if (!data) return emptyFichaPlano(cooperadoId);
-  return mapRow(data as Record<string, unknown>);
+  const { row, storageCooperadoId } = await fetchFichaPlanoRow(supabase, cnpj, cooperadoId);
+  if (!row) return emptyFichaPlano(storageCooperadoId);
+  const plano = mapRow(row);
+  return { ...plano, cooperadoId: storageCooperadoId };
 }
 
 export async function saveFichaPlanoCooperado(
@@ -68,14 +96,19 @@ export async function saveFichaPlanoCooperado(
   plano: HbCreditFichaPlano,
   actorUserId: string
 ): Promise<
-  | { ok: true; plano: HbCreditFichaPlano; limiteWarning?: string }
+  | { ok: true; plano: HbCreditFichaPlano; storageCooperadoId: string; limiteWarning?: string }
   | { ok: false; error: string }
 > {
   const digits = normalizeCnpj(cnpj);
+  const storageCooperadoId = await resolveFichaPlanoStorageCooperadoId(
+    supabase,
+    digits,
+    plano.cooperadoId
+  );
   const now = new Date().toISOString();
   const patch = {
     cooperative_cnpj: digits,
-    cooperado_id: plano.cooperadoId,
+    cooperado_id: storageCooperadoId,
     entrega_1_cents: Math.max(0, Math.round(plano.entrega1Cents)),
     entrega_2_cents: Math.max(0, Math.round(plano.entrega2Cents)),
     entrega_3_cents: Math.max(0, Math.round(plano.entrega3Cents)),
@@ -101,11 +134,19 @@ export async function saveFichaPlanoCooperado(
     return { ok: false, error: error.message ?? "Erro ao salvar ficha." };
   }
 
+  if (storageCooperadoId !== plano.cooperadoId) {
+    await supabase
+      .from("hb_credit_cooperado_ficha_plano")
+      .delete()
+      .eq("cooperative_cnpj", digits)
+      .eq("cooperado_id", plano.cooperadoId);
+  }
+
   const bruto = brutoFichaPlanoCents(plano);
   const manual = await setManualValorBrutoCooperado(
     supabase,
     digits,
-    plano.cooperadoId,
+    storageCooperadoId,
     bruto > 0 ? bruto : null,
     actorUserId
   );
@@ -118,10 +159,10 @@ export async function saveFichaPlanoCooperado(
     const sync = await syncLimiteCooperadoFromCreditoBase(
       supabase,
       digits,
-      plano.cooperadoId,
+      storageCooperadoId,
       bruto,
       actorUserId,
-      { [plano.cooperadoId]: bruto }
+      { [storageCooperadoId]: bruto }
     );
     if (!sync.ok) {
       limiteWarning =
@@ -132,7 +173,8 @@ export async function saveFichaPlanoCooperado(
 
   return {
     ok: true,
-    plano: { ...plano, updatedAt: now },
+    plano: { ...plano, cooperadoId: storageCooperadoId, updatedAt: now },
+    storageCooperadoId,
     limiteWarning,
   };
 }
@@ -173,14 +215,14 @@ export async function aplicarFichaPlanoAposUsoCreditoHb(
       updated_by: actorUserId,
     })
     .eq("cooperative_cnpj", digits)
-    .eq("cooperado_id", cooperadoId);
+    .eq("cooperado_id", plano.cooperadoId);
 
   if (extraCents > 0) {
     const { data: acc } = await supabase
       .from("hb_credit_accounts")
       .select("id, amount_used_cents")
       .eq("cooperative_cnpj", digits)
-      .eq("cooperado_id", cooperadoId)
+      .eq("cooperado_id", plano.cooperadoId)
       .maybeSingle();
     if (acc?.id) {
       const usado = Math.max(0, Math.round(Number(acc.amount_used_cents ?? 0)));
@@ -208,15 +250,14 @@ export async function reconcileHbBrutoFromFichaPlano(
 ): Promise<{ brutoFichaPlanoCents: number | null }> {
   if (!isV2HbOnlyServer()) return { brutoFichaPlanoCents: null };
   const digits = normalizeCnpj(cnpj);
-  const { data: fichaRow } = await supabase
-    .from("hb_credit_cooperado_ficha_plano")
-    .select("*")
-    .eq("cooperative_cnpj", digits)
-    .eq("cooperado_id", cooperadoId)
-    .maybeSingle();
+  const { row: fichaRow, storageCooperadoId } = await fetchFichaPlanoRow(
+    supabase,
+    digits,
+    cooperadoId
+  );
   if (!fichaRow) return { brutoFichaPlanoCents: null };
 
-  const plano = mapRow(fichaRow as Record<string, unknown>);
+  const plano = mapRow(fichaRow);
   const bruto = brutoFichaPlanoCents(plano);
   const targetManual = bruto > 0 ? bruto : null;
 
@@ -224,7 +265,7 @@ export async function reconcileHbBrutoFromFichaPlano(
     .from("hb_credit_accounts")
     .select("manual_valor_bruto_cents")
     .eq("cooperative_cnpj", digits)
-    .eq("cooperado_id", cooperadoId)
+    .eq("cooperado_id", storageCooperadoId)
     .maybeSingle();
 
   const atualRaw = acc?.manual_valor_bruto_cents;
@@ -237,7 +278,7 @@ export async function reconcileHbBrutoFromFichaPlano(
     const manual = await setManualValorBrutoCooperado(
       supabase,
       digits,
-      cooperadoId,
+      storageCooperadoId,
       targetManual,
       actorUserId
     );
@@ -245,10 +286,10 @@ export async function reconcileHbBrutoFromFichaPlano(
       await syncLimiteCooperadoFromCreditoBase(
         supabase,
         digits,
-        cooperadoId,
+        storageCooperadoId,
         bruto,
         actorUserId,
-        { [cooperadoId]: bruto }
+        { [storageCooperadoId]: bruto }
       );
     }
   }
