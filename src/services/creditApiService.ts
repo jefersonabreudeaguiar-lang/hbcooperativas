@@ -131,6 +131,7 @@ export async function fetchCreditLimites(
   limites: ContaCoopLimiteCooperado[];
   creditosBaseAuthoritativeCents?: Record<string, number>;
   authoritativeError?: AuthoritativeCreditBaseErrorPayload;
+  fichaPlanoBrutoCentsByCooperadoId?: Record<string, number>;
 }> {
   const res = await secureApiFetch(`/api/credit/limites?${buildCreditLimitesRequestQuery(cnpj, opts)}`);
   const data = await parseJson<{
@@ -139,6 +140,7 @@ export async function fetchCreditLimites(
     limites?: ContaCoopLimiteCooperado[];
     creditosBaseAuthoritativeCents?: Record<string, number>;
     authoritativeError?: AuthoritativeCreditBaseErrorPayload;
+    fichaPlanoBrutoCentsByCooperadoId?: Record<string, number>;
   }>(res);
   if (!res.ok || (data.ok === false && !Array.isArray(data.limites))) {
     throw new Error(data.error ?? "Erro ao carregar limites.");
@@ -147,6 +149,7 @@ export async function fetchCreditLimites(
     limites: data.limites ?? [],
     creditosBaseAuthoritativeCents: data.creditosBaseAuthoritativeCents,
     authoritativeError: data.authoritativeError,
+    fichaPlanoBrutoCentsByCooperadoId: data.fichaPlanoBrutoCentsByCooperadoId,
   };
 }
 

@@ -51,7 +51,10 @@ import { refreshHbCreditLimitesStaff } from "@/lib/hb-credit/hbCreditLimitesRefr
 import { notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import { mensagemAvisoBaseAuthoritativeLimites, mensagemErroListaLimitesStaff } from "@/lib/hb-credit/hbCreditLimitesStaffMessages";
 import { isV2HbOnlyClient } from "@/lib/product/v2HbOnly";
-import { hbCreditCooperadoInicioV2Totais } from "@/lib/hb-credit/hbCreditCooperadoInicioV2";
+import {
+  hbCreditCooperadoInicioV2Totais,
+  resolveBrutoFichaHbV2Cents,
+} from "@/lib/hb-credit/hbCreditCooperadoInicioV2";
 import { ensureHbCreditLabLiberacaoPadrao } from "@/lib/hb-credit/ensureHbCreditLabLiberacaoPadrao";
 import {
   HB_CREDIT_LAB_LIBERACAO_PERCENT_DEFAULT,
@@ -277,6 +280,7 @@ function ContaCoopContent() {
   const [success, setSuccess] = useState("");
   const [dashboard, setDashboard] = useState<ContaCoopDashboard | null>(null);
   const [limites, setLimites] = useState<ContaCoopLimiteCooperado[]>([]);
+  const [fichaPlanoBrutoByCooperado, setFichaPlanoBrutoByCooperado] = useState<Record<string, number>>({});
   const limitesRef = useRef(limites);
   limitesRef.current = limites;
   const [parceiros, setParceiros] = useState<ContaCoopParceiro[]>([]);
@@ -542,6 +546,7 @@ function ContaCoopContent() {
         limites: ContaCoopLimiteCooperado[];
         creditosBaseAuthoritativeCents?: Record<string, number>;
         authoritativeError?: AuthoritativeCreditBaseErrorPayload;
+        fichaPlanoBrutoCentsByCooperadoId?: Record<string, number>;
       },
       ids: string[]
     ) => {
@@ -550,6 +555,9 @@ function ContaCoopContent() {
       } else {
         setLimitesListaAviso("");
         applyCreditosBaseFromServer(full.creditosBaseAuthoritativeCents);
+      }
+      if (full.fichaPlanoBrutoCentsByCooperadoId) {
+        setFichaPlanoBrutoByCooperado((prev) => ({ ...prev, ...full.fichaPlanoBrutoCentsByCooperadoId }));
       }
       const merged = mergeLimitesCooperado(limitesRef.current, full.limites, ids);
       startTransition(() => {
@@ -667,15 +675,16 @@ function ContaCoopContent() {
   }, [dashboard?.teto?.liberacaoColetivaPercent, liberacaoPercentConfirmado]);
 
   const valoresLimiteExibidos = useCallback(
-    (limite: ContaCoopLimiteCooperado, creditoBaseCents: number) => {
+    (
+      limite: ContaCoopLimiteCooperado,
+      creditoBaseCents: number,
+      fichaPlanoBrutoCents?: number | null
+    ) => {
       const tetoPct = dashboard?.teto?.tetoGlobalPercent ?? 100;
       const libPct = Math.min(tetoPct, percentualCapTabelaLimites);
-      const baseV2 =
-        isV2HbOnlyClient() && limite.manualValorBrutoCents != null && limite.manualValorBrutoCents > 0
-          ? limite.manualValorBrutoCents
-          : isV2HbOnlyClient()
-            ? 0
-            : creditoBaseCents;
+      const baseV2 = isV2HbOnlyClient()
+        ? resolveBrutoFichaHbV2Cents(limite, fichaPlanoBrutoCents ?? null)
+        : creditoBaseCents;
       const eff = resolveLimiteHbCooperadoEfetivo(limite, baseV2, tetoPct, libPct);
       if (!isV2HbOnlyClient()) {
         const liberadoGravado = Math.max(0, limite.limiteLiberadoCents ?? 0);
@@ -889,6 +898,12 @@ function ContaCoopContent() {
             try {
               const fast = await fetchCreditLimites(cnpj, { fast: true, cooperadoIds: ids });
               if (!cancelled && fast.limites.length) {
+                if (fast.fichaPlanoBrutoCentsByCooperadoId) {
+                  setFichaPlanoBrutoByCooperado((prev) => ({
+                    ...prev,
+                    ...fast.fichaPlanoBrutoCentsByCooperadoId,
+                  }));
+                }
                 startTransition(() => {
                   setLimites((prev) => mergeLimitesCooperado(prev, fast.limites, ids));
                 });
@@ -1574,7 +1589,7 @@ function ContaCoopContent() {
                 <thead className="bg-gray-50 text-left">
                   <tr>
                     <th className="p-3">Cooperado</th>
-                    <th className="p-3">{isV2HbOnlyClient() ? "Valor bruto (manual)" : "Crédito (ficha)"}</th>
+                    <th className="p-3">{isV2HbOnlyClient() ? "Valor bruto (ficha)" : "Crédito (ficha)"}</th>
                     {isV2HbOnlyClient() ? <th className="p-3">A receber (coop.)</th> : null}
                     <th className="p-3">Liberado</th>
                     <th className="p-3">Usado</th>
@@ -1586,13 +1601,15 @@ function ContaCoopContent() {
                 <tbody>
                   {limitesLinhasRender.map((l) => {
                     const baseFichaCents = creditosBaseColetivo[l.cooperadoId] ?? 0;
+                    const brutoFichaPlanoCents =
+                      fichaPlanoBrutoByCooperado[l.cooperadoId] ?? l.fichaPlanoBrutoCents ?? null;
                     const paridadeV2 = isV2HbOnlyClient()
                       ? hbCreditCooperadoInicioV2Totais(l, {
-                          brutoFichaPlanoCents: l.manualValorBrutoCents,
+                          brutoFichaPlanoCents,
                         })
                       : null;
                     const baseCents = paridadeV2?.brutoFichaCents ?? baseFichaCents;
-                    const exib = valoresLimiteExibidos(l, baseCents);
+                    const exib = valoresLimiteExibidos(l, baseCents, brutoFichaPlanoCents);
                     const aReceberV2Cents = paridadeV2?.aReceberCents ?? 0;
                     return (
                     <tr key={l.cooperadoId} className="border-t">
@@ -1612,9 +1629,7 @@ function ContaCoopContent() {
                       <td className="p-3">
                         {isV2HbOnlyClient() ? (
                           <span className="text-sm">
-                            {l.manualValorBrutoCents != null && l.manualValorBrutoCents > 0
-                              ? formatCentsBRL(l.manualValorBrutoCents)
-                              : "—"}
+                            {baseCents > 0 ? formatCentsBRL(baseCents) : "—"}
                             <span className="block text-xs text-gray-500 mt-0.5">
                               Edite em Cooperados → ficha HB (entregas 1–5)
                             </span>

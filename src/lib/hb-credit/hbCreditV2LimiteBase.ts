@@ -14,6 +14,17 @@ export function creditoBaseCentsV2FromLimite(
   return manual;
 }
 
+/** Fonte única do bruto V2: ficha plano quando informada; senão manual na conta HB. */
+export function resolveBrutoFichaHbV2Cents(
+  account: Pick<ContaCoopLimiteCooperado, "manualValorBrutoCents">,
+  brutoFichaPlanoCents?: number | null
+): number {
+  if (brutoFichaPlanoCents != null) {
+    return Math.max(0, Math.round(brutoFichaPlanoCents));
+  }
+  return creditoBaseCentsV2FromLimite(account);
+}
+
 export function creditosBaseMapV2ManualOnly(
   cooperadoIds: string[],
   limites: Pick<ContaCoopLimiteCooperado, "cooperadoId" | "manualValorBrutoCents">[]
@@ -25,4 +36,30 @@ export function creditosBaseMapV2ManualOnly(
     out[id] = lim ? creditoBaseCentsV2FromLimite(lim) : 0;
   }
   return out;
+}
+
+/** V2: base de teto/limites = bruto da ficha plano (prioridade) com fallback manual na conta. */
+export function creditosBaseMapV2FichaAlinhada(
+  cooperadoIds: string[],
+  limites: Pick<ContaCoopLimiteCooperado, "cooperadoId" | "manualValorBrutoCents">[],
+  fichaBrutoByCooperadoId: Record<string, number>
+): Record<string, number> {
+  const byId = new Map(limites.map((l) => [l.cooperadoId, l]));
+  const out: Record<string, number> = {};
+  for (const id of cooperadoIds) {
+    const lim = byId.get(id);
+    const fichaBruto = fichaBrutoByCooperadoId[id];
+    out[id] = resolveBrutoFichaHbV2Cents(
+      lim ?? { manualValorBrutoCents: null },
+      fichaBruto != null ? fichaBruto : null
+    );
+  }
+  return out;
+}
+
+export function brutoV2FichaAtivoCents(
+  limite: Pick<ContaCoopLimiteCooperado, "manualValorBrutoCents"> | undefined,
+  fichaBrutoCents: number | null | undefined
+): number {
+  return resolveBrutoFichaHbV2Cents(limite ?? { manualValorBrutoCents: null }, fichaBrutoCents ?? null);
 }

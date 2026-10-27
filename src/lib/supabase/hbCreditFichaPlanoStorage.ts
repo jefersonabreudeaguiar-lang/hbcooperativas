@@ -356,6 +356,23 @@ export async function aplicarFichaPlanoAposUsoCreditoHb(
   }
 }
 
+/** Bruto calculado (entregas 1–5 − desconto) por cooperado — mesma regra da ficha HB em Cooperados. */
+export async function buildFichaPlanoBrutoCentsMapForCooperados(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoIds: string[]
+): Promise<Record<string, number>> {
+  const uniq = [...new Set(cooperadoIds.map((id) => id.trim()).filter(Boolean))];
+  const out: Record<string, number> = {};
+  await Promise.all(
+    uniq.map(async (id) => {
+      const { row } = await fetchFichaPlanoRow(supabase, cnpj, id);
+      out[id] = row ? brutoFichaPlanoCents(mapRow(row)) : 0;
+    })
+  );
+  return out;
+}
+
 /**
  * V2: alinha manual_valor_bruto_cents + limite HB ao bruto da ficha plano na nuvem.
  * Só roda quando existe linha em hb_credit_cooperado_ficha_plano.

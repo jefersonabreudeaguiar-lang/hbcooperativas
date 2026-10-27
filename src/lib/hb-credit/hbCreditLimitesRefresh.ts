@@ -18,6 +18,7 @@ export type RefreshHbCreditLimitesStaffResult = {
   limites: ContaCoopLimiteCooperado[];
   creditosBaseAuthoritativeCents?: Record<string, number>;
   authoritativeError?: AuthoritativeCreditBaseErrorPayload;
+  fichaPlanoBrutoCentsByCooperadoId?: Record<string, number>;
 };
 
 export async function refreshHbCreditLimitesStaff(

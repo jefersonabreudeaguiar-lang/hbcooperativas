@@ -106,8 +106,10 @@ export interface ContaCoopLimiteCooperado extends ContaCoopTresValores {
   id: string;
   cooperativaCnpj: string;
   cooperadoId: string;
-  /** Valor bruto manual (centavos) — V2; substitui base da ficha quando preenchido. */
+  /** Valor bruto manual (centavos) — V2; snapshot em hb_credit_accounts (sync na ficha). */
   manualValorBrutoCents?: number | null;
+  /** Bruto calculado da ficha plano HB (entregas − desconto), alinhado à tela Cooperados. */
+  fichaPlanoBrutoCents?: number | null;
   bloqueado: boolean;
   /** PIN numérico cadastrado pelo cooperado para pagamentos HB Créditos. */
   hasFinancialPin?: boolean;

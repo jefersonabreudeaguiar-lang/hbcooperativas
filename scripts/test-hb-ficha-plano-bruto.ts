@@ -1,5 +1,8 @@
 import { brutoFichaPlanoCents } from "../src/lib/hb-credit/hbCreditFichaPlano";
-import { creditosBaseMapV2ManualOnly as mapV2 } from "../src/lib/hb-credit/hbCreditV2LimiteBase";
+import {
+  creditosBaseMapV2FichaAlinhada,
+  creditosBaseMapV2ManualOnly as mapV2,
+} from "../src/lib/hb-credit/hbCreditV2LimiteBase";
 
 const plano = {
   cooperadoId: "c1",
@@ -25,6 +28,15 @@ const map = mapV2(["c1", "c2"], [
 ]);
 if (map.c1 !== 20000 || map.c2 !== 0) {
   console.error("map V2 manual", map);
+  process.exit(1);
+}
+
+const mapFicha = creditosBaseMapV2FichaAlinhada(["c1", "c2"], [
+  { cooperadoId: "c1", manualValorBrutoCents: 999 },
+  { cooperadoId: "c2", manualValorBrutoCents: 5000 },
+], { c1: 20000, c2: 0 });
+if (mapFicha.c1 !== 20000 || mapFicha.c2 !== 0) {
+  console.error("map V2 ficha alinhada", mapFicha);
   process.exit(1);
 }
 

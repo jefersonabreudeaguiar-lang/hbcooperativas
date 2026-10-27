@@ -42,10 +42,13 @@ import { hbCreditCreditoBaseReais } from "@/lib/hb-credit/hbCreditCreditoBaseCal
 import { isHbCreditMercadoNfDispensada } from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
 import { mergeManualValorBrutoIntoCreditosBaseCents } from "@/lib/hb-credit/hbCreditManualValorBruto";
 import {
+  brutoV2FichaAtivoCents,
   creditoBaseCentsV2FromLimite,
+  creditosBaseMapV2FichaAlinhada,
   creditosBaseMapV2ManualOnly,
   isV2HbOnlyServer,
 } from "@/lib/hb-credit/hbCreditV2LimiteBase";
+import { buildFichaPlanoBrutoCentsMapForCooperados } from "@/lib/supabase/hbCreditFichaPlanoStorage";
 import { resolveLeituraFinanceiraCooperadoCore } from "@/lib/bic/bicLeituraPorta";
 import type {
   AuthoritativeCreditBaseErrorPayload,
@@ -482,13 +485,24 @@ async function sumLimitesDistribuidosV2FichaAtiva(
   const digits = normalizeCnpj(cnpj);
   const { data } = await supabase
     .from("hb_credit_accounts")
-    .select("limit_released_cents, manual_valor_bruto_cents")
+    .select("cooperado_id, limit_released_cents, manual_valor_bruto_cents")
     .eq("cooperative_cnpj", digits);
-  return (data ?? []).reduce((sum, row) => {
+  const rows = data ?? [];
+  if (!rows.length) return 0;
+  const ids = rows.map((r) => String(r.cooperado_id));
+  const fichaBrutoMap = await buildFichaPlanoBrutoCentsMapForCooperados(supabase, digits, ids);
+  return rows.reduce((sum, row) => {
+    const cooperadoId = String(row.cooperado_id);
     const manualRaw = row.manual_valor_bruto_cents;
-    const manual =
-      manualRaw == null || manualRaw === "" ? null : Math.max(0, Math.round(Number(manualRaw)));
-    if (manual == null || manual <= 0) return sum;
+    const manualValorBrutoCents =
+      manualRaw == null || manualRaw === ""
+        ? null
+        : Math.max(0, Math.round(Number(manualRaw)));
+    const bruto = brutoV2FichaAtivoCents(
+      { manualValorBrutoCents },
+      fichaBrutoMap[cooperadoId] ?? 0
+    );
+    if (bruto <= 0) return sum;
     return sum + Math.max(0, Math.round(Number(row.limit_released_cents ?? 0)));
   }, 0);
 }
@@ -527,10 +541,12 @@ export async function getDashboardResumo(
   if (isV2HbOnlyServer()) {
     const limitesV2 = await listLimitesCooperados(supabase, digits);
     const ids = limitesV2.map((l) => l.cooperadoId);
-    creditosBaseForTeto = creditosBaseMapV2ManualOnly(ids, limitesV2);
+    const fichaBrutoMap = await buildFichaPlanoBrutoCentsMapForCooperados(supabase, digits, ids);
+    creditosBaseForTeto = creditosBaseMapV2FichaAlinhada(ids, limitesV2, fichaBrutoMap);
     limiteDistribuido = await sumLimitesDistribuidosV2FichaAtiva(supabase, digits);
     for (const l of limitesV2) {
-      if (creditoBaseCentsV2FromLimite(l) <= 0) continue;
+      const bruto = brutoV2FichaAtivoCents(l, fichaBrutoMap[l.cooperadoId] ?? 0);
+      if (bruto <= 0) continue;
       usadoTotal += l.valorUsadoCents;
       valorDisponivelAgregado += computeDisponivel(l.limiteLiberadoCents, l.valorUsadoCents);
     }

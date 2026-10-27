@@ -1,7 +1,9 @@
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import { hbCreditEffectiveDisponivelCents } from "@/modules/hb-credit/engine/paymentAffordability";
 import { hbCreditValorAReceberReaisFromManualBruto } from "@/lib/hb-credit/hbCreditManualValorBruto";
-import { creditoBaseCentsV2FromLimite } from "@/lib/hb-credit/hbCreditV2LimiteBase";
+import { resolveBrutoFichaHbV2Cents } from "@/lib/hb-credit/hbCreditV2LimiteBase";
+
+export { resolveBrutoFichaHbV2Cents } from "@/lib/hb-credit/hbCreditV2LimiteBase";
 
 export type HbCreditCooperadoInicioV2Totais = {
   brutoFichaCents: number;
@@ -17,17 +19,6 @@ export type HbCreditCooperadoInicioV2TotaisOpts = {
   /** Liberado já capado na API (% × bruto); omitir = usa conta (após cap no servidor). */
   valorLiberadoCents?: number | null;
 };
-
-/** Fonte única do bruto V2: ficha plano quando informada; senão manual na conta HB. */
-export function resolveBrutoFichaHbV2Cents(
-  account: Pick<ContaCoopLimiteCooperado, "manualValorBrutoCents">,
-  brutoFichaPlanoCents?: number | null
-): number {
-  if (brutoFichaPlanoCents != null) {
-    return Math.max(0, Math.round(brutoFichaPlanoCents));
-  }
-  return creditoBaseCentsV2FromLimite(account);
-}
 
 /** Início cooperado V2 — bruto da ficha HB e limite capado nessa base. */
 export function hbCreditCooperadoInicioV2Totais(

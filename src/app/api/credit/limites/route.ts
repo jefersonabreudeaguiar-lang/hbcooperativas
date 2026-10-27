@@ -15,6 +15,11 @@ import {
   listLimitesCooperados,
   setManualValorBrutoCooperado,
 } from "@/lib/supabase/contaCoopStorage";
+import {
+  buildFichaPlanoBrutoCentsMapForCooperados,
+  reconcileHbBrutoFromFichaPlano,
+} from "@/lib/supabase/hbCreditFichaPlanoStorage";
+import { isV2HbOnlyServer } from "@/lib/hb-credit/hbCreditV2LimiteBase";
 import { requireCreditApi, requireCreditCnpj, requireCreditStaff } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { validateCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseValidation";
@@ -50,7 +55,7 @@ export async function GET(request: Request) {
     .map((id) => id.trim())
     .filter(Boolean);
   try {
-    const { limites, creditosBaseCents, authoritativeError } = await listLimitesCooperadosAlinhadosComBase(
+    let { limites, creditosBaseCents, authoritativeError } = await listLimitesCooperadosAlinhadosComBase(
       gate.ctx.supabase,
       cnpj,
       {
@@ -61,11 +66,35 @@ export async function GET(request: Request) {
         authoritativeCooperadoIds: authoritativeCooperadoIds.length ? authoritativeCooperadoIds : undefined,
       }
     );
+
+    let fichaPlanoBrutoCentsByCooperadoId: Record<string, number> | undefined;
+    if (isV2HbOnlyServer()) {
+      const idsParaFicha = authoritativeCooperadoIds.length
+        ? authoritativeCooperadoIds
+        : limites.map((l) => l.cooperadoId);
+      if (persistFichaSync && idsParaFicha.length) {
+        for (const cooperadoId of idsParaFicha) {
+          await reconcileHbBrutoFromFichaPlano(gate.ctx.supabase, cnpj, cooperadoId, actorId);
+        }
+        limites = await listLimitesCooperados(gate.ctx.supabase, cnpj);
+      }
+      fichaPlanoBrutoCentsByCooperadoId = await buildFichaPlanoBrutoCentsMapForCooperados(
+        gate.ctx.supabase,
+        cnpj,
+        idsParaFicha
+      );
+      limites = limites.map((l) => ({
+        ...l,
+        fichaPlanoBrutoCents: fichaPlanoBrutoCentsByCooperadoId?.[l.cooperadoId] ?? 0,
+      }));
+    }
+
     return NextResponse.json({
       ok: true,
       limites,
       creditosBaseAuthoritativeCents: creditosBaseCents,
       authoritativeError: authoritativeError ?? undefined,
+      fichaPlanoBrutoCentsByCooperadoId,
     });
   } catch (e) {
     console.error("[GET /api/credit/limites]", e);
