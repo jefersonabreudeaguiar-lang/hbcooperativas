@@ -51,11 +51,16 @@ export function GuestRoute({
       }
       const pathOnly = dest.split("?")[0];
       if (window.location.pathname === pathOnly) return;
-      if (isStandalonePwa()) {
-        window.location.assign(dest);
-      } else {
-        router.replace(dest);
-      }
+      /** /login → home: assign após commit (replace no RSC aborta doc = “couldn’t load”). */
+      const fromLogin = window.location.pathname === "/login";
+      const delayMs = fromLogin ? 200 : 0;
+      window.setTimeout(() => {
+        if (fromLogin || isStandalonePwa()) {
+          window.location.assign(dest);
+        } else {
+          router.replace(dest);
+        }
+      }, delayMs);
     };
 
     if (document.readyState === "complete") {

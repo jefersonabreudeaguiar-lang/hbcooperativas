@@ -101,8 +101,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: buildInlineRuntimeCrashRecorderScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineCooperadoBrowserSkipDestructiveHeadBootScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlinePwaBrowserDetachServiceWorkerScript() }} />
-        <script dangerouslySetInnerHTML={{ __html: buildInlineStaleProfileGuardScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlinePwaLoginHbPwaRepairAckScript() }} />
+        <script dangerouslySetInnerHTML={{ __html: buildInlineStaleProfileGuardScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlinePwaStandaloneLaunchGuardScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineServiceWorkerMigrationScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlinePageReleaseBootstrap(pageRelease) }} />
