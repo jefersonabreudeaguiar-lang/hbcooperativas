@@ -41,7 +41,11 @@ import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } f
 import { hbCreditCreditoBaseReais } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
 import { isHbCreditMercadoNfDispensada } from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
 import { mergeManualValorBrutoIntoCreditosBaseCents } from "@/lib/hb-credit/hbCreditManualValorBruto";
-import { isV2HbOnlyServer } from "@/lib/hb-credit/hbCreditV2LimiteBase";
+import {
+  creditoBaseCentsV2FromLimite,
+  creditosBaseMapV2ManualOnly,
+  isV2HbOnlyServer,
+} from "@/lib/hb-credit/hbCreditV2LimiteBase";
 import { resolveLeituraFinanceiraCooperadoCore } from "@/lib/bic/bicLeituraPorta";
 import type {
   AuthoritativeCreditBaseErrorPayload,
@@ -514,27 +518,44 @@ export async function getDashboardResumo(
   creditosBaseCents: Record<string, number> = {}
 ): Promise<ContaCoopDashboard> {
   const digits = normalizeCnpj(cnpj);
-  const tetoResult = await resolveTetoGlobal(supabase, digits, creditosBaseCents);
+
+  let creditosBaseForTeto = creditosBaseCents;
+  let limiteDistribuido = 0;
+  let usadoTotal = 0;
+  let valorDisponivelAgregado = 0;
+
+  if (isV2HbOnlyServer()) {
+    const limitesV2 = await listLimitesCooperados(supabase, digits);
+    const ids = limitesV2.map((l) => l.cooperadoId);
+    creditosBaseForTeto = creditosBaseMapV2ManualOnly(ids, limitesV2);
+    limiteDistribuido = await sumLimitesDistribuidosV2FichaAtiva(supabase, digits);
+    for (const l of limitesV2) {
+      if (creditoBaseCentsV2FromLimite(l) <= 0) continue;
+      usadoTotal += l.valorUsadoCents;
+      valorDisponivelAgregado += computeDisponivel(l.limiteLiberadoCents, l.valorUsadoCents);
+    }
+  } else {
+    const limitesEfetivos = await listLimitesCooperadosAlinhadosAEntregas(supabase, digits, {
+      resyncIfInflated: false,
+      actorUserId: "system:hb_dashboard",
+    });
+    for (const l of limitesEfetivos) {
+      limiteDistribuido += l.limiteLiberadoCents;
+      usadoTotal += l.valorUsadoCents;
+    }
+    valorDisponivelAgregado = computeDisponivel(limiteDistribuido, usadoTotal);
+  }
+
+  const tetoResult = await resolveTetoGlobal(supabase, digits, creditosBaseForTeto);
   const tetoPercent = tetoResult.configured ? tetoResult.percent : 0;
   const tetoCents = tetoResult.configured ? tetoResult.cents : 0;
   const creditoBaseTotalCents = tetoResult.configured
     ? tetoResult.creditoBaseTotalCents
-    : sumCreditosBaseCents(creditosBaseCents);
+    : sumCreditosBaseCents(creditosBaseForTeto);
   const liberacaoColetivaPercent =
     tetoResult.configured
       ? (await getCooperativaLiberacaoPercentConfigured(supabase, digits)) ?? tetoPercent
       : 0;
-
-  const limitesEfetivos = await listLimitesCooperadosAlinhadosAEntregas(supabase, digits, {
-    resyncIfInflated: false,
-    actorUserId: "system:hb_dashboard",
-  });
-  let limiteDistribuido = 0;
-  let usadoTotal = 0;
-  for (const l of limitesEfetivos) {
-    limiteDistribuido += l.limiteLiberadoCents;
-    usadoTotal += l.valorUsadoCents;
-  }
 
   const { count: pendentes } = await supabase
     .from("hb_credit_partners")
@@ -636,7 +657,7 @@ export async function getDashboardResumo(
     agregadoCooperados: {
       limiteLiberadoCents: limiteDistribuido,
       valorUsadoCents: usadoTotal,
-      valorDisponivelCents: computeDisponivel(limiteDistribuido, usadoTotal),
+      valorDisponivelCents: valorDisponivelAgregado,
     },
     parceirosPendentes: pendentes ?? 0,
     transacoesRecentes: recentes ?? 0,

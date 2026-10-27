@@ -744,7 +744,10 @@ function ContaCoopContent() {
     try {
       const coopId = user?.cooperativaId ?? "";
       const ids = cooperadoIdsAtivosRef.current;
-      const dash = await fetchCreditDashboard(cnpj, creditosBaseRef.current);
+      const dash = await fetchCreditDashboard(
+        cnpj,
+        isV2HbOnlyClient() ? {} : creditosBaseRef.current
+      );
       setDashboard(dash);
       if (dash) gravarHbCreditDashboardPersistido(cnpj, dash);
       setLoading(false);
@@ -1398,7 +1401,11 @@ function ContaCoopContent() {
                   </strong>
                 </p>
                 <p>
-                  <span className="text-gray-500">Base HB (a receber pendente):</span>{" "}
+                  <span className="text-gray-500">
+                    {isV2HbOnlyClient()
+                      ? "Base HB (bruto ficha lançada):"
+                      : "Base HB (a receber pendente):"}
+                  </span>{" "}
                   {formatCentsBRL(dashboard.teto.creditoBaseTotalCents)}
                 </p>
                 <p>
