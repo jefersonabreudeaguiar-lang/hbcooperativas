@@ -29,6 +29,10 @@ export function staffResponsavelOpeningSyncRequest(
   data?: AppData | null,
   coopId?: string
 ): SyncRunOptions {
+  /** Anônimo / cache limpo: notas na fila sem cadastro → nomes e totais zerados. */
+  if (staffCooperadosCadastroAusente(data, coopId)) {
+    return { silent: true, force: true, tier: "notas_delta" };
+  }
   if (staffPrecisaHydrateOperacionalPull(data, coopId)) {
     return { silent: true, force: true, tier: "financeiro_delta" };
   }
@@ -55,6 +59,11 @@ export function staffResponsavelHydrateFollowUpSyncRequest(
     return { silent: true, force: true, eventDriven: true, tier: "financeiro_delta" };
   }
   return undefined;
+}
+
+/** Passada tardia: mesmo plano do Atualizar, sem spinner pesado na abertura. */
+export function staffResponsavelForceCloudHydrateSyncRequest(): SyncRunOptions {
+  return { silent: true, force: true, userInitiated: true, tier: "operacional_full" };
 }
 
 /**

@@ -18,6 +18,7 @@ import {
   staffGestaoHydrateIncompleto,
 } from "@/lib/staff/staffOperacionalColdHydrate";
 import {
+  staffResponsavelForceCloudHydrateSyncRequest,
   staffResponsavelHydrateFollowUpSyncRequest,
   staffResponsavelOpeningSyncRequest,
 } from "@/lib/staff/staffResponsavelSyncPolicy";
@@ -131,6 +132,13 @@ export function runStaffGestaoAberturaHydrateChain(opts: {
         }
       }
 
+      const snapMid = getData();
+      const coopMid = coopForUser(user, snapMid);
+      if (coopMid && staffGestaoHydrateIncompleto(snapMid, coopMid)) {
+        await waitSyncSlot(isSyncing);
+        await runSync(staffResponsavelForceCloudHydrateSyncRequest());
+      }
+
       const finalCoop = coopForUser(user, getData());
       if (!staffGestaoHydrateIncompleto(getData(), finalCoop)) {
         markStaffGestaoAberturaSyncConcluido();
@@ -140,8 +148,9 @@ export function runStaffGestaoAberturaHydrateChain(opts: {
           const snap2 = getData();
           const coop2 = coopForUser(user, snap2);
           if (!coop2 || !staffGestaoHydrateIncompleto(snap2, coop2)) return;
-          const late = staffResponsavelHydrateFollowUpSyncRequest(snap2, coop2);
-          if (!late) return;
+          const late =
+            staffResponsavelHydrateFollowUpSyncRequest(snap2, coop2) ??
+            staffResponsavelForceCloudHydrateSyncRequest();
           void waitSyncSlot(isSyncing).then(() => runSync(late));
         }, 6_000);
       }

@@ -74,6 +74,16 @@ assert.equal(
   "livro sem ficha no escopo puxa operacional — evita A pagar zerado"
 );
 
+const notasSemCooperados = {
+  ...emptyInitialData,
+  cooperativas: [{ id: "coop1", nome: "Coop", cnpj: "12345678000199", status: "ativa" } as never],
+  cooperados: [],
+  notasPedido: [{ id: "n1", cooperativaId: "coop1" } as never],
+};
+const openingCadastro = staffResponsavelOpeningSyncRequest(notasSemCooperados, "coop1");
+assert.equal(openingCadastro.tier, "notas_delta", "fila sem cadastro puxa cooperados+notas");
+assert.equal(openingCadastro.force, true);
+
 const openingFrio = staffResponsavelOpeningSyncRequest(emptyInitialData);
 assert.equal(openingFrio.tier, "financeiro_delta");
 assert.equal(openingFrio.force, true);
@@ -149,7 +159,8 @@ assert.match(
 
 const provider = readFileSync(join(ROOT, "src/components/sync/CooperativaSyncProvider.tsx"), "utf8");
 assert.ok(provider.includes("expandStaffTierPlanIfOperacionalVazio"), "runSync não escolhe full a frio");
-assert.ok(provider.includes("staffResponsavelOpeningSyncRequest("), "abertura passa snapshot");
+assert.ok(provider.includes("runStaffGestaoAberturaHydrateChain"), "abertura usa cadeia de hydrate");
+assert.ok(provider.includes("resolveRunSyncCooperativaId"), "runSync resolve cooperativa da gestão");
 
 const light = readFileSync(join(ROOT, "src/services/syncRequest.ts"), "utf8");
 assert.ok(light.includes('requestSyncTier("notas_delta"'), "light não sobe para operacional");

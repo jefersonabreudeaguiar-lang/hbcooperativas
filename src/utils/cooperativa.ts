@@ -70,6 +70,16 @@ export function resolveGestaoCooperativaId(
   const ativas = data.cooperativas.filter((c) => c.status !== "inativa");
   if (ativas.length === 1) return ativas[0].id;
 
+  const coopIdsNotas = new Set(
+    (data.notasPedido ?? [])
+      .map((n) => n.cooperativaId)
+      .filter((id): id is string => Boolean(id?.trim()))
+  );
+  if (coopIdsNotas.size === 1) {
+    const only = [...coopIdsNotas][0]!;
+    if (ativas.some((c) => c.id === only)) return only;
+  }
+
   const comOperacao = ativas.find(
     (c) =>
       data.instituicoes.some((i) => i.cooperativaId === c.id) ||

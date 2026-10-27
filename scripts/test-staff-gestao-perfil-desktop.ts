@@ -16,7 +16,7 @@ import {
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.equal(STAFF_GESTAO_DESKTOP_PERFIL_VERSION, 12);
+assert.equal(STAFF_GESTAO_DESKTOP_PERFIL_VERSION, 13);
 assert.equal(staffGestaoPerfilAberturaSyncPermitidoForViewport(true, emptyInitialData), true);
 const comPixDesktop = {
   ...emptyInitialData,

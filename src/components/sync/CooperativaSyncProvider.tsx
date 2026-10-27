@@ -14,6 +14,7 @@ import {
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppDataSelector } from "@/hooks/useAppData";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
+import { resolveRunSyncCooperativaId } from "@/lib/staff/staffGestaoRunSyncCoopId";
 import {
   resolveCooperativaCnpj,
   getCooperativaCnpj,
@@ -34,6 +35,7 @@ import {
   syncCooperadoAtualizarFromCloud,
   syncCooperativaBidirectional,
   syncStaffTieredPullFromCloud,
+  syncCooperativaProfileFromCloud,
   syncOperacionalFromCloud,
   type SyncOperacionalFromCloudResult,
 } from "@/services/cooperativaSyncCloudService";
@@ -426,8 +428,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   cooperadoPagamentosHydratedRef.current = cooperadoPagamentosHydrated;
 
   const coopId = useAppDataSelector(
-    (data) => (user ? getUserCooperativaId(user, data) : undefined),
-    [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]
+    (data) => (user ? resolveRunSyncCooperativaId(user, data) : undefined),
+    [user?.id, user?.cooperadoId, user?.cooperativaId, user?.cooperativaCnpj, user?.role]
   );
 
   useEffect(() => {
@@ -677,7 +679,18 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         /* storage */
       }
     }
-    const currentCoopId = getUserCooperativaId(currentUser, data);
+    let currentCoopId = resolveRunSyncCooperativaId(currentUser, data);
+    if (!currentCoopId && isStaffGestao) {
+      const digitsBootstrap = normalizeCnpj(currentUser.cooperativaCnpj ?? "");
+      if (digitsBootstrap.length === 14) {
+        const sessionOkBootstrap = await ensureCloudSessionReady(userToCloudProfile(currentUser));
+        if (sessionOkBootstrap) {
+          await syncCooperativaProfileFromCloud(digitsBootstrap);
+          data = getData();
+          currentCoopId = resolveRunSyncCooperativaId(currentUser, data);
+        }
+      }
+    }
     if (!currentCoopId) {
       if (currentUser.role === "cooperado") {
         scheduleCooperadoSilentSyncRetry();

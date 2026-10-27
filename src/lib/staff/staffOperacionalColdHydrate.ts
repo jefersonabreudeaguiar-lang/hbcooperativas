@@ -148,7 +148,7 @@ export function staffGestaoHydrateIncompleto(
   if (staffCooperadosCadastroAusente(data, coopId)) return true;
   if (staffGestaoFaltaFichaOperacionalNoEscopo(data, coopId)) return true;
   if (staffLocalOperacionalVazio(data, coopId) && staffGestaoTemFichaOuNotaLocal(data, coopId)) {
-    return !staffOperacionalPullJaAplicado();
+    return true;
   }
   return false;
 }
