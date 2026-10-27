@@ -9,14 +9,16 @@ import {
 } from "@/lib/performance/cooperadoBottomTabRoutes";
 import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 import { cooperadoJefersonDuplaEntradaDesbloqueado } from "@/lib/cooperado/cooperadoJefersonDuplaEntradaAutoAtualizar";
-import { cooperadoMobileUiQuiescenceActive } from "@/lib/cooperado/cooperadoTabSwitchQuiescence";
 import { persistirCooperadoPwaFichaResumoSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import { persistirCooperadoPwaInicioDashboardSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
 import { persistirCooperadoPwaPrecosCatalogoSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaPrecosCatalogoSnapshot";
 import { dispatchCooperadoPwaLeveUiSnapshotRefresh } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
-import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
-import { yieldCooperadoMobileUiBeforeHeavyWork } from "@/lib/cooperado/cooperadoGaMobileAtualizarYield";
+import {
+  cooperadoBicAguardarUiProntaParaMaterializar,
+  scheduleCooperadoBicMaterializacaoProtegida,
+  withCooperadoBicMaterializacaoSerializada,
+} from "@/lib/cooperado/cooperadoBicMaterializacaoPerf";
 import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { isAppDataWarm } from "@/services/dataStore";
 
@@ -123,16 +125,16 @@ export async function materializarCooperadoJefersonAbaDadosReais(
   if (cooperadoJefersonAbaJaMaterializada(user, href)) return false;
   if (typeof document !== "undefined" && document.hidden) return false;
 
-  await yieldCooperadoMobileUiBeforeHeavyWork();
-  if (!isAppDataWarm()) return false;
+  const uiOk = await cooperadoBicAguardarUiProntaParaMaterializar();
+  if (!uiOk || !isAppDataWarm()) return false;
 
-  return materializarAba(user, href);
+  const done = await withCooperadoBicMaterializacaoSerializada(() => materializarAba(user, href));
+  return Boolean(done);
 }
 
 export function scheduleCooperadoJefersonMaterializarAba(
   user: Omit<User, "password"> | null | undefined,
-  href: CooperadoBottomTabHref,
-  attempt = 0
+  href: CooperadoBottomTabHref
 ): void {
   if (!user?.id || !isCooperadoJefersonSomenteAtualizarPilot(user)) return;
   if (!COOPERADO_BOTTOM_TAB_HREFS.includes(href)) return;
@@ -142,28 +144,17 @@ export function scheduleCooperadoJefersonMaterializarAba(
   if (inflight.has(inflightKey)) return;
   inflight.add(inflightKey);
 
-  scheduleCooperadoPostInteractiveTask(() => {
-    const run = async () => {
+  scheduleCooperadoBicMaterializacaoProtegida(
+    async () => {
       try {
         if (!cooperadoJefersonPodeMaterializarAbas(user)) return;
-        if (cooperadoMobileUiQuiescenceActive() && attempt < 12) {
-          window.setTimeout(
-            () => scheduleCooperadoJefersonMaterializarAba(user, href, attempt + 1),
-            700
-          );
-          return;
-        }
         await materializarCooperadoJefersonAbaDadosReais(user, href);
       } finally {
         inflight.delete(inflightKey);
       }
-    };
-    if (typeof requestIdleCallback !== "undefined") {
-      requestIdleCallback(() => void run(), { timeout: 3_500 });
-    } else {
-      window.setTimeout(() => void run(), 200);
-    }
-  });
+    },
+    { quiescenceAttempts: 12 }
+  );
 }
 
 export function scheduleCooperadoJefersonMaterializarAbaAtual(

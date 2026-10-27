@@ -28,18 +28,16 @@ import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoB
 import { cooperadoBrowserDesktopBicPerfActive } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
-import { yieldCooperadoMobileUiBeforeHeavyWork } from "@/lib/cooperado/cooperadoGaMobileAtualizarYield";
 import { scheduleCooperadoJefersonMaterializarAba } from "@/lib/cooperado/cooperadoJefersonAbasDadosReais";
+import { scheduleCooperadoBicMaterializacaoProtegida } from "@/lib/cooperado/cooperadoBicMaterializacaoPerf";
 
 /** Piloto Jeferson — Início primeiro; demais abas sob demanda ao visitar. */
 export function cooperadoJefersonPosSyncSnapshotLeve(
   user: Omit<User, "password"> | null | undefined
 ): void {
   if (!user || user.role !== "cooperado") return;
-  scheduleCooperadoPostInteractiveTask(() => {
-    void yieldCooperadoMobileUiBeforeHeavyWork().then(() => {
-      scheduleCooperadoJefersonMaterializarAba(user, "/dashboard");
-    });
+  scheduleCooperadoBicMaterializacaoProtegida(() => {
+    scheduleCooperadoJefersonMaterializarAba(user, "/dashboard");
   });
 }
 

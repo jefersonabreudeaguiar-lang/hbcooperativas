@@ -17,6 +17,7 @@ import { persistirCooperadoPwaPrecosCatalogoSnapshotFromUser } from "@/lib/coope
 import { dispatchCooperadoPwaLeveUiSnapshotRefresh } from "@/lib/cooperado/cooperadoPwaLeveUiEvents";
 import { persistirInicioCardCooperadoNotificarPwaLeve } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { materializeCooperadoScopedReadModels } from "@/lib/cooperado/cooperadoScopedReadModels";
+import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 
 export function isCooperadoPwaMessengerMode(): boolean {
   if (!isCooperadoPwaMobileLeveUi()) return false;
@@ -50,6 +51,7 @@ export function persistirCooperadoPwaMessengerCaches(
   opts?: { light?: boolean }
 ): void {
   if (!user || user.role !== "cooperado" || !isCooperadoPwaMessengerMode()) return;
+  if (isCooperadoJefersonSomenteAtualizarPilot(user)) return;
   persistirCooperadoPwaFichaResumoSnapshotFromUser(user, true);
   persistirInicioCardCooperadoNotificarPwaLeve(user);
   persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, true);

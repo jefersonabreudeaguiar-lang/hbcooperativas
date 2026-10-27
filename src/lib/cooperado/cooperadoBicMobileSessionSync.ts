@@ -9,10 +9,7 @@ import { cooperadoPilotForcarRematerializacaoFinanceira } from "@/lib/cooperado/
 import { dispatchCooperadoPwaLeveUiSnapshotRefresh } from "@/lib/cooperado/cooperadoPwaLeveUiEvents";
 import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
 import { scheduleCooperadoHbCreditLimiteAndAccountWarmup } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
-import {
-  isCooperadoBicHybridLightEnabled,
-  scheduleCooperadoBicHybridIdleTask,
-} from "@/lib/cooperado/cooperadoBicHybridLight";
+import { scheduleCooperadoBicMaterializacaoProtegida } from "@/lib/cooperado/cooperadoBicMaterializacaoPerf";
 import { markCooperadoBicSessionRematerialized } from "@/lib/cooperado/cooperadoBicSessionReinforcementSkip";
 import { cooperadoBrowserDesktopFinanceiroEstavel } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
 import { cooperadoGaInicioSomenteCasca } from "@/lib/cooperado/cooperadoMobilePilot";
@@ -30,11 +27,7 @@ function rematerializarBicSnapshots(user: Omit<User, "password">): void {
     markCooperadoBicSessionRematerialized(user.id);
     scheduleCooperadoHbCreditLimiteAndAccountWarmup(user);
   };
-  if (isCooperadoBicHybridLightEnabled()) {
-    scheduleCooperadoBicHybridIdleTask(run);
-  } else {
-    run();
-  }
+  scheduleCooperadoBicMaterializacaoProtegida(run, { idleTimeoutMs: 1_200 });
 }
 
 /**
