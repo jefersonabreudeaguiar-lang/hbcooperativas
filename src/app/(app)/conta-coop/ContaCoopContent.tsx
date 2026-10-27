@@ -55,6 +55,7 @@ import {
   hbCreditCooperadoInicioV2Totais,
   resolveBrutoFichaHbV2Cents,
 } from "@/lib/hb-credit/hbCreditCooperadoInicioV2";
+import { capLimiteContaCoopV2FichaBruto } from "@/lib/hb-credit/hbCreditV2CooperadoLimiteExibicao";
 import { ensureHbCreditLabLiberacaoPadrao } from "@/lib/hb-credit/ensureHbCreditLabLiberacaoPadrao";
 import {
   HB_CREDIT_LAB_LIBERACAO_PERCENT_DEFAULT,
@@ -685,6 +686,14 @@ function ContaCoopContent() {
       const baseV2 = isV2HbOnlyClient()
         ? resolveBrutoFichaHbV2Cents(limite, fichaPlanoBrutoCents ?? null)
         : creditoBaseCents;
+      if (isV2HbOnlyClient()) {
+        const capped = capLimiteContaCoopV2FichaBruto(limite, baseV2, tetoPct, libPct);
+        return {
+          liberado: capped.limiteLiberadoCents,
+          usado: capped.valorUsadoCents,
+          disponivel: capped.valorDisponivelCents,
+        };
+      }
       const eff = resolveLimiteHbCooperadoEfetivo(limite, baseV2, tetoPct, libPct);
       if (!isV2HbOnlyClient()) {
         const liberadoGravado = Math.max(0, limite.limiteLiberadoCents ?? 0);
@@ -1643,10 +1652,20 @@ function ContaCoopContent() {
                           {aReceberV2Cents > 0 ? formatCentsBRL(aReceberV2Cents) : "—"}
                         </td>
                       ) : null}
-                      <td className="p-3">{formatCentsBRL(exib.liberado)}</td>
-                      <td className="p-3">{formatCentsBRL(exib.usado)}</td>
+                      <td className="p-3">
+                        {isV2HbOnlyClient() && baseCents <= 0
+                          ? "—"
+                          : formatCentsBRL(exib.liberado)}
+                      </td>
+                      <td className="p-3">
+                        {isV2HbOnlyClient() && baseCents <= 0
+                          ? "—"
+                          : formatCentsBRL(exib.usado)}
+                      </td>
                       <td className="p-3 font-medium text-green-800">
-                        {formatCentsBRL(exib.disponivel)}
+                        {isV2HbOnlyClient() && baseCents <= 0
+                          ? "—"
+                          : formatCentsBRL(exib.disponivel)}
                       </td>
                       <td className="p-3 text-xs text-gray-600">
                         {!limiteTemContaHb(l)

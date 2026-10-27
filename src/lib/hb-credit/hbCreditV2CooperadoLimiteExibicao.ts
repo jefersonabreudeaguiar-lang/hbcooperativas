@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import { resolveLimiteHbCooperadoEfetivo } from "@/modules/hb-credit/engine/creditBaseHbGuard";
-import { computeDisponivel } from "@/modules/hb-credit/engine/money";
+import { hbCreditEffectiveDisponivelCents } from "@/modules/hb-credit/engine/paymentAffordability";
+import { creditosBaseMapV2FichaAlinhada } from "@/lib/hb-credit/hbCreditV2LimiteBase";
 import {
   getCooperativaLiberacaoPercentConfigured,
   resolveTetoGlobal,
@@ -13,11 +14,11 @@ export type HbV2FichaLimiteExibicao = {
 };
 
 export function limiteExibicaoV2SemBrutoFicha(limite: ContaCoopLimiteCooperado): ContaCoopLimiteCooperado {
-  const usado = Math.max(0, Math.round(limite.valorUsadoCents ?? 0));
   return {
     ...limite,
     limiteLiberadoCents: 0,
-    valorDisponivelCents: computeDisponivel(0, usado),
+    valorUsadoCents: 0,
+    valorDisponivelCents: 0,
   };
 }
 
@@ -29,12 +30,43 @@ export function capLimiteContaCoopV2FichaBruto(
 ): ContaCoopLimiteCooperado {
   if (brutoFichaCents <= 0) return limiteExibicaoV2SemBrutoFicha(limite);
   if (!tetoPercent || tetoPercent <= 0) return limiteExibicaoV2SemBrutoFicha(limite);
-  return resolveLimiteHbCooperadoEfetivo(
+  const capped = resolveLimiteHbCooperadoEfetivo(
     limite,
     brutoFichaCents,
     tetoPercent,
     liberacaoPercent
   );
+  const usado = Math.max(0, Math.round(capped.valorUsadoCents ?? 0));
+  return {
+    ...capped,
+    valorDisponivelCents: hbCreditEffectiveDisponivelCents(
+      capped.limiteLiberadoCents,
+      brutoFichaCents,
+      usado
+    ),
+  };
+}
+
+/** V2 staff: limites na API/UI só refletem bruto da ficha HB (sem residual de ciclo antigo). */
+export async function capLimitesListaV2PorFichaBruto(
+  supabase: SupabaseClient,
+  cnpj: string,
+  limites: ContaCoopLimiteCooperado[],
+  fichaBrutoByCooperadoId: Record<string, number>
+): Promise<ContaCoopLimiteCooperado[]> {
+  const ids = [...new Set(limites.map((l) => l.cooperadoId))];
+  const bases = creditosBaseMapV2FichaAlinhada(ids, limites, fichaBrutoByCooperadoId);
+  const teto = await resolveTetoGlobal(supabase, cnpj, bases);
+  const tetoPercent = teto.configured ? teto.percent : 0;
+  const liberacaoPercent = teto.configured
+    ? (await getCooperativaLiberacaoPercentConfigured(supabase, cnpj)) ?? tetoPercent
+    : null;
+
+  return limites.map((l) => {
+    const bruto = Math.max(0, Math.round(fichaBrutoByCooperadoId[l.cooperadoId] ?? 0));
+    const capped = capLimiteContaCoopV2FichaBruto(l, bruto, tetoPercent, liberacaoPercent);
+    return { ...capped, fichaPlanoBrutoCents: bruto };
+  });
 }
 
 /** V2: liberado só com bruto da ficha; valor = % configurada × bruto (cap pelo teto). */

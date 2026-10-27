@@ -49,6 +49,7 @@ import {
   isV2HbOnlyServer,
 } from "@/lib/hb-credit/hbCreditV2LimiteBase";
 import { buildFichaPlanoBrutoCentsMapForCooperados } from "@/lib/supabase/hbCreditFichaPlanoStorage";
+import { capLimiteContaCoopV2FichaBruto } from "@/lib/hb-credit/hbCreditV2CooperadoLimiteExibicao";
 import { resolveLeituraFinanceiraCooperadoCore } from "@/lib/bic/bicLeituraPorta";
 import type {
   AuthoritativeCreditBaseErrorPayload,
@@ -236,6 +237,19 @@ export async function resolveCreditosBaseForLiberacaoColetiva(
   cooperadoIds: string[],
   clientBases: Record<string, number>
 ): Promise<CreditosBaseForLiberacaoResult> {
+  if (isV2HbOnlyServer()) {
+    const limites = await listLimitesCooperados(supabase, cnpj);
+    const fichaMap = await buildFichaPlanoBrutoCentsMapForCooperados(supabase, cnpj, cooperadoIds);
+    const creditosBaseCents = creditosBaseMapV2FichaAlinhada(cooperadoIds, limites, fichaMap);
+    return {
+      ok: true,
+      creditosBaseCents: pickCreditosBaseForLimitSync({
+        authoritative: creditosBaseCents,
+        cooperadoIds,
+        clientPreview: clientBases,
+      }).creditosBaseCents,
+    };
+  }
   const auth = await resolveAuthoritativeCreditBase(supabase, cnpj, cooperadoIds);
   if (!auth.ok) {
     return { ok: false, code: auth.code, message: auth.message };
@@ -543,12 +557,19 @@ export async function getDashboardResumo(
     const ids = limitesV2.map((l) => l.cooperadoId);
     const fichaBrutoMap = await buildFichaPlanoBrutoCentsMapForCooperados(supabase, digits, ids);
     creditosBaseForTeto = creditosBaseMapV2FichaAlinhada(ids, limitesV2, fichaBrutoMap);
-    limiteDistribuido = await sumLimitesDistribuidosV2FichaAtiva(supabase, digits);
+    const tetoPreview = await resolveTetoGlobal(supabase, digits, creditosBaseForTeto);
+    const tetoPctV2 = tetoPreview.configured ? tetoPreview.percent : 0;
+    const libPctV2 =
+      tetoPreview.configured
+        ? (await getCooperativaLiberacaoPercentConfigured(supabase, digits)) ?? tetoPctV2
+        : null;
     for (const l of limitesV2) {
-      const bruto = brutoV2FichaAtivoCents(l, fichaBrutoMap[l.cooperadoId] ?? 0);
+      const bruto = Math.max(0, Math.round(fichaBrutoMap[l.cooperadoId] ?? 0));
+      const capped = capLimiteContaCoopV2FichaBruto(l, bruto, tetoPctV2, libPctV2);
       if (bruto <= 0) continue;
-      usadoTotal += l.valorUsadoCents;
-      valorDisponivelAgregado += computeDisponivel(l.limiteLiberadoCents, l.valorUsadoCents);
+      limiteDistribuido += capped.limiteLiberadoCents;
+      usadoTotal += capped.valorUsadoCents;
+      valorDisponivelAgregado += capped.valorDisponivelCents;
     }
   } else {
     const limitesEfetivos = await listLimitesCooperadosAlinhadosAEntregas(supabase, digits, {
@@ -767,6 +788,66 @@ export async function listLimitesCooperadosAlinhadosComBase(
 
   if (!idsParaBase.length) {
     return { limites: limitesPosSync, creditosBaseCents: {} };
+  }
+
+  if (isV2HbOnlyServer()) {
+    const fichaMap = await buildFichaPlanoBrutoCentsMapForCooperados(supabase, digits, idsParaBase);
+    const creditosBaseMerged = creditosBaseMapV2FichaAlinhada(idsParaBase, limitesPosSync, fichaMap);
+    const teto = await resolveTetoGlobal(supabase, cnpj, creditosBaseMerged);
+    const tetoPercent = teto.configured ? teto.percent : 0;
+    const liberacaoPercent = teto.configured
+      ? (await getCooperativaLiberacaoPercentConfigured(supabase, cnpj)) ?? tetoPercent
+      : null;
+
+    if (persistFichaSync) {
+      const actorSync = opts?.actorUserId ?? "system:hb_limites_ficha_sync";
+      const pickedBase = pickCreditosBaseForLimitSync({
+        authoritative: creditosBaseMerged,
+        cooperadoIds: idsParaBase,
+      });
+      await syncLimitesCooperadosFromCreditoBase(
+        supabase,
+        cnpj,
+        idsParaBase,
+        pickedBase.creditosBaseCents,
+        actorSync
+      );
+      limitesPosSync = await listLimitesCooperados(supabase, cnpj);
+    }
+
+    let limitesParaUi = limitesPosSync.map((limite) => {
+      const bruto = Math.max(0, Math.round(fichaMap[limite.cooperadoId] ?? 0));
+      const capped = capLimiteContaCoopV2FichaBruto(limite, bruto, tetoPercent, liberacaoPercent);
+      return { ...capped, fichaPlanoBrutoCents: bruto };
+    });
+
+    if (opts?.authoritativeCooperadoIds?.length) {
+      const byCooperadoId = new Map(limitesParaUi.map((l) => [l.cooperadoId, l]));
+      limitesParaUi = opts.authoritativeCooperadoIds.map((id) => {
+        const conta = byCooperadoId.get(id);
+        const bruto = Math.max(0, Math.round(fichaMap[id] ?? 0));
+        const baseRow =
+          conta ??
+          ({
+            id: `sem-conta-${id}`,
+            cooperativaCnpj: digits,
+            cooperadoId: id,
+            limiteLiberadoCents: 0,
+            valorUsadoCents: 0,
+            valorDisponivelCents: 0,
+            bloqueado: false,
+            updatedAt: "",
+          } satisfies ContaCoopLimiteCooperado);
+        return capLimiteContaCoopV2FichaBruto(
+          { ...baseRow, cooperadoId: id },
+          bruto,
+          tetoPercent,
+          liberacaoPercent
+        );
+      });
+    }
+
+    return { limites: limitesParaUi, creditosBaseCents: creditosBaseMerged };
   }
 
   const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, idsParaBase);
@@ -2151,12 +2232,23 @@ export async function getLimiteCooperadoExibicaoParidadeLimites(
   cnpj: string,
   cooperadoId: string
 ): Promise<ContaCoopLimiteCooperado | null> {
-  /** Mesma regra da aba Limites rápida: o liberado na nuvem é o que o cooperado gasta. */
-  return getLimiteCooperado(supabase, cnpj, cooperadoId, {
+  const limite = await getLimiteCooperado(supabase, cnpj, cooperadoId, {
     skipCycleHeal: true,
     skipAmountUsedReconcile: true,
     fastPreview: true,
   });
+  if (!limite) return null;
+  if (!isV2HbOnlyServer()) return limite;
+
+  const fichaMap = await buildFichaPlanoBrutoCentsMapForCooperados(supabase, cnpj, [cooperadoId]);
+  const bruto = Math.max(0, Math.round(fichaMap[cooperadoId] ?? 0));
+  const bases = creditosBaseMapV2FichaAlinhada([cooperadoId], [limite], fichaMap);
+  const teto = await resolveTetoGlobal(supabase, cnpj, bases);
+  const tetoPercent = teto.configured ? teto.percent : 0;
+  const liberacaoPercent = teto.configured
+    ? (await getCooperativaLiberacaoPercentConfigured(supabase, cnpj)) ?? tetoPercent
+    : null;
+  return capLimiteContaCoopV2FichaBruto(limite, bruto, tetoPercent, liberacaoPercent);
 }
 
 export async function setFinancialPin(
