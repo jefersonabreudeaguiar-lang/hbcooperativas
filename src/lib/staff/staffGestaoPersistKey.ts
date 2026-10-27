@@ -4,7 +4,22 @@
  */
 import type { AppData } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
-import { primaryStaffGestaoCnpjFromData } from "@/lib/staff/staffGestaoSnapshotGuard";
+
+/** Cópia mínima — não importar staffGestaoSnapshotGuard (evita fusão Turbopack que quebra readAppDataPersistRaw). */
+function primaryStaffGestaoCnpjFromLegacyBlob(data: AppData): string {
+  const ranked = (data.cooperativas ?? [])
+    .map((c) => {
+      const digits = normalizeCnpj(String(c.cnpj ?? ""));
+      if (digits.length !== 14) return null;
+      const notas = (data.notasPedido ?? []).filter((n) => n.cooperativaId === c.id).length;
+      const fichas = (data.fichaCorrida ?? []).filter((f) => f.cooperativaId === c.id).length;
+      return { digits, score: notas + fichas };
+    })
+    .filter((x): x is { digits: string; score: number } => Boolean(x));
+  if (ranked.length === 0) return "";
+  ranked.sort((a, b) => b.score - a.score);
+  return ranked[0].digits;
+}
 
 export const APP_DATA_STORAGE_KEY = "coopeagriplla_data";
 
@@ -101,7 +116,7 @@ export function migrateLegacyAppDataIfMatches(
     if (!raw) return null;
     const parsed = JSON.parse(raw) as AppData;
     if (!parsed || typeof parsed !== "object") return null;
-    const owner = primaryStaffGestaoCnpjFromData(parsed);
+    const owner = primaryStaffGestaoCnpjFromLegacyBlob(parsed);
     if (!owner || owner !== digits) return null;
     store.setItem(staffGestaoPersistKey(digits), raw);
     return raw;
