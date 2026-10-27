@@ -167,12 +167,14 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
       </Card>
 
       {isV2HbOnlyClient() && cnpjHb.length === 14 && podeEditar ? (
-        <HbCreditFichaPlanoPanel
-          cnpj={cnpjHb}
-          cooperadoId={cooperado.id}
-          cooperadoNome={cooperado.nomeCompleto}
-          mode="edit"
-        />
+        <div id="ficha-hb" className="scroll-mt-6">
+          <HbCreditFichaPlanoPanel
+            cnpj={cnpjHb}
+            cooperadoId={cooperado.id}
+            cooperadoNome={cooperado.nomeCompleto}
+            mode="edit"
+          />
+        </div>
       ) : null}
 
       {!isV2HbOnlyClient() ? (

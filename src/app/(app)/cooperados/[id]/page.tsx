@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -26,6 +26,15 @@ export default function CooperadoFichaPage() {
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const acessoOk = cooperado && (!coopId || cooperado.cooperativaId === coopId) && !isCooperado;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.location.hash !== "#ficha-hb") return;
+    const el = document.getElementById("ficha-hb");
+    if (!el) return;
+    const t = window.setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+    return () => window.clearTimeout(t);
+  }, [id, cooperado?.id]);
 
   if (!data) return <PageSkeleton />;
 

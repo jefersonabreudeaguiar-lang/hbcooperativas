@@ -1540,9 +1540,10 @@ function ContaCoopContent() {
               <p>
                 {isV2HbOnlyClient() ? (
                   <>
-                    <strong className="text-gray-900">Valor bruto manual</strong> em{" "}
-                    <code className="text-xs">hb_credit_accounts</code> — base do limite HB e do card{" "}
-                    <strong>A receber</strong> do cooperado (bruto − crédito já usado).
+                    <strong className="text-gray-900">Bruto da ficha HB</strong> (entregas 1–5 − desconto %), salvo em{" "}
+                    <code className="text-xs">hb_credit_accounts</code> — única base do{" "}
+                    <strong>liberado</strong> e do card <strong>A receber</strong> (bruto − crédito já usado). Lance em{" "}
+                    <strong>Cooperados</strong>.
                   </>
                 ) : (
                   <>
@@ -1578,12 +1579,9 @@ function ContaCoopContent() {
                 <tbody>
                   {limitesLinhasRender.map((l) => {
                     const baseFichaCents = creditosBaseColetivo[l.cooperadoId] ?? 0;
-                    const baseCents =
-                      isV2HbOnlyClient() &&
-                      l.manualValorBrutoCents != null &&
-                      l.manualValorBrutoCents > 0
-                        ? l.manualValorBrutoCents
-                        : baseFichaCents;
+                    const baseCents = isV2HbOnlyClient()
+                      ? Math.max(0, Math.round(Number(l.manualValorBrutoCents) || 0))
+                      : baseFichaCents;
                     const exib = valoresLimiteExibidos(l, baseCents);
                     const aReceberV2 = isV2HbOnlyClient()
                       ? hbCreditValorAReceberReaisFromManualBruto(

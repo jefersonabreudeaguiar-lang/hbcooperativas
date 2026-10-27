@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, ShoppingCart, UserCircle, Pencil, Download, Smartphone, PenLine } from "lucide-react";
+import { Plus, ShoppingCart, UserCircle, Pencil, Download, Smartphone, PenLine, Package } from "lucide-react";
+import { isV2HbOnlyClient } from "@/lib/product/v2HbOnly";
 import { useStaffPanelAppData } from "@/hooks/useCooperadoPanelAppData";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
@@ -50,6 +51,7 @@ export default function CooperadosPage() {
 
   const mesAtual = getCurrentMesReferencia();
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+  const v2HbOnly = isV2HbOnlyClient();
 
   const instalacao = useMemo(() => {
     if (!data || !coopId) return null;
@@ -57,9 +59,9 @@ export default function CooperadosPage() {
   }, [data, coopId]);
 
   const assinatura = useMemo(() => {
-    if (!data || !coopId) return null;
+    if (v2HbOnly || !data || !coopId) return null;
     return resumoAssinaturaCadastroApp(data, coopId);
-  }, [data, coopId]);
+  }, [v2HbOnly, data, coopId]);
 
   const cooperados = useMemo(() => {
     if (!data || !user) return [];
@@ -77,6 +79,9 @@ export default function CooperadosPage() {
       return matchSearch && matchStatus;
     });
   }, [data, search, statusFilter, appFilter, user]);
+
+  const podeEditarCooperados = check("cooperados", "edit");
+  const podeLancarNota = check("notas_pedido", "create");
 
   useEffect(() => {
     if (!user || !tabActive) return;
@@ -209,13 +214,193 @@ export default function CooperadosPage() {
     })();
   };
 
+  const tableColumns = useMemo(() => {
+    if (!data) return [];
+    const cols: { key: string; label: string; render: (c: Cooperado) => ReactNode }[] = [
+      {
+        key: "nomeCompleto",
+        label: "Nome",
+        render: (c) => (
+          <span className="inline-flex items-center gap-2 flex-wrap">
+            <span>
+              {c.nomeCompleto}
+              {c.avulso ? (
+                <span className="ml-2 text-xs font-medium text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                  Avulso
+                </span>
+              ) : null}
+              {c.membroDiretoria ? (
+                <span className="ml-2 text-xs font-medium text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">
+                  Diretoria
+                </span>
+              ) : null}
+              {!c.avulso && c.status === "ativo" && (
+                cooperadoTemAppInstalado(c) ? (
+                  <span className="ml-2 text-xs font-medium text-green-800 bg-green-100 px-1.5 py-0.5 rounded">
+                    App OK
+                  </span>
+                ) : (
+                  <span className="ml-2 text-xs font-medium text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded">
+                    Sem app
+                  </span>
+                )
+              )}
+            </span>
+            {podeEditarCooperados && (
+              <button
+                type="button"
+                onClick={() => openEdit(c)}
+                className="text-gray-400 hover:text-green-700 p-1 rounded"
+                aria-label="Editar cooperado"
+              >
+                <Pencil size={14} />
+              </button>
+            )}
+          </span>
+        ),
+      },
+    ];
+
+    if (v2HbOnly) {
+      cols.push({
+        key: "entregasHb",
+        label: "Ficha HB",
+        render: (c) => (
+          <Link href={`/cooperados/${c.id}#ficha-hb`} className="inline-block">
+            <Button size="sm" className="whitespace-nowrap">
+              <Package size={16} className="mr-1.5" />
+              Lançar entregas
+            </Button>
+          </Link>
+        ),
+      });
+    }
+
+    cols.push(
+      { key: "cpfCnpj", label: "CPF/CNPJ", render: (c) => (c.cpfCnpj ? formatCPFCNPJ(c.cpfCnpj) : "—") },
+      { key: "comunidade", label: "Comunidade", render: (c) => c.comunidade || "—" },
+      { key: "telefone", label: "Telefone", render: (c) => formatPhone(c.telefone) },
+      {
+        key: "app",
+        label: "App",
+        render: (c) => {
+          if (c.avulso) return <span className="text-xs text-gray-400">Avulso</span>;
+          if (cooperadoTemAppInstalado(c)) {
+            return (
+              <span className="text-xs text-green-800">
+                Instalado
+                {c.appInstaladoEm ? (
+                  <span className="block text-gray-500">{formatDate(c.appInstaladoEm.split("T")[0])}</span>
+                ) : null}
+              </span>
+            );
+          }
+          return <span className="text-xs font-medium text-amber-800">Não instalou</span>;
+        },
+      },
+      { key: "pix", label: "PIX", render: (c) => c.chavePix || "—" },
+      { key: "produtos", label: "Produtos", render: (c) => c.produtos.join(", ") },
+      { key: "status", label: "Status", render: (c) => <StatusBadge status={c.status} /> }
+    );
+
+    if (!v2HbOnly) {
+      cols.push({
+        key: "cota",
+        label: "Cota",
+        render: (c) => {
+          const status = getStatusCotaCooperado(data, c.id, mesAtual);
+          const paga = status === "paga";
+          return (
+            <div className="space-y-2 min-w-[140px]">
+              <span
+                className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  paga ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                }`}
+              >
+                {paga ? "Paga" : "Não paga"}
+              </span>
+              {podeEditarCooperados && (
+                <div className="flex gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={paga ? "primary" : "secondary"}
+                    className="px-2 text-xs"
+                    onClick={() => handleCota(c, true)}
+                  >
+                    Paga
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={!paga ? "primary" : "secondary"}
+                    className="px-2 text-xs"
+                    onClick={() => handleCota(c, false)}
+                  >
+                    Não paga
+                  </Button>
+                </div>
+              )}
+              <p className="text-[10px] text-gray-400">{formatMesReferencia(mesAtual)}</p>
+            </div>
+          );
+        },
+      });
+      cols.push({
+        key: "ficha",
+        label: "Ficha",
+        render: (c) => (
+          <Link
+            href={`/cooperados/${c.id}`}
+            className="inline-flex items-center gap-1 text-sm text-green-700 hover:text-green-800 font-medium"
+          >
+            <UserCircle size={16} /> Ver ficha
+          </Link>
+        ),
+      });
+      if (podeLancarNota) {
+        cols.push({
+          key: "venda",
+          label: "Lançar",
+          render: (c) => (
+            <Link
+              href={`/notas-pedido?cooperado=${c.id}&lancar=1`}
+              className="inline-flex items-center gap-1 text-sm text-green-700 hover:text-green-800 font-medium"
+            >
+              <ShoppingCart size={16} /> Lançar nota
+            </Link>
+          ),
+        });
+      }
+    } else {
+      cols.push({
+        key: "cadastro",
+        label: "Cadastro",
+        render: (c) => (
+          <Link
+            href={`/cooperados/${c.id}`}
+            className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-green-800 font-medium"
+          >
+            <UserCircle size={16} /> Ver dados
+          </Link>
+        ),
+      });
+    }
+
+    return cols;
+  }, [data, v2HbOnly, mesAtual, podeEditarCooperados, podeLancarNota, openEdit, handleCota]);
+
   if (!data) return <PageSkeleton />;
 
   return (
     <div>
       <PageHeader
         title="Cooperados"
-        subtitle="Todos os cooperados cadastrados no CNPJ da cooperativa — abra a ficha para ver entregas e lançamentos"
+        subtitle={
+          v2HbOnly
+            ? "Cadastro e lançamento da ficha HB (entregas 1–5, desconto e mensalidades) por cooperado"
+            : "Todos os cooperados cadastrados no CNPJ da cooperativa — abra a ficha para ver entregas e lançamentos"
+        }
         action={check("cooperados", "create") && (
           <Button onClick={openNew}><Plus size={18} /> Novo Cooperado</Button>
         )}
@@ -292,11 +477,11 @@ export default function CooperadosPage() {
         </Card>
       )}
 
-      {data && user && coopId && check("cooperados", "edit") && (
+      {!v2HbOnly && data && user && coopId && check("cooperados", "edit") && (
         <AssinaturaCadastroGestaoPanel data={data} user={user} cooperativaId={coopId} />
       )}
 
-      {assinatura && assinatura.comApp > 0 && (
+      {!v2HbOnly && assinatura && assinatura.comApp > 0 && (
         <Card className="mb-6 border-2 border-indigo-200 bg-gradient-to-r from-indigo-50 to-white">
           <div className="flex flex-col sm:flex-row sm:items-start gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600 text-white shrink-0">
@@ -378,123 +563,7 @@ export default function CooperadosPage() {
         </Select>
       </FilterBar>
 
-      <DataTable
-        data={cooperados}
-        keyField="id"
-        columns={[
-          { key: "nomeCompleto", label: "Nome", render: (c) => (
-            <span className="inline-flex items-center gap-2 flex-wrap">
-              <span>
-                {c.nomeCompleto}
-                {c.avulso ? <span className="ml-2 text-xs font-medium text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Avulso</span> : null}
-                {c.membroDiretoria ? <span className="ml-2 text-xs font-medium text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">Diretoria</span> : null}
-                {!c.avulso && c.status === "ativo" && (
-                  cooperadoTemAppInstalado(c) ? (
-                    <span className="ml-2 text-xs font-medium text-green-800 bg-green-100 px-1.5 py-0.5 rounded">App OK</span>
-                  ) : (
-                    <span className="ml-2 text-xs font-medium text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded">Sem app</span>
-                  )
-                )}
-              </span>
-              {check("cooperados", "edit") && (
-                <button
-                  type="button"
-                  onClick={() => openEdit(c)}
-                  className="text-gray-400 hover:text-green-700 p-1 rounded"
-                  aria-label="Editar cooperado"
-                >
-                  <Pencil size={14} />
-                </button>
-              )}
-            </span>
-          ) },
-          { key: "cpfCnpj", label: "CPF/CNPJ", render: (c) => (c.cpfCnpj ? formatCPFCNPJ(c.cpfCnpj) : "—") },
-          { key: "comunidade", label: "Comunidade" },
-          { key: "telefone", label: "Telefone", render: (c) => formatPhone(c.telefone) },
-          {
-            key: "app",
-            label: "App",
-            render: (c) => {
-              if (c.avulso) return <span className="text-xs text-gray-400">Avulso</span>;
-              if (cooperadoTemAppInstalado(c)) {
-                return (
-                  <span className="text-xs text-green-800">
-                    Instalado
-                    {c.appInstaladoEm ? (
-                      <span className="block text-gray-500">{formatDate(c.appInstaladoEm.split("T")[0])}</span>
-                    ) : null}
-                  </span>
-                );
-              }
-              return <span className="text-xs font-medium text-amber-800">Não instalou</span>;
-            },
-          },
-          { key: "pix", label: "PIX", render: (c) => c.chavePix || "—" },
-          { key: "produtos", label: "Produtos", render: (c) => c.produtos.join(", ") },
-          { key: "status", label: "Status", render: (c) => <StatusBadge status={c.status} /> },
-          {
-            key: "cota",
-            label: "Cota",
-            render: (c) => {
-              const status = getStatusCotaCooperado(data, c.id, mesAtual);
-              const paga = status === "paga";
-              return (
-                <div className="space-y-2 min-w-[140px]">
-                  <span
-                    className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${
-                      paga ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                    }`}
-                  >
-                    {paga ? "Paga" : "Não paga"}
-                  </span>
-                  {check("cooperados", "edit") && (
-                    <div className="flex gap-1">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={paga ? "primary" : "secondary"}
-                        className="px-2 text-xs"
-                        onClick={() => handleCota(c, true)}
-                      >
-                        Paga
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={!paga ? "primary" : "secondary"}
-                        className="px-2 text-xs"
-                        onClick={() => handleCota(c, false)}
-                      >
-                        Não paga
-                      </Button>
-                    </div>
-                  )}
-                  <p className="text-[10px] text-gray-400">{formatMesReferencia(mesAtual)}</p>
-                </div>
-              );
-            },
-          },
-          {
-            key: "ficha",
-            label: "Ficha",
-            render: (c) => (
-              <Link href={`/cooperados/${c.id}`} className="inline-flex items-center gap-1 text-sm text-green-700 hover:text-green-800 font-medium">
-                <UserCircle size={16} /> Ver ficha
-              </Link>
-            ),
-          },
-          {
-            key: "venda",
-            label: "Lançar",
-            render: (c) =>
-              check("notas_pedido", "create") ? (
-                <Link href={`/notas-pedido?cooperado=${c.id}&lancar=1`} className="inline-flex items-center gap-1 text-sm text-green-700 hover:text-green-800 font-medium">
-                  <ShoppingCart size={16} /> Lançar nota
-                </Link>
-              ) : null,
-          },
-        ]}
-      />
+      <DataTable data={cooperados} keyField="id" columns={tableColumns} />
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? "Editar Cooperado" : "Novo Cooperado"} size="lg">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
