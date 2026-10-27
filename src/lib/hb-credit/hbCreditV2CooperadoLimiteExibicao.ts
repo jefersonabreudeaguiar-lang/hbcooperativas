@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
-import { resolveLimiteHbCooperadoEfetivo } from "@/modules/hb-credit/engine/creditBaseHbGuard";
+import { calcLimiteFromPercentual } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import { hbCreditEffectiveDisponivelCents } from "@/modules/hb-credit/engine/paymentAffordability";
 import { creditosBaseMapV2FichaAlinhada } from "@/lib/hb-credit/hbCreditV2LimiteBase";
 import {
@@ -14,36 +14,51 @@ export type HbV2FichaLimiteExibicao = {
 };
 
 export function limiteExibicaoV2SemBrutoFicha(limite: ContaCoopLimiteCooperado): ContaCoopLimiteCooperado {
+  const usado = Math.max(0, Math.round(limite.valorUsadoCents ?? 0));
   return {
     ...limite,
     limiteLiberadoCents: 0,
-    valorUsadoCents: 0,
+    valorUsadoCents: usado,
     valorDisponivelCents: 0,
   };
 }
 
+function releasePercentV2(tetoPercent: number, liberacaoPercent: number | null): number {
+  const tetoPct =
+    Number.isFinite(tetoPercent) && tetoPercent > 0 && tetoPercent <= 100 ? tetoPercent : 100;
+  const libPct =
+    liberacaoPercent != null &&
+    Number.isFinite(liberacaoPercent) &&
+    liberacaoPercent > 0 &&
+    liberacaoPercent <= 100
+      ? liberacaoPercent
+      : tetoPct;
+  return Math.min(tetoPct, libPct);
+}
+
+/** V2 responsável/cooperado: liberado = % × bruto da ficha (não limit_released legado na nuvem). */
 export function capLimiteContaCoopV2FichaBruto(
   limite: ContaCoopLimiteCooperado,
   brutoFichaCents: number,
   tetoPercent: number,
   liberacaoPercent: number | null
 ): ContaCoopLimiteCooperado {
-  if (brutoFichaCents <= 0) return limiteExibicaoV2SemBrutoFicha(limite);
+  const bruto = Math.max(0, Math.round(brutoFichaCents));
+  if (bruto <= 0) return limiteExibicaoV2SemBrutoFicha(limite);
   if (!tetoPercent || tetoPercent <= 0) return limiteExibicaoV2SemBrutoFicha(limite);
-  const capped = resolveLimiteHbCooperadoEfetivo(
-    limite,
-    brutoFichaCents,
-    tetoPercent,
-    liberacaoPercent
-  );
-  const usado = Math.max(0, Math.round(capped.valorUsadoCents ?? 0));
+
+  const usado = Math.max(0, Math.round(limite.valorUsadoCents ?? 0));
+  const releasePct = releasePercentV2(tetoPercent, liberacaoPercent);
+  let liberado = calcLimiteFromPercentual(bruto, releasePct);
+  const tetoMax = calcLimiteFromPercentual(bruto, tetoPercent);
+  if (liberado > tetoMax) liberado = tetoMax;
+  if (liberado < usado) liberado = usado;
+
   return {
-    ...capped,
-    valorDisponivelCents: hbCreditEffectiveDisponivelCents(
-      capped.limiteLiberadoCents,
-      brutoFichaCents,
-      usado
-    ),
+    ...limite,
+    limiteLiberadoCents: liberado,
+    valorUsadoCents: usado,
+    valorDisponivelCents: hbCreditEffectiveDisponivelCents(liberado, bruto, usado),
   };
 }
 

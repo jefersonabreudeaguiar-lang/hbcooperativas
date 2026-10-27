@@ -3,12 +3,13 @@
  */
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 
-export const HB_CREDIT_LIMITES_STORAGE_VERSION = 5;
+export const HB_CREDIT_LIMITES_STORAGE_VERSION = 6;
 
 export type HbCreditLimitesPersistido = {
   v: number;
   limites: ContaCoopLimiteCooperado[];
   creditosBaseCents?: Record<string, number>;
+  fichaPlanoBrutoCentsByCooperadoId?: Record<string, number>;
   /** Último percentual de liberação confirmado (espelho local do servidor). */
   liberacaoColetivaPercent?: number;
   savedAt: string;
@@ -44,7 +45,8 @@ export function gravarHbCreditLimitesPersistidos(
   cnpj: string,
   limites: ContaCoopLimiteCooperado[],
   creditosBaseCents?: Record<string, number>,
-  liberacaoColetivaPercent?: number
+  liberacaoColetivaPercent?: number,
+  fichaPlanoBrutoCentsByCooperadoId?: Record<string, number>
 ): void {
   if (typeof localStorage === "undefined") return;
   try {
@@ -54,6 +56,10 @@ export function gravarHbCreditLimitesPersistidos(
       limites,
       creditosBaseCents:
         creditosBaseCents && Object.keys(creditosBaseCents).length ? creditosBaseCents : undefined,
+      fichaPlanoBrutoCentsByCooperadoId:
+        fichaPlanoBrutoCentsByCooperadoId && Object.keys(fichaPlanoBrutoCentsByCooperadoId).length
+          ? fichaPlanoBrutoCentsByCooperadoId
+          : prev?.fichaPlanoBrutoCentsByCooperadoId,
       liberacaoColetivaPercent:
         liberacaoColetivaPercent != null && liberacaoColetivaPercent > 0
           ? liberacaoColetivaPercent

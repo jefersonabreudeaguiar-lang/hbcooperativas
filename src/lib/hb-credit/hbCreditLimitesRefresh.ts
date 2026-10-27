@@ -38,7 +38,13 @@ export async function refreshHbCreditLimitesStaff(
     persistFichaSync: true,
     cooperadoIds: opts.cooperadoIds,
   });
-  gravarHbCreditLimitesPersistidos(opts.cnpj, payload.limites, payload.creditosBaseAuthoritativeCents);
+  gravarHbCreditLimitesPersistidos(
+    opts.cnpj,
+    payload.limites,
+    payload.creditosBaseAuthoritativeCents,
+    undefined,
+    payload.fichaPlanoBrutoCentsByCooperadoId
+  );
   notifyHbCreditLimiteSynced();
   return payload;
 }

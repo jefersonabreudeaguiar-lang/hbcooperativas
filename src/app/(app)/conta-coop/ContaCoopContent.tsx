@@ -36,6 +36,8 @@ import {
   calcLimiteFromPercentual,
 } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import { resolveLimiteHbCooperadoEfetivo } from "@/modules/hb-credit/engine/creditBaseHbGuard";
+import { capLimiteContaCoopV2FichaBruto } from "@/lib/hb-credit/hbCreditV2CooperadoLimiteExibicao";
+import { capLimiteContaCoopV2FichaBruto } from "@/lib/hb-credit/hbCreditV2CooperadoLimiteExibicao";
 import type { AuthoritativeCreditBaseErrorPayload } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro, ContaCoopCooperadoPinResetRequest, ContaCoopPixChangeRequest } from "@/modules/hb-credit/types";
 import type { Cooperado } from "@/types";
@@ -512,10 +514,16 @@ function ContaCoopContent() {
 
   const limitesLinhasCooperados = useMemo(() => {
     if (!cnpj) return [];
+    if (isV2HbOnlyClient()) {
+      return cooperadosAtivos.map((c) => {
+        const row = limitesPorCooperado.get(c.id);
+        return row ?? limitePlaceholderCooperado(c.id, cnpj);
+      });
+    }
     return cooperadosAtivos.map((c) =>
       resolveLimiteExibicaoCooperado(c.id, cnpj, limites, cooperadosAtivos)
     );
-  }, [cooperadosAtivos, limites, cnpj]);
+  }, [cooperadosAtivos, limites, cnpj, limitesPorCooperado]);
 
   const limitesLinhasRender = useDeferredValue(limitesLinhasCooperados);
 
@@ -555,23 +563,41 @@ function ContaCoopContent() {
         setLimitesListaAviso(mensagemAvisoBaseAuthoritativeLimites(full.authoritativeError));
       } else {
         setLimitesListaAviso("");
-        applyCreditosBaseFromServer(full.creditosBaseAuthoritativeCents);
+        if (!isV2HbOnlyClient()) {
+          applyCreditosBaseFromServer(full.creditosBaseAuthoritativeCents);
+        }
       }
-      if (full.fichaPlanoBrutoCentsByCooperadoId) {
-        setFichaPlanoBrutoByCooperado((prev) => ({ ...prev, ...full.fichaPlanoBrutoCentsByCooperadoId }));
+      const fichaMapNext = full.fichaPlanoBrutoCentsByCooperadoId;
+      if (fichaMapNext) {
+        setFichaPlanoBrutoByCooperado((prev) => ({ ...prev, ...fichaMapNext }));
+        if (isV2HbOnlyClient()) {
+          const basesFicha: Record<string, number> = {};
+          for (const [id, cents] of Object.entries(fichaMapNext)) {
+            if (cents > 0) basesFicha[id] = cents;
+          }
+          if (Object.keys(basesFicha).length) {
+            creditosBaseRef.current = basesFicha;
+            startTransition(() => setCreditosBaseColetivo(basesFicha));
+          }
+        }
       }
-      const merged = mergeLimitesCooperado(limitesRef.current, full.limites, ids);
+      const merged = isV2HbOnlyClient()
+        ? mergeLimitesCooperado([], full.limites, ids)
+        : mergeLimitesCooperado(limitesRef.current, full.limites, ids);
       startTransition(() => {
         setLimites(merged);
       });
-      const basesParaPersistir =
-        full.creditosBaseAuthoritativeCents &&
-        Object.keys(full.creditosBaseAuthoritativeCents).length
+      const basesParaPersistir = isV2HbOnlyClient()
+        ? fichaMapNext
+          ? Object.fromEntries(Object.entries(fichaMapNext).filter(([, v]) => v > 0))
+          : undefined
+        : full.creditosBaseAuthoritativeCents &&
+            Object.keys(full.creditosBaseAuthoritativeCents).length
           ? full.creditosBaseAuthoritativeCents
           : Object.keys(creditosBaseRef.current).length
             ? creditosBaseRef.current
             : lerHbCreditLimitesPersistidos(cnpj)?.creditosBaseCents;
-      gravarHbCreditLimitesPersistidos(cnpj, merged, basesParaPersistir);
+      gravarHbCreditLimitesPersistidos(cnpj, merged, basesParaPersistir, undefined, fichaMapNext);
       limitesListaFetchedAtRef.current = Date.now();
     },
     [cnpj, applyCreditosBaseFromServer]
@@ -856,13 +882,27 @@ function ContaCoopContent() {
       setLoading(false);
       background = true;
     }
-    if (snapLimites?.limites.length) {
+    if (isV2HbOnlyClient()) {
+      if (snapLimites?.fichaPlanoBrutoCentsByCooperadoId) {
+        setFichaPlanoBrutoByCooperado(snapLimites.fichaPlanoBrutoCentsByCooperadoId);
+      }
+      if (snapLimites?.limites.length) {
+        setLimites(snapLimites.limites);
+        limitesListaFetchedAtRef.current = snapLimites.savedAt
+          ? Date.parse(snapLimites.savedAt) || Date.now()
+          : Date.now();
+      }
+    } else if (snapLimites?.limites.length) {
       setLimites(snapLimites.limites);
       limitesListaFetchedAtRef.current = snapLimites.savedAt
         ? Date.parse(snapLimites.savedAt) || Date.now()
         : Date.now();
     }
-    if (snapLimites?.creditosBaseCents && Object.keys(snapLimites.creditosBaseCents).length) {
+    if (
+      !isV2HbOnlyClient() &&
+      snapLimites?.creditosBaseCents &&
+      Object.keys(snapLimites.creditosBaseCents).length
+    ) {
       setCreditosBaseColetivo(snapLimites.creditosBaseCents);
       creditosBaseRef.current = snapLimites.creditosBaseCents;
     }
@@ -1609,16 +1649,18 @@ function ContaCoopContent() {
                 </thead>
                 <tbody>
                   {limitesLinhasRender.map((l) => {
-                    const baseFichaCents = creditosBaseColetivo[l.cooperadoId] ?? 0;
                     const brutoFichaPlanoCents =
                       fichaPlanoBrutoByCooperado[l.cooperadoId] ?? l.fichaPlanoBrutoCents ?? null;
+                    const baseCents = isV2HbOnlyClient()
+                      ? resolveBrutoFichaHbV2Cents(l, brutoFichaPlanoCents ?? null)
+                      : creditosBaseColetivo[l.cooperadoId] ?? 0;
+                    const exib = valoresLimiteExibidos(l, baseCents, brutoFichaPlanoCents);
                     const paridadeV2 = isV2HbOnlyClient()
                       ? hbCreditCooperadoInicioV2Totais(l, {
                           brutoFichaPlanoCents,
+                          valorLiberadoCents: exib.liberado,
                         })
                       : null;
-                    const baseCents = paridadeV2?.brutoFichaCents ?? baseFichaCents;
-                    const exib = valoresLimiteExibidos(l, baseCents, brutoFichaPlanoCents);
                     const aReceberV2Cents = paridadeV2?.aReceberCents ?? 0;
                     return (
                     <tr key={l.cooperadoId} className="border-t">

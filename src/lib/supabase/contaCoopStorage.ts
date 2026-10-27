@@ -749,7 +749,7 @@ export async function listLimitesCooperadosAlinhadosComBase(
   const digits = normalizeCnpj(cnpj);
   const limitesRaw = await listLimitesCooperados(supabase, cnpj);
 
-  if (opts?.fast) {
+  if (opts?.fast && !isV2HbOnlyServer()) {
     return { limites: limitesRaw, creditosBaseCents: {} };
   }
 
