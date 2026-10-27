@@ -7,11 +7,12 @@ import type { SyncRunOptions } from "@/services/syncRequest";
 import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewportCore";
 import {
   staffGestaoAberturaSyncJaConcluido,
+  staffGestaoHydrateIncompleto,
   staffPrecisaHydrateOperacionalPull,
 } from "@/lib/staff/staffOperacionalColdHydrate";
 
 /** Bump + teste `test-staff-gestao-perfil-desktop.ts` a cada mudança de comportamento PC. */
-export const STAFF_GESTAO_DESKTOP_PERFIL_VERSION = 10;
+export const STAFF_GESTAO_DESKTOP_PERFIL_VERSION = 11;
 
 export function staffGestaoPerfilEhDesktop(): boolean {
   if (typeof window === "undefined") return false;
@@ -37,11 +38,16 @@ export function staffGestaoPerfilAberturaSyncPermitido(
   data?: AppData | null,
   coopId?: string
 ): boolean {
-  return staffGestaoPerfilAberturaSyncPermitidoForViewport(
-    staffGestaoPerfilEhDesktop(),
-    data,
-    coopId
-  );
+  if (
+    staffGestaoPerfilAberturaSyncPermitidoForViewport(
+      staffGestaoPerfilEhDesktop(),
+      data,
+      coopId
+    )
+  ) {
+    return true;
+  }
+  return Boolean(coopId && staffGestaoHydrateIncompleto(data, coopId));
 }
 
 export function staffGestaoPerfilAberturaDelayMs(): number {

@@ -139,6 +139,20 @@ export function staffGestaoEntregaSemPixNoEscopo(
   return staffGestaoTemFichaOuNotaLocal(data, coopId);
 }
 
+/** Cadastro, ficha ou operacional ainda insuficientes para Pagar / Em aberto. */
+export function staffGestaoHydrateIncompleto(
+  data: AppData | null | undefined,
+  coopId?: string
+): boolean {
+  if (!coopId) return false;
+  if (staffCooperadosCadastroAusente(data, coopId)) return true;
+  if (staffGestaoFaltaFichaOperacionalNoEscopo(data, coopId)) return true;
+  if (staffLocalOperacionalVazio(data, coopId) && staffGestaoTemFichaOuNotaLocal(data, coopId)) {
+    return !staffOperacionalPullJaAplicado();
+  }
+  return false;
+}
+
 export function staffPrecisaHydrateOperacionalPull(
   data: AppData | null | undefined,
   coopId?: string
@@ -148,12 +162,8 @@ export function staffPrecisaHydrateOperacionalPull(
       staffOperacionalPullJaAplicado() && staffGestaoTemFichaOuNotaLocal(data, coopId);
     if (!jaHidratouNestaSessao) return true;
   }
-  if (staffCooperadosCadastroAusente(data, coopId)) {
-    if (!staffOperacionalPullJaAplicado()) return true;
-  }
-  if (staffGestaoFaltaFichaOperacionalNoEscopo(data, coopId)) {
-    if (!staffOperacionalPullJaAplicado()) return true;
-  }
+  if (staffCooperadosCadastroAusente(data, coopId)) return true;
+  if (staffGestaoFaltaFichaOperacionalNoEscopo(data, coopId)) return true;
   return false;
 }
 

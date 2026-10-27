@@ -16,7 +16,7 @@ import {
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.equal(STAFF_GESTAO_DESKTOP_PERFIL_VERSION, 10);
+assert.equal(STAFF_GESTAO_DESKTOP_PERFIL_VERSION, 11);
 assert.equal(staffGestaoPerfilAberturaSyncPermitidoForViewport(true, emptyInitialData), true);
 const comPixDesktop = {
   ...emptyInitialData,
@@ -62,6 +62,7 @@ assert.ok(read("src/components/layout/AppLayout.tsx").includes("data-staff-gesta
 
 assert.ok(read("src/lib/staff/staffGestaoModoDesktop.ts").includes("staffGestaoPerfil"));
 assert.ok(read("src/components/sync/CooperativaSyncProvider.tsx").includes("staffGestaoPerfilCapSyncAutomatico"));
+assert.ok(read("src/components/sync/CooperativaSyncProvider.tsx").includes("runStaffGestaoAberturaHydrate"));
 assert.ok(read("src/components/layout/AppLayout.tsx").includes("data-staff-gestao-perfil"));
 
 console.log("OK test-staff-gestao-perfil-desktop v", STAFF_GESTAO_DESKTOP_PERFIL_VERSION);

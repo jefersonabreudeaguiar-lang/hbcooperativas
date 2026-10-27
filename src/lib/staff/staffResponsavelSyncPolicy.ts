@@ -6,7 +6,11 @@
  */
 import type { AppData, UserRole } from "@/types";
 import type { SyncRunOptions } from "@/services/syncRequest";
-import { staffPrecisaHydrateOperacionalPull } from "@/lib/staff/staffOperacionalColdHydrate";
+import {
+  staffCooperadosCadastroAusente,
+  staffGestaoFaltaFichaOperacionalNoEscopo,
+  staffPrecisaHydrateOperacionalPull,
+} from "@/lib/staff/staffOperacionalColdHydrate";
 import { staffGestaoEmViewportDesktop } from "@/lib/staff/staffGestaoModoDesktop";
 
 const STAFF_GESTAO_ROLES: UserRole[] = ["responsavel", "tesoureiro", "admin"];
@@ -33,6 +37,24 @@ export function staffResponsavelOpeningSyncRequest(
     return { silent: true, tier: "notas_delta" };
   }
   return { silent: true, tier: "notas_delta" };
+}
+
+/** Segunda/terceira passada da abertura — cooperados e ficha antes de fechar a sessão. */
+export function staffResponsavelHydrateFollowUpSyncRequest(
+  data?: AppData | null,
+  coopId?: string
+): SyncRunOptions | undefined {
+  if (!coopId) return undefined;
+  if (staffCooperadosCadastroAusente(data, coopId)) {
+    return { silent: true, force: true, eventDriven: true, tier: "notas_delta" };
+  }
+  if (staffGestaoFaltaFichaOperacionalNoEscopo(data, coopId)) {
+    return { silent: true, force: true, eventDriven: true, tier: "financeiro_delta" };
+  }
+  if (staffPrecisaHydrateOperacionalPull(data, coopId)) {
+    return { silent: true, force: true, eventDriven: true, tier: "financeiro_delta" };
+  }
+  return undefined;
 }
 
 /**

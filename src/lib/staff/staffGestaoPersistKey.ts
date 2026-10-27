@@ -137,6 +137,25 @@ export function writeAppDataPersistRaw(serialized: string, opts?: AppDataPersist
   }
 }
 
+/** Persist ilegível no Chrome — isola o blob e deixa o lastro/sync reconstruir. */
+export function quarantineStaffGestaoPersistCorrupt(opts?: AppDataPersistHint): boolean {
+  const hint = resolveHint(opts);
+  if (!hint.storage || !sessionLooksStaffGestao(hint.role)) return false;
+  if (hint.cnpj.length !== 14) return false;
+  const key = staffGestaoPersistKey(hint.cnpj);
+  try {
+    const raw = hint.storage.getItem(key);
+    if (raw) {
+      hint.storage.setItem(`${key}:quarantine:${Date.now()}`, raw.slice(0, 500_000));
+      hint.storage.removeItem(key);
+    }
+    hint.storage.setItem("hb-staff-persist-quarantine", hint.cnpj);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function removeAppDataPersistRaw(opts?: AppDataPersistHint): void {
   const hint = resolveHint(opts);
   if (!hint.storage) return;

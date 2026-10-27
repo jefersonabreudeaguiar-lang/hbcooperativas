@@ -30,6 +30,8 @@ export function staffAbaDeveRecarregarDocumento(): boolean {
   if (!isStaffSessionActiveInStorage()) return false;
   try {
     if (window.location.search.includes("_hbStaffAba=")) return false;
+    const reloads = Number(sessionStorage.getItem("hb-staff-aba-reload-count") || "0");
+    if (reloads >= 2) return false;
   } catch {
     /* ignore */
   }
@@ -56,6 +58,12 @@ export function staffAbaDeveRecarregarDocumento(): boolean {
 /** Troca o HTML — remount do React no JS velho não recupera a aba. */
 export function recarregarAbaStaffDocumento(): void {
   if (typeof window === "undefined") return;
+  try {
+    const prev = Number(sessionStorage.getItem("hb-staff-aba-reload-count") || "0");
+    sessionStorage.setItem("hb-staff-aba-reload-count", String(prev + 1));
+  } catch {
+    /* ignore */
+  }
   try {
     const u = new URL(window.location.href);
     u.searchParams.set("_hbStaffAba", String(APP_BUILD_VERSION));

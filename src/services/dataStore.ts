@@ -20,6 +20,7 @@ import {
 import {
   APP_DATA_STORAGE_KEY,
   isAppDataPersistStorageKey,
+  quarantineStaffGestaoPersistCorrupt,
   readAppDataPersistRaw,
   removeAppDataPersistRaw,
   writeAppDataPersistRaw,
@@ -1033,6 +1034,9 @@ function loadData(forceReload = false): AppData {
       memoryCache = restoreStaffGestaoFromLastGoodIfNeeded(fallback);
       return memoryCache;
     } catch {
+      if (sessionRoleLooksStaffGestao()) {
+        quarantineStaffGestaoPersistCorrupt();
+      }
       const lkg = sessionRoleLooksStaffGestao() ? peekStaffGestaoLastGood() : null;
       if (lkg && staffGestaoRiquezaTotal(medirRiquezaStaffGestao(lkg)) > 0) {
         memoryCache = lkg;

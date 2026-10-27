@@ -136,7 +136,10 @@ import { scheduleCooperadoPostShellSync } from "@/lib/performance/cooperadoPostS
 import { fetchCooperativaCloudRevision } from "@/services/cooperativaSyncRevisionService";
 import { notifyAppSubtleUpdate } from "@/lib/cooperadoSubtleUpdate";
 import { requestCooperadoAppReleaseSync, type SyncRunOptions } from "@/services/syncRequest";
-import { staffResponsavelOpeningSyncRequest } from "@/lib/staff/staffResponsavelSyncPolicy";
+import {
+  staffResponsavelHydrateFollowUpSyncRequest,
+  staffResponsavelOpeningSyncRequest,
+} from "@/lib/staff/staffResponsavelSyncPolicy";
 import {
   isStaffGestaoLiveSyncEnabled,
   resolveStaffGestaoLiveSyncIntervalMs,
@@ -154,7 +157,10 @@ import {
   staffGestaoSyncBackgroundPermitido,
 } from "@/lib/staff/staffGestaoModoDesktop";
 import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
-import { markStaffGestaoAberturaSyncConcluido } from "@/lib/staff/staffOperacionalColdHydrate";
+import {
+  markStaffGestaoAberturaSyncConcluido,
+  staffGestaoHydrateIncompleto,
+} from "@/lib/staff/staffOperacionalColdHydrate";
 import {
   isStaffFilaNotasLivePollEnabled,
   resolveStaffFilaBackgroundCatchupMs,
@@ -933,14 +939,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
       completed = true;
 
-      if (
-        isStaffGestao &&
-        opts?.userInitiated !== true &&
-        opts?.eventDriven !== true
-      ) {
-        markStaffGestaoAberturaSyncConcluido();
-      }
-
       if (!cooperadoLogado) {
         const align = await ensureOperacionalAlinhadoComNuvem(cnpj, currentCoopId);
         if (!align.ok) {
@@ -1184,6 +1182,26 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     }
   }, [markCooperadoPagamentosHydrated, scheduleCooperadoSilentSyncRetry]);
 
+  const runStaffGestaoAberturaHydrate = useCallback(async () => {
+    const currentUser = userRef.current;
+    if (!currentUser) return;
+    const snap0 = isAppDataWarm() ? getData() : peekStaffGestaoLastGood();
+    const coop0 = resolveGestaoCooperativaId(currentUser, snap0);
+    await runSync(staffResponsavelOpeningSyncRequest(snap0, coop0));
+    for (let step = 0; step < 3; step++) {
+      const snap = getData();
+      const coop = resolveGestaoCooperativaId(currentUser, snap);
+      if (!coop || !staffGestaoHydrateIncompleto(snap, coop)) break;
+      const follow = staffResponsavelHydrateFollowUpSyncRequest(snap, coop);
+      if (!follow) break;
+      await runSync(follow);
+    }
+    const finalCoop = resolveGestaoCooperativaId(currentUser, getData());
+    if (!staffGestaoHydrateIncompleto(getData(), finalCoop)) {
+      markStaffGestaoAberturaSyncConcluido();
+    }
+  }, [runSync]);
+
   useEffect(() => {
     installH197WindowExport();
   }, []);
@@ -1303,9 +1321,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         markUserActivity();
         const runStaffOpen = () => {
           markNextCooperadoSyncSilent();
-          const snap = isAppDataWarm() ? getData() : peekStaffGestaoLastGood();
-          const coopOpen = resolveGestaoCooperativaId(user, snap);
-          void runSync(staffResponsavelOpeningSyncRequest(snap, coopOpen));
+          void runStaffGestaoAberturaHydrate();
         };
         const delayOpen = staffGestaoAberturaSyncDelayMs();
         scheduleStaffPostInteractiveTask(() => {
@@ -1324,9 +1340,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       initialDelay = setTimeout(() => {
         if (!document.hidden) {
           markUserActivity();
-          const snap = isAppDataWarm() ? getData() : peekStaffGestaoLastGood();
-          const coopOpen = resolveGestaoCooperativaId(user, snap);
-          void runSync(staffResponsavelOpeningSyncRequest(snap, coopOpen));
+          void runStaffGestaoAberturaHydrate();
         }
       }, delayOpen);
     } else {
@@ -1403,7 +1417,15 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", onOnline);
     };
-  }, [coopId, user?.id, user?.role, runSync, pullVotacaoOperacionalCooperado, hydrateCooperadoPagamentosFromCloud]);
+  }, [
+    coopId,
+    user?.id,
+    user?.role,
+    runSync,
+    runStaffGestaoAberturaHydrate,
+    pullVotacaoOperacionalCooperado,
+    hydrateCooperadoPagamentosFromCloud,
+  ]);
 
   const staffGestaoLive =
     user?.role === "responsavel" || user?.role === "tesoureiro" || user?.role === "admin";

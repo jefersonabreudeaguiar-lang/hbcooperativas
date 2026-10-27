@@ -1,7 +1,10 @@
 # Liderança do app responsável (gestão) — plano de lançamento
 
 **Responsável técnico:** agente · **Produção:** https://hbcooperativas.vercel.app  
-**Papel do operador (você):** validar **SIM/NÃO** por fase no celular **e** no desktop — mesmo modelo do cooperado.
+**Build live (26/10/2026):** **721** (`445d956e` hidratação/sync; `50333e9d` anti-loop; `716+` paridade R$)  
+**Papel do operador (você):** validar **SIM/NÃO** por aba no celular **e** no desktop — mesmo modelo do cooperado.
+
+**Regra de ouro:** não mexer no fluxo **cooperado** enquanto estabilizamos a gestão; cada entrega = gate `responsavel:verify:lancamento` + `confirm:production:wait`.
 
 **Pré-requisito cooperado:** Fases 1–3 **SIM** (piloto); Fase 4 homolog em andamento.  
 **Objetivo:** responsável **confiável para lançamento** — conferir, lançar, pagar, sem zerar dados, com paridade R$ e cooperado recebendo na nuvem.
@@ -124,8 +127,32 @@ Checklist humano: `docs/plano-mestre/FASE-R-RESPONSAVEL-CHECKLIST.md`.
 
 Ver **`METODO-GESTAO-PC-2026.md`**: perfil único `staffGestaoPerfilDesktop` (contrato versionado), diagnóstico F12 com chave `coopeagriplla_data:CNPJ`, **T1 estável antes de T2 (dados/F5)**.
 
+## Plano por aba (execução passo a passo — out/2026)
+
+Ordem de trabalho alinhada ao menu do responsável (`permissions/index.ts`). Cada passo: **(1)** agente corrige + gates + deploy · **(2)** você homologa SIM/NÃO · **(3)** só então próxima aba.
+
+| Passo | Aba / rota | Fases | Objetivo | Você valida (SIM/NÃO) |
+|-------|------------|-------|----------|------------------------|
+| **0** | Fundação | R1 | Login → painel gestão; F5 sem tela branca; 1º sync/sessão (anônimo + Chrome normal); persist `coopeagriplla_data:CNPJ` | Entra, não trava, build 721+ |
+| **1** | **Início** `/dashboard` | R1+R4 | Card **A pagar** ≈ nuvem; fila do dia; cooperados ativos; «Atualizar totais…» some após sync | R$ ~41k CoopeagriPla (ou audit); sem R$ 0 fixo |
+| **2** | **Conferir** `/notas-pedido` | R2+R3 | Fila = notas reais; conferir/corrigir; badge contagem; PC: Atualizar na tela | Fila 24 ≈ audit; ação não some nota errada |
+| **3** | **Pagar** `/ficha-corrida` (staff) | R3+R4 | Em aberto × Pagar × Início (mesmo R$); mês com PIX não reabre; lançar pós-PIX | Paridade por cooperado; gate `em-aberto-pagar-paridade` |
+| **4** | **Livro caixa** `/livro-caixa` | R4 | Reconciliar só nesta rota no PC; sem loop no Início | Abre, lista, não trava Chrome |
+| **5** | **Cooperados** `/cooperados` | R2 | Lista, cadastro, assinatura/app | Nomes e contagens batem |
+| **6** | **Relatórios** `/relatorios` | R4 | Em aberto / totais = painel | Mesmo total do Início |
+| **7** | **Contratos + Comunicados + Votações** | R2 | Primeiro dia; rotinas secundárias | Só se núcleo 1–3 SIM |
+| **8** | **HB Créditos** `/conta-coop` | R6 | Fora do portão R5 | Após R5 SIM |
+
+**Arquivos âncora por aba:** `DashboardContent` (Início), `NotasPedidoStaffResponsavelApp` (Conferir), `FichaCorridaContent` + `responsavelPainelIndex` (Pagar), `staffGestaoPerfilDesktop` (PC vs mobile).
+
+**Dívida técnica conhecida (passo 0/3):** `npm run responsavel:verify:lancamento` falhou em 26/10 — caso *mês pago + fichaIds antigos* (`test-responsavel-panel-access-etapa622`). Corrigir no **passo 3 (Pagar)** antes de fechar R3.
+
+---
+
 ## Próxima ação (agente)
 
-1. Manter `responsavel:verify:fase-r` verde a cada entrega staff (**não alterar cooperado**).
-2. Você homologa **R1→R2 (T1)** antes de R3/R4; respostas **SIM/NÃO** por item.
-3. Portão **R5 SIM** = lançamento público do par responsável↔cooperado (cooperado já em 645+).
+1. **Passo 0** — fechar R1 no build atual (entrada + sync + documentar limpeza de cache Chrome se preciso).
+2. **Passo 1** — Início: totais estáveis após abertura e após «Atualizar» (desktop + anônimo).
+3. Manter `responsavel:verify:lancamento` verde a cada entrega staff (**não alterar cooperado**).
+4. Você responde **SIM/NÃO** por passo; agente só avança de aba com seu SIM no passo anterior.
+5. Portão **R5 SIM** = lançamento público do par responsável↔cooperado (cooperado já em 645+).
