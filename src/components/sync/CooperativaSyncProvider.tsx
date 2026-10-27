@@ -1106,7 +1106,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         const restaurarApresentacaoCooperado = () => {
           if (!userRef.current || userRef.current.role !== "cooperado") return;
           markCooperadoPagamentosHydrated();
-          persistirInicioCardValorReceberCooperado(userRef.current);
+          if (!isCooperadoJefersonSomenteAtualizarPilot(userRef.current)) {
+            persistirInicioCardValorReceberCooperado(userRef.current);
+          }
           apresentacaoFinanceiraRestaurada = true;
           setLastSyncError("");
         };

@@ -28,15 +28,21 @@ import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoB
 import { cooperadoBrowserDesktopBicPerfActive } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
+import { yieldCooperadoMobileUiBeforeHeavyWork } from "@/lib/cooperado/cooperadoGaMobileAtualizarYield";
+import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 
-/** Piloto Jeferson — só card início + evento leve (sem ficha/dashboard/entregas em massa). */
+/** Piloto Jeferson — só card «A receber» (sem ficha/dashboard/entregas); fora do fim do sync. */
 export function cooperadoJefersonPosSyncSnapshotLeve(
   user: Omit<User, "password"> | null | undefined
 ): void {
   if (!user || user.role !== "cooperado") return;
-  persistirInicioCardCooperadoNotificarPwaLeve(user);
-  clearCooperadoPwaDadosDesatualizados();
-  dispatchCooperadoPwaLeveUiSnapshotRefresh();
+  scheduleCooperadoPostInteractiveTask(() => {
+    void yieldCooperadoMobileUiBeforeHeavyWork().then(() => {
+      persistirInicioCardValorReceberCooperado(user);
+      clearCooperadoPwaDadosDesatualizados();
+      dispatchCooperadoPwaLeveUiSnapshotRefresh();
+    });
+  });
 }
 
 /** Após troca de build ou purge — recria snapshots do AppData local (paridade com o browser). */
