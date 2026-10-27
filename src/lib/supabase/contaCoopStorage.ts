@@ -1745,14 +1745,33 @@ async function fetchHbCreditAccountRowForCooperado(
   cooperadoId: string
 ): Promise<{ row: Record<string, unknown>; accountCooperadoId: string } | null> {
   const digits = normalizeCnpj(cnpj);
+  const id = cooperadoId.trim();
+  if (!id) return null;
+
+  /** Leitura rápida (ficha HB, Minha Conta): evita listar o bucket inteiro de cooperados. */
+  const { data: direct } = await supabase
+    .from("hb_credit_accounts")
+    .select("*")
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", id)
+    .maybeSingle();
+  if (direct) {
+    return {
+      row: direct as Record<string, unknown>,
+      accountCooperadoId: String(direct.cooperado_id ?? id),
+    };
+  }
+
   const cooperados = await fetchCooperadosFromStorage(supabase, digits).catch(() => []);
-  const titularIds = cooperados.length ? titularCooperadoIds(cooperados, cooperadoId) : [cooperadoId];
+  const titularIds = cooperados.length ? titularCooperadoIds(cooperados, id) : [id];
+  const extraIds = titularIds.filter((tid) => tid !== id);
+  if (!extraIds.length) return null;
 
   const { data: rows } = await supabase
     .from("hb_credit_accounts")
     .select("*")
     .eq("cooperative_cnpj", digits)
-    .in("cooperado_id", titularIds);
+    .in("cooperado_id", extraIds);
 
   if (!rows?.length) return null;
 
@@ -1760,7 +1779,7 @@ async function fetchHbCreditAccountRowForCooperado(
   if (!best) return null;
   return {
     row: best,
-    accountCooperadoId: String(best.cooperado_id ?? cooperadoId),
+    accountCooperadoId: String(best.cooperado_id ?? id),
   };
 }
 

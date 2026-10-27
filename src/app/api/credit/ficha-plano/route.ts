@@ -12,9 +12,10 @@ import { isV2HbOnlyServer } from "@/lib/hb-credit/hbCreditV2LimiteBase";
 import {
   requireCreditApi,
   requireCreditCnpj,
+  requireCreditCooperadoAccess,
   requireCreditStaff,
-  resolveCreditPaymentCooperadoId,
 } from "@/lib/security/creditGuard";
+import { resolveCreditAccountCooperadoIdForRequest } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 import { normalizeCnpj } from "@/utils/cooperativa";
 
 export async function GET(request: Request) {
@@ -23,7 +24,10 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const cnpj = normalizeCnpj(searchParams.get("cnpj") ?? gate.ctx.session?.cooperativaCnpj ?? "");
-  let cooperadoId = String(searchParams.get("cooperadoId") ?? gate.ctx.session?.cooperadoId ?? "");
+  const cooperadoId = resolveCreditAccountCooperadoIdForRequest(
+    gate.ctx,
+    String(searchParams.get("cooperadoId") ?? gate.ctx.session?.cooperadoId ?? "")
+  );
   if (cnpj.length !== 14 || !cooperadoId) {
     return NextResponse.json({ error: "CNPJ ou cooperado inválido." }, { status: 400 });
   }
@@ -33,41 +37,48 @@ export async function GET(request: Request) {
 
   const role = String(gate.ctx.session?.role ?? "").toLowerCase();
   if (role === "cooperado") {
-    const resolved = resolveCreditPaymentCooperadoId(gate.ctx, request, cooperadoId);
-    if ("response" in resolved) return resolved.response;
-    cooperadoId = resolved.cooperadoId;
+    const denySelf = await requireCreditCooperadoAccess(gate.ctx, cooperadoId, cnpj);
+    if (denySelf) return denySelf;
   } else {
     const denyStaff = requireCreditStaff(gate.ctx);
     if (denyStaff) return denyStaff;
   }
 
-  let plano = await getFichaPlanoCooperado(gate.ctx.supabase, cnpj, cooperadoId);
-  const archivedCyclesCount = (plano.historicoCiclos ?? []).length;
-  if (role === "cooperado") {
-    plano = { ...plano, historicoCiclos: [] };
-  }
-  const brutoCents = brutoFichaPlanoCents(plano);
-  let hbCredito: { valorLiberadoCents: number; liberacaoPercent: number | null } | null = null;
-  if (isV2HbOnlyServer()) {
-    const limite = await getLimiteCooperadoExibicaoParidadeLimites(
-      gate.ctx.supabase,
-      cnpj,
-      cooperadoId
-    );
-    if (limite) {
-      const capped = await resolveHbV2FichaLimiteExibicao(
+  try {
+    const forCooperadoView = role === "cooperado";
+    let plano = await getFichaPlanoCooperado(gate.ctx.supabase, cnpj, cooperadoId);
+    const archivedCyclesCount = forCooperadoView ? 0 : (plano.historicoCiclos ?? []).length;
+    if (forCooperadoView) {
+      plano = { ...plano, historicoCiclos: [] };
+    }
+    const brutoCents = brutoFichaPlanoCents(plano);
+    const accountCooperadoId = plano.cooperadoId || cooperadoId;
+    let hbCredito: { valorLiberadoCents: number; liberacaoPercent: number | null } | null = null;
+    if (isV2HbOnlyServer()) {
+      const limite = await getLimiteCooperadoExibicaoParidadeLimites(
         gate.ctx.supabase,
         cnpj,
-        cooperadoId,
-        limite,
-        brutoCents
+        accountCooperadoId
       );
-      hbCredito = capped.exibicao;
-    } else {
-      hbCredito = { valorLiberadoCents: 0, liberacaoPercent: null };
+      if (limite) {
+        const capped = await resolveHbV2FichaLimiteExibicao(
+          gate.ctx.supabase,
+          cnpj,
+          accountCooperadoId,
+          limite,
+          brutoCents
+        );
+        hbCredito = capped.exibicao;
+      } else {
+        hbCredito = { valorLiberadoCents: 0, liberacaoPercent: null };
+      }
     }
+    return NextResponse.json({ ok: true, plano, brutoCents, hbCredito, archivedCyclesCount });
+  } catch (e) {
+    console.error("[GET /api/credit/ficha-plano]", e);
+    const message = e instanceof Error ? e.message : "Erro ao carregar ficha HB.";
+    return NextResponse.json({ ok: false, error: message }, { status: 503 });
   }
-  return NextResponse.json({ ok: true, plano, brutoCents, hbCredito, archivedCyclesCount });
 }
 
 export async function POST(request: Request) {
