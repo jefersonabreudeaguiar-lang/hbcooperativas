@@ -4,6 +4,17 @@
 
 O erro **“This page couldn’t load”** no ícone Android vem de **WebAPK + cache** preso ao domínio antigo (`hbcooperativas.vercel.app`), não de perda de dados HB. Um **domínio novo** na Vercel = perfil de site limpo + PWA novo.
 
+## Variáveis mínimas (projeto V2)
+
+```env
+NEXT_PUBLIC_APP_URL=https://hbcooperativas-v2.vercel.app
+NEXT_PUBLIC_V2_HB_ONLY=1
+NEXT_PUBLIC_CONTA_COOP_UI_PUBLIC=1
+NEXT_PUBLIC_HB_CREDIT_ENABLED=true
+HB_CREDIT_ENABLED=true
+# Copiar do projeto oficial: AUTH_SECRET, SUPABASE_*, etc.
+```
+
 ## Passo a passo (Vercel)
 
 1. **Novo projeto** no mesmo time: `hbcooperativas-v2` (ou nome que preferir).
