@@ -15,7 +15,7 @@ import {
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-assert.equal(STAFF_GESTAO_DESKTOP_PERFIL_VERSION, 8);
+assert.equal(STAFF_GESTAO_DESKTOP_PERFIL_VERSION, 9);
 assert.equal(staffGestaoPerfilAberturaSyncPermitidoForViewport(true, emptyInitialData), true);
 const comPixDesktop = {
   ...emptyInitialData,
@@ -41,6 +41,10 @@ assert.deepEqual(
 assert.equal(
   staffGestaoPerfilCapSyncAutomaticoForViewport(true, { tier: "pulse", silent: true }),
   null
+);
+assert.deepEqual(
+  staffGestaoPerfilCapSyncAutomaticoForViewport(true, { tier: "notas_delta", silent: true }),
+  { tier: "notas_delta", silent: true }
 );
 
 assert.ok(read("src/hooks/useReconciliarLivroCaixaGestao.ts").includes("isStaffMobileViewportActive"));

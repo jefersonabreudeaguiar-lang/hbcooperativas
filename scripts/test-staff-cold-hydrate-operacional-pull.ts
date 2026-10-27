@@ -53,6 +53,18 @@ const comLivro = {
 };
 assert.equal(staffLocalOperacionalVazio(comLivro, "coop1"), false);
 
+const livroSemFicha = {
+  ...emptyInitialData,
+  cooperativas: [{ id: "coop1", nome: "Coop", cnpj: "12345678000199", status: "ativa" } as never],
+  cooperados: [{ id: "c1", cooperativaId: "coop1", status: "ativo", nomeCompleto: "A" } as never],
+  livroCaixa: [{ id: "l1", cooperativaId: "coop1" } as never],
+};
+assert.equal(
+  staffPrecisaHydrateOperacionalPull(livroSemFicha, "coop1"),
+  true,
+  "livro sem ficha no escopo puxa operacional — evita A pagar zerado"
+);
+
 const openingFrio = staffResponsavelOpeningSyncRequest(emptyInitialData);
 assert.equal(openingFrio.tier, "financeiro_delta");
 assert.equal(openingFrio.force, true);

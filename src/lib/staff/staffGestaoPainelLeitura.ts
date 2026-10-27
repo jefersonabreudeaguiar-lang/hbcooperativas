@@ -8,8 +8,9 @@ import {
   peekStaffGestaoLastGood,
   staffGestaoRiquezaTotal,
 } from "@/lib/staff/staffGestaoSnapshotGuard";
+import { appDataParaPagarCooperadosResponsavel } from "@/services/responsavelPainelIndex";
 
-export function staffGestaoAppDataParaPainel(coopId?: string): AppData | null {
+function escolherStaffGestaoSnapshotBase(coopId?: string): AppData | null {
   const lkg = peekStaffGestaoLastGood();
   if (!isAppDataWarm()) return lkg;
   const warm = getData();
@@ -17,6 +18,14 @@ export function staffGestaoAppDataParaPainel(coopId?: string): AppData | null {
   const rWarm = staffGestaoRiquezaTotal(medirRiquezaStaffGestao(warm, coopId));
   const rLkg = staffGestaoRiquezaTotal(medirRiquezaStaffGestao(lkg, coopId));
   return rLkg > rWarm ? lkg : warm;
+}
+
+/** Painel gestão: snapshot mais rico (warm × lastro) + projeção Pagar quando há escopo. */
+export function staffGestaoAppDataParaPainel(coopId?: string): AppData | null {
+  const base = escolherStaffGestaoSnapshotBase(coopId);
+  if (!base) return null;
+  if (!coopId) return base;
+  return appDataParaPagarCooperadosResponsavel(base, coopId);
 }
 
 /** Revisão para stats do Início — lastro no 1º quadro antes do persist. */

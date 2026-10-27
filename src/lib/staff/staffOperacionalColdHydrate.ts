@@ -81,11 +81,46 @@ export function staffGestaoTemFichaOuNotaLocal(
   return false;
 }
 
+/**
+ * Livro/PIX sem `fichaCorrida` no escopo — totais «a pagar» zeram no responsável.
+ */
+export function staffGestaoFaltaFichaOperacionalNoEscopo(
+  data: AppData | null | undefined,
+  coopId?: string
+): boolean {
+  if (!data || !coopId) return false;
+  const ativos = data.cooperados.filter(
+    (c) => c.cooperativaId === coopId && c.status === "ativo"
+  ).length;
+  if (ativos === 0) return false;
+  const fichas = (data.fichaCorrida ?? []).filter((f) => pertenceCoop(f, coopId));
+  if (fichas.length > 0) return false;
+  const notas = (data.notasPedido ?? []).filter((n) => pertenceCoop(n, coopId));
+  const livro = (data.livroCaixa ?? []).filter((l) => pertenceCoop(l, coopId));
+  const pix = (data.pagamentosCooperado ?? []).filter((p) => pertenceCoop(p, coopId));
+  return notas.length > 0 || livro.length > 0 || pix.length > 0;
+}
+
+/** Entrega/ficha local sem PIX confirmado no escopo — puxa backup da nuvem na abertura. */
+export function staffGestaoEntregaSemPixNoEscopo(
+  data: AppData | null | undefined,
+  coopId?: string
+): boolean {
+  if (!data || !coopId) return false;
+  const pix = (data.pagamentosCooperado ?? []).filter((p) => pertenceCoop(p, coopId));
+  if (pix.length > 0) return false;
+  return staffGestaoTemFichaOuNotaLocal(data, coopId);
+}
+
 export function staffPrecisaHydrateOperacionalPull(
   data: AppData | null | undefined,
   coopId?: string
 ): boolean {
-  return staffLocalOperacionalVazio(data, coopId);
+  if (staffLocalOperacionalVazio(data, coopId)) return true;
+  if (staffCooperadosCadastroAusente(data, coopId)) return true;
+  if (staffGestaoFaltaFichaOperacionalNoEscopo(data, coopId)) return true;
+  if (staffGestaoEntregaSemPixNoEscopo(data, coopId)) return true;
+  return false;
 }
 
 /** Operacional local sem cadastro de cooperados (nomes e A pagar zeravam). */

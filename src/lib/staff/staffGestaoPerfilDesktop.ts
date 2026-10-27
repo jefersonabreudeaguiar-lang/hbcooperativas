@@ -8,7 +8,7 @@ import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewpo
 import { staffPrecisaHydrateOperacionalPull } from "@/lib/staff/staffOperacionalColdHydrate";
 
 /** Bump + teste `test-staff-gestao-perfil-desktop.ts` a cada mudança de comportamento PC. */
-export const STAFF_GESTAO_DESKTOP_PERFIL_VERSION = 8;
+export const STAFF_GESTAO_DESKTOP_PERFIL_VERSION = 9;
 
 export function staffGestaoPerfilEhDesktop(): boolean {
   if (typeof window === "undefined") return false;
@@ -19,17 +19,25 @@ export function staffGestaoPerfilSyncBackgroundPermitido(): boolean {
   return isStaffMobileViewportActive();
 }
 
-/** PC: abertura leve; exceção única = hidratação fria (sem PIX/livro local). */
+/** PC: abertura quando o operacional local não sustenta totais/ficha no escopo. */
 export function staffGestaoPerfilAberturaSyncPermitidoForViewport(
   desktop: boolean,
-  data?: AppData | null
+  data?: AppData | null,
+  coopId?: string
 ): boolean {
   if (!desktop) return true;
-  return staffPrecisaHydrateOperacionalPull(data);
+  return staffPrecisaHydrateOperacionalPull(data, coopId);
 }
 
-export function staffGestaoPerfilAberturaSyncPermitido(data?: AppData | null): boolean {
-  return staffGestaoPerfilAberturaSyncPermitidoForViewport(staffGestaoPerfilEhDesktop(), data);
+export function staffGestaoPerfilAberturaSyncPermitido(
+  data?: AppData | null,
+  coopId?: string
+): boolean {
+  return staffGestaoPerfilAberturaSyncPermitidoForViewport(
+    staffGestaoPerfilEhDesktop(),
+    data,
+    coopId
+  );
 }
 
 export function staffGestaoPerfilAberturaDelayMs(): number {
@@ -110,6 +118,9 @@ export function staffGestaoPerfilCapSyncAutomaticoForViewport(
     opts?.force === true &&
     opts?.silent === true
   ) {
+    return opts;
+  }
+  if (opts?.tier === "notas_delta" && opts?.silent === true && opts?.userInitiated !== true) {
     return opts;
   }
   return null;

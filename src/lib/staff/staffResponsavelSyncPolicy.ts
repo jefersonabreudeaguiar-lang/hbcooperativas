@@ -21,13 +21,16 @@ export function isStaffGestaoRole(role: UserRole | string | undefined | null): b
  * PIX+livro vazios: financeiro_delta (puxa o backup da nuvem, sem push).
  * Aparelho já hidratado: notas_delta.
  */
-export function staffResponsavelOpeningSyncRequest(data?: AppData | null): SyncRunOptions {
-  if (staffPrecisaHydrateOperacionalPull(data)) {
+export function staffResponsavelOpeningSyncRequest(
+  data?: AppData | null,
+  coopId?: string
+): SyncRunOptions {
+  if (staffPrecisaHydrateOperacionalPull(data, coopId)) {
     return { silent: true, force: true, tier: "financeiro_delta" };
   }
-  /** PC já hidratado: shell leve — operacional completo só em «Atualizar». */
+  /** PC hidratado: notas_delta expande pull quando necessário — sem pulse vazio na abertura. */
   if (staffGestaoEmViewportDesktop()) {
-    return { silent: true, tier: "pulse" };
+    return { silent: true, tier: "notas_delta" };
   }
   return { silent: true, tier: "notas_delta" };
 }

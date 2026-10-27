@@ -160,6 +160,7 @@ import {
 } from "@/lib/performance/staffFilaNotasLivePoll";
 import { usePathname } from "next/navigation";
 import { expandStaffTierPlanIfOperacionalVazio } from "@/lib/staff/staffOperacionalColdHydrate";
+import { resolveGestaoCooperativaId } from "@/utils/cooperativa";
 import { purgarInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { scheduleCooperadoPwaOperacionalParidadePull } from "@/lib/cooperado/cooperadoPwaFinanceiroParidadeRefresh";
 import {
@@ -1286,14 +1287,16 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (
         !document.hidden &&
         staffGestaoPerfilAberturaSyncPermitido(
-          isAppDataWarm() ? getData() : peekStaffGestaoLastGood()
+          isAppDataWarm() ? getData() : peekStaffGestaoLastGood(),
+          resolveGestaoCooperativaId(user, isAppDataWarm() ? getData() : peekStaffGestaoLastGood())
         )
       ) {
         markUserActivity();
         const runStaffOpen = () => {
           markNextCooperadoSyncSilent();
           const snap = isAppDataWarm() ? getData() : peekStaffGestaoLastGood();
-          void runSync(staffResponsavelOpeningSyncRequest(snap));
+          const coopOpen = resolveGestaoCooperativaId(user, snap);
+          void runSync(staffResponsavelOpeningSyncRequest(snap, coopOpen));
         };
         const delayOpen = staffGestaoAberturaSyncDelayMs();
         scheduleStaffPostInteractiveTask(() => {
@@ -1304,7 +1307,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     } else if (
       staff &&
       staffGestaoPerfilAberturaSyncPermitido(
-        isAppDataWarm() ? getData() : peekStaffGestaoLastGood()
+        isAppDataWarm() ? getData() : peekStaffGestaoLastGood(),
+        resolveGestaoCooperativaId(user, isAppDataWarm() ? getData() : peekStaffGestaoLastGood())
       )
     ) {
       const delayOpen = staffGestaoAberturaSyncDelayMs();
@@ -1312,7 +1316,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         if (!document.hidden) {
           markUserActivity();
           const snap = isAppDataWarm() ? getData() : peekStaffGestaoLastGood();
-          void runSync(staffResponsavelOpeningSyncRequest(snap));
+          const coopOpen = resolveGestaoCooperativaId(user, snap);
+          void runSync(staffResponsavelOpeningSyncRequest(snap, coopOpen));
         }
       }, delayOpen);
     } else {
