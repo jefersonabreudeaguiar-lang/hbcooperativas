@@ -1,29 +1,37 @@
 import type { User } from "@/types";
+import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import {
-  COOPERADO_MOBILE_PILOT_COOPERADO_ID,
-  COOPERADO_MOBILE_PILOT_EMAIL,
-  isCooperadoMobilePilot,
-} from "@/lib/cooperado/cooperadoMobilePilot";
-import { normalizeAuthEmail } from "@/lib/security/appCreator";
-import { readCooperadoSessionLite } from "@/lib/cooperado/cooperadoSessionLite";
+  cooperadoGaMobileViewportAtivoLite,
+  readCooperadoSessionLite,
+} from "@/lib/cooperado/cooperadoSessionLite";
 
 /**
- * Piloto Jeferson — app leve na 1ª entrada; sync financeiro automático após 2ª entrada (≥30s).
- * Exceção: fotos de entrega (envio imediato). Produção (Orlando+): inalterado.
+ * Cooperado mobile GA — app leve na 1ª entrada; sync automático na 2ª entrada (≥30s).
+ * BIC + snapshots lazy por aba. Homologado no piloto Jeferson → GA todos (build ≥715).
  */
-export const COOPERADO_JEFERSON_SOMENTE_ATUALIZAR_MODE_ON = true;
+export const COOPERADO_MOBILE_SYNC_LEVE_GA_PROMOTED = true;
+
+/** @deprecated alias — usar `COOPERADO_MOBILE_SYNC_LEVE_GA_PROMOTED` */
+export const COOPERADO_JEFERSON_SOMENTE_ATUALIZAR_MODE_ON = COOPERADO_MOBILE_SYNC_LEVE_GA_PROMOTED;
+
+function cooperadoMobileSyncLeveViewportAtivo(): boolean {
+  if (typeof window === "undefined") return true;
+  return cooperadoGaMobileViewportAtivoLite();
+}
 
 export function isCooperadoJefersonSomenteAtualizarPilot(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
-  if (!COOPERADO_JEFERSON_SOMENTE_ATUALIZAR_MODE_ON) return false;
-  return isCooperadoMobilePilot(user);
+  if (!COOPERADO_MOBILE_SYNC_LEVE_GA_PROMOTED) return false;
+  if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return false;
+  return cooperadoMobileSyncLeveViewportAtivo();
 }
 
 export function isCooperadoJefersonSomenteAtualizarSessionLite(): boolean {
-  if (!COOPERADO_JEFERSON_SOMENTE_ATUALIZAR_MODE_ON) return false;
+  if (!COOPERADO_MOBILE_SYNC_LEVE_GA_PROMOTED) return false;
   const session = readCooperadoSessionLite();
-  return session?.role === "cooperado" && isCooperadoMobilePilot(session);
+  if (session?.role !== "cooperado") return false;
+  return cooperadoMobileSyncLeveViewportAtivo();
 }
 
 let entregaSyncPermitDepth = 0;
@@ -98,19 +106,13 @@ export function cooperadoJefersonBloqueiaSyncAutomatico(
   return true;
 }
 
-/** Fragmento `<head>` — Jeferson piloto não faz parse do operacional no cold start. */
+/** Fragmento `<head>` — cooperado mobile/PWA: não parseia AppData no cold start. */
 export function cooperadoJefersonSomenteAtualizarInlineHeadSkipAppDataWarmJs(): string {
-  if (!COOPERADO_JEFERSON_SOMENTE_ATUALIZAR_MODE_ON) return "";
-  const id = COOPERADO_MOBILE_PILOT_COOPERADO_ID;
-  const email = normalizeAuthEmail(COOPERADO_MOBILE_PILOT_EMAIL);
+  if (!COOPERADO_MOBILE_SYNC_LEVE_GA_PROMOTED) return "";
   return (
     `try{var raw=localStorage.getItem("coopeagriplla_session");if(raw){var s=JSON.parse(raw);` +
-    `var cid=(s.cooperadoId||s.mobileCooperadoId||"").trim();` +
-    `var em=(s.email||"").toLowerCase().trim();` +
-    `if(s.role==="cooperado"&&(cid==="` +
-    id +
-    `"||em==="` +
-    email +
-    `"))return;}}catch(e){}`
+    `if(s.role==="cooperado"){var mob=window.matchMedia&&window.matchMedia("(max-width:1023px)").matches;` +
+    `var pwa=window.matchMedia&&window.matchMedia("(display-mode:standalone)").matches;` +
+    `if(mob||pwa)return;}}}catch(e){}`
   );
 }

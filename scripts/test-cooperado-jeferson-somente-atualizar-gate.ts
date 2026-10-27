@@ -40,11 +40,11 @@ const orlando = {
   active: true,
 };
 
-assert.equal(isCooperadoJefersonSomenteAtualizarPilot(orlando), false);
-
 if (!COOPERADO_JEFERSON_SOMENTE_ATUALIZAR_MODE_ON) {
   assert.equal(isCooperadoJefersonSomenteAtualizarPilot(jeferson), false);
+  assert.equal(isCooperadoJefersonSomenteAtualizarPilot(orlando), false);
 } else {
+  assert.equal(isCooperadoJefersonSomenteAtualizarPilot(orlando), true);
   assert.equal(isCooperadoJefersonSomenteAtualizarPilot(jeferson), true);
   assert.equal(cooperadoPwaMostraDadosDesatualizados(jeferson), false);
   assert.equal(resolveCooperadoJefersonTabHref("/notas-pedido/foo"), "/notas-pedido");

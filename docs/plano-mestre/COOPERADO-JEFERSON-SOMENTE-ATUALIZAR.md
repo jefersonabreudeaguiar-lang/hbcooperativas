@@ -1,15 +1,15 @@
 # Piloto Jeferson — app leve («só Atualizar»)
 
-**Status:** piloto Jeferson — `COOPERADO_JEFERSON_SOMENTE_ATUALIZAR_MODE_ON` (build ≥707). Orlando e demais: GA inalterado.
+**Status:** **GA mobile** — `COOPERADO_MOBILE_SYNC_LEVE_GA_PROMOTED` (build ≥715). Todos os cooperados no celular/PWA; desktop cooperado inalterado (botão Atualizar).
 
 ## Comportamento
 
-| Área | Piloto Jeferson | Demais cooperados |
-|------|-----------------|-------------------|
-| Abertura / troca de abas | Sem sync operacional/financeiro automático, sem bootstrap pós-deploy, sem prefetch agressivo de abas | GA atual |
-| Início + abas | **1ª entrada** leve; **2ª entrada** (≥30s) → sync automático; **Início** materializa primeiro; **Entregas / Preços / Financeiro** gravam snapshot **ao abrir a aba** (idle, sem travar troca). Sem botão Atualizar no piloto | GA atual |
-| Entregas — fotos | Envio e sync de notas **na hora** (responsável vê na fila) | GA atual |
-| AppData local | Parse adiado no cold start; **Atualizar** libera warm + sync base | GA atual |
+| Área | Cooperado mobile / PWA (GA) | Desktop cooperado |
+|------|-----------------------------|-------------------|
+| Abertura / troca de abas | Sem sync pesado automático; BIC/snapshots em idle | GA anterior |
+| Início + abas | 1ª entrada leve; 2ª entrada (≥30s) sync auto; dados reais **por aba** ao abrir | Atualizar manual |
+| Entregas — fotos | Envio imediato | Igual |
+| AppData | Parse adiado no cold start; sync libera warm | Igual |
 
 ## Código
 
