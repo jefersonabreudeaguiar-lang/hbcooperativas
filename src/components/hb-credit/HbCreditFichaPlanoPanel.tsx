@@ -17,7 +17,11 @@ import {
   somaEntregasPlanoCents,
 } from "@/lib/hb-credit/hbCreditFichaPlano";
 import { HB_FICHA_PLANO_UPDATED_EVENT } from "@/lib/hb-credit/hbCreditFichaPlanoEvents";
-import { fetchHbCreditFichaPlano, saveHbCreditFichaPlano } from "@/services/creditApiService";
+import {
+  archiveHbCreditFichaPlanoEntregas,
+  fetchHbCreditFichaPlano,
+  saveHbCreditFichaPlano,
+} from "@/services/creditApiService";
 import { HbCreditEntregaReaisInput } from "@/components/hb-credit/HbCreditEntregaReaisInput";
 import {
   notifyHbCreditAccountCacheUpdated,
@@ -53,6 +57,8 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [limiteAviso, setLimiteAviso] = useState("");
+  const [archivedCyclesCount, setArchivedCyclesCount] = useState(0);
   const [hbCredito, setHbCredito] = useState<{
     valorLiberadoCents: number;
     liberacaoPercent: number | null;
@@ -68,21 +74,27 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
     });
   }, []);
 
-  const reload = useCallback(async () => {
-    if (cnpj.length !== 14 || !cooperadoId) return;
-    setLoading(true);
-    setError("");
-    try {
-      const loaded = await fetchHbCreditFichaPlano(cnpj, cooperadoId);
-      planoLiveRef.current = loaded.plano;
-      setPlano(loaded.plano);
-      setHbCredito(loaded.hbCredito);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao carregar ficha HB.");
-    } finally {
-      setLoading(false);
-    }
-  }, [cnpj, cooperadoId]);
+  const reload = useCallback(
+    async (opts?: { preserveFeedback?: boolean }) => {
+      if (cnpj.length !== 14 || !cooperadoId) return;
+      setLoading(true);
+      if (!opts?.preserveFeedback) setError("");
+      try {
+        const loaded = await fetchHbCreditFichaPlano(cnpj, cooperadoId);
+        planoLiveRef.current = loaded.plano;
+        setPlano(loaded.plano);
+        setHbCredito(loaded.hbCredito);
+        setArchivedCyclesCount(loaded.archivedCyclesCount);
+      } catch (e) {
+        if (!opts?.preserveFeedback) {
+          setError(e instanceof Error ? e.message : "Erro ao carregar ficha HB.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [cnpj, cooperadoId]
+  );
 
   useEffect(() => {
     void reload();
@@ -128,10 +140,40 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
     });
   };
 
+  const arquivarEntregasAnteriores = async () => {
+    if (mode !== "edit") return;
+    if (!confirm("Arquivar as entregas atuais na nuvem e limpar a ficha para novos lançamentos? O cooperado deixa de ver esses valores.")) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    setLimiteAviso("");
+    try {
+      const archived = await archiveHbCreditFichaPlanoEntregas(cnpj, cooperadoId);
+      planoLiveRef.current = archived.plano;
+      setPlano(archived.plano);
+      setArchivedCyclesCount(archived.archivedCyclesCount);
+      notifyHbFichaPlanoUpdated(cooperadoId);
+      if (archived.storageCooperadoId !== cooperadoId) {
+        notifyHbFichaPlanoUpdated(archived.storageCooperadoId);
+      }
+      notifyHbCreditLimiteSynced({ immediate: true });
+      notifyHbCreditAccountCacheUpdated();
+      setSuccess("Entregas anteriores arquivadas na nuvem. Lance os valores novos abaixo.");
+      await reload({ preserveFeedback: true });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao arquivar entregas.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const salvar = async () => {
     setBusy(true);
     setError("");
     setSuccess("");
+    setLimiteAviso("");
     try {
       if (typeof document !== "undefined") {
         (document.activeElement as HTMLElement | null)?.blur?.();
@@ -147,12 +189,13 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
       }
       notifyHbCreditLimiteSynced({ immediate: true });
       notifyHbCreditAccountCacheUpdated();
-      setSuccess(
-        limiteWarning
-          ? `Ficha salva na nuvem. ${limiteWarning}`
-          : "Ficha salva. Limite HB liberado e visível para o cooperado."
-      );
-      await reload();
+      if (limiteWarning) {
+        setLimiteAviso(limiteWarning);
+        setSuccess("Ficha salva na nuvem. Bruto e a receber do cooperado já foram atualizados.");
+      } else {
+        setSuccess("Ficha salva. Limite HB liberado e visível para o cooperado.");
+      }
+      await reload({ preserveFeedback: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar.");
     } finally {
@@ -173,13 +216,19 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
         </p>
       ) : null}
       {error ? <AlertBanner variant="error">{error}</AlertBanner> : null}
+      {limiteAviso ? <AlertBanner variant="warning" title="Limite HB">{limiteAviso}</AlertBanner> : null}
       {success ? <AlertBanner variant="success">{success}</AlertBanner> : null}
 
       <Card title="Entregas (valores em R$)" className="!p-5">
         <p className="text-sm text-gray-600 mb-4">
-          Sem peso — só valores lançados pelo responsável. O bruto da ficha HB é a soma das entregas 1 a 5 menos o
-          desconto %.
+          Sem peso — só os lançamentos do ciclo atual. Entregas antigas ficam arquivadas na nuvem e não aparecem para o
+          cooperado.
         </p>
+        {mode === "edit" && archivedCyclesCount > 0 ? (
+          <p className="text-xs text-gray-500 mb-3">
+            {archivedCyclesCount} ciclo(s) anterior(es) guardado(s) na nuvem (não exibidos aqui).
+          </p>
+        ) : null}
         {mode === "readonly" ? (
           <div className="mb-4 overflow-x-auto rounded-lg border border-gray-200">
             <table className="w-full min-w-[280px] text-sm">
@@ -341,9 +390,12 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
       </Card>
 
       {mode === "edit" ? (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button onClick={() => void salvar()} disabled={busy}>
             Salvar ficha e atualizar bruto HB
+          </Button>
+          <Button variant="secondary" onClick={() => void arquivarEntregasAnteriores()} disabled={busy}>
+            Arquivar entregas e lançar novas
           </Button>
           <Button variant="secondary" onClick={() => void reload()} disabled={busy || loading}>
             Recarregar

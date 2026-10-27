@@ -41,6 +41,7 @@ import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } f
 import { hbCreditCreditoBaseReais } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
 import { isHbCreditMercadoNfDispensada } from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
 import { mergeManualValorBrutoIntoCreditosBaseCents } from "@/lib/hb-credit/hbCreditManualValorBruto";
+import { isV2HbOnlyServer } from "@/lib/hb-credit/hbCreditV2LimiteBase";
 import { resolveLeituraFinanceiraCooperadoCore } from "@/lib/bic/bicLeituraPorta";
 import type {
   AuthoritativeCreditBaseErrorPayload,
@@ -467,6 +468,25 @@ async function sumLimitesDistribuidos(supabase: SupabaseClient, cnpj: string): P
     .select("limit_released_cents")
     .eq("cooperative_cnpj", cnpj);
   return (data ?? []).reduce((s, r) => s + Number(r.limit_released_cents), 0);
+}
+
+/** V2: teto coletivo só considera limites de cooperados com bruto ativo na ficha HB. */
+async function sumLimitesDistribuidosV2FichaAtiva(
+  supabase: SupabaseClient,
+  cnpj: string
+): Promise<number> {
+  const digits = normalizeCnpj(cnpj);
+  const { data } = await supabase
+    .from("hb_credit_accounts")
+    .select("limit_released_cents, manual_valor_bruto_cents")
+    .eq("cooperative_cnpj", digits);
+  return (data ?? []).reduce((sum, row) => {
+    const manualRaw = row.manual_valor_bruto_cents;
+    const manual =
+      manualRaw == null || manualRaw === "" ? null : Math.max(0, Math.round(Number(manualRaw)));
+    if (manual == null || manual <= 0) return sum;
+    return sum + Math.max(0, Math.round(Number(row.limit_released_cents ?? 0)));
+  }, 0);
 }
 
 /** Limites de cooperados que não entram na liberação coletiva atual (ex.: inativos). */
@@ -911,7 +931,9 @@ export async function previewLimiteAlteracao(
     };
   }
 
-  const distribuido = await sumLimitesDistribuidos(supabase, digits);
+  const distribuido = isV2HbOnlyServer()
+    ? await sumLimitesDistribuidosV2FichaAtiva(supabase, digits)
+    : await sumLimitesDistribuidos(supabase, digits);
   const totalApos = distribuido - atualLimite + novoLimiteCents;
 
   if (totalApos > teto.cents) {
@@ -1349,7 +1371,24 @@ export async function syncLimiteCooperadoFromCreditoBase(
     };
   }
 
-  const teto = await requireConfiguredTeto(supabase, cnpj, creditosBaseCents);
+  let basesForPreview = { ...creditosBaseCents, [cooperadoId]: base };
+  if (isV2HbOnlyServer()) {
+    const limites = await listLimitesCooperados(supabase, cnpj);
+    const ids = limites.map((l) => l.cooperadoId);
+    if (ids.length) {
+      const resolved = await resolveCreditosBaseForLiberacaoColetiva(
+        supabase,
+        cnpj,
+        ids,
+        basesForPreview
+      );
+      if (resolved.ok) {
+        basesForPreview = { ...resolved.creditosBaseCents, [cooperadoId]: base };
+      }
+    }
+  }
+
+  const teto = await requireConfiguredTeto(supabase, cnpj, basesForPreview);
   if (!teto.ok) return { ok: false, error: teto.error };
 
   const releasePercent =
@@ -1370,7 +1409,7 @@ export async function syncLimiteCooperadoFromCreditoBase(
     cnpj,
     cooperadoId,
     novoLimiteCents,
-    creditosBaseCents
+    basesForPreview
   );
   if (!preview.ok) return { ok: false, error: preview.error! };
 

@@ -231,6 +231,7 @@ export type HbCreditFichaPlanoLoad = {
   plano: HbCreditFichaPlano;
   brutoCents: number;
   hbCredito: { valorLiberadoCents: number; liberacaoPercent: number | null } | null;
+  archivedCyclesCount: number;
 };
 
 export async function fetchHbCreditFichaPlano(cnpj: string, cooperadoId: string): Promise<HbCreditFichaPlanoLoad> {
@@ -242,12 +243,37 @@ export async function fetchHbCreditFichaPlano(cnpj: string, cooperadoId: string)
     plano?: HbCreditFichaPlano;
     brutoCents?: number;
     hbCredito?: { valorLiberadoCents: number; liberacaoPercent: number | null } | null;
+    archivedCyclesCount?: number;
   }>(res);
   if (!res.ok || !data.ok || !data.plano) throw new Error(data.error ?? "Não foi possível carregar a ficha.");
   return {
     plano: data.plano,
     brutoCents: Math.max(0, Math.round(data.brutoCents ?? 0)),
     hbCredito: data.hbCredito ?? null,
+    archivedCyclesCount: Math.max(0, Math.round(data.archivedCyclesCount ?? 0)),
+  };
+}
+
+export async function archiveHbCreditFichaPlanoEntregas(cnpj: string, cooperadoId: string) {
+  const res = await secureApiFetch("/api/credit/ficha-plano", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "archive_entregas", cnpj, cooperadoId }),
+  });
+  const data = await parseJson<{
+    ok?: boolean;
+    error?: string;
+    plano?: HbCreditFichaPlano;
+    storageCooperadoId?: string;
+    archivedCyclesCount?: number;
+  }>(res);
+  if (!res.ok || !data.ok || !data.plano) {
+    throw new Error(data.error ?? "Não foi possível arquivar as entregas.");
+  }
+  return {
+    plano: data.plano,
+    storageCooperadoId: data.storageCooperadoId ?? cooperadoId,
+    archivedCyclesCount: data.archivedCyclesCount ?? 0,
   };
 }
 

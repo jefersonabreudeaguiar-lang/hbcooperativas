@@ -10,6 +10,18 @@ export type HbCreditMensalidadePlano = {
   cobradaEm?: string | null;
 };
 
+/** Entregas arquivadas na nuvem — não entram no bruto nem na UI do cooperado. */
+export type HbCreditFichaPlanoHistoricoCiclo = {
+  archivedAt: string;
+  entrega1Cents: number;
+  entrega2Cents: number;
+  entrega3Cents: number;
+  entrega4Cents: number;
+  entrega5Cents: number;
+  descontoPercent: number;
+  brutoCents: number;
+};
+
 export type HbCreditFichaPlano = {
   cooperadoId: string;
   entrega1Cents: number;
@@ -21,6 +33,7 @@ export type HbCreditFichaPlano = {
   mensalidades: HbCreditMensalidadePlano[];
   /** Quantas “entregas” HB já consumidas no ciclo (compras com crédito). */
   entregasConsumidas: number;
+  historicoCiclos?: HbCreditFichaPlanoHistoricoCiclo[];
   updatedAt?: string;
 };
 
@@ -33,6 +46,7 @@ export const HB_FICHA_PLANO_EMPTY: Omit<HbCreditFichaPlano, "cooperadoId"> = {
   descontoPercent: 0,
   mensalidades: [],
   entregasConsumidas: 0,
+  historicoCiclos: [],
 };
 
 export function somaEntregasPlanoCents(

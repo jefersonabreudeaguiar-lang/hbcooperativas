@@ -2,10 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import {
   type HbCreditFichaPlano,
+  type HbCreditFichaPlanoHistoricoCiclo,
   type HbCreditMensalidadePlano,
   HB_FICHA_PLANO_EMPTY,
   brutoFichaPlanoCents,
   mensalidadesPendentesPlano,
+  somaEntregasPlanoCents,
 } from "@/lib/hb-credit/hbCreditFichaPlano";
 import {
   resolveHbCreditPayCooperadoId,
@@ -29,6 +31,23 @@ function mapRow(row: Record<string, unknown>): HbCreditFichaPlano {
       };
     });
   }
+  const historicoRaw = row.historico_ciclos;
+  let historicoCiclos: HbCreditFichaPlanoHistoricoCiclo[] = [];
+  if (Array.isArray(historicoRaw)) {
+    historicoCiclos = historicoRaw.map((h) => {
+      const o = h as Record<string, unknown>;
+      return {
+        archivedAt: String(o.archivedAt ?? o.archived_at ?? ""),
+        entrega1Cents: Math.max(0, Math.round(Number(o.entrega1Cents ?? o.entrega_1_cents ?? 0))),
+        entrega2Cents: Math.max(0, Math.round(Number(o.entrega2Cents ?? o.entrega_2_cents ?? 0))),
+        entrega3Cents: Math.max(0, Math.round(Number(o.entrega3Cents ?? o.entrega_3_cents ?? 0))),
+        entrega4Cents: Math.max(0, Math.round(Number(o.entrega4Cents ?? o.entrega_4_cents ?? 0))),
+        entrega5Cents: Math.max(0, Math.round(Number(o.entrega5Cents ?? o.entrega_5_cents ?? 0))),
+        descontoPercent: Number(o.descontoPercent ?? o.desconto_percent ?? 0),
+        brutoCents: Math.max(0, Math.round(Number(o.brutoCents ?? o.bruto_cents ?? 0))),
+      };
+    });
+  }
   return {
     cooperadoId: String(row.cooperado_id),
     entrega1Cents: Number(row.entrega_1_cents ?? 0),
@@ -39,6 +58,7 @@ function mapRow(row: Record<string, unknown>): HbCreditFichaPlano {
     descontoPercent: Number(row.desconto_percent ?? 0),
     mensalidades,
     entregasConsumidas: Math.max(0, Math.round(Number(row.entregas_consumidas ?? 0))),
+    historicoCiclos,
     updatedAt: row.updated_at ? String(row.updated_at) : undefined,
   };
 }
@@ -117,6 +137,7 @@ export async function saveFichaPlanoCooperado(
     desconto_percent: Math.min(100, Math.max(0, Number(plano.descontoPercent) || 0)),
     mensalidades: plano.mensalidades ?? [],
     entregas_consumidas: Math.max(0, Math.round(plano.entregasConsumidas ?? 0)),
+    historico_ciclos: plano.historicoCiclos ?? [],
     updated_at: now,
     updated_by: actorUserId,
   };
@@ -125,13 +146,22 @@ export async function saveFichaPlanoCooperado(
     onConflict: "cooperative_cnpj,cooperado_id",
   });
   if (error) {
-    if (/hb_credit_cooperado_ficha_plano/i.test(error.message ?? "")) {
+    if (/historico_ciclos/i.test(error.message ?? "")) {
+      const { historico_ciclos: _h, ...patchSemHistorico } = patch;
+      const retry = await supabase.from("hb_credit_cooperado_ficha_plano").upsert(patchSemHistorico, {
+        onConflict: "cooperative_cnpj,cooperado_id",
+      });
+      if (retry.error) {
+        return { ok: false, error: retry.error.message ?? "Erro ao salvar ficha." };
+      }
+    } else if (/hb_credit_cooperado_ficha_plano/i.test(error.message ?? "")) {
       return {
         ok: false,
         error: "Tabela hb_credit_cooperado_ficha_plano ausente na nuvem — aplique a migration V2.",
       };
+    } else {
+      return { ok: false, error: error.message ?? "Erro ao salvar ficha." };
     }
-    return { ok: false, error: error.message ?? "Erro ao salvar ficha." };
   }
 
   if (storageCooperadoId !== plano.cooperadoId) {
@@ -177,6 +207,65 @@ export async function saveFichaPlanoCooperado(
     storageCooperadoId,
     limiteWarning,
   };
+}
+
+/** Arquiva entregas atuais na nuvem e zera o ciclo visível (cooperado só vê lançamentos novos). */
+export async function archiveFichaPlanoEntregasCooperado(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  actorUserId: string
+): Promise<
+  | { ok: true; plano: HbCreditFichaPlano; storageCooperadoId: string }
+  | { ok: false; error: string }
+> {
+  const plano = await getFichaPlanoCooperado(supabase, cnpj, cooperadoId);
+  const bruto = brutoFichaPlanoCents(plano);
+  const temEntregas = somaEntregasPlanoCents(plano) > 0;
+  if (!temEntregas && bruto <= 0) {
+    return { ok: true, plano, storageCooperadoId: plano.cooperadoId };
+  }
+
+  const now = new Date().toISOString();
+  const snapshot: HbCreditFichaPlanoHistoricoCiclo = {
+    archivedAt: now,
+    entrega1Cents: plano.entrega1Cents,
+    entrega2Cents: plano.entrega2Cents,
+    entrega3Cents: plano.entrega3Cents,
+    entrega4Cents: plano.entrega4Cents,
+    entrega5Cents: plano.entrega5Cents,
+    descontoPercent: plano.descontoPercent ?? 0,
+    brutoCents: bruto,
+  };
+
+  const cleared: HbCreditFichaPlano = {
+    ...plano,
+    entrega1Cents: 0,
+    entrega2Cents: 0,
+    entrega3Cents: 0,
+    entrega4Cents: 0,
+    entrega5Cents: 0,
+    descontoPercent: 0,
+    entregasConsumidas: 0,
+    historicoCiclos: [...(plano.historicoCiclos ?? []), snapshot],
+  };
+
+  const saved = await saveFichaPlanoCooperado(supabase, cnpj, cleared, actorUserId);
+  if (!saved.ok) return saved;
+
+  const digits = normalizeCnpj(cnpj);
+  const storageCooperadoId = saved.storageCooperadoId;
+  await setManualValorBrutoCooperado(supabase, digits, storageCooperadoId, null, actorUserId);
+  await syncLimiteCooperadoFromCreditoBase(
+    supabase,
+    digits,
+    storageCooperadoId,
+    0,
+    actorUserId,
+    { [storageCooperadoId]: 0 }
+  ).catch(() => {});
+
+  return { ok: true, plano: saved.plano, storageCooperadoId };
 }
 
 /** Após compra HB: incrementa entregas e cobra mensalidades vencidas (amount_used). */

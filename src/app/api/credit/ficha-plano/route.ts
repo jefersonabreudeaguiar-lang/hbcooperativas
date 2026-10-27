@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  archiveFichaPlanoEntregasCooperado,
   getFichaPlanoCooperado,
   saveFichaPlanoCooperado,
 } from "@/lib/supabase/hbCreditFichaPlanoStorage";
@@ -40,7 +41,11 @@ export async function GET(request: Request) {
     if (denyStaff) return denyStaff;
   }
 
-  const plano = await getFichaPlanoCooperado(gate.ctx.supabase, cnpj, cooperadoId);
+  let plano = await getFichaPlanoCooperado(gate.ctx.supabase, cnpj, cooperadoId);
+  const archivedCyclesCount = (plano.historicoCiclos ?? []).length;
+  if (role === "cooperado") {
+    plano = { ...plano, historicoCiclos: [] };
+  }
   const brutoCents = brutoFichaPlanoCents(plano);
   let hbCredito: { valorLiberadoCents: number; liberacaoPercent: number | null } | null = null;
   if (isV2HbOnlyServer()) {
@@ -62,7 +67,7 @@ export async function GET(request: Request) {
       hbCredito = { valorLiberadoCents: 0, liberacaoPercent: null };
     }
   }
-  return NextResponse.json({ ok: true, plano, brutoCents, hbCredito });
+  return NextResponse.json({ ok: true, plano, brutoCents, hbCredito, archivedCyclesCount });
 }
 
 export async function POST(request: Request) {
@@ -75,9 +80,10 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const cnpj = normalizeCnpj(String(body?.cnpj ?? gate.ctx.session?.cooperativaCnpj ?? ""));
   const cooperadoId = String(body?.cooperadoId ?? "");
+  const action = String(body?.action ?? "save");
   const plano = body?.plano as HbCreditFichaPlano | undefined;
 
-  if (cnpj.length !== 14 || !cooperadoId || !plano) {
+  if (cnpj.length !== 14 || !cooperadoId) {
     return NextResponse.json({ error: "Dados incompletos." }, { status: 400 });
   }
 
@@ -85,6 +91,28 @@ export async function POST(request: Request) {
   if (denyCoop) return denyCoop;
 
   const actorId = gate.ctx.session?.sub ?? "staff";
+
+  if (action === "archive_entregas") {
+    const archived = await archiveFichaPlanoEntregasCooperado(
+      gate.ctx.supabase,
+      cnpj,
+      cooperadoId,
+      actorId
+    );
+    if (!archived.ok) return NextResponse.json({ error: archived.error }, { status: 400 });
+    const outPlano = { ...archived.plano, historicoCiclos: archived.plano.historicoCiclos ?? [] };
+    return NextResponse.json({
+      ok: true,
+      plano: outPlano,
+      storageCooperadoId: archived.storageCooperadoId,
+      archivedCyclesCount: outPlano.historicoCiclos.length,
+    });
+  }
+
+  if (!plano) {
+    return NextResponse.json({ error: "Dados incompletos." }, { status: 400 });
+  }
+
   const saved = await saveFichaPlanoCooperado(gate.ctx.supabase, cnpj, { ...plano, cooperadoId }, actorId);
   if (!saved.ok) return NextResponse.json({ error: saved.error }, { status: 400 });
   return NextResponse.json({
