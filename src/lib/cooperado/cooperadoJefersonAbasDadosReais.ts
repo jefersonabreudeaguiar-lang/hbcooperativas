@@ -3,7 +3,6 @@
  */
 import type { User } from "@/types";
 import {
-  COOPERADO_BOTTOM_TAB_HREFS,
   type CooperadoBottomTabHref,
   isCooperadoBottomTabPath,
 } from "@/lib/performance/cooperadoBottomTabRoutes";
@@ -137,7 +136,7 @@ export function scheduleCooperadoJefersonMaterializarAba(
   href: CooperadoBottomTabHref
 ): void {
   if (!user?.id || !isCooperadoJefersonSomenteAtualizarPilot(user)) return;
-  if (!COOPERADO_BOTTOM_TAB_HREFS.includes(href)) return;
+  if (!isCooperadoBottomTabPath(href)) return;
   if (cooperadoJefersonAbaJaMaterializada(user, href)) return;
 
   const inflightKey = `${user.id}:${href}`;
