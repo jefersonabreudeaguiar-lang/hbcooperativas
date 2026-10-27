@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
@@ -28,32 +28,39 @@ export function GuestRoute({
 
   useLayoutEffect(() => {
     dismissCooperadoBootShell();
-    if (!loading && user && authenticatedRedirect) {
-      const params = new URLSearchParams(window.location.search);
-      const next = params.get("next");
-      const dest =
-        next && next.startsWith("/") && !next.startsWith("//") ? next : authenticatedRedirect;
-      const onLoginWithPwaRepair =
-        window.location.pathname === "/login" && params.has("hb-pwa");
-      if (onLoginWithPwaRepair) {
-        /** pwa-launch / ack inline já marcaram reparo — purge+reload no browser quebra com “couldn’t load”. */
-        markPwaRepairSessionForBuild();
-        const pathOnly = dest.split("?")[0];
-        if (window.location.pathname !== pathOnly) {
-          if (isStandalonePwa()) window.location.replace(dest);
-          else router.replace(dest);
-        }
-        return;
-      }
+  }, []);
 
+  /** Redirect após o documento commitar — useLayoutEffect + replace abortava /login (couldn’t load). */
+  useEffect(() => {
+    if (loading || !user || !authenticatedRedirect) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get("next");
+    const dest =
+      next && next.startsWith("/") && !next.startsWith("//") ? next : authenticatedRedirect;
+    const onLoginWithPwaRepair =
+      window.location.pathname === "/login" && params.has("hb-pwa");
+
+    const go = () => {
+      if (onLoginWithPwaRepair) {
+        markPwaRepairSessionForBuild();
+      }
+      const pathOnly = dest.split("?")[0];
+      if (window.location.pathname === pathOnly) return;
       if (isStandalonePwa()) {
-        if (window.location.pathname !== dest.split("?")[0]) {
-          window.location.replace(dest);
-        }
+        window.location.assign(dest);
       } else {
         router.replace(dest);
       }
+    };
+
+    if (document.readyState === "complete") {
+      const t = window.setTimeout(go, 0);
+      return () => window.clearTimeout(t);
     }
+    const onLoad = () => window.setTimeout(go, 0);
+    window.addEventListener("load", onLoad, { once: true });
+    return () => window.removeEventListener("load", onLoad);
   }, [user, loading, router, authenticatedRedirect]);
 
   if (loading) {

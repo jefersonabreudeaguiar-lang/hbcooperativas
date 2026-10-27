@@ -35,6 +35,10 @@ assert.match(layout, /buildInlinePwaBrowserDetachServiceWorkerScript/, "layout d
 const loginPage = read("src/app/login/page.tsx");
 assert.doesNotMatch(loginPage, /repairBrowserProfileIfStale/, "login sem purge/reload automático");
 
+const guest = read("src/components/auth/GuestRoute.tsx");
+assert.match(guest, /useEffect\(\(\) => \{[\s\S]*authenticatedRedirect/, "redirect autenticado após load");
+assert.doesNotMatch(guest, /useLayoutEffect\(\(\) => \{[\s\S]*location\.replace/, "sem replace no layout effect");
+
 const manifest = buildWebAppManifest();
 assert.ok(manifest.start_url.includes("/login") && manifest.start_url.includes("hb-pwa="), "manifest start_url login direto");
 assert.ok(manifest.shortcuts[0].url.includes("pwa-launch.html"), "atalhos passam pelo launch");

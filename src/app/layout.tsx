@@ -19,6 +19,7 @@ import { buildInlineRuntimeCrashRecorderScript } from "@/lib/pwa/runtimeCrashFor
 import { buildInlineStaleProfileGuardScript } from "@/lib/pwa/staleProfileGuard";
 import { buildInlinePwaLoginHbPwaRepairAckScript } from "@/lib/pwa/pwaLoginHbPwaAckInline";
 import { buildInlinePwaBrowserDetachServiceWorkerScript } from "@/lib/pwa/pwaBrowserDetachServiceWorkerInline";
+import { buildInlineCooperadoBrowserSkipDestructiveHeadBootScript } from "@/lib/pwa/cooperadoBrowserHeadBootPolicy";
 import { buildInlineChunkDplAlignGuardScript } from "@/lib/pwa/chunkDplAlignGuard";
 import { buildInlineHtmlDeploymentAlignScript } from "@/lib/pwa/htmlDeploymentAlign";
 import { buildInlineRescuePendingVerifyScript } from "@/lib/pwa/pwaReleaseConsistency";
@@ -98,6 +99,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: buildInlineRuntimeCrashRecorderScript() }} />
+        <script dangerouslySetInnerHTML={{ __html: buildInlineCooperadoBrowserSkipDestructiveHeadBootScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlinePwaBrowserDetachServiceWorkerScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineStaleProfileGuardScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlinePwaLoginHbPwaRepairAckScript() }} />
