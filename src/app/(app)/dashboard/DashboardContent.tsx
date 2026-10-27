@@ -34,6 +34,10 @@ import {
 import { markCooperadoInicioAberturaQuiescence } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
 import { useCooperadoInicioAberturaQuiescenceActive } from "@/hooks/useCooperadoInicioAberturaQuiescenceActive";
 import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
+import {
+  staffGestaoAppDataParaPainel,
+  staffGestaoPainelDataRevisionToken,
+} from "@/lib/staff/staffGestaoPainelLeitura";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { evaluateResponsavelPainelAbertura } from "@/lib/responsavel/responsavelPainelContrato";
 import { cooperadoSessaoNuncaPainelGestaoMobile } from "@/lib/responsavel/responsavelIdentidade";
@@ -744,7 +748,11 @@ function AdminDashboard() {
   const gestaoUser = accountUser ?? user;
   const adminDataRevision = useAppDataSelectorWhenActive(
     tabActive,
-    () => (isAppDataWarm() ? getDataRevision() : -1),
+    () => {
+      const token = staffGestaoPainelDataRevisionToken();
+      if (token < 0) return -1;
+      return isAppDataWarm() ? getDataRevision() : token;
+    },
     []
   );
   const navUser = useMemo(() => {
@@ -835,7 +843,9 @@ function AdminDashboard() {
   const quickStats = useMemo(() => {
     if (!meta || deferredRevision == null || deferredRevision < 0) return null;
     try {
-      return getAdminStatsCached(getData(), meta.coopId || undefined, { skipValoresAPagar: true });
+      const d = staffGestaoAppDataParaPainel(meta.coopId || undefined);
+      if (!d) return null;
+      return getAdminStatsCached(d, meta.coopId || undefined, { skipValoresAPagar: true });
     } catch {
       return null;
     }
@@ -846,7 +856,8 @@ function AdminDashboard() {
       return null;
     }
     try {
-      const d = getData();
+      const d = staffGestaoAppDataParaPainel(meta.coopId || undefined);
+      if (!d) return null;
       const coopScope = meta.coopId || undefined;
       return {
         stats: getAdminStatsCached(d, coopScope),
@@ -864,7 +875,8 @@ function AdminDashboard() {
     }
     let cancelled = false;
     try {
-      const d = getData();
+      const d = staffGestaoAppDataParaPainel(meta.coopId || undefined);
+      if (!d) return;
       const coopScope = meta.coopId || undefined;
       const fila = getFilaDoDiaCached(d, coopScope, meta.mes);
       void requestAdminStatsFromWorker(d, coopScope, undefined, deferredRevision)

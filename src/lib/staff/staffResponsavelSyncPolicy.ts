@@ -22,12 +22,12 @@ export function isStaffGestaoRole(role: UserRole | string | undefined | null): b
  * Aparelho já hidratado: notas_delta.
  */
 export function staffResponsavelOpeningSyncRequest(data?: AppData | null): SyncRunOptions {
-  /** PC: shell primeiro; operacional pesado só em «Atualizar». */
-  if (staffGestaoEmViewportDesktop()) {
-    return { silent: true, tier: "pulse" };
-  }
   if (staffPrecisaHydrateOperacionalPull(data)) {
     return { silent: true, force: true, tier: "financeiro_delta" };
+  }
+  /** PC já hidratado: shell leve — operacional completo só em «Atualizar». */
+  if (staffGestaoEmViewportDesktop()) {
+    return { silent: true, tier: "pulse" };
   }
   return { silent: true, tier: "notas_delta" };
 }

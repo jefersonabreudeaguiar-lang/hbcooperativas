@@ -2,11 +2,13 @@
  * Contrato único — gestão no PC (viewport ≥1024px).
  * Toda decisão “desktop vs mobile” da staff passa aqui ou em staffGestaoModoDesktop (reexport).
  */
+import type { AppData } from "@/types";
 import type { SyncRunOptions } from "@/services/syncRequest";
 import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewportCore";
+import { staffPrecisaHydrateOperacionalPull } from "@/lib/staff/staffOperacionalColdHydrate";
 
 /** Bump + teste `test-staff-gestao-perfil-desktop.ts` a cada mudança de comportamento PC. */
-export const STAFF_GESTAO_DESKTOP_PERFIL_VERSION = 7;
+export const STAFF_GESTAO_DESKTOP_PERFIL_VERSION = 8;
 
 export function staffGestaoPerfilEhDesktop(): boolean {
   if (typeof window === "undefined") return false;
@@ -17,9 +19,17 @@ export function staffGestaoPerfilSyncBackgroundPermitido(): boolean {
   return isStaffMobileViewportActive();
 }
 
-/** PC: sem sync automático na abertura — só «Atualizar». */
-export function staffGestaoPerfilAberturaSyncPermitido(): boolean {
-  return !staffGestaoPerfilEhDesktop();
+/** PC: abertura leve; exceção única = hidratação fria (sem PIX/livro local). */
+export function staffGestaoPerfilAberturaSyncPermitidoForViewport(
+  desktop: boolean,
+  data?: AppData | null
+): boolean {
+  if (!desktop) return true;
+  return staffPrecisaHydrateOperacionalPull(data);
+}
+
+export function staffGestaoPerfilAberturaSyncPermitido(data?: AppData | null): boolean {
+  return staffGestaoPerfilAberturaSyncPermitidoForViewport(staffGestaoPerfilEhDesktop(), data);
 }
 
 export function staffGestaoPerfilAberturaDelayMs(): number {
@@ -95,6 +105,13 @@ export function staffGestaoPerfilCapSyncAutomaticoForViewport(
 ): SyncRunOptions | null | undefined {
   if (!desktop) return opts;
   if (opts?.userInitiated === true || opts?.eventDriven === true) return opts;
+  if (
+    opts?.tier === "financeiro_delta" &&
+    opts?.force === true &&
+    opts?.silent === true
+  ) {
+    return opts;
+  }
   return null;
 }
 

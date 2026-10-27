@@ -153,7 +153,7 @@ import {
   staffGestaoPerfilCapSyncAutomatico,
   staffGestaoSyncBackgroundPermitido,
 } from "@/lib/staff/staffGestaoModoDesktop";
-import { scheduleStaffGestaoPersistReloadAfterPaint } from "@/services/dataStore";
+import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
 import {
   isStaffFilaNotasLivePollEnabled,
   resolveStaffFilaBackgroundCatchupMs,
@@ -1283,11 +1283,17 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         });
       }
     } else if (staff && isCooperadoInstantResumeEnabled()) {
-      if (!document.hidden && staffGestaoPerfilAberturaSyncPermitido()) {
+      if (
+        !document.hidden &&
+        staffGestaoPerfilAberturaSyncPermitido(
+          isAppDataWarm() ? getData() : peekStaffGestaoLastGood()
+        )
+      ) {
         markUserActivity();
         const runStaffOpen = () => {
           markNextCooperadoSyncSilent();
-          void runSync(staffResponsavelOpeningSyncRequest(isAppDataWarm() ? getData() : null));
+          const snap = isAppDataWarm() ? getData() : peekStaffGestaoLastGood();
+          void runSync(staffResponsavelOpeningSyncRequest(snap));
         };
         const delayOpen = staffGestaoAberturaSyncDelayMs();
         scheduleStaffPostInteractiveTask(() => {
@@ -1295,12 +1301,18 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           else window.setTimeout(runStaffOpen, delayOpen);
         });
       }
-    } else if (staff && staffGestaoPerfilAberturaSyncPermitido()) {
+    } else if (
+      staff &&
+      staffGestaoPerfilAberturaSyncPermitido(
+        isAppDataWarm() ? getData() : peekStaffGestaoLastGood()
+      )
+    ) {
       const delayOpen = staffGestaoAberturaSyncDelayMs();
       initialDelay = setTimeout(() => {
         if (!document.hidden) {
           markUserActivity();
-          void runSync(staffResponsavelOpeningSyncRequest(isAppDataWarm() ? getData() : null));
+          const snap = isAppDataWarm() ? getData() : peekStaffGestaoLastGood();
+          void runSync(staffResponsavelOpeningSyncRequest(snap));
         }
       }, delayOpen);
     } else {
