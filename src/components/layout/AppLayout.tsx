@@ -115,6 +115,7 @@ const ICONS: Record<string, React.ReactNode> = {
   "/prestacao-contas": <FileCheck size={20} />,
   "/conta-coop": <Wallet size={20} />,
   "/minha-conta-coop": <Wallet size={20} />,
+  "/minha-ficha-hb": <FileText size={20} />,
   "/mercado-parceiro": <ShoppingCart size={20} />,
   "/contador/dashboard": <Shield size={20} />,
   "/contador/conciliacao": <Scale size={20} />,

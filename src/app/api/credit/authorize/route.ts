@@ -15,6 +15,8 @@ import {
 } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
 import { isCooperadoTransferIntentId } from "@/config/cooperadoTransferenciaCredito";
 import { authorizeCooperadoTransferPayment } from "@/lib/supabase/cooperadoTransferenciaCreditoStorage";
+import { isV2HbOnlyServer } from "@/lib/hb-credit/hbCreditV2LimiteBase";
+import { aplicarFichaPlanoAposUsoCreditoHb } from "@/lib/supabase/hbCreditFichaPlanoStorage";
 
 /** Autorização HB — RPC + PIN; precisa de folga acima do default serverless em sync pesado. */
 export const maxDuration = 60;
@@ -135,6 +137,10 @@ export async function POST(request: Request) {
     void projectContaCoopDescontosAfterHbAuthorize(supabase, cnpj, cooperadoId, {
       mesReferencia,
     }).catch(() => {});
+  }
+
+  if (isV2HbOnlyServer() && !result.duplicate) {
+    void aplicarFichaPlanoAposUsoCreditoHb(supabase, cnpj, cooperadoId, actorId).catch(() => {});
   }
 
   return NextResponse.json({

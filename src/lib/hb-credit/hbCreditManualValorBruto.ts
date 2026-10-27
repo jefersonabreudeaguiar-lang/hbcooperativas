@@ -1,5 +1,6 @@
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import type { InicioCardMotorSnapshot } from "@/lib/cooperadoInicioCardPolicy";
+import { creditosBaseMapV2ManualOnly, isV2HbOnlyServer } from "@/lib/hb-credit/hbCreditV2LimiteBase";
 import { round2 } from "@/utils/calculations";
 
 /** Valor a receber V2: bruto manual − crédito HB já usado (amount_used na conta). */
@@ -17,6 +18,12 @@ export function mergeManualValorBrutoIntoCreditosBaseCents(
   creditosBaseCents: Record<string, number>,
   limites: Pick<ContaCoopLimiteCooperado, "cooperadoId" | "manualValorBrutoCents">[]
 ): Record<string, number> {
+  if (isV2HbOnlyServer()) {
+    const ids = [
+      ...new Set([...Object.keys(creditosBaseCents), ...limites.map((l) => l.cooperadoId)]),
+    ];
+    return creditosBaseMapV2ManualOnly(ids, limites);
+  }
   const out = { ...creditosBaseCents };
   for (const l of limites) {
     const manual = l.manualValorBrutoCents;

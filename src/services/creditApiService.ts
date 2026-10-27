@@ -25,6 +25,7 @@ import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCen
 import { getData } from "@/services/dataStore";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { isCooperadoTransferIntentId } from "@/config/cooperadoTransferenciaCredito";
+import type { HbCreditFichaPlano } from "@/lib/hb-credit/hbCreditFichaPlano";
 
 function mensagemCorpoNaoJson(res: Response, raw: string): string {
   const trimmed = raw.trim();
@@ -224,6 +225,25 @@ export async function resetMercadoFinancialPin(cnpj: string, parceiroId: string)
   const data = await parseJson<{ ok?: boolean; error?: string }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Não foi possível resetar o PIN do mercado.");
   return data;
+}
+
+export async function fetchHbCreditFichaPlano(cnpj: string, cooperadoId: string) {
+  const q = new URLSearchParams({ cnpj, cooperadoId });
+  const res = await secureApiFetch(`/api/credit/ficha-plano?${q}`);
+  const data = await parseJson<{ ok?: boolean; error?: string; plano?: HbCreditFichaPlano }>(res);
+  if (!res.ok || !data.ok || !data.plano) throw new Error(data.error ?? "Não foi possível carregar a ficha.");
+  return data.plano;
+}
+
+export async function saveHbCreditFichaPlano(cnpj: string, plano: HbCreditFichaPlano) {
+  const res = await secureApiFetch("/api/credit/ficha-plano", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cnpj, cooperadoId: plano.cooperadoId, plano }),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string; plano?: HbCreditFichaPlano }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Não foi possível salvar a ficha.");
+  return data.plano ?? plano;
 }
 
 export async function postManualValorBrutoCooperado(

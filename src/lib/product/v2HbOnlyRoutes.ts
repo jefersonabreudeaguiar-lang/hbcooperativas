@@ -1,7 +1,7 @@
 import { normalizeUserRole } from "@/permissions";
 import { isV2HbOnlyClient } from "@/lib/product/v2HbOnly";
 
-const COOPERADO_PREFIXES = ["/dashboard", "/minha-conta-coop", "/meu-cadastro", "/baixar-app"];
+const COOPERADO_PREFIXES = ["/dashboard", "/minha-conta-coop", "/minha-ficha-hb", "/meu-cadastro", "/baixar-app"];
 
 const STAFF_PREFIXES = ["/conta-coop", "/cooperados", "/meu-perfil", "/baixar-app"];
 

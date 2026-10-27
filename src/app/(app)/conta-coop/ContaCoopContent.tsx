@@ -51,7 +51,6 @@ import { refreshHbCreditLimitesStaff } from "@/lib/hb-credit/hbCreditLimitesRefr
 import { notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import { mensagemAvisoBaseAuthoritativeLimites, mensagemErroListaLimitesStaff } from "@/lib/hb-credit/hbCreditLimitesStaffMessages";
 import { isV2HbOnlyClient } from "@/lib/product/v2HbOnly";
-import { HbCreditManualValorBrutoInput } from "@/components/hb-credit/HbCreditManualValorBrutoInput";
 import { hbCreditValorAReceberReaisFromManualBruto } from "@/lib/hb-credit/hbCreditManualValorBruto";
 import { ensureHbCreditLabLiberacaoPadrao } from "@/lib/hb-credit/ensureHbCreditLabLiberacaoPadrao";
 import {
@@ -382,6 +381,7 @@ function ContaCoopContent() {
 
   const recomputeCreditosBaseLocal = useCallback(
     (opts?: { immediate?: boolean }) => {
+      if (isV2HbOnlyClient()) return;
       if (!opts?.immediate) return;
       if (!user?.cooperativaId || !cooperadoIdsAtivos.length) {
         creditosBaseComputeGenRef.current += 1;
@@ -668,23 +668,30 @@ function ContaCoopContent() {
 
   const valoresLimiteExibidos = useCallback(
     (limite: ContaCoopLimiteCooperado, creditoBaseCents: number) => {
-      const liberadoGravado = Math.max(0, limite.limiteLiberadoCents ?? 0);
-      const usadoGravado = Math.max(0, limite.valorUsadoCents ?? 0);
-      /** Lista do responsável: espelha o limite já liberado na nuvem/cache (não zera só porque o crédito-base local ainda não carregou). */
-      if (liberadoGravado > 0 || usadoGravado > 0) {
-        const disponivelGravado = Math.max(
-          0,
-          limite.valorDisponivelCents ?? computeDisponivel(liberadoGravado, usadoGravado)
-        );
-        return {
-          liberado: liberadoGravado,
-          usado: usadoGravado,
-          disponivel: disponivelGravado,
-        };
-      }
       const tetoPct = dashboard?.teto.tetoGlobalPercent ?? 100;
       const libPct = Math.min(tetoPct, percentualCapTabelaLimites);
-      const eff = resolveLimiteHbCooperadoEfetivo(limite, creditoBaseCents, tetoPct, libPct);
+      const baseV2 =
+        isV2HbOnlyClient() && limite.manualValorBrutoCents != null && limite.manualValorBrutoCents > 0
+          ? limite.manualValorBrutoCents
+          : isV2HbOnlyClient()
+            ? 0
+            : creditoBaseCents;
+      const eff = resolveLimiteHbCooperadoEfetivo(limite, baseV2, tetoPct, libPct);
+      if (!isV2HbOnlyClient()) {
+        const liberadoGravado = Math.max(0, limite.limiteLiberadoCents ?? 0);
+        const usadoGravado = Math.max(0, limite.valorUsadoCents ?? 0);
+        if (liberadoGravado > 0 || usadoGravado > 0) {
+          const disponivelGravado = Math.max(
+            0,
+            limite.valorDisponivelCents ?? computeDisponivel(liberadoGravado, usadoGravado)
+          );
+          return {
+            liberado: liberadoGravado,
+            usado: usadoGravado,
+            disponivel: disponivelGravado,
+          };
+        }
+      }
       return {
         liberado: eff.limiteLiberadoCents,
         usado: eff.valorUsadoCents,
@@ -1601,13 +1608,14 @@ function ContaCoopContent() {
                       </td>
                       <td className="p-3">
                         {isV2HbOnlyClient() ? (
-                          <HbCreditManualValorBrutoInput
-                            cnpj={cnpj}
-                            cooperadoId={l.cooperadoId}
-                            manualValorBrutoCents={l.manualValorBrutoCents}
-                            disabled={busy || limitesRefreshing}
-                            onSaved={() => void atualizarLimitesNaNuvem()}
-                          />
+                          <span className="text-sm">
+                            {l.manualValorBrutoCents != null && l.manualValorBrutoCents > 0
+                              ? formatCentsBRL(l.manualValorBrutoCents)
+                              : "—"}
+                            <span className="block text-xs text-gray-500 mt-0.5">
+                              Edite em Cooperados → ficha HB (entregas 1–5)
+                            </span>
+                          </span>
                         ) : (
                           formatCentsBRL(baseCents)
                         )}

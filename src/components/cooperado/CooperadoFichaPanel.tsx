@@ -18,6 +18,8 @@ import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTi
 import { CooperadoMinhaFichaTab } from "@/components/cooperado/CooperadoMinhaFichaTab";
 import { formatCPFCNPJ, formatPhone, getCurrentMesReferencia } from "@/utils/format";
 import type { Cooperado, NotaPedido } from "@/types";
+import { isV2HbOnlyClient } from "@/lib/product/v2HbOnly";
+import { HbCreditFichaPlanoPanel } from "@/components/hb-credit/HbCreditFichaPlanoPanel";
 
 function getEscolaLabel(
   nota: NotaPedido,
@@ -88,6 +90,10 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
 
   if (!data) return <PageSkeleton compact />;
 
+  const coopId = getUserCooperativaId(user!, data);
+  const coop = data.cooperativas.find((c) => c.id === coopId);
+  const cnpjHb = normalizeCnpj(coop?.cnpj ?? user?.cooperativaCnpj ?? "");
+
   const statusCota = getStatusCotaCooperado(data, cooperado.id, getCurrentMesReferencia());
 
   return (
@@ -144,20 +150,32 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
           </label>
         )}
 
-        <div className="flex flex-wrap gap-2 mt-4">
-          <Link href={`/ficha-corrida?cooperado=${cooperado.id}`}>
-            <Button variant="secondary" size="sm">
-              <Wallet size={16} /> Ficha corrida / pagar
-            </Button>
-          </Link>
-          <Link href={`/notas-pedido?cooperado=${cooperado.id}`}>
-            <Button variant="secondary" size="sm">
-              <FileText size={16} /> Entregas
-            </Button>
-          </Link>
-        </div>
+        {!isV2HbOnlyClient() ? (
+          <div className="flex flex-wrap gap-2 mt-4">
+            <Link href={`/ficha-corrida?cooperado=${cooperado.id}`}>
+              <Button variant="secondary" size="sm">
+                <Wallet size={16} /> Ficha corrida / pagar
+              </Button>
+            </Link>
+            <Link href={`/notas-pedido?cooperado=${cooperado.id}`}>
+              <Button variant="secondary" size="sm">
+                <FileText size={16} /> Entregas
+              </Button>
+            </Link>
+          </div>
+        ) : null}
       </Card>
 
+      {isV2HbOnlyClient() && cnpjHb.length === 14 && podeEditar ? (
+        <HbCreditFichaPlanoPanel
+          cnpj={cnpjHb}
+          cooperadoId={cooperado.id}
+          cooperadoNome={cooperado.nomeCompleto}
+          mode="edit"
+        />
+      ) : null}
+
+      {!isV2HbOnlyClient() ? (
       <CooperadoMinhaFichaTab
         cooperadoId={cooperado.id}
         cooperativaId={cooperado.cooperativaId}
@@ -166,6 +184,7 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
         getEscolaLabel={getEscolaLabelBound}
         modo="responsavel"
       />
+      ) : null}
     </div>
   );
 }
