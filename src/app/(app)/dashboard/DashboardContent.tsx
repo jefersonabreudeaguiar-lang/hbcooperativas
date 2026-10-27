@@ -56,6 +56,7 @@ import {
 } from "@/components/cooperado/CooperadoInicioCooperadoLiveLeaf";
 import { CooperadoMensalidadesPagarPanel } from "@/components/cooperado/CooperadoMensalidadesPagarPanel";
 import { ValoresAvulsosDashboardCard } from "@/components/ficha/ValoresAvulsosReceberPanel";
+import { V2HbOnlyDashboardRedirect } from "@/components/product/V2HbOnlyDashboardRedirect";
 import { getAdminStatsCached } from "@/services/dashboardService";
 import { requestAdminStatsFromWorker } from "@/services/adminStatsWorkerClient";
 import { isRqlAdminStatsWorkerEnabled } from "@/lib/performance/rqlAdminStats85";
@@ -1143,18 +1144,28 @@ export default function DashboardPage() {
 
   if (!authSubject) return <PageSkeleton />;
 
+  const v2HomeRedirect = <V2HbOnlyDashboardRedirect />;
+
   if (
     cooperadoSessaoNuncaPainelGestaoMobile(user ?? authSubject, mobile) ||
     cooperadoSessaoNuncaPainelGestaoMobile(authSubject, mobile)
   ) {
-    return <CooperadoDashboard />;
+    return (
+      <>
+        {v2HomeRedirect}
+        <CooperadoDashboard />
+      </>
+    );
   }
 
   if (painelAbertura.staffPainelUi || painelAbertura.showAdminPainel) {
     return (
-      <StaffPainelSafeRoot>
-        <AdminDashboard />
-      </StaffPainelSafeRoot>
+      <>
+        {v2HomeRedirect}
+        <StaffPainelSafeRoot>
+          <AdminDashboard />
+        </StaffPainelSafeRoot>
+      </>
     );
   }
 
@@ -1163,18 +1174,38 @@ export default function DashboardPage() {
     isCooperadoAppUser(user ?? authSubject) ||
     user?.role === "cooperado"
   ) {
-    return <CooperadoDashboard />;
+    return (
+      <>
+        {v2HomeRedirect}
+        <CooperadoDashboard />
+      </>
+    );
   }
 
   if (painelAbertura.canGestao) {
     return (
-      <StaffPainelSafeRoot>
-        <AdminDashboard />
-      </StaffPainelSafeRoot>
+      <>
+        {v2HomeRedirect}
+        <StaffPainelSafeRoot>
+          <AdminDashboard />
+        </StaffPainelSafeRoot>
+      </>
     );
   }
 
-  if (!dataReady && !instantResume) return <PageSkeleton />;
+  if (!dataReady && !instantResume) {
+    return (
+      <>
+        {v2HomeRedirect}
+        <PageSkeleton />
+      </>
+    );
+  }
 
-  return <PageSkeleton />;
+  return (
+    <>
+      {v2HomeRedirect}
+      <PageSkeleton />
+    </>
+  );
 }

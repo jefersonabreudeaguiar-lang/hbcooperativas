@@ -7,7 +7,8 @@ import {
 export { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
 import { isHbCreditEnabledClient } from "@/modules/hb-credit/config";
 import { filterContaCoopNavItems, isContaCoopUiPublic } from "@/utils/contaCoopUiVisibility";
-import { COOPERADO_BOTTOM_TAB_HREFS } from "@/lib/performance/cooperadoBottomTabRoutes";
+import { cooperadoBottomTabHrefs } from "@/lib/performance/cooperadoBottomTabRoutes";
+import { isV2HbOnlyClient } from "@/lib/product/v2HbOnly";
 import { isAppCreator } from "@/lib/security/appCreator";
 
 type PermissionMatrix = Record<UserRole, Partial<Record<Resource, Action[]>>>;
@@ -360,6 +361,29 @@ const COOPERADO_DRAWER_MENU: { href: string; label: string; resource: Resource }
   { href: "/prestacao-contas", label: "Prestação de contas", resource: "prestacao_contas" },
 ];
 
+const V2_COOPERADO_MENU: { href: string; label: string; resource: Resource }[] = [
+  { href: "/minha-conta-coop", label: "HB Créditos", resource: "conta_coop" },
+  { href: "/meu-cadastro", label: "Meu cadastro", resource: "dashboard" },
+];
+
+const V2_COOPERADO_DRAWER_MENU: { href: string; label: string; resource: Resource }[] = [
+  { href: "/minha-conta-coop", label: "HB Créditos", resource: "conta_coop" },
+  { href: "/meu-cadastro", label: "Meu cadastro", resource: "dashboard" },
+  { href: "/baixar-app", label: "Baixar aplicativo", resource: "dashboard" },
+];
+
+const V2_RESPONSAVEL_MENU: { href: string; label: string; resource: Resource }[] = [
+  { href: "/conta-coop", label: "HB Créditos", resource: "conta_coop" },
+  { href: "/cooperados", label: "Cooperados", resource: "cooperados" },
+  { href: "/meu-perfil", label: "Perfil da cooperativa", resource: "cooperativas" },
+];
+
+const V2_RESPONSAVEL_MOBILE_MENU: { href: string; label: string; resource: Resource }[] = [
+  { href: "/conta-coop", label: "HB Créditos", resource: "conta_coop" },
+  { href: "/cooperados", label: "Cooperados", resource: "cooperados" },
+  { href: "/meu-perfil", label: "Perfil", resource: "cooperativas" },
+];
+
 const PARCEIRO_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/mercado-parceiro", label: "Painel mercado", resource: "conta_coop" },
 ];
@@ -547,6 +571,15 @@ export function getMenuItems(
   const effectiveRole = resolveAppUserRole(navSubject, data);
   const navUser = { ...user, role: effectiveRole };
 
+  if (isV2HbOnlyClient()) {
+    if (effectiveRole === "cooperado") {
+      return filterMenuForUser(V2_COOPERADO_MENU, navUser);
+    }
+    if (isResponsavelRole(effectiveRole)) {
+      return filterMenuForUser(V2_RESPONSAVEL_MENU, user);
+    }
+  }
+
   if (effectiveRole === "parceiro") {
     const parceiroItems = filterContaCoopNavItems(PARCEIRO_MENU, contaCoopUiVisible);
     const showMercado = isHbCreditNavVisible(
@@ -604,6 +637,9 @@ export function getCooperadoDrawerMenuItems(
     return getMenuItems(user, creditEnabled, contaCoopUiVisible, data, cooperadoNavEligible);
   }
   const navUser = { ...user, role: "cooperado" as UserRole };
+  if (isV2HbOnlyClient()) {
+    return filterMenuForUser(V2_COOPERADO_DRAWER_MENU, navUser);
+  }
   const base = filterMenuForUser(COOPERADO_DRAWER_MENU, navUser);
   return appendHbCreditMenuItem(
     base,
@@ -625,6 +661,11 @@ export function getStaffShellMenusBeforeDataWarm(user: PermissionSubject): {
   mobileMenu: { href: string; label: string; resource: Resource }[];
   drawerMenu: { href: string; label: string; resource: Resource }[];
 } {
+  if (isV2HbOnlyClient() && isResponsavelRole(user.role)) {
+    const desktopMenu = filterMenuForUser(V2_RESPONSAVEL_MENU, user);
+    const mobileMenu = filterMenuForUser(V2_RESPONSAVEL_MOBILE_MENU, user);
+    return { desktopMenu, mobileMenu, drawerMenu: desktopMenu };
+  }
   const desktopMenu = getMenuItems(user, false, false, null, false);
   const mobileMenu = getMobileNavItems(user, false, false, null, false);
   return { desktopMenu, mobileMenu, drawerMenu: desktopMenu };
@@ -638,9 +679,16 @@ export function getCooperadoShellMenusBeforeDataWarm(
   drawerMenu: { href: string; label: string; resource: Resource }[];
 } {
   const navUser = { ...user, role: "cooperado" as UserRole };
-  const mobileBase = COOPERADO_MENU.filter((i) =>
-    (COOPERADO_BOTTOM_TAB_HREFS as readonly string[]).includes(i.href)
-  );
+  if (isV2HbOnlyClient()) {
+    const desktopMenu = filterMenuForUser(V2_COOPERADO_MENU, navUser);
+    const mobileMenu = filterMenuForUser(
+      V2_COOPERADO_MENU.filter((i) => cooperadoBottomTabHrefs().includes(i.href)),
+      navUser
+    );
+    const drawerMenu = filterMenuForUser(V2_COOPERADO_DRAWER_MENU, navUser);
+    return { desktopMenu, mobileMenu, drawerMenu };
+  }
+  const mobileBase = COOPERADO_MENU.filter((i) => cooperadoBottomTabHrefs().includes(i.href));
   const hbWarmEligible =
     isContaCoopUiPublic() &&
     Boolean((user as Pick<User, "cooperadoId">).cooperadoId?.trim());
@@ -665,13 +713,19 @@ export function getMobileNavItems(
   const navUser = { ...user, role: effectiveRole };
 
   if (effectiveRole === "cooperado") {
-    const baseItems = COOPERADO_MENU.filter((i) =>
-      (COOPERADO_BOTTOM_TAB_HREFS as readonly string[]).includes(i.href)
-    );
+    if (isV2HbOnlyClient()) {
+      const baseItems = V2_COOPERADO_MENU.filter((i) => cooperadoBottomTabHrefs().includes(i.href));
+      return filterMenuForUser(baseItems, navUser);
+    }
+    const baseItems = COOPERADO_MENU.filter((i) => cooperadoBottomTabHrefs().includes(i.href));
     return filterMenuForUser(baseItems, navUser);
   }
 
   if (isResponsavelRole(effectiveRole)) {
+    if (isV2HbOnlyClient()) {
+      const filtered = filterContaCoopNavItems(V2_RESPONSAVEL_MOBILE_MENU, contaCoopUiVisible);
+      return filterMenuForUser(filtered, navUser);
+    }
     const responsavelItems: { href: string; label: string; resource: Resource }[] = [
       { href: "/dashboard", label: "Início", resource: "dashboard" },
       { href: "/notas-pedido", label: "Conferir", resource: "notas_pedido" },

@@ -1,5 +1,5 @@
 import type { User } from "@/types";
-import { COOPERADO_BOTTOM_TAB_HREFS } from "@/lib/performance/cooperadoBottomTabRoutes";
+import { cooperadoBottomTabHrefs } from "@/lib/performance/cooperadoBottomTabRoutes";
 import {
   COOPERADO_TAB_FINANCEIRO_HREF,
   COOPERADO_TAB_PIN_HREF,
@@ -102,7 +102,7 @@ export function cooperadoPilotInstantBottomTabSwitchEnabled(
 }
 
 export function cooperadoPilotBottomTabHrefs(): readonly string[] {
-  return COOPERADO_BOTTOM_TAB_HREFS;
+  return cooperadoBottomTabHrefs();
 }
 
 /** Gate financeiro L1 — Início/Entregas/Preços sem bloquear UI durante sync silencioso. */

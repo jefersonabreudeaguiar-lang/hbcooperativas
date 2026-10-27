@@ -14,6 +14,7 @@ import {
 import { useRouter } from "next/navigation";
 import type { User } from "@/types";
 import { normalizeUserRole, resolveAppUserRole } from "@/permissions";
+import { resolveAppHomePath } from "@/lib/product/v2HbOnly";
 import { canAccessPainelResponsavelSession } from "@/lib/security/responsavelPanelAccess";
 import { resolveExperienceUser, resolveMobileCooperadoId } from "@/lib/mobileExperience";
 import { PAINEL_MOBILE_PREF_EVENT, setPreferPainelResponsavelMobile } from "@/lib/mobilePainelPreference";
@@ -348,7 +349,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             persistirInicioCardValorReceberCooperado(getSession() ?? safeUserEarly);
           }
         })();
-        const redirectTo = "/dashboard";
+        const redirectTo = resolveAppHomePath(jwtRoleEarly, "/dashboard");
         if (typeof window !== "undefined") {
           window.location.assign(redirectTo);
           return { ok: true as const, redirectTo, navigated: true as const };
@@ -411,7 +412,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           persistirInicioCardValorReceberCooperado(safeUser);
         }
       }
-      const redirectTo = role === "parceiro" ? "/mercado-parceiro" : "/dashboard";
+      const redirectTo =
+        role === "parceiro" ? "/mercado-parceiro" : resolveAppHomePath(role, "/dashboard");
       if (typeof window !== "undefined") {
         if (
           role === "cooperado" &&

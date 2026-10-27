@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
 import { markPwaRepairSessionForBuild } from "@/lib/pwa/cooperadoPwaInstallPrepare";
+import { resolveAppHomePath } from "@/lib/product/v2HbOnly";
 
 function isStandalonePwa(): boolean {
   if (typeof window === "undefined") return false;
@@ -36,8 +37,11 @@ export function GuestRoute({
 
     const params = new URLSearchParams(window.location.search);
     const next = params.get("next");
+    const defaultHome = user
+      ? resolveAppHomePath(user.role, authenticatedRedirect || "/dashboard")
+      : authenticatedRedirect || "/dashboard";
     const dest =
-      next && next.startsWith("/") && !next.startsWith("//") ? next : authenticatedRedirect;
+      next && next.startsWith("/") && !next.startsWith("//") ? next : defaultHome;
     const onLoginWithPwaRepair =
       window.location.pathname === "/login" && params.has("hb-pwa");
 
