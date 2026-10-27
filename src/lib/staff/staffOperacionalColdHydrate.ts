@@ -116,10 +116,17 @@ export function staffPrecisaHydrateOperacionalPull(
   data: AppData | null | undefined,
   coopId?: string
 ): boolean {
-  if (staffLocalOperacionalVazio(data, coopId)) return true;
-  if (staffCooperadosCadastroAusente(data, coopId)) return true;
-  if (staffGestaoFaltaFichaOperacionalNoEscopo(data, coopId)) return true;
-  if (staffGestaoEntregaSemPixNoEscopo(data, coopId)) return true;
+  if (staffLocalOperacionalVazio(data, coopId)) {
+    const jaHidratouNestaSessao =
+      staffOperacionalPullJaAplicado() && staffGestaoTemFichaOuNotaLocal(data, coopId);
+    if (!jaHidratouNestaSessao) return true;
+  }
+  if (staffCooperadosCadastroAusente(data, coopId)) {
+    if (!staffOperacionalPullJaAplicado()) return true;
+  }
+  if (staffGestaoFaltaFichaOperacionalNoEscopo(data, coopId)) {
+    if (!staffOperacionalPullJaAplicado()) return true;
+  }
   return false;
 }
 

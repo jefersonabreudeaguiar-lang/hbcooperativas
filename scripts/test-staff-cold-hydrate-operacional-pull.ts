@@ -31,6 +31,8 @@ assert.equal(staffPrecisaHydrateOperacionalPull(emptyInitialData), true);
 
 const soNotas = {
   ...emptyInitialData,
+  cooperativas: [{ id: "coop1", nome: "Coop", cnpj: "12345678000199", status: "ativa" } as never],
+  cooperados: [{ id: "c1", cooperativaId: "coop1", status: "ativo", nomeCompleto: "A" } as never],
   notasPedido: [{ id: "n1", cooperativaId: "coop1" } as never],
   fichaCorrida: [{ id: "f1", cooperativaId: "coop1", status: "pendente" } as never],
 };
@@ -40,6 +42,13 @@ assert.equal(
   true,
   "F5 com ficha/nota e sem PIX puxa o operacional da nuvem"
 );
+markStaffOperacionalPullAplicado();
+assert.equal(
+  staffPrecisaHydrateOperacionalPull(soNotas, "coop1"),
+  false,
+  "na mesma sessão, ficha pendente sem PIX não reabre financeiro_delta (evita travar o painel)"
+);
+resetStaffOperacionalColdHydrateForTests();
 
 const comPix = {
   ...emptyInitialData,

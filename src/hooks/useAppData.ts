@@ -9,12 +9,14 @@ import {
 } from "@/lib/performance/appDataDomainNotify";
 import { getData, getDataRevision, isAppDataWarm, subscribe } from "@/services/dataStore";
 import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
-import { staffGestaoAppDataParaPainel } from "@/lib/staff/staffGestaoPainelLeitura";
+import {
+  escolherStaffGestaoSnapshotParaLeitura,
+} from "@/lib/staff/staffGestaoPainelLeitura";
 import type { AppData } from "@/types";
 
 function staffPanelDataOrNull(): AppData | null {
-  const painel = staffGestaoAppDataParaPainel();
-  if (painel) return painel;
+  const merged = escolherStaffGestaoSnapshotParaLeitura();
+  if (merged) return merged;
   if (isAppDataWarm()) return getData();
   return peekStaffGestaoLastGood();
 }

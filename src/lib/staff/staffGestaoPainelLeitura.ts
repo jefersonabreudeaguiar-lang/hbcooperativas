@@ -10,7 +10,8 @@ import {
 } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { appDataParaPagarCooperadosResponsavel } from "@/services/responsavelPainelIndex";
 
-function escolherStaffGestaoSnapshotBase(coopId?: string): AppData | null {
+/** Warm × lastro — sem projeção Pagar (evita reconciliar ficha em todo useAppData). */
+export function escolherStaffGestaoSnapshotParaLeitura(coopId?: string): AppData | null {
   const lkg = peekStaffGestaoLastGood();
   if (!isAppDataWarm()) return lkg;
   const warm = getData();
@@ -18,6 +19,10 @@ function escolherStaffGestaoSnapshotBase(coopId?: string): AppData | null {
   const rWarm = staffGestaoRiquezaTotal(medirRiquezaStaffGestao(warm, coopId));
   const rLkg = staffGestaoRiquezaTotal(medirRiquezaStaffGestao(lkg, coopId));
   return rLkg > rWarm ? lkg : warm;
+}
+
+function escolherStaffGestaoSnapshotBase(coopId?: string): AppData | null {
+  return escolherStaffGestaoSnapshotParaLeitura(coopId);
 }
 
 /** Painel gestão: snapshot mais rico (warm × lastro) + projeção Pagar quando há escopo. */
