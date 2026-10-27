@@ -93,6 +93,7 @@ import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/c
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { useCooperadoFluxoPadrao } from "@/hooks/useCooperadoFluxoPadrao";
 import { useCooperadoInicioValorReceberCardState } from "@/hooks/useCooperadoInicioValorReceberCardState";
+import { useHbV2InicioValorReceberCard } from "@/hooks/useHbV2InicioValorReceberCard";
 import { AvisosInicioSection } from "@/components/comunicado/AvisosInicioSection";
 import { PrestacaoContasDashboardBanner } from "@/components/prestacao/PrestacaoContasDashboardBanner";
 import { InicioResolvidosPanel } from "@/components/cooperado/InicioResolvidosPanel";
@@ -414,18 +415,28 @@ function CooperadoDashboardMain() {
   const cooperadoIdCard = inicioCardCtx?.cooperadoId ?? user?.cooperadoId;
   const cooperativaIdCard = inicioCardCtx?.cooperativaId ?? user?.cooperativaId;
 
-  const { snapshot: valorReceberCard, atualizando: cardFinanceiroAtualizando } =
-    useCooperadoInicioValorReceberCardState({
-      data: inicioCardCtx?.data ?? null,
-      cooperadoId: cooperadoIdCard,
-      cooperativaId: cooperativaIdCard,
-      dataReady: inicioCardCtx?.dataReady ?? isAppDataWarm(),
-      syncing: syncingForUi,
-      apresentacaoConsolidada,
-      carregandoValoresFinanceiros,
-      leituraSomentePwa: messenger || inicioSnapshotFirst,
-      tabAtiva: tabActive,
-    });
+  const v2InicioHb = useHbV2InicioValorReceberCard({
+    user,
+    cooperadoId: cooperadoIdCard,
+    cooperativaId: cooperativaIdCard,
+    tabAtiva: tabActive,
+  });
+  const legacyInicioCard = useCooperadoInicioValorReceberCardState({
+    data: inicioCardCtx?.data ?? null,
+    cooperadoId: cooperadoIdCard,
+    cooperativaId: cooperativaIdCard,
+    dataReady: inicioCardCtx?.dataReady ?? isAppDataWarm(),
+    syncing: syncingForUi,
+    apresentacaoConsolidada,
+    carregandoValoresFinanceiros,
+    leituraSomentePwa: messenger || inicioSnapshotFirst,
+    tabAtiva: tabActive,
+    skipBicMotor: v2HbOnly,
+  });
+  const valorReceberCard = v2HbOnly ? v2InicioHb.snapshot : legacyInicioCard.snapshot;
+  const cardFinanceiroAtualizando = v2HbOnly
+    ? v2InicioHb.atualizando
+    : legacyInicioCard.atualizando;
 
   const exibicaoZeroRecoveryRef = useRef(false);
   useEffect(() => {
@@ -617,19 +628,15 @@ function CooperadoDashboardMain() {
               {formatMesReferencia(mesAtual)}
             </p>
           </div>
-          <div className="space-y-4">
-            <CooperadoHbCreditInicioSection hbCredit={hbCredit} cnpjDigits={cnpjHbDigits} />
-            {!v2HbOnly ? (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <CooperadoInicioValorReceberCard
-                  snapshot={valorReceberCard}
-                  atualizando={cardFinanceiroAtualizando}
-                  exibirReciboAssinatura
-                />
-                {envioFotosHabilitado ? <EnviarFotoEntregaInicioCard onEnviar={irEnviarFotoEntrega} /> : null}
-              </div>
-            ) : null}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <CooperadoInicioValorReceberCard
+              snapshot={valorReceberCard}
+              atualizando={cardFinanceiroAtualizando}
+              exibirReciboAssinatura={!v2HbOnly}
+            />
+            {envioFotosHabilitado ? <EnviarFotoEntregaInicioCard onEnviar={irEnviarFotoEntrega} /> : null}
           </div>
+          <CooperadoHbCreditInicioSection hbCredit={hbCredit} cnpjDigits={cnpjHbDigits} />
         </div>
       ) : (
         <CooperadoDashboardInicioView
@@ -708,21 +715,19 @@ function CooperadoDashboardInicioView({
         precisaPix={precisaPix}
       />
 
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <CooperadoInicioValorReceberCard
+          snapshot={valorReceberCard}
+          atualizando={cardFinanceiroAtualizando}
+          exibirReciboAssinatura={!v2HbOnly}
+        />
+        {envioFotosHabilitado ? <EnviarFotoEntregaInicioCard onEnviar={irEnviarFotoEntrega} /> : null}
+      </div>
+
       <CooperadoHbCreditInicioSection
         hbCredit={hbCredit}
         cnpjDigits={cnpjDigits.length === 14 ? cnpjDigits : cnpjHbFallback}
       />
-
-      {!v2HbOnly ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <CooperadoInicioValorReceberCard
-            snapshot={valorReceberCard}
-            atualizando={cardFinanceiroAtualizando}
-            exibirReciboAssinatura
-          />
-          {envioFotosHabilitado ? <EnviarFotoEntregaInicioCard onEnviar={irEnviarFotoEntrega} /> : null}
-        </div>
-      ) : null}
 
       {pautasAbertas.length > 0 && <VotacaoPautasInicioPanel pautas={pautasAbertas} />}
 
@@ -754,13 +759,6 @@ function CooperadoDashboardInicioView({
           {fotosEmAnalise} foto{fotosEmAnalise === 1 ? "" : "s"} aguardando conferência da cooperativa. Você será avisado quando o valor for lançado.
         </AlertBanner>
       )}
-
-      {!v2HbOnly ? (
-        <CooperadoHbCreditInicioSection
-          hbCredit={hbCredit}
-          cnpjDigits={cnpjDigits.length === 14 ? cnpjDigits : cnpjHbFallback}
-        />
-      ) : null}
 
       <InicioResolvidosPanel itens={resolvidos} />
     </div>

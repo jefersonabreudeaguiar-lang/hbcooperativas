@@ -185,12 +185,6 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
               : "Saldo para pagar nos mercados parceiros"}
           </p>
           <p className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">{formatCentsBRL(totals.saldo)}</p>
-          {v2Hb && totals.brutoFicha != null ? (
-            <p className="mt-2 text-xs text-emerald-100/95 leading-relaxed">
-              Ficha bruto {formatCentsBRL(totals.brutoFicha)}
-              {totals.aReceber != null ? ` · A receber ${formatCentsBRL(totals.aReceber)}` : ""}
-            </p>
-          ) : null}
         </div>
         <span className="shrink-0 text-sm font-semibold text-white/90 pt-1">Detalhes →</span>
       </div>

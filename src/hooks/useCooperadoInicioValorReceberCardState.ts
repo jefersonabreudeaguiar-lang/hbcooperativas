@@ -70,8 +70,6 @@ import { cooperadoPwaFinanceiroSnapshotsAusentes } from "@/lib/cooperado/coopera
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { isV2HbOnlyClient } from "@/lib/product/v2HbOnly";
-import { useHbV2InicioValorReceberCard } from "@/hooks/useHbV2InicioValorReceberCard";
 
 const SNAPSHOT_VAZIO: InicioCardMotorSnapshot = {
   mesLabel: "—",
@@ -106,6 +104,8 @@ export function useCooperadoInicioValorReceberCardState(input: {
   leituraSomentePwa?: boolean;
   /** Keep-alive: aba Início visível. Motor pesado só corre com a aba aberta. */
   tabAtiva?: boolean;
+  /** V2 HB: não roda motor BIC/ficha operacional (card vem de useHbV2InicioValorReceberCard). */
+  skipBicMotor?: boolean;
 }): {
   snapshot: InicioCardMotorSnapshot;
   atualizando: boolean;
@@ -124,13 +124,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
   const [persistidoTick, setPersistidoTick] = useState(0);
 
   const tabAtiva = input.tabAtiva !== false;
-
-  const v2InicioCard = useHbV2InicioValorReceberCard({
-    user: sessionUser,
-    cooperadoId: input.cooperadoId,
-    cooperativaId: input.cooperativaId,
-    tabAtiva,
-  });
+  const skipBicMotor = Boolean(input.skipBicMotor);
 
   const leituraSomentePwa = Boolean(
     input.leituraSomentePwa &&
@@ -158,6 +152,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
   );
 
   useEffect(() => {
+    if (skipBicMotor) return;
     if (!leituraSomentePwa || !isCooperadoMobilePilotPerfActive()) return;
     if (sessionUser && cooperadoGaInicioSomenteCasca(sessionUser)) return;
     if (isAppDataWarm()) return;
@@ -165,6 +160,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
   }, [leituraSomentePwa, appDataWarmKey, sessionUser?.id, sessionUser?.role]);
 
   useEffect(() => {
+    if (skipBicMotor) return;
     const gaAuto =
       sessionUser?.role === "cooperado" && isCooperadoMobileGaPromoted(sessionUser);
     if (!leituraSomentePwa && !gaAuto) return;
@@ -182,6 +178,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
 
   /** GA: AppData/sync leve mudou — repinta o card sem operacional_full na thread principal. */
   useEffect(() => {
+    if (skipBicMotor) return;
     if (!tabAtiva || !sessionUser || sessionUser.role !== "cooperado") return;
     if (!isCooperadoMobileGaPromoted(sessionUser)) return;
     if (!isAppDataWarm()) return;
@@ -237,6 +234,14 @@ export function useCooperadoInicioValorReceberCardState(input: {
   }, [apresentacaoConsolidada, input.syncing, hbDescontosRevision]);
 
   const resolved = useMemo(() => {
+    if (skipBicMotor) {
+      return {
+        display: SNAPSHOT_VAZIO,
+        latch: latchRef.current,
+        atualizando: false,
+        gravarPersistencia: false,
+      };
+    }
     if (
       tabAtiva &&
       sessionUser?.role === "cooperado" &&
@@ -653,12 +658,14 @@ export function useCooperadoInicioValorReceberCardState(input: {
     sessionUser?.id,
     sessionUser?.cooperativaId,
     apresentacaoCard,
+    skipBicMotor,
     ...(leituraSomentePwa ? [] : [hbDescontosRevision]),
   ]);
 
   latchRef.current = resolved.latch;
 
   const snapshotExibido = useMemo(() => {
+    if (skipBicMotor) return SNAPSHOT_VAZIO;
     let base = resolved.display;
     if (
       !cooperadoMotorTemObrigacaoReceber(base) &&
@@ -713,9 +720,11 @@ export function useCooperadoInicioValorReceberCardState(input: {
     persistidoTick,
     appDataWarmKey,
     hbDescontosRevision,
+    skipBicMotor,
   ]);
 
   useEffect(() => {
+    if (skipBicMotor) return;
     if (!input.cooperadoId || !resolved.latch) return;
     if (!cooperadoMotorTemObrigacaoReceber(snapshotExibido)) return;
     gravarInicioCardPersistidoFlex(input.cooperadoId, input.cooperativaId, {
@@ -733,6 +742,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
   ]);
 
   useEffect(() => {
+    if (skipBicMotor) return;
     const cooperadoId = input.cooperadoId;
     if (!cooperadoId) return;
     const persistirAoFechar = () => {
@@ -769,10 +779,6 @@ export function useCooperadoInicioValorReceberCardState(input: {
       resolved.atualizando ||
       Boolean(input.carregandoValoresFinanceiros) ||
       Boolean(input.syncing);
-
-  if (isV2HbOnlyClient()) {
-    return v2InicioCard;
-  }
 
   return {
     snapshot: snapshotExibido,

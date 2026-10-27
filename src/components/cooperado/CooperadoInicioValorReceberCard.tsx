@@ -66,9 +66,7 @@ export function CooperadoInicioValorReceberCard({
       ? "bg-gradient-to-br from-amber-500 to-amber-600 text-white"
       : "bg-white text-gray-900 border-2 border-amber-200";
 
-  const rotulo = v2Hb
-    ? `Ficha HB · ${mesLabel}`
-    : modoRecibo
+  const rotulo = modoRecibo
       ? `Pagamento registrado · ${mesLabel}`
       : modoAssinaturaComAberto
         ? `A receber · ${mesLabel}`
@@ -84,8 +82,8 @@ export function CooperadoInicioValorReceberCard({
     ? "Atualizando valores…"
     : v2Hb
       ? modoValor
-        ? "Bruto da ficha HB menos crédito já usado — veja entregas e mensalidades."
-        : "Responsável ainda não lançou a ficha HB deste ciclo."
+        ? "Sincronizado com a ficha HB (sem peso)."
+        : "Aguardando o responsável lançar a ficha HB."
       : modoAssinaturaComAberto
         ? `Recibo ${formatCurrency(base.valorRecibo)} aguardando assinatura na ficha.`
         : modoRecibo
@@ -100,7 +98,7 @@ export function CooperadoInicioValorReceberCard({
       ? "/ficha-corrida?assinar=1"
       : "/ficha-corrida";
 
-  const acaoV2 = v2Hb ? "Ver minha ficha HB" : acao;
+  const acaoV2 = v2Hb ? "Ver ficha HB" : acao;
 
   return (
     <div
