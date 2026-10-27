@@ -54,7 +54,8 @@ export async function GET(request: Request) {
     const brutoCents = brutoFichaPlanoCents(plano);
     const accountCooperadoId = plano.cooperadoId || cooperadoId;
     let hbCredito: { valorLiberadoCents: number; liberacaoPercent: number | null } | null = null;
-    if (isV2HbOnlyServer()) {
+    /** Responsável lançando ficha: só plano na nuvem — limite HB vem da aba Limites (abertura mais rápida). */
+    if (isV2HbOnlyServer() && forCooperadoView) {
       const limite = await getLimiteCooperadoExibicaoParidadeLimites(
         gate.ctx.supabase,
         cnpj,

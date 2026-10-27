@@ -53,7 +53,8 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
     cooperadoId,
     ...HB_FICHA_PLANO_EMPTY,
   }));
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(mode === "readonly");
+  const [cloudSyncing, setCloudSyncing] = useState(mode === "edit");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -75,9 +76,11 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
   }, []);
 
   const reload = useCallback(
-    async (opts?: { preserveFeedback?: boolean }) => {
+    async (opts?: { preserveFeedback?: boolean; background?: boolean }) => {
       if (cnpj.length !== 14 || !cooperadoId) return;
-      setLoading(true);
+      const blockUi = mode === "readonly" && !opts?.background;
+      if (blockUi) setLoading(true);
+      else if (mode === "edit" && !opts?.background) setCloudSyncing(true);
       if (!opts?.preserveFeedback) setError("");
       try {
         const loaded = await fetchHbCreditFichaPlano(cnpj, cooperadoId);
@@ -90,10 +93,11 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
           setError(e instanceof Error ? e.message : "Erro ao carregar ficha HB.");
         }
       } finally {
-        setLoading(false);
+        if (blockUi) setLoading(false);
+        setCloudSyncing(false);
       }
     },
-    [cnpj, cooperadoId]
+    [cnpj, cooperadoId, mode]
   );
 
   useEffect(() => {
@@ -161,7 +165,7 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
       notifyHbCreditLimiteSynced({ immediate: true });
       notifyHbCreditAccountCacheUpdated();
       setSuccess("Entregas anteriores arquivadas na nuvem. Lance os valores novos abaixo.");
-      await reload({ preserveFeedback: true });
+      await reload({ preserveFeedback: true, background: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao arquivar entregas.");
     } finally {
@@ -195,7 +199,7 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
       } else {
         setSuccess("Ficha salva. Limite HB liberado e visível para o cooperado.");
       }
-      await reload({ preserveFeedback: true });
+      await reload({ preserveFeedback: true, background: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar.");
     } finally {
@@ -209,6 +213,9 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
 
   return (
     <div className="space-y-4">
+      {cloudSyncing ? (
+        <p className="text-xs text-gray-500" aria-live="polite">Sincronizando ficha na nuvem…</p>
+      ) : null}
       {cooperadoNome ? (
         <p className="text-sm text-gray-600">
           Ficha HB — <span className="font-medium text-gray-900">{cooperadoNome}</span>

@@ -32,7 +32,7 @@ export default function CooperadoFichaPage() {
     if (window.location.hash !== "#ficha-hb") return;
     const el = document.getElementById("ficha-hb");
     if (!el) return;
-    const t = window.setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+    const t = window.setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
     return () => window.clearTimeout(t);
   }, [id, cooperado?.id]);
 

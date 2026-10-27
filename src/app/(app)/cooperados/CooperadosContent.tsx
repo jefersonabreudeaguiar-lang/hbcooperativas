@@ -266,7 +266,7 @@ export default function CooperadosPage() {
         key: "entregasHb",
         label: "Ficha HB",
         render: (c) => (
-          <Link href={`/cooperados/${c.id}#ficha-hb`} className="inline-block">
+          <Link href={`/cooperados/${c.id}#ficha-hb`} prefetch className="inline-block">
             <Button size="sm" className="whitespace-nowrap">
               <Package size={16} className="mr-1.5" />
               Lançar entregas

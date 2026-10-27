@@ -82,18 +82,32 @@ async function fetchFichaPlanoRow(
   cooperadoId: string
 ): Promise<{ row: Record<string, unknown> | null; storageCooperadoId: string }> {
   const digits = normalizeCnpj(cnpj);
-  const storageCooperadoId = await resolveFichaPlanoStorageCooperadoId(supabase, cnpj, cooperadoId);
-  const candidateIds = [...new Set([storageCooperadoId, cooperadoId].filter(Boolean))];
+  const id = cooperadoId.trim();
+  if (!id) {
+    return { row: null, storageCooperadoId: id };
+  }
 
-  for (const id of candidateIds) {
-    const { data } = await supabase
+  const { data: direct } = await supabase
+    .from("hb_credit_cooperado_ficha_plano")
+    .select("*")
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", id)
+    .maybeSingle();
+  if (direct) {
+    const storageCooperadoId = String((direct as Record<string, unknown>).cooperado_id ?? id);
+    return { row: direct as Record<string, unknown>, storageCooperadoId };
+  }
+
+  const storageCooperadoId = await resolveFichaPlanoStorageCooperadoId(supabase, cnpj, id);
+  if (storageCooperadoId !== id) {
+    const { data: titularRow } = await supabase
       .from("hb_credit_cooperado_ficha_plano")
       .select("*")
       .eq("cooperative_cnpj", digits)
-      .eq("cooperado_id", id)
+      .eq("cooperado_id", storageCooperadoId)
       .maybeSingle();
-    if (data) {
-      return { row: data as Record<string, unknown>, storageCooperadoId };
+    if (titularRow) {
+      return { row: titularRow as Record<string, unknown>, storageCooperadoId };
     }
   }
   return { row: null, storageCooperadoId };
