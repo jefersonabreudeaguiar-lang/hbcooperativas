@@ -29,18 +29,16 @@ import { cooperadoBrowserDesktopBicPerfActive } from "@/lib/cooperado/cooperadoB
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 import { yieldCooperadoMobileUiBeforeHeavyWork } from "@/lib/cooperado/cooperadoGaMobileAtualizarYield";
-import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
+import { scheduleCooperadoJefersonMaterializarAba } from "@/lib/cooperado/cooperadoJefersonAbasDadosReais";
 
-/** Piloto Jeferson — só card «A receber» (sem ficha/dashboard/entregas); fora do fim do sync. */
+/** Piloto Jeferson — Início primeiro; demais abas sob demanda ao visitar. */
 export function cooperadoJefersonPosSyncSnapshotLeve(
   user: Omit<User, "password"> | null | undefined
 ): void {
   if (!user || user.role !== "cooperado") return;
   scheduleCooperadoPostInteractiveTask(() => {
     void yieldCooperadoMobileUiBeforeHeavyWork().then(() => {
-      persistirInicioCardValorReceberCooperado(user);
-      clearCooperadoPwaDadosDesatualizados();
-      dispatchCooperadoPwaLeveUiSnapshotRefresh();
+      scheduleCooperadoJefersonMaterializarAba(user, "/dashboard");
     });
   });
 }

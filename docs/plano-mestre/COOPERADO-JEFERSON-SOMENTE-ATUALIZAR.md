@@ -7,13 +7,14 @@
 | Área | Piloto Jeferson | Demais cooperados |
 |------|-----------------|-------------------|
 | Abertura / troca de abas | Sem sync operacional/financeiro automático, sem bootstrap pós-deploy, sem prefetch agressivo de abas | GA atual |
-| Início + Financeiro | **1ª entrada** leve; **2ª entrada** (≥30s após a 1ª) → **Atualizar automático**; depois, cada volta ao app (intervalo mín. 45s). Botão Atualizar usa o mesmo fluxo suave | GA atual |
+| Início + abas | **1ª entrada** leve; **2ª entrada** (≥30s) → sync automático; **Início** materializa primeiro; **Entregas / Preços / Financeiro** gravam snapshot **ao abrir a aba** (idle, sem travar troca). Sem botão Atualizar no piloto | GA atual |
 | Entregas — fotos | Envio e sync de notas **na hora** (responsável vê na fila) | GA atual |
 | AppData local | Parse adiado no cold start; **Atualizar** libera warm + sync base | GA atual |
 
 ## Código
 
 - `src/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot.ts` — flag + gate de sync + janela `entrega`.
+- `src/lib/cooperado/cooperadoJefersonAbasDadosReais.ts` — snapshots reais por aba (lazy).
 - Teste: `scripts/test-cooperado-jeferson-somente-atualizar-gate.ts`.
 
 ## Promoção produção

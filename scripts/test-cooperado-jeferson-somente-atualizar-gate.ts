@@ -17,6 +17,10 @@ import {
 } from "../src/lib/cooperado/cooperadoJefersonDuplaEntradaAutoAtualizar";
 import { COOPERADO_MOBILE_PILOT_COOPERADO_ID } from "../src/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoPwaMostraDadosDesatualizados } from "../src/lib/cooperado/cooperadoPwaDadosFreshness";
+import {
+  resolveCooperadoJefersonTabHref,
+  resetCooperadoJefersonAbasMaterializadas,
+} from "../src/lib/cooperado/cooperadoJefersonAbasDadosReais";
 
 const jeferson = {
   id: "u1",
@@ -43,6 +47,9 @@ if (!COOPERADO_JEFERSON_SOMENTE_ATUALIZAR_MODE_ON) {
 } else {
   assert.equal(isCooperadoJefersonSomenteAtualizarPilot(jeferson), true);
   assert.equal(cooperadoPwaMostraDadosDesatualizados(jeferson), false);
+  assert.equal(resolveCooperadoJefersonTabHref("/notas-pedido/foo"), "/notas-pedido");
+  assert.equal(resolveCooperadoJefersonTabHref("/precos"), "/precos");
+  resetCooperadoJefersonAbasMaterializadas(jeferson.id);
   assert.equal(cooperadoJefersonBloqueiaSyncAutomatico(jeferson, {}), true);
   assert.equal(cooperadoJefersonBloqueiaSyncAutomatico(jeferson, { userInitiated: true }), false);
   assert.equal(

@@ -84,6 +84,7 @@ import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoM
 import { StaffMobileTabKeepAlive } from "@/components/performance/StaffMobileTabKeepAlive";
 import { CooperadoPwaResumeLifecycle } from "@/components/cooperado/CooperadoPwaResumeLifecycle";
 import { CooperadoJefersonDuplaEntradaAutoAtualizar } from "@/components/cooperado/CooperadoJefersonDuplaEntradaAutoAtualizar";
+import { CooperadoJefersonAbaDadosReaisLifecycle } from "@/components/cooperado/CooperadoJefersonAbaDadosReaisLifecycle";
 import { CooperadoPwaMessengerAppDataWarm } from "@/components/cooperado/CooperadoPwaMessengerAppDataWarm";
 import { CooperadoMobileBuildBadge } from "@/components/cooperado/CooperadoMobileBuildBadge";
 import { CooperadoPostDeployGate } from "@/components/cooperado/CooperadoPostDeployGate";
@@ -677,7 +678,12 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           {navUser && isCooperadoAppUser(navUser) && <CooperadoFinanceiroSyncBanner />}
           {navUser && isCooperadoAppUser(navUser) && <CooperadoPwaMessengerAppDataWarm />}
           {navUser && isCooperadoAppUser(navUser) && <CooperadoPwaResumeLifecycle />}
-          {navUser && isCooperadoAppUser(navUser) && <CooperadoJefersonDuplaEntradaAutoAtualizar />}
+          {navUser && isCooperadoAppUser(navUser) && (
+            <>
+              <CooperadoJefersonDuplaEntradaAutoAtualizar />
+              <CooperadoJefersonAbaDadosReaisLifecycle />
+            </>
+          )}
           {routePanelsWrapped}
         </main>
       </div>

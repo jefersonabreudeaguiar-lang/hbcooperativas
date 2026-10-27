@@ -104,6 +104,11 @@ export function scheduleCooperadoJefersonAutoAtualizar(
   if (autoInflight) return;
 
   clearCooperadoPwaDadosDesatualizados();
+  if (user.id) {
+    void import("@/lib/cooperado/cooperadoJefersonAbasDadosReais").then((mod) => {
+      mod.resetCooperadoJefersonAbasMaterializadas(user.id);
+    });
+  }
 
   scheduleCooperadoPostInteractiveTask(() => {
     if (autoInflight) return;
