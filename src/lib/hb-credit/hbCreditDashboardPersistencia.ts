@@ -22,6 +22,7 @@ export function lerHbCreditDashboardPersistido(cnpj: string): HbCreditDashboardP
     if (!raw) return null;
     const parsed = JSON.parse(raw) as HbCreditDashboardPersistido;
     if (parsed.v !== HB_CREDIT_DASHBOARD_STORAGE_VERSION || !parsed.dashboard) return null;
+    if (!parsed.dashboard.teto || typeof parsed.dashboard.teto !== "object") return null;
     return parsed;
   } catch {
     return null;

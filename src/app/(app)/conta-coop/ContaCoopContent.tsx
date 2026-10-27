@@ -143,7 +143,7 @@ function percentualHbPersistido(
   snap?: ReturnType<typeof lerHbCreditLimitesPersistidos>
 ): number | null {
   const fromDash =
-    dashboard?.teto.liberacaoColetivaPercent ?? dashboard?.teto.tetoGlobalPercent ?? null;
+    dashboard?.teto?.liberacaoColetivaPercent ?? dashboard?.teto?.tetoGlobalPercent ?? null;
   const fromSnap = snap?.liberacaoColetivaPercent ?? null;
   const p = fromDash ?? fromSnap;
   if (p == null || !Number.isFinite(p) || p <= 0) return null;
@@ -640,8 +640,8 @@ function ContaCoopContent() {
     return percentualHbPersistido(dashboard, snap);
   }, [
     cnpj,
-    dashboard?.teto.liberacaoColetivaPercent,
-    dashboard?.teto.tetoGlobalPercent,
+    dashboard?.teto?.liberacaoColetivaPercent,
+    dashboard?.teto?.tetoGlobalPercent,
     limitesPersistTick,
   ]);
 
@@ -650,25 +650,25 @@ function ContaCoopContent() {
     if (percentualLiberacaoHb != null) return percentualLiberacaoHb;
     const fromInput = parsePercentualHbInput(percentualColetivo);
     if (fromInput != null) return fromInput;
-    return dashboard?.teto.tetoGlobalPercent ?? 100;
+    return dashboard?.teto?.tetoGlobalPercent ?? 100;
   }, [
     liberacaoPercentConfirmado,
     percentualLiberacaoHb,
     percentualColetivo,
-    dashboard?.teto.tetoGlobalPercent,
+    dashboard?.teto?.tetoGlobalPercent,
   ]);
 
   useEffect(() => {
-    const dashPct = dashboard?.teto.liberacaoColetivaPercent;
+    const dashPct = dashboard?.teto?.liberacaoColetivaPercent;
     if (liberacaoPercentConfirmado == null || dashPct == null) return;
     if (Math.abs(dashPct - liberacaoPercentConfirmado) < 0.005) {
       setLiberacaoPercentConfirmado(null);
     }
-  }, [dashboard?.teto.liberacaoColetivaPercent, liberacaoPercentConfirmado]);
+  }, [dashboard?.teto?.liberacaoColetivaPercent, liberacaoPercentConfirmado]);
 
   const valoresLimiteExibidos = useCallback(
     (limite: ContaCoopLimiteCooperado, creditoBaseCents: number) => {
-      const tetoPct = dashboard?.teto.tetoGlobalPercent ?? 100;
+      const tetoPct = dashboard?.teto?.tetoGlobalPercent ?? 100;
       const libPct = Math.min(tetoPct, percentualCapTabelaLimites);
       const baseV2 =
         isV2HbOnlyClient() && limite.manualValorBrutoCents != null && limite.manualValorBrutoCents > 0
@@ -698,7 +698,7 @@ function ContaCoopContent() {
         disponivel: eff.valorDisponivelCents,
       };
     },
-    [dashboard?.teto.tetoGlobalPercent, percentualCapTabelaLimites]
+    [dashboard?.teto?.tetoGlobalPercent, percentualCapTabelaLimites]
   );
 
   const marcarPercentualLiberacaoConfirmado = useCallback((pct: number) => {
@@ -774,7 +774,7 @@ function ContaCoopContent() {
   const aplicarLimitesColetivoLocal = useCallback(
     (percentual: number, bases: Record<string, number>, ids: string[]) => {
       if (!cnpj || !ids.length) return;
-      const tetoPct = dashboard?.teto.tetoGlobalPercent ?? 100;
+      const tetoPct = dashboard?.teto?.tetoGlobalPercent ?? 100;
       const libPct = Math.min(tetoPct, percentual);
       setLimites((prev) => {
         const map = new Map<string, ContaCoopLimiteCooperado>();
@@ -799,7 +799,7 @@ function ContaCoopContent() {
         return next;
       });
     },
-    [cnpj, dashboard?.teto.tetoGlobalPercent]
+    [cnpj, dashboard?.teto?.tetoGlobalPercent]
   );
 
   const refreshLimitesAposLiberacao = useCallback(async () => {
@@ -919,7 +919,7 @@ function ContaCoopContent() {
     const s = String(pref);
     setTetoPercentual(s);
     setPercentualColetivo(s);
-  }, [cnpj, dashboard?.teto.liberacaoColetivaPercent, dashboard?.teto.tetoGlobalPercent]);
+  }, [cnpj, dashboard?.teto?.liberacaoColetivaPercent, dashboard?.teto?.tetoGlobalPercent]);
 
   const salvarTeto = async () => {
     if (!cnpj) return;
@@ -935,7 +935,7 @@ function ContaCoopContent() {
       const creditosBaseCents = await ensureCreditosBaseCentsForPost();
       if (!creditosBaseCents) return;
       const cooperadoIds = cooperadosAtivos.map((c) => c.id);
-      const tetoAtual = dashboard?.teto.tetoGlobalPercent ?? 100;
+      const tetoAtual = dashboard?.teto?.tetoGlobalPercent ?? 100;
       const tetoGravar = Math.max(pct, tetoAtual);
 
       const liberacaoRes = await postCreditLimites({
@@ -1290,7 +1290,7 @@ function ContaCoopContent() {
         <>
           {loading && !dashboard ? (
             <PageSkeleton compact />
-          ) : dashboard ? (
+          ) : dashboard?.teto ? (
         <div className="space-y-4">
           {dashboardRefreshing && (
             <p className="text-xs text-gray-500">Atualizando painel com a nuvem…</p>
@@ -1485,8 +1485,8 @@ function ContaCoopContent() {
                   }}
                   className="w-40"
                   placeholder={
-                    dashboard?.teto.liberacaoColetivaPercent != null
-                      ? String(dashboard.teto.liberacaoColetivaPercent)
+                    dashboard?.teto?.liberacaoColetivaPercent != null
+                      ? String(dashboard.teto?.liberacaoColetivaPercent)
                       : "50"
                   }
                   inputMode="decimal"
@@ -1496,12 +1496,12 @@ function ContaCoopContent() {
                 Salvar percentual
               </Button>
             </div>
-            {dashboard && (
+            {dashboard?.teto ? (
               <p className="text-xs text-gray-500">
-                Atual na nuvem: liberação {dashboard.teto.liberacaoColetivaPercent}% · teto máximo{" "}
-                {dashboard.teto.tetoGlobalPercent}%
+                Atual na nuvem: liberação {dashboard.teto.liberacaoColetivaPercent ?? "—"}% · teto máximo{" "}
+                {dashboard.teto.tetoGlobalPercent ?? "—"}%
               </p>
-            )}
+            ) : null}
           </Card>
 
           <AlertBanner variant="info">
@@ -1735,7 +1735,7 @@ function ContaCoopContent() {
                 <div className="space-y-1">
                   <p>Percentual: {previewColetivo.percentual ?? percentualColetivo}%</p>
                   <p>
-                    Teto global: {previewColetivo.tetoGlobalPercent ?? dashboard?.teto.tetoGlobalPercent ?? 100}% ={" "}
+                    Teto global: {previewColetivo.tetoGlobalPercent ?? dashboard?.teto?.tetoGlobalPercent ?? 100}% ={" "}
                     {formatCentsBRL(Number(previewColetivo.tetoGlobal ?? 0))}
                   </p>
                   <p>Limite atual total: {formatCentsBRL(Number(previewColetivo.limiteAtualTotal ?? 0))}</p>
