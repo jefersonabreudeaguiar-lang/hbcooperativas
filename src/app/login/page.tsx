@@ -102,8 +102,14 @@ function LoginForm() {
       new URLSearchParams(searchParams.toString())
     );
     if (changed) {
-      router.replace(`/login?${params.toString()}`);
-      return;
+      const qs = params.toString();
+      const url = `/login?${qs}`;
+      /** Só ajusta query no mesmo doc — router.replace no /login aborta o WebAPK. */
+      if (window.location.pathname === "/login") {
+        window.history.replaceState(null, "", url);
+      } else {
+        router.replace(url);
+      }
     }
     if (params.has("hb-pwa")) {
       markPwaRepairSessionForBuild();

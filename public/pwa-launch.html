@@ -82,6 +82,17 @@
           });
         }
 
+        function standalonePwa() {
+          try {
+            return (
+              window.matchMedia("(display-mode: standalone)").matches ||
+              window.navigator.standalone === true
+            );
+          } catch (e) {
+            return false;
+          }
+        }
+
         function go(pageBuild, target) {
           try {
             if (target.indexOf("/login") < 0) {
@@ -98,7 +109,12 @@
           detachBrowserSw()
             .catch(function () {})
             .finally(function () {
-              location.replace(target);
+              /** WebAPK: replace no boot aborta o doc; assign no ícone. */
+              if (standalonePwa()) {
+                location.assign(target);
+              } else {
+                location.replace(target);
+              }
             });
         }
 

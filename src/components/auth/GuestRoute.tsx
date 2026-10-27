@@ -6,6 +6,7 @@ import { useAuth } from "@/modules/auth/AuthProvider";
 import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
 import { markPwaRepairSessionForBuild } from "@/lib/pwa/cooperadoPwaInstallPrepare";
 import { resolveAppHomePath } from "@/lib/product/v2HbOnly";
+import { scheduleSafeAppNavigation } from "@/lib/pwa/safeDocumentNavigation";
 
 function isStandalonePwa(): boolean {
   if (typeof window === "undefined") return false;
@@ -49,18 +50,9 @@ export function GuestRoute({
       if (onLoginWithPwaRepair) {
         markPwaRepairSessionForBuild();
       }
-      const pathOnly = dest.split("?")[0];
-      if (window.location.pathname === pathOnly) return;
-      /** /login → home: assign após commit (replace no RSC aborta doc = “couldn’t load”). */
       const fromLogin = window.location.pathname === "/login";
-      const delayMs = fromLogin ? 200 : 0;
-      window.setTimeout(() => {
-        if (fromLogin || isStandalonePwa()) {
-          window.location.assign(dest);
-        } else {
-          router.replace(dest);
-        }
-      }, delayMs);
+      const delayMs = fromLogin || isStandalonePwa() ? 320 : 0;
+      scheduleSafeAppNavigation(dest, delayMs);
     };
 
     if (document.readyState === "complete") {
