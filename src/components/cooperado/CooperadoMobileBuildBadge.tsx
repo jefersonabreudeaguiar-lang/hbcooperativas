@@ -27,7 +27,10 @@ export function CooperadoMobileBuildBadge() {
 
   useEffect(() => {
     if (user?.role !== "cooperado") return;
-    if (rematerializarCooperadoPwaSnapshotsSeNecessario(user)) {
+    if (
+      !isCooperadoJefersonSomenteAtualizarPilot(user) &&
+      rematerializarCooperadoPwaSnapshotsSeNecessario(user)
+    ) {
       clearCooperadoPwaDadosDesatualizados();
     }
     let cancelled = false;

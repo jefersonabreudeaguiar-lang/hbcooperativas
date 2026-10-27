@@ -16,6 +16,7 @@ import {
   resetCooperadoJefersonDuplaEntradaForTests,
 } from "../src/lib/cooperado/cooperadoJefersonDuplaEntradaAutoAtualizar";
 import { COOPERADO_MOBILE_PILOT_COOPERADO_ID } from "../src/lib/cooperado/cooperadoMobilePilot";
+import { cooperadoPwaMostraDadosDesatualizados } from "../src/lib/cooperado/cooperadoPwaDadosFreshness";
 
 const jeferson = {
   id: "u1",
@@ -41,6 +42,7 @@ if (!COOPERADO_JEFERSON_SOMENTE_ATUALIZAR_MODE_ON) {
   assert.equal(isCooperadoJefersonSomenteAtualizarPilot(jeferson), false);
 } else {
   assert.equal(isCooperadoJefersonSomenteAtualizarPilot(jeferson), true);
+  assert.equal(cooperadoPwaMostraDadosDesatualizados(jeferson), false);
   assert.equal(cooperadoJefersonBloqueiaSyncAutomatico(jeferson, {}), true);
   assert.equal(cooperadoJefersonBloqueiaSyncAutomatico(jeferson, { userInitiated: true }), false);
   assert.equal(

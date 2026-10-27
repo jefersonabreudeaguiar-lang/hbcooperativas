@@ -14,6 +14,7 @@ import {
   persistirCooperadoPwaMessengerCaches,
 } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 import { cooperadoRematerializarFinanceiroLocalSePossivel } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
@@ -116,6 +117,7 @@ export function rematerializarCooperadoPwaSnapshotsSeNecessario(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   if (!user || user.role !== "cooperado" || !user.cooperadoId) return false;
+  if (isCooperadoJefersonSomenteAtualizarPilot(user)) return false;
   if (!isAppDataWarm()) return false;
   const data = getData();
   const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;

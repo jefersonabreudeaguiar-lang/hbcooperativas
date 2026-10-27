@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
+import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { scheduleCooperadoPaintFirst } from "@/lib/performance/cooperadoColdStart";
 import { isAppDataWarm, preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
@@ -13,6 +14,7 @@ export function CooperadoPwaMessengerAppDataWarm() {
 
   useEffect(() => {
     if (!user || user.role !== "cooperado" || !isCooperadoPwaMessengerMode()) return;
+    if (isCooperadoJefersonSomenteAtualizarPilot(user)) return;
     if (isAppDataWarm()) return;
 
     let idleId: number | undefined;

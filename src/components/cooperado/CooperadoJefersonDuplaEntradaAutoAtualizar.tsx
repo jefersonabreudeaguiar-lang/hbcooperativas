@@ -7,7 +7,7 @@ import { registrarCooperadoJefersonForegroundEntrada } from "@/lib/cooperado/coo
 
 /**
  * Piloto Jeferson: 1ª entrada leve; 2ª entrada (≥30s após a 1ª) dispara Atualizar automático.
- * Depois disso, cada volta ao app atualiza de novo (com intervalo mínimo).
+ * Sync automático só na 2ª entrada (≥30s); sem repetir a cada volta (evita travar).
  */
 export function CooperadoJefersonDuplaEntradaAutoAtualizar() {
   const { user } = useAuth();

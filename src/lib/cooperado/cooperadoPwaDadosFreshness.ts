@@ -10,6 +10,7 @@ import { getUserCooperativaId } from "@/utils/cooperativa";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import type { CooperativaCloudRevision } from "@/lib/performance/cooperadoEventDrivenSync";
 import { readAppliedCooperativaCloudRevision } from "@/lib/performance/cooperadoEventDrivenSync";
+import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 
 export const COOPERADO_PWA_DADOS_STALE_EVENT = "hb-cooperado-pwa-dados-stale";
 export const COOPERADO_PWA_DADOS_FRESH_EVENT = "hb-cooperado-pwa-dados-fresh";
@@ -88,6 +89,8 @@ export function cooperadoPwaMostraDadosDesatualizados(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   if (!isCooperadoPwaMessengerMode() || !user || user.role !== "cooperado") return false;
+  /** Piloto Jeferson — sync automático na 2ª entrada; badge alarmava antes dos dados existirem. */
+  if (isCooperadoJefersonSomenteAtualizarPilot(user)) return false;
   const warm = isAppDataWarm();
   let temLocais = false;
   if (warm && user.cooperadoId) {

@@ -6,14 +6,15 @@ import {
 import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
 import { yieldCooperadoMobileUiBeforeHeavyWork } from "@/lib/cooperado/cooperadoGaMobileAtualizarYield";
 import { executarCooperadoAtualizarManual } from "@/lib/cooperado/cooperadoAtualizarManual";
+import { clearCooperadoPwaDadosDesatualizados } from "@/lib/cooperado/cooperadoPwaDadosFreshness";
 
 /** Segunda «entrada» só após este intervalo desde a primeira (piloto Jeferson). */
 export const COOPERADO_JEFERSON_DUPLA_ENTRADA_MIN_MS = 30_000;
 
-/** Depois de liberado, não repetir auto-atualizar antes deste intervalo. */
-export const COOPERADO_JEFERSON_AUTO_ATUALIZAR_MIN_INTERVAL_MS = 45_000;
-
 const STORAGE_PREFIX = "hb.coop.jefersonDuplaEntrada.v2";
+/** Evita contar 2 entradas no mesmo frame (pageshow + visibility). */
+const FOREGROUND_REGISTRO_GAP_MS = 1_200;
+const lastForegroundRegistroAt = new Map<string, number>();
 
 type DuplaEntradaState = {
   firstAt: number;
@@ -69,6 +70,9 @@ export function registrarCooperadoJefersonForegroundEntrada(
   if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
 
   const now = Date.now();
+  const lastReg = lastForegroundRegistroAt.get(user.id) ?? 0;
+  if (now - lastReg < FOREGROUND_REGISTRO_GAP_MS) return;
+  lastForegroundRegistroAt.set(user.id, now);
   const state = readState(user.id);
 
   if (state.entradas === 0) {
@@ -87,13 +91,6 @@ export function registrarCooperadoJefersonForegroundEntrada(
   }
 
   writeState(user.id, next);
-
-  if (
-    state.unlocked &&
-    (state.lastAutoAt === 0 || now - state.lastAutoAt >= COOPERADO_JEFERSON_AUTO_ATUALIZAR_MIN_INTERVAL_MS)
-  ) {
-    scheduleCooperadoJefersonAutoAtualizar(user, { motivo: "entrada_liberada" });
-  }
 }
 
 let autoInflight = false;
@@ -106,6 +103,8 @@ export function scheduleCooperadoJefersonAutoAtualizar(
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   if (autoInflight) return;
 
+  clearCooperadoPwaDadosDesatualizados();
+
   scheduleCooperadoPostInteractiveTask(() => {
     if (autoInflight) return;
     autoInflight = true;
@@ -113,9 +112,9 @@ export function scheduleCooperadoJefersonAutoAtualizar(
       await yieldCooperadoMobileUiBeforeHeavyWork();
       await new Promise<void>((r) => {
         if (typeof requestIdleCallback !== "undefined") {
-          requestIdleCallback(() => r(), { timeout: 2_500 });
+          requestIdleCallback(() => r(), { timeout: 4_000 });
         } else {
-          window.setTimeout(() => r(), 120);
+          window.setTimeout(() => r(), 280);
         }
       });
       const ok = await executarCooperadoAtualizarManual();
@@ -134,8 +133,10 @@ export function resetCooperadoJefersonDuplaEntradaForTests(userId?: string): voi
   if (typeof sessionStorage === "undefined") return;
   if (userId) {
     sessionStorage.removeItem(storageKey(userId));
+    lastForegroundRegistroAt.delete(userId);
     return;
   }
+  lastForegroundRegistroAt.clear();
   for (let i = sessionStorage.length - 1; i >= 0; i--) {
     const k = sessionStorage.key(i);
     if (k?.startsWith(STORAGE_PREFIX)) sessionStorage.removeItem(k);
