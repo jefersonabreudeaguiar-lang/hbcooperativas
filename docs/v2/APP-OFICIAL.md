@@ -6,7 +6,8 @@
 
 Não é necessário outro domínio para usar a versão nova. O projeto oficial já publica com:
 
-- `NEXT_PUBLIC_V2_HB_ONLY=1` em `vercel.json`
+- `NEXT_PUBLIC_V2_HB_ONLY=1` em `vercel.json` e **padrão ligado em produção** (`next.config` + `resolveV2HbOnlyPublicEnv`)
+- Na Vercel → Environment Variables: **não** deixe `NEXT_PUBLIC_V2_HB_ONLY=0` no projeto oficial
 - Mesmos logins, Supabase e dados HB de sempre
 
 ## O que cada perfil vê

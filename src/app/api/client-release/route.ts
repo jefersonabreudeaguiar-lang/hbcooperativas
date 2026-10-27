@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { isV2HbOnlyClient } from "@/lib/product/v2HbOnly";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -11,8 +12,7 @@ export async function GET() {
 
   const fingerprint = `${APP_BUILD_VERSION}:${gitCommitSha.slice(0, 12)}:${deploymentId}`;
 
-  const v2Raw = (process.env.NEXT_PUBLIC_V2_HB_ONLY ?? "").trim().toLowerCase();
-  const v2HbOnly = v2Raw === "1" || v2Raw === "true" || v2Raw === "yes";
+  const v2HbOnly = isV2HbOnlyClient();
 
   return NextResponse.json(
     {
