@@ -15,12 +15,17 @@ import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperad
 import { scheduleCooperadoHbCreditLimiteAndAccountWarmup } from "@/lib/cooperado/cooperadoMobilePilotHbCreditWarmup";
 import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { isAppDataWarm, preloadAppData } from "@/services/dataStore";
+import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 
 /** Materializa caches locais (idempotente). */
 export function empacotarModeloAparelhoJeferson(
   user: Omit<User, "password"> | null | undefined
 ): void {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return;
+  if (isCooperadoJefersonSomenteAtualizarPilot(user)) {
+    applyCooperadoMobilePilotPerfDomFlag(user);
+    return;
+  }
 
   applyCooperadoMobilePilotPerfDomFlag(user);
 

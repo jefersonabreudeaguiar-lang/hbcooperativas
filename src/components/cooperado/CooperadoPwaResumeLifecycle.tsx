@@ -45,9 +45,6 @@ export function CooperadoPwaResumeLifecycle() {
       const flush = () => {
         if (!isAppDataWarm()) return;
         persistirInicioCardCooperadoNotificarPwaLeve(user);
-        persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, true);
-        persistirCooperadoPwaFichaResumoSnapshotFromUser(user, true);
-        persistirCooperadoPwaEntregasResumosSnapshotFromUser(user);
       };
       const onPageHide = () => flush();
       window.addEventListener("pagehide", onPageHide);

@@ -184,6 +184,7 @@ import {
 } from "@/lib/cooperado/cooperadoMobilePilot";
 import { tryAckCooperadoAppReleaseWhenLocalReady } from "@/lib/cooperado/cooperadoMobileReleaseLocalAck";
 import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
+import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 /** Intervalo mínimo entre pulls de operacional só para votação (bem menor que sync completa). */
@@ -1149,9 +1150,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           (isCooperadoPwaMobileLeveUi() || isCooperadoMobilePilotPerfActive(userRef.current)) &&
           (completed || apresentacaoFinanceiraRestaurada)
         ) {
-          cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(userRef.current);
-          empacotarModeloAparelhoJeferson(userRef.current);
-          scheduleCooperadoHbCreditSyncPadrao(userRef.current);
+          const cooperadoUser = userRef.current;
+          cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(cooperadoUser);
+          if (!isCooperadoJefersonSomenteAtualizarPilot(cooperadoUser)) {
+            empacotarModeloAparelhoJeferson(cooperadoUser);
+            scheduleCooperadoHbCreditSyncPadrao(cooperadoUser);
+          }
           if (completed) {
             persistOperacionalSyncedAppBuild();
           }

@@ -17,6 +17,7 @@ import { rematerializarCooperadoPwaSnapshotsSeNecessario } from "@/lib/cooperado
 import { getSession } from "@/services/dataStore";
 import { fetchOfficialClientRelease } from "@/lib/pwa/fetchOfficialClientRelease";
 import { ackCooperadoPwaReleaseWhenCanonicalMatch } from "@/lib/cooperado/cooperadoMobileReleaseLocalAck";
+import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 
 /** Mensagem de conforto enquanto o cooperado aguarda a nuvem (piloto / PWA mobile). */
 export const COOPERADO_ATUALIZAR_MENSAGEM_AMOR = "Jesus te ama";
@@ -36,6 +37,7 @@ export async function executarCooperadoAtualizarManual(): Promise<boolean> {
   await yieldCooperadoMobileUiBeforeHeavyWork();
   if (
     session?.role === "cooperado" &&
+    !isCooperadoJefersonSomenteAtualizarPilot(session) &&
     isAppDataWarm() &&
     rematerializarCooperadoPwaSnapshotsSeNecessario(session)
   ) {

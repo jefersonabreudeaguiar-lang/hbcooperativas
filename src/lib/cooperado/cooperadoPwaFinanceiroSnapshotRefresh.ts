@@ -27,12 +27,24 @@ import { cooperadoGaPausaTrabalhoFinanceiroPesado } from "@/lib/cooperado/cooper
 import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoBicMobileAuthority";
 import { cooperadoBrowserDesktopBicPerfActive } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
+
+/** Piloto Jeferson — só card início + evento leve (sem ficha/dashboard/entregas em massa). */
+export function cooperadoJefersonPosSyncSnapshotLeve(
+  user: Omit<User, "password"> | null | undefined
+): void {
+  if (!user || user.role !== "cooperado") return;
+  persistirInicioCardCooperadoNotificarPwaLeve(user);
+  clearCooperadoPwaDadosDesatualizados();
+  dispatchCooperadoPwaLeveUiSnapshotRefresh();
+}
 
 /** Após troca de build ou purge — recria snapshots do AppData local (paridade com o browser). */
 export function cooperadoRematerializarFinanceiroLocalSePossivel(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   if (!user || user.role !== "cooperado" || !user.cooperadoId) return false;
+  if (isCooperadoJefersonSomenteAtualizarPilot(user)) return false;
   if (cooperadoGaPausaTrabalhoFinanceiroPesado(user)) return false;
   if (!isAppDataWarm()) return false;
   const data = getData();
@@ -75,6 +87,10 @@ export function cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(
 ): void {
   const skipInicioView = opts?.skipInicioDashboardView ?? cooperadoGaInicioSomenteCasca(user);
   if (!user || user.role !== "cooperado") return;
+  if (isCooperadoJefersonSomenteAtualizarPilot(user)) {
+    cooperadoJefersonPosSyncSnapshotLeve(user);
+    return;
+  }
   if (isCooperadoPwaMessengerMode()) {
     persistirCooperadoPwaMessengerCaches(user, { light: opts?.light });
     clearCooperadoPwaDadosDesatualizados();
