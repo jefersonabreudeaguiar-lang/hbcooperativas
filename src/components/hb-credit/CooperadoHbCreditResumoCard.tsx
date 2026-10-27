@@ -26,6 +26,8 @@ import {
 import { resolveCooperadoHbCreditCnpjDigits } from "@/lib/hb-credit/resolveCooperadoHbCreditCnpj";
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import { clearCooperadoOptimisticTab } from "@/lib/performance/cooperadoOptimisticTabNavigation";
+import { isV2HbOnlyClient } from "@/lib/product/v2HbOnly";
+import { hbCreditCooperadoInicioV2Totais } from "@/lib/hb-credit/hbCreditCooperadoInicioV2";
 
 type Props = {
   cnpj: string;
@@ -120,16 +122,31 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
     };
   }, [hbApiCooperadoId, cooperadoId, cnpjResolved, user]);
 
+  const v2Hb = isV2HbOnlyClient();
+
   const totals = useMemo(() => {
     const acc = snap?.account;
     if (!acc) return null;
+    if (v2Hb) {
+      const v2 = hbCreditCooperadoInicioV2Totais(acc);
+      if (!v2) return null;
+      return {
+        saldo: v2.saldoMercadoCents,
+        limite: v2.limiteLiberadoCents,
+        usado: v2.usadoCents,
+        brutoFicha: v2.brutoFichaCents,
+        aReceber: v2.aReceberCents,
+      };
+    }
     const norm = normalizeHbPaymentLimiteDisponivel(acc);
     return {
       saldo: norm.valorDisponivelCents,
       limite: norm.limiteLiberadoCents,
       usado: Math.max(0, norm.valorUsadoCents ?? 0),
+      brutoFicha: null as number | null,
+      aReceber: null as number | null,
     };
-  }, [snap]);
+  }, [snap, v2Hb]);
 
   if (!totals) {
     return (
@@ -162,8 +179,18 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-wider text-emerald-100">HB Créditos</p>
-          <p className="mt-1 text-sm text-emerald-50/90">Saldo para pagar nos mercados parceiros</p>
+          <p className="mt-1 text-sm text-emerald-50/90">
+            {v2Hb
+              ? "Base na ficha HB (entregas 1–5) — saldo para mercados parceiros"
+              : "Saldo para pagar nos mercados parceiros"}
+          </p>
           <p className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">{formatCentsBRL(totals.saldo)}</p>
+          {v2Hb && totals.brutoFicha != null ? (
+            <p className="mt-2 text-xs text-emerald-100/95 leading-relaxed">
+              Ficha bruto {formatCentsBRL(totals.brutoFicha)}
+              {totals.aReceber != null ? ` · A receber ${formatCentsBRL(totals.aReceber)}` : ""}
+            </p>
+          ) : null}
         </div>
         <span className="shrink-0 text-sm font-semibold text-white/90 pt-1">Detalhes →</span>
       </div>

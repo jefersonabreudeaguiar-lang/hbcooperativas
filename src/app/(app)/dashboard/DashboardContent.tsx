@@ -248,6 +248,7 @@ function CooperadoDashboard() {
 
 function CooperadoDashboardMain() {
   const tabActive = useCooperadoTabPanelActive("/dashboard");
+  const v2HbOnly = isV2HbOnlyClient();
   const messenger = isCooperadoPwaMessengerMode();
   const inicioPwaLeve = isCooperadoPwaMobileLeveUi();
   const appDataUiOn = cooperadoPwaUiSubscribesAppData() && tabActive;
@@ -616,15 +617,19 @@ function CooperadoDashboardMain() {
               {formatMesReferencia(mesAtual)}
             </p>
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <CooperadoInicioValorReceberCard
-              snapshot={valorReceberCard}
-              atualizando={cardFinanceiroAtualizando}
-              exibirReciboAssinatura
-            />
-            {envioFotosHabilitado ? <EnviarFotoEntregaInicioCard onEnviar={irEnviarFotoEntrega} /> : null}
+          <div className="space-y-4">
+            <CooperadoHbCreditInicioSection hbCredit={hbCredit} cnpjDigits={cnpjHbDigits} />
+            {!v2HbOnly ? (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <CooperadoInicioValorReceberCard
+                  snapshot={valorReceberCard}
+                  atualizando={cardFinanceiroAtualizando}
+                  exibirReciboAssinatura
+                />
+                {envioFotosHabilitado ? <EnviarFotoEntregaInicioCard onEnviar={irEnviarFotoEntrega} /> : null}
+              </div>
+            ) : null}
           </div>
-          <CooperadoHbCreditInicioSection hbCredit={hbCredit} cnpjDigits={cnpjHbDigits} />
         </div>
       ) : (
         <CooperadoDashboardInicioView
@@ -635,6 +640,7 @@ function CooperadoDashboardMain() {
           envioFotosHabilitado={envioFotosHabilitado}
           hbCredit={hbCredit}
           cnpjHbFallback={cnpjHbDigits}
+          v2HbOnly={v2HbOnly}
         />
         )}
       </CooperadoInicioCooperadoLiveRoot>
@@ -650,6 +656,7 @@ function CooperadoDashboardInicioView({
   envioFotosHabilitado,
   hbCredit,
   cnpjHbFallback,
+  v2HbOnly,
 }: {
   view: CooperadoPwaInicioDashboardView;
   valorReceberCard: ReturnType<typeof useCooperadoInicioValorReceberCardState>["snapshot"];
@@ -658,6 +665,7 @@ function CooperadoDashboardInicioView({
   envioFotosHabilitado: boolean;
   hbCredit: ReturnType<typeof useHbCreditEnabled>;
   cnpjHbFallback: string;
+  v2HbOnly: boolean;
 }) {
   const {
     cooperadoId,
@@ -700,15 +708,21 @@ function CooperadoDashboardInicioView({
         precisaPix={precisaPix}
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <CooperadoInicioValorReceberCard
-          snapshot={valorReceberCard}
-          atualizando={cardFinanceiroAtualizando}
-          exibirReciboAssinatura
-        />
+      <CooperadoHbCreditInicioSection
+        hbCredit={hbCredit}
+        cnpjDigits={cnpjDigits.length === 14 ? cnpjDigits : cnpjHbFallback}
+      />
 
-        {envioFotosHabilitado ? <EnviarFotoEntregaInicioCard onEnviar={irEnviarFotoEntrega} /> : null}
-      </div>
+      {!v2HbOnly ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <CooperadoInicioValorReceberCard
+            snapshot={valorReceberCard}
+            atualizando={cardFinanceiroAtualizando}
+            exibirReciboAssinatura
+          />
+          {envioFotosHabilitado ? <EnviarFotoEntregaInicioCard onEnviar={irEnviarFotoEntrega} /> : null}
+        </div>
+      ) : null}
 
       {pautasAbertas.length > 0 && <VotacaoPautasInicioPanel pautas={pautasAbertas} />}
 
@@ -741,10 +755,12 @@ function CooperadoDashboardInicioView({
         </AlertBanner>
       )}
 
-      <CooperadoHbCreditInicioSection
-        hbCredit={hbCredit}
-        cnpjDigits={cnpjDigits.length === 14 ? cnpjDigits : cnpjHbFallback}
-      />
+      {!v2HbOnly ? (
+        <CooperadoHbCreditInicioSection
+          hbCredit={hbCredit}
+          cnpjDigits={cnpjDigits.length === 14 ? cnpjDigits : cnpjHbFallback}
+        />
+      ) : null}
 
       <InicioResolvidosPanel itens={resolvidos} />
     </div>

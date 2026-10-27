@@ -4,6 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import type { InicioCardMotorSnapshot } from "@/lib/cooperadoInicioCardPolicy";
 import { hbV2InicioCardSnapshotFromHbAccount } from "@/lib/hb-credit/hbCreditManualValorBruto";
 import { HB_A_RECEBER_HIBRIDO_EVENT } from "@/lib/hb-credit/hbAReceberHibrido";
+import {
+  HB_CREDIT_ACCOUNT_CACHE_EVENT,
+  HB_CREDIT_LIMITE_SYNCED_EVENT,
+} from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import { hbCreditCooperadoInicioV2Totais } from "@/lib/hb-credit/hbCreditCooperadoInicioV2";
 import { fetchCreditAccount } from "@/services/creditApiService";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
@@ -50,7 +55,12 @@ export function useHbV2InicioValorReceberCard(opts: {
       const apiCooperadoId =
         resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId) ?? cooperadoId;
       const { account } = await fetchCreditAccount(cnpj, apiCooperadoId);
-      setSnapshot(hbV2InicioCardSnapshotFromHbAccount(account ?? null, mesLabel));
+      const totais = hbCreditCooperadoInicioV2Totais(account ?? null);
+      const snap = hbV2InicioCardSnapshotFromHbAccount(account ?? null, mesLabel);
+      if (totais) {
+        snap.valor = totais.aReceberCents / 100;
+      }
+      setSnapshot(snap);
     } catch {
       setSnapshot(hbV2InicioCardSnapshotFromHbAccount(null, mesLabel));
     } finally {
@@ -65,7 +75,13 @@ export function useHbV2InicioValorReceberCard(opts: {
   useEffect(() => {
     const onRefresh = () => void reload();
     window.addEventListener(HB_A_RECEBER_HIBRIDO_EVENT, onRefresh);
-    return () => window.removeEventListener(HB_A_RECEBER_HIBRIDO_EVENT, onRefresh);
+    window.addEventListener(HB_CREDIT_ACCOUNT_CACHE_EVENT, onRefresh);
+    window.addEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onRefresh);
+    return () => {
+      window.removeEventListener(HB_A_RECEBER_HIBRIDO_EVENT, onRefresh);
+      window.removeEventListener(HB_CREDIT_ACCOUNT_CACHE_EVENT, onRefresh);
+      window.removeEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onRefresh);
+    };
   }, [reload]);
 
   return { snapshot, atualizando };

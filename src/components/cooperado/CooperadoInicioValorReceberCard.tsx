@@ -5,6 +5,7 @@ import { Wallet } from "lucide-react";
 import { formatCurrency } from "@/utils/format";
 import type { InicioCardMotorSnapshot } from "@/lib/cooperadoInicioCardPolicy";
 import { cooperadoUsarFluxoReciboAssinaturaNaUi, isCooperadoBicCentralUiEnabled } from "@/lib/bic/cooperadoBicCentralUi";
+import { isV2HbOnlyClient } from "@/lib/product/v2HbOnly";
 
 type Props = {
   snapshot: InicioCardMotorSnapshot;
@@ -48,10 +49,11 @@ export function CooperadoInicioValorReceberCard({
   exibirReciboAssinatura = false,
 }: Props) {
   const base = snapshot;
+  const v2Hb = isV2HbOnlyClient();
 
   const { modoRecibo, modoAssinaturaComAberto, acao } = resolveCooperadoInicioValorReceberCardModos(
     base,
-    exibirReciboAssinatura
+    v2Hb ? false : exibirReciboAssinatura
   );
   const modoValor = base.valor > 0;
   const mesLabel = base.mesLabel.trim() || "—";
@@ -64,11 +66,11 @@ export function CooperadoInicioValorReceberCard({
       ? "bg-gradient-to-br from-amber-500 to-amber-600 text-white"
       : "bg-white text-gray-900 border-2 border-amber-200";
 
-  const rotulo = modoRecibo
-    ? `Pagamento registrado · ${mesLabel}`
-    : modoAssinaturaComAberto
-      ? `A receber · ${mesLabel}`
-      : modoValor
+  const rotulo = v2Hb
+    ? `Ficha HB · ${mesLabel}`
+    : modoRecibo
+      ? `Pagamento registrado · ${mesLabel}`
+      : modoAssinaturaComAberto
         ? `A receber · ${mesLabel}`
         : `A receber · ${mesLabel}`;
 
@@ -80,16 +82,25 @@ export function CooperadoInicioValorReceberCard({
 
   const subtitulo = atualizando
     ? "Atualizando valores…"
-    : modoAssinaturaComAberto
-      ? `Recibo ${formatCurrency(base.valorRecibo)} aguardando assinatura na ficha.`
-      : modoRecibo
-        ? `Aberto na ficha: ${formatCurrency(base.valor)}`
-        : modoValor
-          ? "Confira descontos e detalhes na ficha."
-          : "Nenhum valor pendente no momento.";
+    : v2Hb
+      ? modoValor
+        ? "Bruto da ficha HB menos crédito já usado — veja entregas e mensalidades."
+        : "Responsável ainda não lançou a ficha HB deste ciclo."
+      : modoAssinaturaComAberto
+        ? `Recibo ${formatCurrency(base.valorRecibo)} aguardando assinatura na ficha.`
+        : modoRecibo
+          ? `Aberto na ficha: ${formatCurrency(base.valor)}`
+          : modoValor
+            ? "Confira descontos e detalhes na ficha."
+            : "Nenhum valor pendente no momento.";
 
-  const href =
-    modoRecibo || modoAssinaturaComAberto ? "/ficha-corrida?assinar=1" : "/ficha-corrida";
+  const href = v2Hb
+    ? "/minha-ficha-hb"
+    : modoRecibo || modoAssinaturaComAberto
+      ? "/ficha-corrida?assinar=1"
+      : "/ficha-corrida";
+
+  const acaoV2 = v2Hb ? "Ver minha ficha HB" : acao;
 
   return (
     <div
@@ -121,7 +132,7 @@ export function CooperadoInicioValorReceberCard({
             : "bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200"
         }`}
       >
-        {acao}
+        {acaoV2}
       </Link>
     </div>
   );
