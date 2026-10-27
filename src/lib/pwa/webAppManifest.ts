@@ -51,14 +51,15 @@ export function buildWebAppManifest(request?: Request): WebAppManifestJson {
   const icon192 = `${origin}/icons/icon-192.png`;
   const launch = (nextPath: string) =>
     `${origin}/pwa-launch.html?next=${encodeURIComponent(nextPath)}`;
+  const loginEntry = `${origin}${buildCooperadoLoginPath(APP_BUILD_VERSION)}`;
 
   return {
     id: `${origin}/`,
     name: "HB Cooperativas",
     short_name: "HB Coop",
     description: "Gestão de cooperativas — entregas, mensalidades e ficha corrida",
-    /** Padrão 0fc3a12a: splash + flags de reparo antes do login. */
-    start_url: launch(buildCooperadoLoginPath(APP_BUILD_VERSION)),
+    /** Browser/atalho novo: login direto; ícone sem flags ainda passa pelo guard → pwa-launch. */
+    start_url: loginEntry,
     scope: `${origin}/`,
     display: "standalone",
     display_override: ["standalone", "minimal-ui"],

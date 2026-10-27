@@ -4,7 +4,6 @@ import { useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
-import { repairBrowserProfileIfStale } from "@/lib/pwa/browserProfileRepair";
 import { markPwaRepairSessionForBuild } from "@/lib/pwa/cooperadoPwaInstallPrepare";
 
 function isStandalonePwa(): boolean {
@@ -37,20 +36,13 @@ export function GuestRoute({
       const onLoginWithPwaRepair =
         window.location.pathname === "/login" && params.has("hb-pwa");
       if (onLoginWithPwaRepair) {
-        if (isStandalonePwa()) {
-          markPwaRepairSessionForBuild();
-          const pathOnly = dest.split("?")[0];
-          if (window.location.pathname !== pathOnly) {
-            window.location.replace(dest);
-          }
-          return;
+        /** pwa-launch / ack inline já marcaram reparo — purge+reload no browser quebra com “couldn’t load”. */
+        markPwaRepairSessionForBuild();
+        const pathOnly = dest.split("?")[0];
+        if (window.location.pathname !== pathOnly) {
+          if (isStandalonePwa()) window.location.replace(dest);
+          else router.replace(dest);
         }
-        void repairBrowserProfileIfStale({ includeStandalone: true }).then((reloaded) => {
-          if (reloaded) return;
-          const pathOnly = dest.split("?")[0];
-          if (window.location.pathname === pathOnly) return;
-          router.replace(dest);
-        });
         return;
       }
 

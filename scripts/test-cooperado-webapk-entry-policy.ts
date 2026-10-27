@@ -26,6 +26,7 @@ const layout = read("src/app/layout.tsx");
 assert.match(layout, /buildInlinePwaLoginHbPwaRepairAckScript/, "layout ack antes do guard");
 
 const manifest = buildWebAppManifest();
-assert.ok(manifest.start_url.includes("pwa-launch.html"), "manifest start_url via launch");
+assert.ok(manifest.start_url.includes("/login") && manifest.start_url.includes("hb-pwa="), "manifest start_url login direto");
+assert.ok(manifest.shortcuts[0].url.includes("pwa-launch.html"), "atalhos passam pelo launch");
 
 console.log("OK test-cooperado-webapk-entry-policy");
