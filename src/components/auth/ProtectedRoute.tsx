@@ -99,10 +99,14 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     if (instantCoop) {
       setProfileRepairDone(true);
     }
-    void repairBrowserProfileIfStale({ includeStandalone: true }).then((reloaded) => {
-      if (cancelled || reloaded) return;
-      if (!instantCoop) setProfileRepairDone(true);
-    });
+    if (sessionGate.role !== "cooperado") {
+      void repairBrowserProfileIfStale({ includeStandalone: true }).then((reloaded) => {
+        if (cancelled || reloaded) return;
+        if (!instantCoop) setProfileRepairDone(true);
+      });
+    } else if (!instantCoop) {
+      setProfileRepairDone(true);
+    }
     return () => {
       cancelled = true;
     };

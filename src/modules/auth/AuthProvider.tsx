@@ -347,7 +347,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!isCooperadoPwaMessengerMode()) {
             persistirInicioCardValorReceberCooperado(getSession() ?? safeUserEarly);
           }
-          void repairBrowserProfileIfStale({ includeStandalone: true });
         })();
         const redirectTo = "/dashboard";
         if (typeof window !== "undefined") {
@@ -421,12 +420,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { ok: true as const, redirectTo, navigated: true as const };
         }
         const reloaded =
-          role === "cooperado" && isCooperadoMobileGaPromoted(safeUser)
+          role === "cooperado"
             ? false
             : await repairBrowserProfileIfStale({ includeStandalone: true });
-        if (role === "cooperado" && isCooperadoMobileGaPromoted(safeUser)) {
-          void repairBrowserProfileIfStale({ includeStandalone: true });
-        }
         if (reloaded) {
           return { ok: true as const, redirectTo, navigated: true as const };
         }

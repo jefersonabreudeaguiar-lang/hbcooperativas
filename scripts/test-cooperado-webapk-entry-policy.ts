@@ -19,6 +19,12 @@ assert.match(guard, /pwa-launch\.html\?next=/, "atalho passa pelo launch");
 const launch = read("public/pwa-launch.html");
 assert.match(launch, /if \(!forcePurge\)/, "launch sem purge por padrão");
 
+const chunkGuard = read("src/lib/pwa/chunkDplAlignGuard.ts");
+assert.doesNotMatch(chunkGuard, /location\.replace\(next\)/, "chunk dpl nao redireciona cooperado");
+
+const crash = read("src/lib/pwa/runtimeCrashForensics.ts");
+assert.doesNotMatch(crash, /pwa-rescue\.html\?auto=1/, "crash forensics sem rescue automatico");
+
 const ack = read("src/lib/pwa/pwaLoginHbPwaAckInline.ts");
 assert.match(ack, /hb-pwa=/, "ack de reparo no login antes do guard");
 

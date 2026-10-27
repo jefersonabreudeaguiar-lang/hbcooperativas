@@ -1,7 +1,6 @@
 import { BUILD_SEEN_KEY } from "@/lib/pwa/clientRelease";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { fetchOfficialClientRelease } from "@/lib/pwa/fetchOfficialClientRelease";
-import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
 import { getSession } from "@/services/dataStore";
 
 export const PROFILE_REPAIR_RECENT_KEY = "hb-coop-profile-repair-at";
@@ -59,23 +58,21 @@ export async function repairBrowserProfileIfStale(
     markProfileRepairChecked();
     return false;
   }
-  if (session && isCooperadoMobileGaPromoted(session) && !options?.forceNetworkCheck) {
-    markProfileRepairChecked();
-    const laterOpts = { ...options, forceNetworkCheck: true };
-    const runLater = () => {
-      void repairBrowserProfileIfStale(laterOpts);
-    };
-    if (typeof requestIdleCallback === "function") {
-      requestIdleCallback(runLater, { timeout: 15_000 });
-    } else {
-      window.setTimeout(runLater, 8_000);
-    }
-    return false;
-  }
 
   const official = await fetchOfficialClientRelease();
   let cloudBuild = official?.build ?? 0;
   if (cloudBuild <= 0) cloudBuild = APP_BUILD_VERSION;
+
+  /** Cooperado: nunca purge/reload automático em frota (build novo ≠ couldnt load). */
+  if (session?.role === "cooperado") {
+    try {
+      localStorage.setItem(BUILD_SEEN_KEY, String(cloudBuild));
+    } catch {
+      /* ignore */
+    }
+    markProfileRepairChecked();
+    return false;
+  }
 
   const pageBuild = parseInt(
     document.documentElement.getAttribute("data-app-build") ?? "",
@@ -89,20 +86,6 @@ export async function repairBrowserProfileIfStale(
   const neverSeen = !seenRaw && cloudBuild > 0;
 
   if (!htmlStale && !profileStale && !neverSeen) {
-    try {
-      localStorage.setItem(BUILD_SEEN_KEY, String(cloudBuild));
-    } catch {
-      /* ignore */
-    }
-    markProfileRepairChecked();
-    return false;
-  }
-
-  const standalonePwa =
-    typeof window !== "undefined" &&
-    (window.matchMedia("(display-mode: standalone)").matches ||
-      (window.navigator as Navigator & { standalone?: boolean }).standalone === true);
-  if (standalonePwa && session?.role === "cooperado") {
     try {
       localStorage.setItem(BUILD_SEEN_KEY, String(cloudBuild));
     } catch {
