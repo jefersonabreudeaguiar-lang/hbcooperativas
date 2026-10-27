@@ -15,14 +15,6 @@ import {
   listLimitesCooperados,
   setManualValorBrutoCooperado,
 } from "@/lib/supabase/contaCoopStorage";
-import {
-  buildFichaPlanoBrutoCentsMapForCooperados,
-  reconcileHbBrutoFromFichaPlano,
-} from "@/lib/supabase/hbCreditFichaPlanoStorage";
-import {
-  capLimitesListaV2PorFichaBruto,
-  resolveHbV2FichaLimiteExibicao,
-} from "@/lib/hb-credit/hbCreditV2CooperadoLimiteExibicao";
 import { isV2HbOnlyServer } from "@/lib/hb-credit/hbCreditV2LimiteBase";
 import { requireCreditApi, requireCreditCnpj, requireCreditStaff } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
@@ -72,56 +64,11 @@ export async function GET(request: Request) {
     );
 
     let fichaPlanoBrutoCentsByCooperadoId: Record<string, number> | undefined;
-    if (isV2HbOnlyServer()) {
-      const idsParaFicha = [
-        ...new Set([
-          ...authoritativeCooperadoIds,
-          ...limites.map((l) => l.cooperadoId),
-        ]),
-      ].filter(Boolean);
-      if (persistFichaSync && idsParaFicha.length) {
-        for (const cooperadoId of idsParaFicha) {
-          await reconcileHbBrutoFromFichaPlano(gate.ctx.supabase, cnpj, cooperadoId, actorId);
-        }
-        limites = await listLimitesCooperados(gate.ctx.supabase, cnpj);
-      }
-      fichaPlanoBrutoCentsByCooperadoId = await buildFichaPlanoBrutoCentsMapForCooperados(
-        gate.ctx.supabase,
-        cnpj,
-        idsParaFicha
-      );
-      limites = await capLimitesListaV2PorFichaBruto(
-        gate.ctx.supabase,
-        cnpj,
-        limites,
-        fichaPlanoBrutoCentsByCooperadoId
-      );
-      if (authoritativeCooperadoIds.length) {
-        const byId = new Map(limites.map((l) => [l.cooperadoId, l]));
-        const projected: typeof limites = [];
-        for (const id of authoritativeCooperadoIds) {
-          const bruto = Math.max(0, Math.round(fichaPlanoBrutoCentsByCooperadoId?.[id] ?? 0));
-          const base =
-            byId.get(id) ?? {
-              id: `sem-conta-${id}`,
-              cooperativaCnpj: cnpj,
-              cooperadoId: id,
-              limiteLiberadoCents: 0,
-              valorUsadoCents: 0,
-              valorDisponivelCents: 0,
-              bloqueado: false,
-              updatedAt: "",
-            };
-          const { limite } = await resolveHbV2FichaLimiteExibicao(
-            gate.ctx.supabase,
-            cnpj,
-            id,
-            { ...base, cooperadoId: id },
-            bruto
-          );
-          projected.push({ ...limite, fichaPlanoBrutoCents: bruto });
-        }
-        limites = projected;
+    if (isV2HbOnlyServer() && limites.length) {
+      fichaPlanoBrutoCentsByCooperadoId = {};
+      for (const l of limites) {
+        const bruto = l.fichaPlanoBrutoCents ?? 0;
+        fichaPlanoBrutoCentsByCooperadoId[l.cooperadoId] = bruto;
       }
     }
 

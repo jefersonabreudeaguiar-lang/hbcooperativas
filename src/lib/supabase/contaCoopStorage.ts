@@ -50,6 +50,8 @@ import {
 } from "@/lib/hb-credit/hbCreditV2LimiteBase";
 import { buildFichaPlanoBrutoCentsMapForCooperados } from "@/lib/supabase/hbCreditFichaPlanoStorage";
 import { capLimiteContaCoopV2FichaBruto } from "@/lib/hb-credit/hbCreditV2CooperadoLimiteExibicao";
+import { listLimitesV2StaffAlinhadosFichaPlano } from "@/lib/hb-credit/hbCreditV2LimitesStaffLista";
+import { reconcileHbBrutoFromFichaPlano } from "@/lib/supabase/hbCreditFichaPlanoStorage";
 import { resolveLeituraFinanceiraCooperadoCore } from "@/lib/bic/bicLeituraPorta";
 import type {
   AuthoritativeCreditBaseErrorPayload,
@@ -749,7 +751,47 @@ export async function listLimitesCooperadosAlinhadosComBase(
   const digits = normalizeCnpj(cnpj);
   const limitesRaw = await listLimitesCooperados(supabase, cnpj);
 
-  if (opts?.fast && !isV2HbOnlyServer()) {
+  if (isV2HbOnlyServer()) {
+    const persistFichaSync = opts?.persistFichaSync === true;
+    let raw = limitesRaw;
+    const staffIds = [
+      ...new Set([
+        ...(opts?.authoritativeCooperadoIds ?? []),
+        ...raw.map((l) => l.cooperadoId),
+      ]),
+    ].filter(Boolean);
+
+    if (persistFichaSync && staffIds.length) {
+      const actorSync = opts?.actorUserId ?? "system:hb_limites_ficha_sync";
+      for (const cooperadoId of staffIds) {
+        await reconcileHbBrutoFromFichaPlano(supabase, digits, cooperadoId, actorSync);
+      }
+      raw = await listLimitesCooperados(supabase, cnpj);
+      const alignedPre = await listLimitesV2StaffAlinhadosFichaPlano(supabase, cnpj, raw, staffIds);
+      const pickedBase = pickCreditosBaseForLimitSync({
+        authoritative: alignedPre.creditosBaseCents,
+        cooperadoIds: staffIds,
+      });
+      await syncLimitesCooperadosFromCreditoBase(
+        supabase,
+        cnpj,
+        staffIds,
+        pickedBase.creditosBaseCents,
+        actorSync
+      );
+      raw = await listLimitesCooperados(supabase, cnpj);
+    }
+
+    const idsLista =
+      opts?.authoritativeCooperadoIds?.length ? opts.authoritativeCooperadoIds : staffIds;
+    const aligned = await listLimitesV2StaffAlinhadosFichaPlano(supabase, cnpj, raw, idsLista);
+    return {
+      limites: aligned.limites,
+      creditosBaseCents: aligned.creditosBaseCents,
+    };
+  }
+
+  if (opts?.fast) {
     return { limites: limitesRaw, creditosBaseCents: {} };
   }
 
@@ -788,66 +830,6 @@ export async function listLimitesCooperadosAlinhadosComBase(
 
   if (!idsParaBase.length) {
     return { limites: limitesPosSync, creditosBaseCents: {} };
-  }
-
-  if (isV2HbOnlyServer()) {
-    const fichaMap = await buildFichaPlanoBrutoCentsMapForCooperados(supabase, digits, idsParaBase);
-    const creditosBaseMerged = creditosBaseMapV2FichaAlinhada(idsParaBase, limitesPosSync, fichaMap);
-    const teto = await resolveTetoGlobal(supabase, cnpj, creditosBaseMerged);
-    const tetoPercent = teto.configured ? teto.percent : 0;
-    const liberacaoPercent = teto.configured
-      ? (await getCooperativaLiberacaoPercentConfigured(supabase, cnpj)) ?? tetoPercent
-      : null;
-
-    if (persistFichaSync) {
-      const actorSync = opts?.actorUserId ?? "system:hb_limites_ficha_sync";
-      const pickedBase = pickCreditosBaseForLimitSync({
-        authoritative: creditosBaseMerged,
-        cooperadoIds: idsParaBase,
-      });
-      await syncLimitesCooperadosFromCreditoBase(
-        supabase,
-        cnpj,
-        idsParaBase,
-        pickedBase.creditosBaseCents,
-        actorSync
-      );
-      limitesPosSync = await listLimitesCooperados(supabase, cnpj);
-    }
-
-    let limitesParaUi = limitesPosSync.map((limite) => {
-      const bruto = Math.max(0, Math.round(fichaMap[limite.cooperadoId] ?? 0));
-      const capped = capLimiteContaCoopV2FichaBruto(limite, bruto, tetoPercent, liberacaoPercent);
-      return { ...capped, fichaPlanoBrutoCents: bruto };
-    });
-
-    if (opts?.authoritativeCooperadoIds?.length) {
-      const byCooperadoId = new Map(limitesParaUi.map((l) => [l.cooperadoId, l]));
-      limitesParaUi = opts.authoritativeCooperadoIds.map((id) => {
-        const conta = byCooperadoId.get(id);
-        const bruto = Math.max(0, Math.round(fichaMap[id] ?? 0));
-        const baseRow =
-          conta ??
-          ({
-            id: `sem-conta-${id}`,
-            cooperativaCnpj: digits,
-            cooperadoId: id,
-            limiteLiberadoCents: 0,
-            valorUsadoCents: 0,
-            valorDisponivelCents: 0,
-            bloqueado: false,
-            updatedAt: "",
-          } satisfies ContaCoopLimiteCooperado);
-        return capLimiteContaCoopV2FichaBruto(
-          { ...baseRow, cooperadoId: id },
-          bruto,
-          tetoPercent,
-          liberacaoPercent
-        );
-      });
-    }
-
-    return { limites: limitesParaUi, creditosBaseCents: creditosBaseMerged };
   }
 
   const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, idsParaBase);
