@@ -40,6 +40,7 @@ import { formatHbCreditUsoMotivo } from "@/lib/hb-credit/hbCreditUsoDescricao";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import { hbCreditCreditoBaseReais } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
 import { isHbCreditMercadoNfDispensada } from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
+import { mergeManualValorBrutoIntoCreditosBaseCents } from "@/lib/hb-credit/hbCreditManualValorBruto";
 import { resolveLeituraFinanceiraCooperadoCore } from "@/lib/bic/bicLeituraPorta";
 import type {
   AuthoritativeCreditBaseErrorPayload,
@@ -231,14 +232,108 @@ export async function resolveCreditosBaseForLiberacaoColetiva(
   if (!auth.ok) {
     return { ok: false, code: auth.code, message: auth.message };
   }
+  const limites = await listLimitesCooperados(supabase, cnpj);
+  const authoritativeMerged = mergeManualValorBrutoIntoCreditosBaseCents(
+    auth.creditosBaseCents,
+    limites.filter((l) => cooperadoIds.includes(l.cooperadoId))
+  );
   return {
     ok: true,
     creditosBaseCents: pickCreditosBaseForLimitSync({
-      authoritative: auth.creditosBaseCents,
+      authoritative: authoritativeMerged,
       cooperadoIds,
       clientPreview: clientBases,
     }).creditosBaseCents,
   };
+}
+
+/** Valor bruto manual (V2) — grava em hb_credit_accounts e alinha snapshot de base. */
+export async function setManualValorBrutoCooperado(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  manualValorBrutoCents: number | null,
+  actorUserId: string
+): Promise<{ ok: true; limite: ContaCoopLimiteCooperado } | { ok: false; error: string }> {
+  const digits = normalizeCnpj(cnpj);
+  const cents =
+    manualValorBrutoCents == null
+      ? null
+      : Math.max(0, Math.round(Number(manualValorBrutoCents)));
+  const now = new Date().toISOString();
+
+  const { data: existing } = await supabase
+    .from("hb_credit_accounts")
+    .select("*")
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", cooperadoId)
+    .maybeSingle();
+
+  const patch: Record<string, unknown> = {
+    manual_valor_bruto_cents: cents,
+    updated_at: now,
+    updated_by: actorUserId,
+  };
+  if (cents != null && cents > 0) {
+    patch.financial_limit_base_cents = cents;
+  }
+
+  if (existing) {
+    const { data, error } = await supabase
+      .from("hb_credit_accounts")
+      .update(patch)
+      .eq("cooperative_cnpj", digits)
+      .eq("cooperado_id", cooperadoId)
+      .select()
+      .single();
+    if (error) {
+      if (/manual_valor_bruto_cents/i.test(error.message ?? "")) {
+        return {
+          ok: false,
+          error: "Coluna manual_valor_bruto_cents ausente na nuvem — aplique a migration HB V2.",
+        };
+      }
+      return { ok: false, error: error.message };
+    }
+    await markHbCreditLimitStale(supabase, {
+      cnpj: digits,
+      cooperadoId,
+      actorUserId,
+      reason: "manual_valor_bruto",
+    }).catch(() => {});
+    return { ok: true, limite: mapLimiteRow(data as Record<string, unknown>) };
+  }
+
+  const { data, error } = await supabase
+    .from("hb_credit_accounts")
+    .insert({
+      cooperative_cnpj: digits,
+      cooperado_id: cooperadoId,
+      status: "active",
+      limit_released_cents: 0,
+      amount_used_cents: 0,
+      ...patch,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    if (/manual_valor_bruto_cents/i.test(error.message ?? "")) {
+      return {
+        ok: false,
+        error: "Coluna manual_valor_bruto_cents ausente na nuvem — aplique a migration HB V2.",
+      };
+    }
+    return { ok: false, error: error.message };
+  }
+
+  await markHbCreditLimitStale(supabase, {
+    cnpj: digits,
+    cooperadoId,
+    actorUserId,
+    reason: "manual_valor_bruto",
+  }).catch(() => {});
+  return { ok: true, limite: mapLimiteRow(data as Record<string, unknown>) };
 }
 
 /** @deprecated leitura legada — não usar para novas liberações */
@@ -626,10 +721,15 @@ export async function listLimitesCooperadosAlinhadosComBase(
     };
   }
 
+  const creditosBaseMerged = mergeManualValorBrutoIntoCreditosBaseCents(
+    authoritative.creditosBaseCents,
+    limitesPosSync
+  );
+
   if (persistFichaSync) {
     const actorSync = opts?.actorUserId ?? "system:hb_limites_ficha_sync";
     const pickedBase = pickCreditosBaseForLimitSync({
-      authoritative: authoritative.creditosBaseCents,
+      authoritative: creditosBaseMerged,
       cooperadoIds: idsParaBase,
     });
     await syncLimitesCooperadosFromCreditoBase(
@@ -654,8 +754,8 @@ export async function listLimitesCooperadosAlinhadosComBase(
   const capped = limitesPosSync.map((limite) => {
     const canon = resolverCanonico(limite.cooperadoId);
     const base = Math.max(
-      authoritative.creditosBaseCents[limite.cooperadoId] ?? 0,
-      authoritative.creditosBaseCents[canon] ?? 0
+      creditosBaseMerged[limite.cooperadoId] ?? 0,
+      creditosBaseMerged[canon] ?? 0
     );
     return capContaCoopLimiteToAuthoritativeBase(limite, base, tetoPercent, liberacaoPercent);
   });
@@ -665,7 +765,7 @@ export async function listLimitesCooperadosAlinhadosComBase(
     limitesParaUi = projetarLimitesListaCooperados(
       capped,
       opts.authoritativeCooperadoIds,
-      authoritative.creditosBaseCents,
+      creditosBaseMerged,
       tetoPercent,
       resolverCanonico,
       liberacaoPercent
@@ -680,7 +780,7 @@ export async function listLimitesCooperadosAlinhadosComBase(
       const cap = capped[i];
       if (cap.limiteLiberadoCents >= raw.limiteLiberadoCents) continue;
       toSync.push(raw.cooperadoId);
-      creditosBaseCents[raw.cooperadoId] = authoritative.creditosBaseCents[raw.cooperadoId] ?? 0;
+      creditosBaseCents[raw.cooperadoId] = creditosBaseMerged[raw.cooperadoId] ?? 0;
     }
     if (toSync.length) {
       await syncLimitesCooperadosFromCreditoBase(
@@ -694,8 +794,8 @@ export async function listLimitesCooperadosAlinhadosComBase(
       const cappedAfter = limitesPosSync.map((limite) => {
         const canon = resolverCanonico(limite.cooperadoId);
         const base = Math.max(
-          authoritative.creditosBaseCents[limite.cooperadoId] ?? 0,
-          authoritative.creditosBaseCents[canon] ?? 0
+          creditosBaseMerged[limite.cooperadoId] ?? 0,
+          creditosBaseMerged[canon] ?? 0
         );
         return capContaCoopLimiteToAuthoritativeBase(limite, base, tetoPercent, liberacaoPercent);
       });
@@ -703,7 +803,7 @@ export async function listLimitesCooperadosAlinhadosComBase(
         ? projetarLimitesListaCooperados(
             cappedAfter,
             opts.authoritativeCooperadoIds,
-            authoritative.creditosBaseCents,
+            creditosBaseMerged,
             tetoPercent,
             resolverCanonico,
             liberacaoPercent
@@ -712,7 +812,7 @@ export async function listLimitesCooperadosAlinhadosComBase(
     }
   }
 
-  return { limites: limitesParaUi, creditosBaseCents: authoritative.creditosBaseCents };
+  return { limites: limitesParaUi, creditosBaseCents: creditosBaseMerged };
 }
 
 function mapLimiteRow(row: Record<string, unknown>, cashbackDisponivelCents = 0): ContaCoopLimiteCooperado {
@@ -721,10 +821,17 @@ function mapLimiteRow(row: Record<string, unknown>, cashbackDisponivelCents = 0)
   const capRaw = row.financial_limit_cap_cents;
   const cap = capRaw == null || capRaw === "" ? null : Number(capRaw);
   const status = String(row.status ?? "active");
+  const manualRaw = row.manual_valor_bruto_cents;
+  const manualValorBrutoCents =
+    manualRaw == null || manualRaw === ""
+      ? null
+      : Math.max(0, Math.round(Number(manualRaw)));
+
   return {
     id: String(row.id),
     cooperativaCnpj: String(row.cooperative_cnpj),
     cooperadoId: String(row.cooperado_id),
+    manualValorBrutoCents,
     limiteLiberadoCents: limite,
     valorUsadoCents: usado,
     valorDisponivelCents: hbCreditEffectiveDisponivelCents(limite, cap, usado),

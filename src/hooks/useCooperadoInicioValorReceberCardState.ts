@@ -70,6 +70,8 @@ import { cooperadoPwaFinanceiroSnapshotsAusentes } from "@/lib/cooperado/coopera
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import { isV2HbOnlyClient } from "@/lib/product/v2HbOnly";
+import { useHbV2InicioValorReceberCard } from "@/hooks/useHbV2InicioValorReceberCard";
 
 const SNAPSHOT_VAZIO: InicioCardMotorSnapshot = {
   mesLabel: "—",
@@ -122,6 +124,14 @@ export function useCooperadoInicioValorReceberCardState(input: {
   const [persistidoTick, setPersistidoTick] = useState(0);
 
   const tabAtiva = input.tabAtiva !== false;
+
+  const v2InicioCard = useHbV2InicioValorReceberCard({
+    user: sessionUser,
+    cooperadoId: input.cooperadoId,
+    cooperativaId: input.cooperativaId,
+    tabAtiva,
+  });
+
   const leituraSomentePwa = Boolean(
     input.leituraSomentePwa &&
       (isCooperadoPwaMobileLeveUi() || isCooperadoMobilePilotPerfActive())
@@ -759,6 +769,10 @@ export function useCooperadoInicioValorReceberCardState(input: {
       resolved.atualizando ||
       Boolean(input.carregandoValoresFinanceiros) ||
       Boolean(input.syncing);
+
+  if (isV2HbOnlyClient()) {
+    return v2InicioCard;
+  }
 
   return {
     snapshot: snapshotExibido,

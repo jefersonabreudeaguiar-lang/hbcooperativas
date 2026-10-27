@@ -50,6 +50,9 @@ import { lerHbCreditLimitesPersistidos, gravarHbCreditLimitesPersistidos } from 
 import { refreshHbCreditLimitesStaff } from "@/lib/hb-credit/hbCreditLimitesRefresh";
 import { notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import { mensagemAvisoBaseAuthoritativeLimites, mensagemErroListaLimitesStaff } from "@/lib/hb-credit/hbCreditLimitesStaffMessages";
+import { isV2HbOnlyClient } from "@/lib/product/v2HbOnly";
+import { HbCreditManualValorBrutoInput } from "@/components/hb-credit/HbCreditManualValorBrutoInput";
+import { hbCreditValorAReceberReaisFromManualBruto } from "@/lib/hb-credit/hbCreditManualValorBruto";
 import { ensureHbCreditLabLiberacaoPadrao } from "@/lib/hb-credit/ensureHbCreditLabLiberacaoPadrao";
 import {
   HB_CREDIT_LAB_LIBERACAO_PERCENT_DEFAULT,
@@ -1528,8 +1531,18 @@ function ContaCoopContent() {
           <Card className="overflow-hidden !p-0">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-gray-50 px-4 py-3 text-sm text-gray-600">
               <p>
-                <strong className="text-gray-900">Crédito (ficha)</strong> = valor bruto da ficha nos meses em aberto (nuvem)
-                (operacional + notas), mesma base do painel HB e da tela do cooperado após sync.
+                {isV2HbOnlyClient() ? (
+                  <>
+                    <strong className="text-gray-900">Valor bruto manual</strong> em{" "}
+                    <code className="text-xs">hb_credit_accounts</code> — base do limite HB e do card{" "}
+                    <strong>A receber</strong> do cooperado (bruto − crédito já usado).
+                  </>
+                ) : (
+                  <>
+                    <strong className="text-gray-900">Crédito (ficha)</strong> = valor bruto da ficha nos meses em
+                    aberto (nuvem) (operacional + notas), mesma base do painel HB e da tela do cooperado após sync.
+                  </>
+                )}
               </p>
               <Button
                 type="button"
@@ -1546,7 +1559,8 @@ function ContaCoopContent() {
                 <thead className="bg-gray-50 text-left">
                   <tr>
                     <th className="p-3">Cooperado</th>
-                    <th className="p-3">Crédito (ficha)</th>
+                    <th className="p-3">{isV2HbOnlyClient() ? "Valor bruto (manual)" : "Crédito (ficha)"}</th>
+                    {isV2HbOnlyClient() ? <th className="p-3">A receber (coop.)</th> : null}
                     <th className="p-3">Liberado</th>
                     <th className="p-3">Usado</th>
                     <th className="p-3">Disponível</th>
@@ -1556,8 +1570,20 @@ function ContaCoopContent() {
                 </thead>
                 <tbody>
                   {limitesLinhasRender.map((l) => {
-                    const baseCents = creditosBaseColetivo[l.cooperadoId] ?? 0;
+                    const baseFichaCents = creditosBaseColetivo[l.cooperadoId] ?? 0;
+                    const baseCents =
+                      isV2HbOnlyClient() &&
+                      l.manualValorBrutoCents != null &&
+                      l.manualValorBrutoCents > 0
+                        ? l.manualValorBrutoCents
+                        : baseFichaCents;
                     const exib = valoresLimiteExibidos(l, baseCents);
+                    const aReceberV2 = isV2HbOnlyClient()
+                      ? hbCreditValorAReceberReaisFromManualBruto(
+                          l.manualValorBrutoCents,
+                          l.valorUsadoCents
+                        )
+                      : 0;
                     return (
                     <tr key={l.cooperadoId} className="border-t">
                       <td className="p-3">
@@ -1573,7 +1599,24 @@ function ContaCoopContent() {
                           </span>
                         )}
                       </td>
-                      <td className="p-3">{formatCentsBRL(baseCents)}</td>
+                      <td className="p-3">
+                        {isV2HbOnlyClient() ? (
+                          <HbCreditManualValorBrutoInput
+                            cnpj={cnpj}
+                            cooperadoId={l.cooperadoId}
+                            manualValorBrutoCents={l.manualValorBrutoCents}
+                            disabled={busy || limitesRefreshing}
+                            onSaved={() => void atualizarLimitesNaNuvem()}
+                          />
+                        ) : (
+                          formatCentsBRL(baseCents)
+                        )}
+                      </td>
+                      {isV2HbOnlyClient() ? (
+                        <td className="p-3 font-medium text-green-800">
+                          {aReceberV2 > 0 ? `R$ ${aReceberV2.toFixed(2).replace(".", ",")}` : "—"}
+                        </td>
+                      ) : null}
                       <td className="p-3">{formatCentsBRL(exib.liberado)}</td>
                       <td className="p-3">{formatCentsBRL(exib.usado)}</td>
                       <td className="p-3 font-medium text-green-800">

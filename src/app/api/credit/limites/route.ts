@@ -13,6 +13,7 @@ import {
   setTetoGlobalPercent,
   resolveCreditosBaseForLiberacaoColetiva,
   listLimitesCooperados,
+  setManualValorBrutoCooperado,
 } from "@/lib/supabase/contaCoopStorage";
 import { requireCreditApi, requireCreditCnpj, requireCreditStaff } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
@@ -280,6 +281,30 @@ export async function POST(request: Request) {
       creditosBaseCents
     );
     return NextResponse.json({ ok: true, preview });
+  }
+
+  if (action === "set_manual_valor_bruto") {
+    const cooperadoId = String(body?.cooperadoId ?? "");
+    if (!cooperadoId) {
+      return NextResponse.json({ error: "Cooperado inválido." }, { status: 400 });
+    }
+    const raw = body?.manualValorBrutoCents;
+    const manualValorBrutoCents =
+      raw === null || raw === undefined || raw === ""
+        ? null
+        : Math.max(0, Math.round(Number(raw)));
+    if (manualValorBrutoCents != null && !Number.isFinite(manualValorBrutoCents)) {
+      return NextResponse.json({ error: "Valor bruto inválido." }, { status: 400 });
+    }
+    const result = await setManualValorBrutoCooperado(
+      gate.ctx.supabase,
+      cnpj,
+      cooperadoId,
+      manualValorBrutoCents,
+      actorId
+    );
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+    return NextResponse.json({ ok: true, limite: result.limite });
   }
 
   if (action === "set_bloqueado") {

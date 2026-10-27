@@ -16,7 +16,7 @@ export type CooperadoBottomTabHref =
   | "/minha-conta-coop";
 
 export function cooperadoBottomTabHrefs(): readonly string[] {
-  if (isV2HbOnlyClient()) return ["/minha-conta-coop"];
+  if (isV2HbOnlyClient()) return ["/dashboard", "/minha-conta-coop"];
   return COOPERADO_BOTTOM_TAB_HREFS_LEGACY;
 }
 

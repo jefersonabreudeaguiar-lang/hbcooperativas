@@ -362,11 +362,13 @@ const COOPERADO_DRAWER_MENU: { href: string; label: string; resource: Resource }
 ];
 
 const V2_COOPERADO_MENU: { href: string; label: string; resource: Resource }[] = [
+  { href: "/dashboard", label: "Início", resource: "dashboard" },
   { href: "/minha-conta-coop", label: "HB Créditos", resource: "conta_coop" },
   { href: "/meu-cadastro", label: "Meu cadastro", resource: "dashboard" },
 ];
 
 const V2_COOPERADO_DRAWER_MENU: { href: string; label: string; resource: Resource }[] = [
+  { href: "/dashboard", label: "Início", resource: "dashboard" },
   { href: "/minha-conta-coop", label: "HB Créditos", resource: "conta_coop" },
   { href: "/meu-cadastro", label: "Meu cadastro", resource: "dashboard" },
   { href: "/baixar-app", label: "Baixar aplicativo", resource: "dashboard" },

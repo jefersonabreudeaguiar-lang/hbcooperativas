@@ -12,7 +12,7 @@ export function isV2HbOnlyClient(): boolean {
 export function resolveAppHomePath(role: string, fallback = "/dashboard"): string {
   if (!isV2HbOnlyClient()) return fallback;
   const r = String(role).trim().toLowerCase();
-  if (r === "cooperado") return "/minha-conta-coop";
+  if (r === "cooperado") return "/dashboard";
   if (r === "parceiro") return "/mercado-parceiro";
   if (r === "responsavel" || r === "tesoureiro") return "/conta-coop";
   return fallback;

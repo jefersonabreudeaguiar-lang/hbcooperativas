@@ -226,6 +226,26 @@ export async function resetMercadoFinancialPin(cnpj: string, parceiroId: string)
   return data;
 }
 
+export async function postManualValorBrutoCooperado(
+  cnpj: string,
+  cooperadoId: string,
+  manualValorBrutoCents: number | null
+) {
+  const res = await secureApiFetch("/api/credit/limites", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "set_manual_valor_bruto",
+      cnpj,
+      cooperadoId,
+      manualValorBrutoCents,
+    }),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string; limite?: ContaCoopLimiteCooperado }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Não foi possível salvar o valor bruto.");
+  return data;
+}
+
 export async function resetCooperadoFinancialPin(cnpj: string, cooperadoId: string) {
   const res = await secureApiFetch("/api/credit/limites", {
     method: "POST",

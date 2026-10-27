@@ -57,6 +57,7 @@ import {
 import { CooperadoMensalidadesPagarPanel } from "@/components/cooperado/CooperadoMensalidadesPagarPanel";
 import { ValoresAvulsosDashboardCard } from "@/components/ficha/ValoresAvulsosReceberPanel";
 import { V2HbOnlyDashboardRedirect } from "@/components/product/V2HbOnlyDashboardRedirect";
+import { isV2HbOnlyClient } from "@/lib/product/v2HbOnly";
 import { getAdminStatsCached } from "@/services/dashboardService";
 import { requestAdminStatsFromWorker } from "@/services/adminStatsWorkerClient";
 import { isRqlAdminStatsWorkerEnabled } from "@/lib/performance/rqlAdminStats85";
@@ -390,9 +391,11 @@ function CooperadoDashboardMain() {
 
   /** Modo mensageiro: HB só no runSync (Atualizar) — sem pilot periódico na UI. */
   useSyncContaCoopValorReceberPilot(
-    contaCoopSync && (cooperadoMotorAoVivo || (!messenger && !inicioSnapshotFirst))
-      ? { ...contaCoopSync, user, initialDelayMs: 3_000 }
-      : undefined
+    isV2HbOnlyClient()
+      ? undefined
+      : contaCoopSync && (cooperadoMotorAoVivo || (!messenger && !inicioSnapshotFirst))
+        ? { ...contaCoopSync, user, initialDelayMs: 3_000 }
+        : undefined
   );
 
   const inicioCardCtx = fluxo.cooperadoId
