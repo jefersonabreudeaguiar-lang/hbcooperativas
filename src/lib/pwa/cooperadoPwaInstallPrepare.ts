@@ -66,12 +66,12 @@ export async function prepareBrowserProfileForPwaInstall(
   );
   const htmlStale = pageBuild > 0 && cloudBuild > pageBuild;
   const profileStale = seen > 0 && seen !== cloudBuild;
-  const onLoginCanonical = mode === "login-canonical";
-  const needsPurge =
-    mode === "install" ||
-    htmlStale ||
-    profileStale ||
-    (!onLoginCanonical && (!repairOk || seen === 0));
+  if (mode === "login-canonical") {
+    markPwaRepairSessionForBuild(cloudBuild);
+    return;
+  }
+
+  const needsPurge = mode === "install" || htmlStale || profileStale || !repairOk || seen === 0;
 
   if (needsPurge) {
     await clearClientRuntimeCaches();

@@ -24,6 +24,10 @@ assert.match(ack, /hb-pwa=/, "ack de reparo no login antes do guard");
 
 const layout = read("src/app/layout.tsx");
 assert.match(layout, /buildInlinePwaLoginHbPwaRepairAckScript/, "layout ack antes do guard");
+assert.match(layout, /buildInlinePwaBrowserDetachServiceWorkerScript/, "layout detach SW no browser");
+
+const loginPage = read("src/app/login/page.tsx");
+assert.doesNotMatch(loginPage, /repairBrowserProfileIfStale/, "login sem purge/reload automático");
 
 const manifest = buildWebAppManifest();
 assert.ok(manifest.start_url.includes("/login") && manifest.start_url.includes("hb-pwa="), "manifest start_url login direto");

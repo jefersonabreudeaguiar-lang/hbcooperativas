@@ -13,9 +13,8 @@ import { Input, Label } from "@/components/ui/Form";
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AVISO_ACESSO_AUTOMATIZADO_RESUMO } from "@/config/politicaAcessoAutomatizado";
 import { isBicLabEnabledClient } from "@/lib/lab/bicLabGate";
-import { repairBrowserProfileIfStale } from "@/lib/pwa/browserProfileRepair";
 import { ensureCooperadoLoginSearchParams } from "@/lib/cooperado/cooperadoCanonicalEntryUrl";
-import { prepareBrowserProfileForPwaInstall } from "@/lib/pwa/cooperadoPwaInstallPrepare";
+import { markPwaRepairSessionForBuild } from "@/lib/pwa/cooperadoPwaInstallPrepare";
 import { shouldShowBaixarAppInstallPromo } from "@/lib/pwa/baixarAppInstallPromo";
 import { PwaRepararAtalhoPanel } from "@/components/pwa/PwaRepararAtalhoPanel";
 import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
@@ -106,9 +105,9 @@ function LoginForm() {
       router.replace(`/login?${params.toString()}`);
       return;
     }
-    void repairBrowserProfileIfStale({ includeStandalone: true }).then((reloaded) => {
-      if (!reloaded) void prepareBrowserProfileForPwaInstall("login-canonical");
-    });
+    if (params.has("hb-pwa")) {
+      markPwaRepairSessionForBuild();
+    }
   }, [router, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {

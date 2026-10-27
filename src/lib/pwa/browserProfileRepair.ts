@@ -41,6 +41,12 @@ export async function repairBrowserProfileIfStale(
   options?: RepairBrowserProfileOptions
 ): Promise<boolean> {
   if (typeof window === "undefined") return false;
+  try {
+    const path = (window.location.pathname || "").toLowerCase();
+    if (path === "/login" || path === "/") return false;
+  } catch {
+    /* ignore */
+  }
   const standalone = window.matchMedia("(display-mode: standalone)").matches;
   if (standalone && !options?.includeStandalone) return false;
   /** WebAPK: nunca hard-reload automático no login (GuestRoute marca reparo no ícone). */

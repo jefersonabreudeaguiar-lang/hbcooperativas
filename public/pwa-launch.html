@@ -71,6 +71,17 @@
           return target;
         }
 
+        function detachBrowserSw() {
+          if (!("serviceWorker" in navigator)) return Promise.resolve();
+          return navigator.serviceWorker.getRegistrations().then(function (regs) {
+            return Promise.all(
+              regs.map(function (r) {
+                return r.unregister();
+              })
+            );
+          });
+        }
+
         function go(pageBuild, target) {
           try {
             if (target.indexOf("/login") < 0) {
@@ -84,7 +95,11 @@
           } catch (e) {
             /* ignore */
           }
-          location.replace(target);
+          detachBrowserSw()
+            .catch(function () {})
+            .finally(function () {
+              location.replace(target);
+            });
         }
 
         function goWithRetry(pageBuild, target, attempt) {
