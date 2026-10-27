@@ -84,7 +84,7 @@ import {
   updateDataSafe,
   waitForAppDataWarm,
 } from "@/services/dataStore";
-import { readAppDataPersistRaw } from "@/lib/staff/staffGestaoPersistKey";
+import { readAppDataPersistRaw } from "@/lib/staff/appDataPersistIo";
 import {
   ensureCloudSessionReady,
   getLastCloudSyncError,

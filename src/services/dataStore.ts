@@ -24,7 +24,7 @@ import {
   readAppDataPersistRaw,
   removeAppDataPersistRaw,
   writeAppDataPersistRaw,
-} from "@/lib/staff/staffGestaoPersistKey";
+} from "@/lib/staff/appDataPersistIo";
 import {
   shouldAdoptStaffPersistHint,
   shouldFlushAppDataMemoryOnTenantChange,

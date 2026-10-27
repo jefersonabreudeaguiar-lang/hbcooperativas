@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { getData, isAppDataWarm, refreshData, subscribe, updateData } from "@/services/dataStore";
-import { readAppDataPersistRaw } from "@/lib/staff/staffGestaoPersistKey";
+import { readAppDataPersistRaw } from "@/lib/staff/appDataPersistIo";
 import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewport";
 import {
   medirRiquezaStaffGestao,

@@ -98,6 +98,7 @@ removeAppDataPersistRaw({ role: "responsavel", cnpj: "", storage: staffSemCnpj }
 assert.ok(staffSemCnpj.getItem(APP_DATA_STORAGE_KEY)?.includes("Orlando"), "sem CNPJ não apaga o cooperado");
 
 const store = readFileSync(join(import.meta.dirname ?? __dirname, "../src/services/dataStore.ts"), "utf8");
+assert.match(store, /appDataPersistIo/);
 assert.match(store, /readAppDataPersistRaw/);
 assert.match(store, /writeAppDataPersistRaw/);
 assert.match(store, /isAppDataPersistStorageKey/);
