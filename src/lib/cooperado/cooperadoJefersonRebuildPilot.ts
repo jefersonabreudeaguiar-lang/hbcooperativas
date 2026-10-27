@@ -4,8 +4,11 @@ import {
   isCooperadoMobilePilot,
 } from "@/lib/cooperado/cooperadoMobilePilot";
 
-/** Liga reconstrução incremental — só afeta Jeferson quando `true`. */
-export const COOPERADO_JEFERSON_REBUILD_MODE_ON = true;
+/**
+ * Liga reconstrução incremental — só afeta Jeferson quando `true`.
+ * **Desligado (2026-10-26):** Jeferson volta ao app cooperado GA normal; código rebuild permanece para estratégia futura.
+ */
+export const COOPERADO_JEFERSON_REBUILD_MODE_ON = false;
 
 export type CooperadoJefersonRebuildTab = "inicio" | "entregas" | "precos" | "financeiro";
 

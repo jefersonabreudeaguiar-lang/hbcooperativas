@@ -1,5 +1,7 @@
 # Cooperado v1 — reconstrução incremental (piloto Jeferson)
 
+> **Status (build ≥706):** `COOPERADO_JEFERSON_REBUILD_MODE_ON = false` — Jeferson usa o **app cooperado GA** (mesmo fluxo que Orlando). Plano pausado; código/API piloto ficam no repo para outra estratégia.
+
 **Objetivo:** manter **mesma UI/UX** (header, abas inferiores, cards, cores, rotas `/dashboard`, `/notas-pedido`, `/precos`, `/ficha-corrida`). Trocar só a **lógica por baixo**, aba a aba, sem apagar dados na nuvem.
 
 **Fase 0 (build ≥703):** casca zerada nas abas ainda não refeitas.
