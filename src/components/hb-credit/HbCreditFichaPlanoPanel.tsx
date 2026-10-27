@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Form";
@@ -14,8 +14,16 @@ import {
   formatCentsInputReais,
   parseReaisToCentsInput,
   HB_FICHA_PLANO_EMPTY,
+  somaEntregasPlanoCents,
 } from "@/lib/hb-credit/hbCreditFichaPlano";
+import { HB_FICHA_PLANO_UPDATED_EVENT } from "@/lib/hb-credit/hbCreditFichaPlanoEvents";
 import { fetchHbCreditFichaPlano, saveHbCreditFichaPlano } from "@/services/creditApiService";
+import { HbCreditEntregaReaisInput } from "@/components/hb-credit/HbCreditEntregaReaisInput";
+import {
+  notifyHbCreditAccountCacheUpdated,
+  notifyHbCreditLimiteSynced,
+} from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import { notifyHbFichaPlanoUpdated } from "@/lib/hb-credit/hbCreditFichaPlanoEvents";
 import { generateId } from "@/services/dataStore";
 import { formatDate } from "@/utils/format";
 
@@ -45,6 +53,16 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const planoLiveRef = useRef(plano);
+  planoLiveRef.current = plano;
+
+  const patchPlano = useCallback((patch: Partial<HbCreditFichaPlano>) => {
+    setPlano((p) => {
+      const next = { ...p, ...patch };
+      planoLiveRef.current = next;
+      return next;
+    });
+  }, []);
 
   const reload = useCallback(async () => {
     if (cnpj.length !== 14 || !cooperadoId) return;
@@ -52,6 +70,7 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
     setError("");
     try {
       const p = await fetchHbCreditFichaPlano(cnpj, cooperadoId);
+      planoLiveRef.current = p;
       setPlano(p);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar ficha HB.");
@@ -64,13 +83,18 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
     void reload();
   }, [reload]);
 
+  useEffect(() => {
+    const onUpdated = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ cooperadoId?: string }>).detail;
+      if (detail?.cooperadoId && detail.cooperadoId !== cooperadoId) return;
+      void reload();
+    };
+    window.addEventListener(HB_FICHA_PLANO_UPDATED_EVENT, onUpdated);
+    return () => window.removeEventListener(HB_FICHA_PLANO_UPDATED_EVENT, onUpdated);
+  }, [cooperadoId, reload]);
+
   const brutoCents = useMemo(() => brutoFichaPlanoCents(plano), [plano]);
   const brutoReais = useMemo(() => brutoFichaPlanoReais(plano), [plano]);
-
-  const setEntrega = (key: keyof HbCreditFichaPlano, raw: string) => {
-    if (mode !== "edit") return;
-    setPlano((p) => ({ ...p, [key]: parseReaisToCentsInput(raw) }));
-  };
 
   const addMensalidade = () => {
     if (mode !== "edit") return;
@@ -80,20 +104,23 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
       dataCobranca: new Date().toISOString().slice(0, 10),
       valorCents: 0,
     };
-    setPlano((p) => ({ ...p, mensalidades: [...(p.mensalidades ?? []), m] }));
+    patchPlano({ mensalidades: [...(planoLiveRef.current.mensalidades ?? []), m] });
   };
 
   const updateMensalidade = (id: string, patch: Partial<HbCreditMensalidadePlano>) => {
     if (mode !== "edit") return;
-    setPlano((p) => ({
-      ...p,
-      mensalidades: (p.mensalidades ?? []).map((m) => (m.id === id ? { ...m, ...patch } : m)),
-    }));
+    patchPlano({
+      mensalidades: (planoLiveRef.current.mensalidades ?? []).map((m) =>
+        m.id === id ? { ...m, ...patch } : m
+      ),
+    });
   };
 
   const removeMensalidade = (id: string) => {
     if (mode !== "edit") return;
-    setPlano((p) => ({ ...p, mensalidades: (p.mensalidades ?? []).filter((m) => m.id !== id) }));
+    patchPlano({
+      mensalidades: (planoLiveRef.current.mensalidades ?? []).filter((m) => m.id !== id),
+    });
   };
 
   const salvar = async () => {
@@ -101,8 +128,20 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
     setError("");
     setSuccess("");
     try {
-      await saveHbCreditFichaPlano(cnpj, { ...plano, cooperadoId });
-      setSuccess("Ficha salva. Valor bruto HB e limites usam só este bruto.");
+      if (typeof document !== "undefined") {
+        (document.activeElement as HTMLElement | null)?.blur?.();
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      const toSave = { ...planoLiveRef.current, cooperadoId };
+      const { limiteWarning } = await saveHbCreditFichaPlano(cnpj, toSave);
+      notifyHbFichaPlanoUpdated(cooperadoId);
+      notifyHbCreditLimiteSynced({ immediate: true });
+      notifyHbCreditAccountCacheUpdated();
+      setSuccess(
+        limiteWarning
+          ? `Ficha salva na nuvem. ${limiteWarning}`
+          : "Ficha salva. Limite HB liberado e visível para o cooperado."
+      );
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar.");
@@ -131,21 +170,44 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
           Sem peso — só valores lançados pelo responsável. O bruto da ficha HB é a soma das entregas 1 a 5 menos o
           desconto %.
         </p>
+        {mode === "readonly" ? (
+          <div className="mb-4 overflow-x-auto rounded-lg border border-gray-200">
+            <table className="w-full min-w-[280px] text-sm">
+              <thead className="bg-gray-50 text-left text-gray-600">
+                <tr>
+                  <th className="p-3">Entrega</th>
+                  <th className="p-3 text-right">Valor (R$)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ENTREGA_KEYS.map(({ key, label }) => (
+                  <tr key={key} className="border-t border-gray-100">
+                    <td className="p-3 font-medium text-gray-900">{label}</td>
+                    <td className="p-3 text-right font-semibold text-green-800">
+                      {formatCentsBRL(plano[key] as number)}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="border-t bg-gray-50/80">
+                  <td className="p-3 text-gray-600">Soma entregas</td>
+                  <td className="p-3 text-right font-medium">{formatCentsBRL(somaEntregasPlanoCents(plano))}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {ENTREGA_KEYS.map(({ key, label }) => (
             <div key={key}>
               <Label>{label}</Label>
               {mode === "edit" ? (
-                <Input
-                  className="mt-1"
-                  inputMode="decimal"
-                  value={formatCentsInputReais(plano[key] as number)}
-                  onChange={(e) => setEntrega(key, e.target.value)}
-                  placeholder="0,00"
+                <HbCreditEntregaReaisInput
+                  cents={plano[key] as number}
+                  disabled={busy}
+                  onCommit={(c) => patchPlano({ [key]: c })}
                 />
-              ) : (
-                <p className="mt-1 font-medium">{formatCentsBRL(plano[key] as number)}</p>
-              )}
+              ) : null}
             </div>
           ))}
           <div>
@@ -156,10 +218,12 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
                 inputMode="decimal"
                 value={String(plano.descontoPercent ?? 0)}
                 onChange={(e) =>
-                  setPlano((p) => ({
-                    ...p,
-                    descontoPercent: Math.min(100, Math.max(0, Number(e.target.value.replace(",", ".")) || 0)),
-                  }))
+                  patchPlano({
+                    descontoPercent: Math.min(
+                      100,
+                      Math.max(0, Number(e.target.value.replace(",", ".")) || 0)
+                    ),
+                  })
                 }
               />
             ) : (
@@ -209,11 +273,10 @@ export function HbCreditFichaPlanoPanel({ cnpj, cooperadoId, cooperadoNome, mode
                     </div>
                     <div>
                       <Label>Valor (R$)</Label>
-                      <Input
-                        className="mt-1 w-28"
-                        inputMode="decimal"
-                        value={formatCentsInputReais(m.valorCents)}
-                        onChange={(e) => updateMensalidade(m.id, { valorCents: parseReaisToCentsInput(e.target.value) })}
+                      <HbCreditEntregaReaisInput
+                        cents={m.valorCents}
+                        disabled={busy}
+                        onCommit={(c) => updateMensalidade(m.id, { valorCents: c })}
                       />
                     </div>
                     <Button size="sm" variant="secondary" onClick={() => removeMensalidade(m.id)} disabled={busy}>

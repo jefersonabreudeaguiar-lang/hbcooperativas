@@ -241,9 +241,14 @@ export async function saveHbCreditFichaPlano(cnpj: string, plano: HbCreditFichaP
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ cnpj, cooperadoId: plano.cooperadoId, plano }),
   });
-  const data = await parseJson<{ ok?: boolean; error?: string; plano?: HbCreditFichaPlano }>(res);
+  const data = await parseJson<{
+    ok?: boolean;
+    error?: string;
+    plano?: HbCreditFichaPlano;
+    limiteWarning?: string | null;
+  }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Não foi possível salvar a ficha.");
-  return data.plano ?? plano;
+  return { plano: data.plano ?? plano, limiteWarning: data.limiteWarning ?? undefined };
 }
 
 export async function postManualValorBrutoCooperado(

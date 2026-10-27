@@ -9,6 +9,7 @@ import {
   HB_CREDIT_LIMITE_SYNCED_EVENT,
 } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import { hbCreditCooperadoInicioV2Totais } from "@/lib/hb-credit/hbCreditCooperadoInicioV2";
+import { HB_FICHA_PLANO_UPDATED_EVENT } from "@/lib/hb-credit/hbCreditFichaPlanoEvents";
 import { fetchCreditAccount } from "@/services/creditApiService";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
@@ -77,10 +78,12 @@ export function useHbV2InicioValorReceberCard(opts: {
     window.addEventListener(HB_A_RECEBER_HIBRIDO_EVENT, onRefresh);
     window.addEventListener(HB_CREDIT_ACCOUNT_CACHE_EVENT, onRefresh);
     window.addEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onRefresh);
+    window.addEventListener(HB_FICHA_PLANO_UPDATED_EVENT, onRefresh);
     return () => {
       window.removeEventListener(HB_A_RECEBER_HIBRIDO_EVENT, onRefresh);
       window.removeEventListener(HB_CREDIT_ACCOUNT_CACHE_EVENT, onRefresh);
       window.removeEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onRefresh);
+      window.removeEventListener(HB_FICHA_PLANO_UPDATED_EVENT, onRefresh);
     };
   }, [reload]);
 

@@ -62,5 +62,9 @@ export async function POST(request: Request) {
   const actorId = gate.ctx.session?.sub ?? "staff";
   const saved = await saveFichaPlanoCooperado(gate.ctx.supabase, cnpj, { ...plano, cooperadoId }, actorId);
   if (!saved.ok) return NextResponse.json({ error: saved.error }, { status: 400 });
-  return NextResponse.json({ ok: true, plano: saved.plano });
+  return NextResponse.json({
+    ok: true,
+    plano: saved.plano,
+    limiteWarning: saved.limiteWarning ?? null,
+  });
 }

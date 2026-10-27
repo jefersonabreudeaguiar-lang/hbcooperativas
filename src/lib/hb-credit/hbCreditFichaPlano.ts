@@ -62,17 +62,38 @@ export function brutoFichaPlanoReais(plano: Pick<HbCreditFichaPlano, keyof typeo
   return round2(brutoFichaPlanoCents(plano) / 100);
 }
 
+/** Aceita 1500, 1.500,50, 1500,50 — até 999.999,99 (centavos em bigint seguro). */
 export function parseReaisToCentsInput(raw: string): number {
-  const cleaned = raw.trim().replace(/\./g, "").replace(",", ".");
-  if (!cleaned) return 0;
-  const n = Number(cleaned);
+  const t = raw.trim();
+  if (!t) return 0;
+  const hasComma = t.includes(",");
+  const hasDot = t.includes(".");
+  let normalized = t;
+  if (hasComma) {
+    normalized = t.replace(/\./g, "").replace(",", ".");
+  } else if (hasDot) {
+    const parts = t.split(".");
+    if (parts.length === 2 && (parts[1]?.length ?? 0) <= 2) {
+      normalized = parts.join(".");
+    } else {
+      normalized = t.replace(/\./g, "");
+    }
+  }
+  const n = Number(normalized);
   if (!Number.isFinite(n) || n < 0) return 0;
-  return Math.round(n * 100);
+  const cents = Math.round(n * 100);
+  const max = 99_999_999_99;
+  return Math.min(max, cents);
 }
 
 export function formatCentsInputReais(cents: number): string {
   if (!cents) return "";
   return (cents / 100).toFixed(2).replace(".", ",");
+}
+
+export function reaisDraftFromCents(cents: number): string {
+  if (!cents) return "";
+  return formatCentsInputReais(cents);
 }
 
 /** Mensalidades com data de cobrança vencida e ainda não cobradas. */

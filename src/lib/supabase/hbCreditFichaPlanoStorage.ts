@@ -7,7 +7,10 @@ import {
   brutoFichaPlanoCents,
   mensalidadesPendentesPlano,
 } from "@/lib/hb-credit/hbCreditFichaPlano";
-import { setManualValorBrutoCooperado } from "@/lib/supabase/contaCoopStorage";
+import {
+  setManualValorBrutoCooperado,
+  syncLimiteCooperadoFromCreditoBase,
+} from "@/lib/supabase/contaCoopStorage";
 
 function mapRow(row: Record<string, unknown>): HbCreditFichaPlano {
   const mensalidadesRaw = row.mensalidades;
@@ -63,7 +66,10 @@ export async function saveFichaPlanoCooperado(
   cnpj: string,
   plano: HbCreditFichaPlano,
   actorUserId: string
-): Promise<{ ok: true; plano: HbCreditFichaPlano } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; plano: HbCreditFichaPlano; limiteWarning?: string }
+  | { ok: false; error: string }
+> {
   const digits = normalizeCnpj(cnpj);
   const now = new Date().toISOString();
   const patch = {
@@ -106,7 +112,28 @@ export async function saveFichaPlanoCooperado(
     return { ok: false, error: manual.error };
   }
 
-  return { ok: true, plano: { ...plano, updatedAt: now } };
+  let limiteWarning: string | undefined;
+  if (bruto > 0) {
+    const sync = await syncLimiteCooperadoFromCreditoBase(
+      supabase,
+      digits,
+      plano.cooperadoId,
+      bruto,
+      actorUserId,
+      { [plano.cooperadoId]: bruto }
+    );
+    if (!sync.ok) {
+      limiteWarning =
+        sync.error ||
+        "Ficha salva, mas o limite HB não foi liberado — configure o percentual em HB Créditos → Limites.";
+    }
+  }
+
+  return {
+    ok: true,
+    plano: { ...plano, updatedAt: now },
+    limiteWarning,
+  };
 }
 
 /** Após compra HB: incrementa entregas e cobra mensalidades vencidas (amount_used). */
