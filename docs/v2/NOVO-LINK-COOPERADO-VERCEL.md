@@ -1,5 +1,7 @@
 # Novo link V2 para cooperados (evitar “This page couldn’t load”)
 
+> **Produto V2 no app oficial:** use **https://hbcooperativas.vercel.app** — ver [APP-OFICIAL.md](./APP-OFICIAL.md). Este guia é **opcional** (segundo domínio só para cache/WebAPK).
+
 ## Por quê um link novo?
 
 O erro **“This page couldn’t load”** no ícone Android vem de **WebAPK + cache** preso ao domínio antigo (`hbcooperativas.vercel.app`), não de perda de dados HB. Um **domínio novo** na Vercel = perfil de site limpo + PWA novo.
@@ -46,8 +48,8 @@ npx tsx scripts/confirm-production-deploy.ts --url https://hbcooperativas-v2.ver
 
 ## Oficial vs V2
 
-| | Domínio antigo | Domínio V2 (novo) |
-|--|----------------|-------------------|
-| Cooperado PWA | Cache legado | Recomendado |
-| `V2_HB_ONLY` | Pode estar ligado no mesmo domínio | Sempre `1` |
+| | App oficial (`hbcooperativas.vercel.app`) | Domínio extra (opcional) |
+|--|---------------------------------------------|---------------------------|
+| Produto V2 HB | **Sim** — `NEXT_PUBLIC_V2_HB_ONLY=1` no `vercel.json` | Mesmo código, outro domínio |
+| Cooperado PWA com cache ruim | Reparar atalho / hard refresh | Ícone novo em domínio limpo |
 | Dados HB / login | Mesmo Supabase | Mesmo Supabase |

@@ -10,6 +10,7 @@ import { AppIdleSecondaryBootstraps } from "@/components/performance/AppIdleSeco
 
 import { GestaoAccessGuard } from "@/components/permissions/GestaoAccessGuard";
 import { AppAreaSafeRoot } from "@/components/responsavel/AppAreaSafeRoot";
+import { V2HbOnlyRouteGuard } from "@/components/product/V2HbOnlyRouteGuard";
 
 /** Reforço noindex — área autenticada (cooperado, mercado, responsável). */
 export const metadata: Metadata = {
@@ -26,7 +27,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <GestaoAccessGuard>
           <AppAreaSafeRoot>
             <AppShell>
-              <CooperadoFinanceiroGate>{children}</CooperadoFinanceiroGate>
+              <V2HbOnlyRouteGuard>
+                <CooperadoFinanceiroGate>{children}</CooperadoFinanceiroGate>
+              </V2HbOnlyRouteGuard>
             </AppShell>
           </AppAreaSafeRoot>
         </GestaoAccessGuard>
