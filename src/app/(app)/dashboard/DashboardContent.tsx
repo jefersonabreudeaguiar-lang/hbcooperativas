@@ -152,6 +152,7 @@ import {
 import { isCooperadoAppUser } from "@/permissions";
 import { getSession } from "@/services/dataStore";
 import { cooperadoGaInicioSomenteCasca, isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 import {
   isCooperadoJefersonRebuildInicioAtivo,
   shouldRenderCooperadoJefersonRebuildShell,
@@ -258,6 +259,7 @@ function CooperadoDashboardMain() {
 
   useEffect(() => {
     if (!user || user.role !== "cooperado") return;
+    if (isCooperadoJefersonSomenteAtualizarPilot(user)) return;
     const runBackground = () => {
       if (!isAppDataWarm()) preloadAppData();
       if (!gaInicioSomenteCasca) {
@@ -350,12 +352,14 @@ function CooperadoDashboardMain() {
 
   useEffect(() => {
     if (messenger || isCooperadoManualOperacionalSync()) return;
+    if (user && isCooperadoJefersonSomenteAtualizarPilot(user)) return;
     if (!user?.cooperadoId || typeof navigator === "undefined" || !navigator.onLine) return;
     if (shouldSkipCooperadoSecondaryMountSync()) return;
     requestVotacaoOperacionalSync();
-  }, [messenger, user?.id, user?.cooperadoId]);
+  }, [messenger, user?.id, user?.cooperadoId, user]);
 
   useEffect(() => {
+    if (user && isCooperadoJefersonSomenteAtualizarPilot(user)) return;
     if (
       !financeiroAusente ||
       recoverySyncRef.current ||
@@ -370,7 +374,7 @@ function CooperadoDashboardMain() {
     recoverySyncRef.current = true;
     requestCooperadoFinanceiroRecoverySync();
     scheduleCooperadoGaPrimeiraCargaSilenciosa(user ?? undefined);
-  }, [financeiroAusente, user?.id, user?.role]);
+  }, [financeiroAusente, user?.id, user?.role, user]);
 
   const contaCoopSync = useAppDataSelectorForDomainsWhenActive(
     appDataUiOn && hbCredit.navEnabled,

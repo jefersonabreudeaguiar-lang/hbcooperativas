@@ -31,6 +31,7 @@ import { persistirHbCreditAccountCooperado } from "@/services/hbCreditAccountPer
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm, waitForAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
+import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 
 const SESSION_PREFIX = "hb.coop.silentReleaseBootstrap.v1";
 
@@ -118,6 +119,7 @@ export function scheduleCooperadoSilentReleaseBootstrap(
   clientBuild: number
 ): void {
   if (!user || user.role !== "cooperado" || !user.id) return;
+  if (isCooperadoJefersonSomenteAtualizarPilot(user)) return;
   const effective = policy ?? embeddedCooperadoReleasePolicy();
   if (cooperadoPostDeployAckMatches(clientBuild, effective.releaseEpoch)) {
     if (cooperadoGaExibicaoFinanceiraConfiavel(user) || cooperadoLiquidadoPeloResponsavel(user)) {
@@ -180,6 +182,7 @@ export function scheduleCooperadoPostDeployMaterializeOnSync(
   policy: CooperadoReleasePolicy | null
 ): void {
   if (!user || user.role !== "cooperado") return;
+  if (isCooperadoJefersonSomenteAtualizarPilot(user)) return;
   const effective = policy ?? embeddedCooperadoReleasePolicy();
   if (
     cooperadoPostDeployAckMatches(APP_BUILD_VERSION, effective.releaseEpoch) &&

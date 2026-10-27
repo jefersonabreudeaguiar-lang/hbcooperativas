@@ -26,6 +26,7 @@ import {
   requestSyncTier,
 } from "@/services/syncRequest";
 import { scheduleEmpacotarModeloAparelhoJeferson } from "@/lib/cooperado/cooperadoAparelhoJefersonPacote";
+import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 
 const BOOTSTRAP_SESSION_KEY = "hb.coop.gaColdBootstrap.v1";
 
@@ -106,6 +107,7 @@ export function scheduleCooperadoGaPrimeiraCargaSilenciosa(
   user: Omit<User, "password"> | null | undefined
 ): void {
   if (!user?.id || user.role !== "cooperado") return;
+  if (isCooperadoJefersonSomenteAtualizarPilot(user)) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   if (!cooperadoGaAparelhoPrecisaBootstrapNuvem(user)) return;
   if (bootstrapAlreadyScheduled(user.id)) return;

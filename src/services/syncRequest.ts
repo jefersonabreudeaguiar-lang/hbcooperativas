@@ -29,6 +29,10 @@ import {
 } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { cooperadoMobileSyncTrace } from "@/lib/cooperado/cooperadoMobileSyncTrace";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import {
+  cooperadoJefersonBloqueiaSyncAutomatico,
+  withCooperadoJefersonEntregaSyncPermitido,
+} from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 import { runCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/cooperadoGaBaseInformacoesFinanceirasSync";
 import { scheduleCooperadoGaValorRevisionLightSync } from "@/lib/cooperado/cooperadoGaRevisionLightSync";
 import { getSession } from "@/services/dataStore";
@@ -101,8 +105,11 @@ function cooperadoBloqueiaSyncOperacionalAutomatico(opts?: {
   userInitiated?: boolean;
   eventDriven?: boolean;
 }): boolean {
-  if (!isCooperadoManualOperacionalSync()) return false;
   const session = getSession();
+  if (session?.role === "cooperado" && cooperadoJefersonBloqueiaSyncAutomatico(session, opts)) {
+    return true;
+  }
+  if (!isCooperadoManualOperacionalSync()) return false;
   if (session?.role !== "cooperado") return false;
   if (opts?.userInitiated || opts?.eventDriven) return false;
   return !cooperadoOperacionalSyncPermitido();
@@ -265,6 +272,7 @@ export function requestCooperadoGaFinanceiroExibicaoRecoverySync(opts?: {
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   const session = getSession();
   if (!session || session.role !== "cooperado") return;
+  if (cooperadoJefersonBloqueiaSyncAutomatico(session, { eventDriven: true })) return;
   if (opts?.garantia) {
     if (cooperadoGaValorReceberExibicaoResolvida(session)) return;
   } else if (!cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(session)) {
@@ -290,6 +298,8 @@ export function requestCooperadoGaFinanceiroExibicaoRecoverySync(opts?: {
 
 /** Primeira carga / app novo — uma vez até ter ficha local. */
 export function requestCooperadoPrimeiraCargaSync(): void {
+  const session = getSession();
+  if (session && cooperadoJefersonBloqueiaSyncAutomatico(session, { eventDriven: true })) return;
   if (!isCooperadoEventDrivenSync()) return;
   grantCooperadoEventDrivenSync();
   markNextCooperadoSyncSilent();
@@ -299,6 +309,8 @@ export function requestCooperadoPrimeiraCargaSync(): void {
 /** Nova versão do app publicada — sync operacional única (todos os modos cooperado mobile). */
 export function requestCooperadoAppReleaseSync(): void {
   if (typeof window === "undefined") return;
+  const session = getSession();
+  if (session && cooperadoJefersonBloqueiaSyncAutomatico(session, { eventDriven: true })) return;
   if (!cooperadoAppReleaseNeedsOperacionalSync()) return;
   if (isCooperadoEventDrivenSync()) {
     grantCooperadoEventDrivenSync();
@@ -361,12 +373,14 @@ export function requestAppSync(): void {
 
 /** Cooperado concluiu envio de entrega — reconcilia fila e puxa status sem exigir «Atualizar». */
 export function requestCooperadoPostEntregaSync(): void {
-  grantCooperadoEventDrivenSync();
-  markNextCooperadoSyncSilent();
-  requestSyncTier("operacional_full", {
-    force: true,
-    immediate: true,
-    eventDriven: true,
+  withCooperadoJefersonEntregaSyncPermitido(() => {
+    grantCooperadoEventDrivenSync();
+    markNextCooperadoSyncSilent();
+    requestSyncTier("operacional_full", {
+      force: true,
+      immediate: true,
+      eventDriven: true,
+    });
   });
 }
 

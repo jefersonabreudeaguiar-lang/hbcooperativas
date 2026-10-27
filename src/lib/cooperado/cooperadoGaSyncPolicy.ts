@@ -4,6 +4,7 @@ import { cooperadoGaExibicaoFinanceiraAindaZerada } from "@/lib/cooperado/cooper
 import { cooperadoPostDeployQueueActive } from "@/lib/cooperado/cooperadoPostDeploySession";
 import { isPwaColdStartWindow } from "@/lib/pwa/clientRelease";
 import { getSession } from "@/services/dataStore";
+import { cooperadoJefersonBloqueiaSyncAutomatico } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 
 const PRIMEIRA_CARGA_KEY = "hb-cooperado-primeira-carga-pending";
 const FINANCE_EXIBICAO_SYNC_KEY = "hb-cooperado-ga-finance-exibicao-sync-pending";
@@ -75,6 +76,7 @@ export function cooperadoGaBloqueiaOperacionalFullAutomatico(opts?: {
   if (cooperadoPostDeployQueueActive()) return false;
   if (opts?.userInitiated) return false;
   const session = getSession();
+  if (session && cooperadoJefersonBloqueiaSyncAutomatico(session, opts)) return true;
   if (!session || session.role !== "cooperado" || !isCooperadoMobileGaPromoted(session)) {
     return false;
   }

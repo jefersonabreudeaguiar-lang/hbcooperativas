@@ -42,6 +42,7 @@ import {
   cooperadoBrowserDesktopBicPerfActive,
   cooperadoBrowserDesktopFinanceiroEstavel,
 } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
+import { cooperadoJefersonBloqueiaSyncAutomatico } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 
 const SESSION_KEY = "hb.coop.gaBaseInformacoesPull.v1";
 const MIN_INTERVAL_MS = 45_000;
@@ -110,6 +111,7 @@ export async function runCooperadoGaSyncBaseInformacoesFinanceiras(
 ): Promise<boolean> {
   if (typeof window === "undefined") return false;
   if (!user || user.role !== "cooperado" || !user.cooperadoId) return false;
+  if (cooperadoJefersonBloqueiaSyncAutomatico(user, opts)) return false;
   if (!isCooperadoMobileGaPromoted(user) && !isCooperadoMobileBicLeituraAuthority(user)) return false;
   if (cooperadoGaAberturaBloqueiaPullOperacionalNuvem(user, opts)) {
     const precisaFichaNuvem =

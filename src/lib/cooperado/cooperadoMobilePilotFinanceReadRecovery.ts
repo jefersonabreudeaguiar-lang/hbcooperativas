@@ -33,6 +33,7 @@ import {
   cooperadoBrowserDesktopFinanceiroEstavel,
 } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
 import { scheduleCooperadoBicHybridIdleTask } from "@/lib/cooperado/cooperadoBicHybridLight";
+import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 
 function pilotFinanceCtx(user: Omit<User, "password">) {
   if (!user.cooperadoId) return null;
@@ -83,6 +84,7 @@ export function cooperadoPilotForcarRematerializacaoFinanceira(
   user: Omit<User, "password"> | null | undefined
 ): void {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return;
+  if (isCooperadoJefersonSomenteAtualizarPilot(user)) return;
   if (cooperadoGaPausaTrabalhoFinanceiroPesado(user)) return;
 
   const run = () => {
@@ -143,6 +145,7 @@ export function scheduleCooperadoPilotFinanceReadRecovery(
   user: Omit<User, "password"> | null | undefined
 ): void {
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return;
+  if (isCooperadoJefersonSomenteAtualizarPilot(user)) return;
   if (
     cooperadoGaInicioSomenteCasca(user) &&
     cooperadoInicioAberturaQuiescenceActive()

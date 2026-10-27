@@ -15,6 +15,7 @@ import { preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
 import { cooperadoBrowserDesktopFinanceiroEstavel } from "@/lib/cooperado/cooperadoBrowserDesktopPerf";
 import { cooperadoGaInicioSomenteCasca } from "@/lib/cooperado/cooperadoMobilePilot";
 import { cooperadoInicioAberturaQuiescenceActive } from "@/lib/cooperado/cooperadoInicioAberturaQuiescence";
+import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 
 let warmupInFlight: Promise<void> | null = null;
 
@@ -52,6 +53,7 @@ export function cooperadoFinanceiroDisplayWarmupRanThisSession(userId: string): 
 export function scheduleCooperadoFinanceiroDisplayWarmup(
   user: Omit<User, "password"> | null | undefined
 ): void {
+  if (isCooperadoJefersonSomenteAtualizarPilot(user)) return;
   if (!cooperadoFinanceiroDisplayWarmupEligible(user) || !user?.id) return;
   if (financeWarmupAlreadyRanThisSession(user.id)) return;
   if (cooperadoBrowserDesktopFinanceiroEstavel(user)) {

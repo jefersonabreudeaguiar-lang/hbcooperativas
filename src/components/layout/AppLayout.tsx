@@ -94,6 +94,7 @@ import {
   shouldShowBaixarAppInCooperadoOverflowMenu,
   shouldShowBaixarAppInstallPromo,
 } from "@/lib/pwa/baixarAppInstallPromo";
+import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 
 const ICONS: Record<string, React.ReactNode> = {
   dashboard: <LayoutDashboard size={20} />,
@@ -286,6 +287,7 @@ export function MobileNav() {
   useEffect(() => {
     if (!navUser) return;
     if (isCooperadoAppUser(navUser)) {
+      if (isCooperadoJefersonSomenteAtualizarPilot(navUser)) return;
       scheduleCooperadoPinnedTabsEagerWarm(router);
       return scheduleCooperadoNavPrefetchEarly(router);
     }

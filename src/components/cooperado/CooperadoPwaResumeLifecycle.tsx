@@ -26,6 +26,7 @@ import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilo
 import { persistirCooperadoPwaEntregasResumosSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
 import { persistirInicioCardCooperadoNotificarPwaLeve } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { isAppDataWarm } from "@/services/dataStore";
+import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 
 /** Ao ir para segundo plano, grava snapshots — reabertura instantânea (estilo WhatsApp). */
 export function CooperadoPwaResumeLifecycle() {
@@ -38,6 +39,19 @@ export function CooperadoPwaResumeLifecycle() {
       (!isCooperadoPwaMobileLeveUi() && !cooperadoMobilePilotSnapshotFirstInicio(user))
     ) {
       return;
+    }
+
+    if (isCooperadoJefersonSomenteAtualizarPilot(user)) {
+      const flush = () => {
+        if (!isAppDataWarm()) return;
+        persistirInicioCardCooperadoNotificarPwaLeve(user);
+        persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, true);
+        persistirCooperadoPwaFichaResumoSnapshotFromUser(user, true);
+        persistirCooperadoPwaEntregasResumosSnapshotFromUser(user);
+      };
+      const onPageHide = () => flush();
+      window.addEventListener("pagehide", onPageHide);
+      return () => window.removeEventListener("pagehide", onPageHide);
     }
 
     if (cooperadoMobilePilotSnapshotFirstInicio(user)) {

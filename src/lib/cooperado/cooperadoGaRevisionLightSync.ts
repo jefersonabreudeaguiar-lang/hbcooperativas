@@ -12,6 +12,7 @@ import { runCooperadoGaSyncBaseInformacoesFinanceiras } from "@/lib/cooperado/co
 import { cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem } from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
 import { cooperadoMobileUiQuiescenceActive } from "@/lib/cooperado/cooperadoTabSwitchQuiescence";
 import { cooperadoGaPausaTrabalhoFinanceiroPesado } from "@/lib/cooperado/cooperadoGaPausaTrabalhoPesado";
+import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 
 /** Agrupa vários eventos de revisão sem enfileirar operacional_full. */
 const DEBOUNCE_MS = 2_000;
@@ -35,6 +36,7 @@ export function scheduleCooperadoGaValorRevisionLightSync(
   user: Omit<User, "password"> | null | undefined
 ): void {
   if (typeof window === "undefined") return;
+  if (isCooperadoJefersonSomenteAtualizarPilot(user)) return;
   if (!user || user.role !== "cooperado" || !isCooperadoMobileGaPromoted(user)) return;
 
   if (cooperadoMobileUiQuiescenceActive()) {

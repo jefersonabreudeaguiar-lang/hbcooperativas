@@ -91,6 +91,7 @@ import {
 } from "@/lib/cooperado/cooperadoTabSwitchQuiescence";
 import { scheduleCooperadoBicHybridIdleTask } from "@/lib/cooperado/cooperadoBicHybridLight";
 import { isCooperadoJefersonRebuildPilot } from "@/lib/cooperado/cooperadoJefersonRebuildPilot";
+import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 
 /** Após este tempo, o conteúdo pode seguir mesmo sem sync (shell já navegável). */
 const SYNC_HINT_MAX_MS = 18_000;
@@ -102,6 +103,8 @@ const SYNC_HINT_MAX_MS = 18_000;
 export function CooperadoFinanceiroGate({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const jefersonRebuild = isCooperadoJefersonRebuildPilot(user);
+  const jefersonSomenteAtualizar = isCooperadoJefersonSomenteAtualizarPilot(user);
+  const jefersonSemSyncAbertura = jefersonRebuild || jefersonSomenteAtualizar;
   const { syncingForUi, lastSyncedAt } = useSyncStatus();
   const [syncWaitExceeded, setSyncWaitExceeded] = useState(false);
   const dataReadyMarkedRef = useRef(false);
@@ -127,7 +130,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role, padraoJeferson]);
 
   useEffect(() => {
-    if (jefersonRebuild) return;
+    if (jefersonSemSyncAbertura) return;
     if (user?.role !== "cooperado" || !user.cooperadoId) return;
     if (!isCooperadoMobileGaPromoted(user)) return;
     scheduleCooperadoFinanceiroDisplayWarmup(user);
@@ -143,10 +146,10 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
       cancelCooperadoGarantiaValorReceberSync();
       cancelCooperadoBicMobileSessionSync();
     };
-  }, [jefersonRebuild, user?.id, user?.role, user?.cooperadoId]);
+  }, [jefersonSemSyncAbertura, user?.id, user?.role, user?.cooperadoId]);
 
   useEffect(() => {
-    if (jefersonRebuild) return;
+    if (jefersonSemSyncAbertura) return;
     if (user?.role !== "cooperado" || !user.cooperadoId) return;
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
 
@@ -262,7 +265,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     };
 
     scheduleCooperadoPostShellSync(runFinanceBootstrap);
-  }, [jefersonRebuild, user?.id, user?.cooperadoId, user?.role]);
+  }, [jefersonSemSyncAbertura, user?.id, user?.cooperadoId, user?.role]);
 
   const cooperadoAtivo = user?.role === "cooperado" && Boolean(user?.cooperadoId);
   const aguardandoSyncInicial =
@@ -331,13 +334,15 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     return <>{children}</>;
   }
 
-  if (jefersonRebuild) {
+  if (jefersonSemSyncAbertura) {
     return (
       <CooperadoFinanceiroShellProvider
         value={{
           aguardandoDadosFinanceiros: false,
           bloqueiaEntrada: false,
-          mensagemStatus: null,
+          mensagemStatus: jefersonSomenteAtualizar
+            ? "Valores na nuvem só ao tocar em Atualizar."
+            : null,
         }}
       >
         {children}

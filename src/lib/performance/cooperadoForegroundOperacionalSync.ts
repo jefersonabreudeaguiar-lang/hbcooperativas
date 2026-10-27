@@ -40,6 +40,7 @@ import type { CooperativaCloudRevision } from "@/lib/performance/cooperadoEventD
 import { resolveCooperadoForegroundStaleMs } from "@/lib/cooperado/cooperadoMobilePilotPerf";
 import { cooperadoGaDeferForegroundRevisionChecks } from "@/lib/cooperado/cooperadoGaSyncPolicy";
 import { isCooperadoMobileGaPromoted } from "@/lib/cooperado/cooperadoMobilePilot";
+import { cooperadoJefersonBloqueiaSyncAutomatico } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 import {
   cooperadoFinanceiroStaleRecuperavelEmBackground,
   cooperadoTemConferidaAguardandoFicha,
@@ -188,6 +189,9 @@ export async function runCooperadoForegroundOperacionalCheck(
   }
 ): Promise<boolean> {
   const session = getSession();
+  if (session?.role === "cooperado" && cooperadoJefersonBloqueiaSyncAutomatico(session)) {
+    return false;
+  }
   if (
     session?.role === "cooperado" &&
     cooperadoGaPausaTrabalhoFinanceiroPesado(session) &&

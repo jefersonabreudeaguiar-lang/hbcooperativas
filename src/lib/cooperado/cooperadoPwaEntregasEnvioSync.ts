@@ -6,10 +6,14 @@ import type { NotaPedido } from "@/types";
 import { isCooperadoPwaMobileEntregasSyncDeferUntilEnvio } from "@/lib/cooperado/cooperadoPwaMobileEntregas";
 import { grantCooperadoEventDrivenSync } from "@/lib/performance/cooperadoEventDrivenSync";
 import { scheduleCooperadoPilotPostEnvioSync } from "@/lib/cooperado/cooperadoMobilePilotPerfSync";
-import { getData, isAppDataWarm } from "@/services/dataStore";
+import { getData, isAppDataWarm, preloadAppData, waitForAppDataWarm } from "@/services/dataStore";
 import { resolveCooperativaCnpj, syncNotasPedidoFromCloud } from "@/services/notaPedidoCloudService";
 import { syncContratosFromCloud } from "@/services/cooperativaSyncCloudService";
-
+import { unlockCooperadoGaDataWarmForSession } from "@/lib/cooperado/cooperadoGaDataWarmDefer";
+import {
+  isCooperadoJefersonSomenteAtualizarPilot,
+  withCooperadoJefersonEntregaSyncPermitidoAsync,
+} from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 export type CooperadoPwaEnvioSyncReason = "anexar" | "submit";
 
 export type CooperadoPwaEnvioSyncResult = {
@@ -36,6 +40,7 @@ export async function ensureCooperadoNotasFreshForEnvio(
   coopId: string,
   opts?: { reason?: CooperadoPwaEnvioSyncReason; notaRejeitada?: NotaPedido }
 ): Promise<CooperadoPwaEnvioSyncResult> {
+  return withCooperadoJefersonEntregaSyncPermitidoAsync(async () => {
   if (!isCooperadoPwaMobileEntregasSyncDeferUntilEnvio()) return { ok: true };
   if (user.role !== "cooperado") return { ok: true };
   if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -47,7 +52,19 @@ export async function ensureCooperadoNotasFreshForEnvio(
 
   grantCooperadoEventDrivenSync();
   if (!isAppDataWarm()) {
-    return { ok: false, error: "Dados locais ainda carregando. Aguarde um instante e tente de novo." };
+    if (isCooperadoJefersonSomenteAtualizarPilot(user)) {
+      unlockCooperadoGaDataWarmForSession();
+      preloadAppData({ userInitiated: true, eager: true });
+      const warm = await waitForAppDataWarm(12_000);
+      if (!warm) {
+        return {
+          ok: false,
+          error: "Dados locais ainda carregando. Aguarde um instante e tente de novo.",
+        };
+      }
+    } else {
+      return { ok: false, error: "Dados locais ainda carregando. Aguarde um instante e tente de novo." };
+    }
   }
   const data = getData();
   if (!data) {
@@ -100,4 +117,5 @@ export async function ensureCooperadoNotasFreshForEnvio(
       error: "Não foi possível atualizar suas entregas. Verifique a internet e tente de novo.",
     };
   }
+  });
 }
