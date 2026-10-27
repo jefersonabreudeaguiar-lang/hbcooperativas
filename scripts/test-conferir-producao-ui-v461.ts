@@ -24,7 +24,7 @@ assert.match(
   "Chrome do responsável não dá hard-reload sozinho (só PWA) — v461"
 );
 const chunkGuard = read("src/lib/pwa/chunkDplAlignGuard.ts");
-assert.match(chunkGuard, /if\(!standalone\(\)\)return/, "chunk dpl não manda o browser para pwa-launch");
+assert.match(chunkGuard, /hbCoopNoteWebApkChunkMismatch/, "chunk dpl no ícone só marca mismatch");
 
 const staffApp = read("src/app/(app)/notas-pedido/staff/NotasPedidoStaffResponsavelApp.tsx");
 assert.doesNotMatch(staffApp, /StaffConferirProducaoBar/, "faixa Ao vivo produção saiu do Conferir");

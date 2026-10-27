@@ -49,8 +49,9 @@
 ## Fluxo padrão cooperado (produção)
 
 1. `https://hbcooperativas.vercel.app/login?hb-pwa=<build>`
-2. Ícone: `start_url` → `/pwa-launch.html` → limpeza → login.
-3. Problema: login → **Reparar atalho** ou `pwa-rescue.html?auto=1&next=/login?hb-pwa=<build>`.
+2. Ícone (build **726+**): `start_url` → **login direto** (sem `pwa-launch`).
+3. Ícone antigo: ainda pode usar `pwa-launch` (caminho rápido, sem purge) até reinstalar.
+4. **WebAPK:** guards **não** fazem purge/SW unregister automático (causa “This page couldn’t load”). Reparo manual: `pwa-rescue.html` ou `pwa-launch.html?purge=1`.
 
 ---
 

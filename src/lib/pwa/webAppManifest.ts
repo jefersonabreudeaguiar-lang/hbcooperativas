@@ -49,15 +49,15 @@ function originFromRequest(request?: Request): string {
 export function buildWebAppManifest(request?: Request): WebAppManifestJson {
   const origin = originFromRequest(request).replace(/\/$/, "");
   const icon192 = `${origin}/icons/icon-192.png`;
-  const launch = (nextPath: string) =>
-    `${origin}/pwa-launch.html?next=${encodeURIComponent(nextPath)}`;
+  const loginEntry = `${origin}${buildCooperadoLoginPath(APP_BUILD_VERSION)}`;
 
   return {
     id: `${origin}/`,
     name: "HB Cooperativas",
     short_name: "HB Coop",
     description: "Gestão de cooperativas — entregas, mensalidades e ficha corrida",
-    start_url: launch(buildCooperadoLoginPath(APP_BUILD_VERSION)),
+    /** Ícone novo: login direto — evita purge do pwa-launch no WebAPK. */
+    start_url: loginEntry,
     scope: `${origin}/`,
     display: "standalone",
     display_override: ["standalone", "minimal-ui"],
@@ -80,25 +80,25 @@ export function buildWebAppManifest(request?: Request): WebAppManifestJson {
       {
         name: "Início",
         short_name: "Início",
-        url: launch("/login?next=/dashboard"),
+        url: `${origin}/login?hb-pwa=${APP_BUILD_VERSION}&next=%2Fdashboard`,
         icons: [{ src: icon192, sizes: "192x192", type: "image/png" }],
       },
       {
         name: "Entregas",
         short_name: "Entregas",
-        url: launch("/login?next=/notas-pedido"),
+        url: `${origin}/login?hb-pwa=${APP_BUILD_VERSION}&next=%2Fnotas-pedido`,
         icons: [{ src: icon192, sizes: "192x192", type: "image/png" }],
       },
       {
         name: "Financeiro",
         short_name: "Financeiro",
-        url: launch("/login?next=/ficha-corrida"),
+        url: `${origin}/login?hb-pwa=${APP_BUILD_VERSION}&next=%2Fficha-corrida`,
         icons: [{ src: icon192, sizes: "192x192", type: "image/png" }],
       },
       {
         name: "Preços",
         short_name: "Preços",
-        url: launch("/login?next=/precos"),
+        url: `${origin}/login?hb-pwa=${APP_BUILD_VERSION}&next=%2Fprecos`,
         icons: [{ src: icon192, sizes: "192x192", type: "image/png" }],
       },
     ],
