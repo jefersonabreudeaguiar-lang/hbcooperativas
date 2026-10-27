@@ -46,6 +46,7 @@ import {
   scheduleCooperadoPostInteractiveTask,
 } from "@/lib/performance/cooperadoColdStart";
 import { cooperadoCooperadoEntregasLeveUiForUser } from "@/lib/cooperado/cooperadoMobilePilotPerf";
+import { cooperadoEnvioFotosEntregaEnabled } from "@/lib/cooperado/cooperadoEnvioFotosEntrega";
 import {
   ensureCooperadoNotasFreshForEnvio,
   type CooperadoPwaEnvioSyncResult,
@@ -419,6 +420,7 @@ export default function NotasPedidoCooperadoMain() {
   const appDataUiOn = cooperadoPwaUiSubscribesAppData() && tabActive;
   const data = useCooperadoPanelAppData(appDataUiOn, ["notas", "shell", "financeiro", "operacional"]);
   const { check, user, isCooperado, isDiretoria, cooperadoId } = usePermissions();
+  const cooperadoPodeEnviarFotos = cooperadoEnvioFotosEntregaEnabled();
   const entregasPwaLeve = isCooperado && cooperadoCooperadoEntregasLeveUiForUser(user);
   const { syncing, syncingForUi } = useSyncStatus();
   const searchParams = useSearchParams();
@@ -1764,6 +1766,7 @@ export default function NotasPedidoCooperadoMain() {
   };
 
   const openAnexar = (notaRejeitada?: NotaPedido, options?: { abrirCamera?: boolean }) => {
+    if (isCooperado && !cooperadoPodeEnviarFotos) return;
     if (!notaRejeitada) prefetchCooperadoAnexarPipeline();
     if (!notaRejeitada && rascunhoFotosCount > 0) {
       continuarRascunhoFotos(options?.abrirCamera ?? false);
@@ -2299,8 +2302,12 @@ export default function NotasPedidoCooperadoMain() {
       return;
     }
     if (!tabActive || !isCooperado || anexarParamHandledRef.current) return;
-    if (!ready && !isAppDataWarm()) return;
     anexarParamHandledRef.current = true;
+    if (!cooperadoPodeEnviarFotos) {
+      router.replace("/notas-pedido", { scroll: false });
+      return;
+    }
+    if (!ready && !isAppDataWarm()) return;
     openAnexar(undefined, { abrirCamera: true });
     router.replace("/notas-pedido", { scroll: false });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4275,14 +4282,16 @@ export default function NotasPedidoCooperadoMain() {
           isCooperado
             ? abaCooperado === "ficha"
               ? "Extrato financeiro mensal com valores recebidos e detalhamento de cada entrega"
-              : "Toque no botão verde para fotografar sua entrega — histórico por mês abaixo"
+              : cooperadoPodeEnviarFotos
+                ? "Toque no botão verde para fotografar sua entrega — histórico por mês abaixo"
+                : "Histórico das suas entregas por mês"
             : vistaResponsavel === "aberto"
               ? "Relatório de entregas já lançadas, com pagamento ainda em aberto por cooperado"
               : pendentesEstaveis.length > 0
               ? `${pendentesEstaveis.length} ${pendentesEstaveis.length === 1 ? "nota" : "notas"} aguardando conferência e lançamento`
               : "Nenhuma pendente — use Histórico para entregas já lançadas ou Lançar entrega (avulso)"
         }
-        action={isCooperado ? (
+        action={isCooperado && cooperadoPodeEnviarFotos ? (
           <div className="hidden sm:block">
             <Button size="lg" onClick={() => openAnexar(undefined, { abrirCamera: true })}>
               <Camera size={18} /> Tirar foto
@@ -4395,7 +4404,7 @@ export default function NotasPedidoCooperadoMain() {
         <AlertBanner variant="success" className="mt-4" onDismiss={() => setLancadoMsg("")}>{lancadoMsg}</AlertBanner>
       )}
 
-      {isCooperado && rascunhoFotosCount > 0 && !anexarModal && abaCooperado !== "entregas" && (
+      {isCooperado && cooperadoPodeEnviarFotos && rascunhoFotosCount > 0 && !anexarModal && abaCooperado !== "entregas" && (
         <AlertBanner variant="warning" className="mb-4" title="Entrega em andamento">
           Você tem {rascunhoFotosCount}{" "}
           {rascunhoFotosCount === 1 ? "foto" : "fotos"} de uma entrega não concluída
@@ -4411,7 +4420,7 @@ export default function NotasPedidoCooperadoMain() {
         </AlertBanner>
       )}
 
-      {isCooperado && rascunhoFotosCount > 0 && !anexarModal && abaCooperado === "entregas" && (
+      {isCooperado && cooperadoPodeEnviarFotos && rascunhoFotosCount > 0 && !anexarModal && abaCooperado === "entregas" && (
         <Card className="mb-4 border-amber-300 bg-amber-50/90">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
             <div className="min-w-0">
@@ -4760,12 +4769,12 @@ export default function NotasPedidoCooperadoMain() {
         </AlertBanner>
       )}
 
-      {isCooperado && abaCooperado === "entregas" && (
+      {isCooperado && cooperadoPodeEnviarFotos && abaCooperado === "entregas" && (
         <button
           type="button"
           onClick={() => openAnexar(undefined, { abrirCamera: true })}
           className="w-full mb-6 rounded-2xl bg-gradient-to-br from-green-600 to-green-700 text-white shadow-lg shadow-green-900/20 p-5 flex items-center gap-4 active:scale-[0.98] transition-transform"
-        >
+          >
           <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/20">
             <Camera size={32} strokeWidth={2.25} />
           </span>
@@ -4883,6 +4892,7 @@ export default function NotasPedidoCooperadoMain() {
                   nomeCooperado={nomeCooperadoExibicao}
                   ultimaNotaEnviadaIds={ultimaNotaEnviadaIds}
                   painelRotaAtiva={tabActive && abaCooperado === "entregas"}
+                  permitirEnviarFotos={cooperadoPodeEnviarFotos}
                   onReenviar={(n) => openAnexar(n, { abrirCamera: true })}
                   onExcluir={(n) => solicitarExclusaoNota(n, false)}
                   getEscolaLabel={getEscolaLabelCooperado}
@@ -4907,7 +4917,7 @@ export default function NotasPedidoCooperadoMain() {
         />
       ) : null}
 
-      {isCooperado && (
+      {isCooperado && cooperadoPodeEnviarFotos && (
         <div className="fixed bottom-20 right-4 z-30 sm:hidden">
           <Button size="lg" className="shadow-lg rounded-full px-5" onClick={() => openAnexar(undefined, { abrirCamera: true })}>
             <Camera size={20} /> Tirar foto
@@ -5907,9 +5917,11 @@ export default function NotasPedidoCooperadoMain() {
             )}
             {isCooperado && selectedNota.status === "rejeitada" && (
               <div className="flex flex-col gap-2">
-                <Button className="w-full" onClick={() => { setViewModal(false); openAnexar(selectedNota, { abrirCamera: true }); }}>
-                  <RefreshCw size={18} /> Enviar de novo
-                </Button>
+                {cooperadoPodeEnviarFotos ? (
+                  <Button className="w-full" onClick={() => { setViewModal(false); openAnexar(selectedNota, { abrirCamera: true }); }}>
+                    <RefreshCw size={18} /> Enviar de novo
+                  </Button>
+                ) : null}
                 <Button className="w-full" variant="danger" onClick={() => solicitarExclusaoNota(selectedNota, false)}>
                   <Trash2 size={18} /> Excluir entrega
                 </Button>

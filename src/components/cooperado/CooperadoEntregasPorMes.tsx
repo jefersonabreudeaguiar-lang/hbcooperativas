@@ -52,6 +52,8 @@ interface CooperadoEntregasPorMesProps {
   onReenviar: (nota: NotaPedido) => void;
   onExcluir: (nota: NotaPedido) => void;
   getEscolaLabel: (nota: NotaPedido) => string;
+  /** Quando false, oculta “Enviar de novo” em entregas rejeitadas (produto V2). */
+  permitirEnviarFotos?: boolean;
 }
 
 function notaPrincipal(entrega: EntregaCooperadoView): NotaPedido {
@@ -184,6 +186,7 @@ function EntregaSemanaItem({
   onToggle,
   onReenviar,
   onExcluir,
+  permitirEnviarFotos,
   data,
   cooperadoId,
 }: {
@@ -194,6 +197,7 @@ function EntregaSemanaItem({
   onToggle: () => void;
   onReenviar: () => void;
   onExcluir: () => void;
+  permitirEnviarFotos: boolean;
   data: AppData | null;
   cooperadoId: string;
 }) {
@@ -346,10 +350,12 @@ function EntregaSemanaItem({
 
           {status === "rejeitada" && (
             <div className="flex flex-col sm:flex-row gap-2">
-              <Button size="sm" variant="secondary" className="flex-1" onClick={onReenviar}>
-                <RefreshCw size={16} /> Enviar de novo
-              </Button>
-              <Button size="sm" variant="danger" className="flex-1" onClick={onExcluir}>
+              {permitirEnviarFotos ? (
+                <Button size="sm" variant="secondary" className="flex-1" onClick={onReenviar}>
+                  <RefreshCw size={16} /> Enviar de novo
+                </Button>
+              ) : null}
+              <Button size="sm" variant="danger" className={permitirEnviarFotos ? "flex-1" : "w-full"} onClick={onExcluir}>
                 <Trash2 size={16} /> Excluir
               </Button>
             </div>
@@ -374,6 +380,7 @@ export const CooperadoEntregasPorMes = memo(function CooperadoEntregasPorMes({
   onReenviar,
   onExcluir,
   getEscolaLabel,
+  permitirEnviarFotos = false,
 }: CooperadoEntregasPorMesProps) {
   const { user } = useAuth();
   const entregasLeve = cooperadoCooperadoEntregasLeveUiForUser(user);
@@ -480,6 +487,7 @@ export const CooperadoEntregasPorMes = memo(function CooperadoEntregasPorMes({
                               }
                               onReenviar={() => onReenviar(nota)}
                               onExcluir={() => onExcluir(nota)}
+                              permitirEnviarFotos={permitirEnviarFotos}
                               data={data}
                               cooperadoId={cooperadoId}
                             />
@@ -503,6 +511,7 @@ export const CooperadoEntregasPorMes = memo(function CooperadoEntregasPorMes({
                               }
                               onReenviar={() => onReenviar(nota)}
                               onExcluir={() => onExcluir(nota)}
+                              permitirEnviarFotos={permitirEnviarFotos}
                               data={data}
                               cooperadoId={cooperadoId}
                             />

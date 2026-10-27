@@ -20,6 +20,8 @@ Não é necessário outro domínio para usar a versão nova. O projeto oficial j
 
 Rotas antigas (ex.: `/notas-pedido`, `/ficha-corrida`) redirecionam para a home V2 quando o cooperado ou o responsável tenta abrir pelo histórico.
 
+**Envio de fotos de entrega (cooperado):** desligado no oficial (`NEXT_PUBLIC_COOPERADO_ENVIO_FOTOS_ENTREGA=0` e V2 força off no código). Sem câmera, “Tirar foto” nem upload na API.
+
 ## Conferir produção
 
 ```powershell

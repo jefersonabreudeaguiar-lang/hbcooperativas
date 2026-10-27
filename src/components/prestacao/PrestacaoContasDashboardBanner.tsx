@@ -11,6 +11,7 @@ import {
   TIPO_REPASSE_LABELS,
 } from "@/services/prestacaoContasService";
 import { formatCurrency } from "@/utils/format";
+import { cooperadoEnvioFotosEntregaEnabled } from "@/lib/cooperado/cooperadoEnvioFotosEntrega";
 
 interface Props {
   data: AppData;
@@ -61,7 +62,9 @@ export function PrestacaoContasDashboardBanner({ data, cooperadoId, cooperativaI
             href="/prestacao-contas"
             className="inline-flex items-center justify-center gap-2 mt-4 px-3 py-1.5 text-xs rounded-lg font-medium bg-green-700 hover:bg-green-800 text-white"
           >
-            {resumo.notasAguardando > 0 ? "Ver prestação" : "Enviar fotos das notas"}
+            {resumo.notasAguardando > 0 || !cooperadoEnvioFotosEntregaEnabled()
+              ? "Ver prestação"
+              : "Enviar fotos das notas"}
           </Link>
         </div>
       </div>

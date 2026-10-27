@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { cooperadoEnvioFotosEntregaEnabled } from "@/lib/cooperado/cooperadoEnvioFotosEntrega";
 import { isV2HbOnlyClient } from "@/lib/product/v2HbOnly";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ export async function GET() {
       gitCommitSha,
       fingerprint,
       v2HbOnly,
+      cooperadoEnvioFotosEntrega: cooperadoEnvioFotosEntregaEnabled(),
       appUrl: (process.env.NEXT_PUBLIC_APP_URL ?? "https://hbcooperativas.vercel.app").trim(),
     },
     {

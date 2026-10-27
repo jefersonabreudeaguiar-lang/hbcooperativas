@@ -24,6 +24,7 @@ import { cooperadoPrecisaCadastrarPix, normalizarChavePixBrCode } from "@/utils/
 import { AssinaturaCadastroPanel } from "@/components/cooperado/AssinaturaCadastroPanel";
 import { cooperadoUsaAssinaturaCadastroPilot } from "@/config/assinaturaCadastroPilot";
 import { cooperadoPrecisaCadastrarAssinatura } from "@/services/cooperadoAssinaturaService";
+import { cooperadoEnvioFotosEntregaEnabled } from "@/lib/cooperado/cooperadoEnvioFotosEntrega";
 
 export default function MeuCadastroContent() {
   const data = useAppData();
@@ -139,7 +140,7 @@ export default function MeuCadastroContent() {
     pixDirtyRef.current = false;
     setSaved(true);
     if (isNovo) {
-      router.replace("/notas-pedido?anexar=1");
+      router.replace(cooperadoEnvioFotosEntregaEnabled() ? "/notas-pedido?anexar=1" : "/dashboard");
       return;
     }
     setTimeout(() => setSaved(false), 3000);
@@ -381,9 +382,11 @@ export default function MeuCadastroContent() {
       </Card>
 
       <div className="mt-6 flex flex-col sm:flex-row gap-3">
-        <Link href="/notas-pedido?anexar=1" className="flex-1">
-          <Button variant="secondary" className="w-full" size="lg">Enviar foto da entrega</Button>
-        </Link>
+        {cooperadoEnvioFotosEntregaEnabled() ? (
+          <Link href="/notas-pedido?anexar=1" className="flex-1">
+            <Button variant="secondary" className="w-full" size="lg">Enviar foto da entrega</Button>
+          </Link>
+        ) : null}
         <Link href="/ficha-corrida" className="flex-1">
           <Button variant="secondary" className="w-full" size="lg"><Wallet size={18} /> Abrir Financeiro</Button>
         </Link>

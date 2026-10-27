@@ -15,6 +15,7 @@ import {
 } from "@/lib/supabase/notasStorage";
 import { pickHigherNotaStatus } from "@/utils/notaStatus";
 import { bufferFotoEntregaPreview } from "@/lib/images/fotoEntregaPreview";
+import { cooperadoEnvioFotosEntregaEnabled } from "@/lib/cooperado/cooperadoEnvioFotosEntrega";
 
 interface FotoUploadInput {
   cnpj: string;
@@ -311,6 +312,13 @@ export async function POST(
 
   const guard = await guardCooperativaApi(request, parsed.cnpj, { write: true, checkSaas: true });
   if (!guard.ok) return guard.response;
+
+  if (guard.session?.role === "cooperado" && !cooperadoEnvioFotosEntregaEnabled()) {
+    return NextResponse.json(
+      { error: "Envio de fotos pelo cooperado está desativado." },
+      { status: 403 }
+    );
+  }
 
   return processFotoUpload(id, parsed);
 }

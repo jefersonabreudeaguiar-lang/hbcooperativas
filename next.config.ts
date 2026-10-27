@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 import { X_ROBOTS_TAG_NOINDEX, isSearchIndexingAllowed } from "./src/lib/security/crawlerPolicy";
 import { validateProductionClientEnv } from "./src/lib/security/validateProductionClientEnv";
 import { resolveV2HbOnlyPublicEnv } from "./src/lib/product/v2HbOnly";
+import { resolveCooperadoEnvioFotosPublicEnv } from "./src/lib/cooperado/cooperadoEnvioFotosEntrega";
 
 const prodEnvIssues = validateProductionClientEnv();
 if (prodEnvIssues.length > 0) {
@@ -77,6 +78,9 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_CONTA_COOP_VALOR_RECEBER_PUBLIC:
       process.env.NEXT_PUBLIC_CONTA_COOP_VALOR_RECEBER_PUBLIC ?? "1",
     NEXT_PUBLIC_V2_HB_ONLY: resolveV2HbOnlyPublicEnv(process.env.NEXT_PUBLIC_V2_HB_ONLY),
+    NEXT_PUBLIC_COOPERADO_ENVIO_FOTOS_ENTREGA: resolveCooperadoEnvioFotosPublicEnv(
+      process.env.NEXT_PUBLIC_COOPERADO_ENVIO_FOTOS_ENTREGA
+    ),
     NEXT_PUBLIC_VERCEL_DEPLOYMENT_ID: process.env.VERCEL_DEPLOYMENT_ID ?? "",
     NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA: process.env.VERCEL_GIT_COMMIT_SHA ?? "",
   },

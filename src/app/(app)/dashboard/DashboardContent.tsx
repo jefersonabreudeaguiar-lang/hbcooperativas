@@ -58,6 +58,7 @@ import { CooperadoMensalidadesPagarPanel } from "@/components/cooperado/Cooperad
 import { ValoresAvulsosDashboardCard } from "@/components/ficha/ValoresAvulsosReceberPanel";
 import { V2HbOnlyDashboardRedirect } from "@/components/product/V2HbOnlyDashboardRedirect";
 import { isV2HbOnlyClient } from "@/lib/product/v2HbOnly";
+import { cooperadoEnvioFotosEntregaEnabled } from "@/lib/cooperado/cooperadoEnvioFotosEntrega";
 import { getAdminStatsCached } from "@/services/dashboardService";
 import { requestAdminStatsFromWorker } from "@/services/adminStatsWorkerClient";
 import { isRqlAdminStatsWorkerEnabled } from "@/lib/performance/rqlAdminStats85";
@@ -284,7 +285,9 @@ function CooperadoDashboardMain() {
   }, [user?.id, user?.role, gaInicioSomenteCasca]);
 
   const router = useRouter();
+  const envioFotosHabilitado = cooperadoEnvioFotosEntregaEnabled();
   const irEnviarFotoEntrega = useCallback(() => {
+    if (!cooperadoEnvioFotosEntregaEnabled()) return;
     setCooperadoOptimisticTab("/notas-pedido");
     cooperadoTabWarmOnPointerDown("/notas-pedido");
     startTransition(() => {
@@ -619,7 +622,7 @@ function CooperadoDashboardMain() {
               atualizando={cardFinanceiroAtualizando}
               exibirReciboAssinatura
             />
-            <EnviarFotoEntregaInicioCard onEnviar={irEnviarFotoEntrega} />
+            {envioFotosHabilitado ? <EnviarFotoEntregaInicioCard onEnviar={irEnviarFotoEntrega} /> : null}
           </div>
           <CooperadoHbCreditInicioSection hbCredit={hbCredit} cnpjDigits={cnpjHbDigits} />
         </div>
@@ -629,6 +632,7 @@ function CooperadoDashboardMain() {
           valorReceberCard={valorReceberCard}
           cardFinanceiroAtualizando={cardFinanceiroAtualizando}
           irEnviarFotoEntrega={irEnviarFotoEntrega}
+          envioFotosHabilitado={envioFotosHabilitado}
           hbCredit={hbCredit}
           cnpjHbFallback={cnpjHbDigits}
         />
@@ -643,6 +647,7 @@ function CooperadoDashboardInicioView({
   valorReceberCard,
   cardFinanceiroAtualizando,
   irEnviarFotoEntrega,
+  envioFotosHabilitado,
   hbCredit,
   cnpjHbFallback,
 }: {
@@ -650,6 +655,7 @@ function CooperadoDashboardInicioView({
   valorReceberCard: ReturnType<typeof useCooperadoInicioValorReceberCardState>["snapshot"];
   cardFinanceiroAtualizando: boolean;
   irEnviarFotoEntrega: () => void;
+  envioFotosHabilitado: boolean;
   hbCredit: ReturnType<typeof useHbCreditEnabled>;
   cnpjHbFallback: string;
 }) {
@@ -701,7 +707,7 @@ function CooperadoDashboardInicioView({
           exibirReciboAssinatura
         />
 
-        <EnviarFotoEntregaInicioCard onEnviar={irEnviarFotoEntrega} />
+        {envioFotosHabilitado ? <EnviarFotoEntregaInicioCard onEnviar={irEnviarFotoEntrega} /> : null}
       </div>
 
       {pautasAbertas.length > 0 && <VotacaoPautasInicioPanel pautas={pautasAbertas} />}
@@ -722,7 +728,7 @@ function CooperadoDashboardInicioView({
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Pendências</p>
       )}
 
-      {rejeitadas.length > 0 && (
+      {rejeitadas.length > 0 && envioFotosHabilitado && (
         <AlertBanner variant="error" title="Entrega precisa de correção">
           Você tem {rejeitadas.length} entrega(s) que a cooperativa pediu para corrigir.{" "}
           <Link href="/notas-pedido" className="font-semibold underline">Ver e enviar de novo</Link>
