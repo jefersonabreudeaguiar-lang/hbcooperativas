@@ -7,7 +7,7 @@
 | Área | Piloto Jeferson | Demais cooperados |
 |------|-----------------|-------------------|
 | Abertura / troca de abas | Sem sync operacional/financeiro automático, sem bootstrap pós-deploy, sem prefetch agressivo de abas | GA atual |
-| Início + Financeiro | Valores atualizam **somente** no botão **Atualizar** | GA atual |
+| Início + Financeiro | **1ª entrada** leve; **2ª entrada** (≥30s após a 1ª) → **Atualizar automático**; depois, cada volta ao app (intervalo mín. 45s). Botão Atualizar usa o mesmo fluxo suave | GA atual |
 | Entregas — fotos | Envio e sync de notas **na hora** (responsável vê na fila) | GA atual |
 | AppData local | Parse adiado no cold start; **Atualizar** libera warm + sync base | GA atual |
 

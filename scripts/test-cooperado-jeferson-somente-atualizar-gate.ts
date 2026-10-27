@@ -9,6 +9,12 @@ import {
   isCooperadoJefersonSomenteAtualizarPilot,
   withCooperadoJefersonEntregaSyncPermitido,
 } from "../src/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
+import {
+  COOPERADO_JEFERSON_DUPLA_ENTRADA_MIN_MS,
+  cooperadoJefersonDuplaEntradaDesbloqueado,
+  registrarCooperadoJefersonForegroundEntrada,
+  resetCooperadoJefersonDuplaEntradaForTests,
+} from "../src/lib/cooperado/cooperadoJefersonDuplaEntradaAutoAtualizar";
 import { COOPERADO_MOBILE_PILOT_COOPERADO_ID } from "../src/lib/cooperado/cooperadoMobilePilot";
 
 const jeferson = {
@@ -43,6 +49,23 @@ if (!COOPERADO_JEFERSON_SOMENTE_ATUALIZAR_MODE_ON) {
     ),
     false
   );
+
+  if (typeof sessionStorage !== "undefined") {
+    resetCooperadoJefersonDuplaEntradaForTests(jeferson.id);
+    registrarCooperadoJefersonForegroundEntrada(jeferson);
+    assert.equal(cooperadoJefersonDuplaEntradaDesbloqueado(jeferson), false);
+    const key = `hb.coop.jefersonDuplaEntrada.v2:${jeferson.id}`;
+    const st = JSON.parse(sessionStorage.getItem(key) ?? "{}") as {
+      firstAt: number;
+      entradas: number;
+      unlocked: boolean;
+      lastAutoAt: number;
+    };
+    st.firstAt = Date.now() - COOPERADO_JEFERSON_DUPLA_ENTRADA_MIN_MS - 1;
+    sessionStorage.setItem(key, JSON.stringify(st));
+    registrarCooperadoJefersonForegroundEntrada(jeferson);
+    assert.equal(cooperadoJefersonDuplaEntradaDesbloqueado(jeferson), true);
+  }
 }
 
 console.log("test-cooperado-jeferson-somente-atualizar-gate: ok");

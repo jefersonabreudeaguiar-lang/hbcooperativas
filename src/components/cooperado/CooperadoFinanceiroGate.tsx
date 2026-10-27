@@ -341,7 +341,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
           aguardandoDadosFinanceiros: false,
           bloqueiaEntrada: false,
           mensagemStatus: jefersonSomenteAtualizar
-            ? "Valores na nuvem só ao tocar em Atualizar."
+            ? "1ª abertura leve. Na 2ª entrada (após 30s), os valores atualizam sozinhos."
             : null,
         }}
       >

@@ -8,9 +8,8 @@ import { normalizeAuthEmail } from "@/lib/security/appCreator";
 import { readCooperadoSessionLite } from "@/lib/cooperado/cooperadoSessionLite";
 
 /**
- * Piloto Jeferson — app leve: valores/financeiro/operacional só no botão «Atualizar».
- * Exceção: fluxo de fotos de entrega (envio imediato para o responsável).
- * Produção (Orlando+): não alterar até homologação.
+ * Piloto Jeferson — app leve na 1ª entrada; sync financeiro automático após 2ª entrada (≥30s).
+ * Exceção: fotos de entrega (envio imediato). Produção (Orlando+): inalterado.
  */
 export const COOPERADO_JEFERSON_SOMENTE_ATUALIZAR_MODE_ON = true;
 
@@ -28,6 +27,31 @@ export function isCooperadoJefersonSomenteAtualizarSessionLite(): boolean {
 }
 
 let entregaSyncPermitDepth = 0;
+let autoAtualizarPermitDepth = 0;
+
+export function cooperadoJefersonAutoAtualizarEmCurso(): boolean {
+  return autoAtualizarPermitDepth > 0;
+}
+
+export function withCooperadoJefersonAutoAtualizarPermitido<T>(fn: () => T): T {
+  autoAtualizarPermitDepth += 1;
+  try {
+    return fn();
+  } finally {
+    autoAtualizarPermitDepth = Math.max(0, autoAtualizarPermitDepth - 1);
+  }
+}
+
+export async function withCooperadoJefersonAutoAtualizarPermitidoAsync<T>(
+  fn: () => Promise<T>
+): Promise<T> {
+  autoAtualizarPermitDepth += 1;
+  try {
+    return await fn();
+  } finally {
+    autoAtualizarPermitDepth = Math.max(0, autoAtualizarPermitDepth - 1);
+  }
+}
 
 /** Libera sync operacional pontual (fotos / pós-envio) sem furar «só Atualizar» no resto do app. */
 export function withCooperadoJefersonEntregaSyncPermitido<T>(fn: () => T): T {
@@ -70,6 +94,7 @@ export function cooperadoJefersonBloqueiaSyncAutomatico(
   if (!isCooperadoJefersonSomenteAtualizarPilot(user)) return false;
   if (opts?.userInitiated) return false;
   if (cooperadoJefersonEntregaSyncPermitido()) return false;
+  if (cooperadoJefersonAutoAtualizarEmCurso()) return false;
   return true;
 }
 
