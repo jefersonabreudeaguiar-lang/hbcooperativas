@@ -84,7 +84,8 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
 
   const carregandoFinanceiro =
     bloqueiaEntrada &&
-    (syncInProgress || syncing || (lastSyncedAt == null && !syncWaitExceeded));
+    !syncWaitExceeded &&
+    (syncInProgress || syncing || lastSyncedAt == null);
 
   if (carregandoFinanceiro) {
     return (
@@ -99,16 +100,18 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
 
   const falhaCarregarFicha =
     bloqueiaEntrada &&
-    !syncInProgress &&
-    !syncing &&
-    (Boolean(lastSyncError) || lastSyncedAt != null || syncWaitExceeded);
+    (syncWaitExceeded ||
+      ((!syncInProgress && !syncing) &&
+        (Boolean(lastSyncError) || lastSyncedAt != null)));
 
   if (falhaCarregarFicha) {
     return (
       <div className="max-w-lg mx-auto py-8 space-y-4">
         <AlertBanner variant="error" title="Não foi possível carregar sua ficha">
           {lastSyncError ||
-            "A sincronização demorou demais. Toque em Tentar novamente. Se persistir, saia, limpe o cache do navegador e entre de novo."}
+            (syncInProgress || syncing
+              ? "A sincronização ainda está em andamento, mas está demorando além do esperado. Você pode aguardar ou sair e entrar novamente."
+              : "A sincronização demorou demais. Toque em Tentar novamente. Se persistir, saia e entre de novo.")}
         </AlertBanner>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -116,9 +119,9 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
               solicitarRecuperacaoFinanceiroCooperado();
               requestAppSyncImmediate();
             }}
-            disabled={syncing}
+            disabled={syncing || syncInProgress}
           >
-            {syncing ? "Baixando…" : "Tentar novamente"}
+            {syncing || syncInProgress ? "Sincronização em andamento…" : "Tentar novamente"}
           </Button>
           <Button variant="secondary" onClick={() => logout()}>
             Sair e entrar de novo
