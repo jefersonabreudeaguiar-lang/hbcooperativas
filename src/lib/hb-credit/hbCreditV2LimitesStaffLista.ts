@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { creditosBaseMapV2FichaAlinhada } from "@/lib/hb-credit/hbCreditV2LimiteBase";
-import { capLimiteContaCoopV2FichaBruto } from "@/lib/hb-credit/hbCreditV2CooperadoLimiteExibicao";
+import { capLimiteContaCoopV2FichaBruto } from "@/lib/hb-credit/hbCreditV2CooperadoLimitePure";
 import {
   buildFichaPlanoBrutoCentsMapForCooperados,
   resolveFichaPlanoStorageCooperadoId,

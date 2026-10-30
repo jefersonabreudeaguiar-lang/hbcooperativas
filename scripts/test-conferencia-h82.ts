@@ -38,7 +38,10 @@ function pass(msg: string) {
   console.log("PASS:", msg);
 }
 
-const notas = readFileSync(join(ROOT, "src/app/(app)/notas-pedido/NotasPedidoStaffMain.tsx"), "utf8");
+const notas = readFileSync(
+  join(ROOT, "src/app/(app)/notas-pedido/staff/NotasPedidoStaffResponsavelApp.tsx"),
+  "utf8"
+);
 const guard = readFileSync(join(ROOT, "src/lib/conferencia/responsavelConferenciaNavigateGuard.ts"), "utf8");
 
 assert.ok(guard.includes("syncingForUi"), "guard documenta syncingForUi");
@@ -194,6 +197,11 @@ assert.ok(notas.includes("finalizarFichasConferenciaMultiFoto"), "fechamento mul
 assert.ok(notas.includes("reidratarProgressoMultiFotoConferencia"), "reidrata progresso da ficha");
 assert.ok(notas.includes("lancamentosOrdenadosPorFoto"), "consolida itens por índice de foto");
 assert.ok(notas.includes("aplicarLancamentoFotoConferenciaEmDados"), "persistência atômica multi-foto na aprovação");
+assert.ok(
+  notas.includes("for (let idx = 0; idx < qtdFotosAprovadas; idx++)") &&
+    notas.includes("lancamentosFotoConferenciaRef.current.get(idx)"),
+  "aprovação grava cada foto aprovada, da primeira até a última"
+);
 assert.ok(notas.includes("persistirFotoConferenciaNaFicha(fotoIdx"), "lançamento intermediário grava na ficha");
 assert.ok(notas.includes("mesclarProgressoMultiFotoSessaoNaFicha"), "sync não apaga progresso da sessão");
 assert.ok(notas.includes("executarSlideshowLeveConferenciaMultiFoto"), "slideshow leve sem gate de batch pré-aprovacao");

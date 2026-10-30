@@ -157,8 +157,10 @@ function testProductionFailClosed() {
   const prevEnv = process.env.NODE_ENV;
   const prevFlag = process.env.HB_CREDIT_ENABLED;
   const prevSecret = process.env.AUTH_SECRET;
+  const prevPublicUi = process.env.NEXT_PUBLIC_CONTA_COOP_UI_PUBLIC;
 
   process.env.NODE_ENV = "production";
+  process.env.NEXT_PUBLIC_CONTA_COOP_UI_PUBLIC = "0";
   process.env.HB_CREDIT_ENABLED = "true";
   delete process.env.AUTH_SECRET;
   ok("produção sem AUTH_SECRET desliga crédito", !isHbCreditEnabledServer());
@@ -184,6 +186,8 @@ function testProductionFailClosed() {
   else process.env.HB_CREDIT_ENABLED = prevFlag;
   if (prevSecret === undefined) delete process.env.AUTH_SECRET;
   else process.env.AUTH_SECRET = prevSecret;
+  if (prevPublicUi === undefined) delete process.env.NEXT_PUBLIC_CONTA_COOP_UI_PUBLIC;
+  else process.env.NEXT_PUBLIC_CONTA_COOP_UI_PUBLIC = prevPublicUi;
   delete process.env.HB_CREDIT_OPERATIONS_ENABLED;
 }
 

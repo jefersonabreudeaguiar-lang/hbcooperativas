@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense, useEffect, useLayoutEffect } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
@@ -12,12 +12,6 @@ import { Input, Label } from "@/components/ui/Form";
 
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AVISO_ACESSO_AUTOMATIZADO_RESUMO } from "@/config/politicaAcessoAutomatizado";
-import { isBicLabEnabledClient } from "@/lib/lab/bicLabGate";
-import { ensureCooperadoLoginSearchParams } from "@/lib/cooperado/cooperadoCanonicalEntryUrl";
-import { markPwaRepairSessionForBuild } from "@/lib/pwa/cooperadoPwaInstallPrepare";
-import { shouldShowBaixarAppInstallPromo } from "@/lib/pwa/baixarAppInstallPromo";
-import { PwaRepararAtalhoPanel } from "@/components/pwa/PwaRepararAtalhoPanel";
-import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
 
 const SEGMENTOS_ATENDIDOS = [
   "Agrícola e agroindustrial",
@@ -90,42 +84,15 @@ function LoginForm() {
   const senhaRedefinida = searchParams.get("senha") === "redefinida";
   const redirectTo =
     nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/dashboard";
-  const bicLabLogin = isBicLabEnabledClient();
-  const sessaoExpirada = searchParams.get("sessao") === "expirada";
-
-  useLayoutEffect(() => {
-    dismissCooperadoBootShell();
-  }, []);
-
-  useEffect(() => {
-    const { params, changed } = ensureCooperadoLoginSearchParams(
-      new URLSearchParams(searchParams.toString())
-    );
-    if (changed) {
-      const qs = params.toString();
-      const url = `/login?${qs}`;
-      /** Só ajusta query no mesmo doc — router.replace no /login aborta o WebAPK. */
-      if (window.location.pathname === "/login") {
-        window.history.replaceState(null, "", url);
-      } else {
-        router.replace(url);
-      }
-    }
-    if (params.has("hb-pwa")) {
-      markPwaRepairSessionForBuild();
-    }
-  }, [router, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setSubmitting(true);
     try {
-      const result = await login(email.trim(), password.trim());
+      const result = await login(email, password);
       if (result.ok) {
-        if (!result.navigated) {
-          window.location.assign(result.redirectTo ?? redirectTo);
-        }
+        router.push(result.redirectTo ?? redirectTo);
       } else {
         setError(
           result.error?.trim() ||
@@ -154,24 +121,9 @@ function LoginForm() {
               <h2 className="text-2xl font-bold text-gray-900 mb-1">Entrar</h2>
               <p className="text-sm text-gray-500 mb-6">Acesse com seu e-mail e senha</p>
 
-              {bicLabLogin && (
-                <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4 leading-relaxed">
-                  Modo <strong>BIC LAB</strong> (homolog): use o login cadastrado neste ambiente de testes. A senha do app
-                  oficial em hbcooperativas.vercel.app <strong>não</strong> vale aqui, salvo se o responsável tiver
-                  recriado o mesmo usuário na homolog.
-                </p>
-              )}
-
               {senhaRedefinida && (
                 <p className="text-sm text-green-800 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4">
                   Senha redefinida com sucesso. Faça login com a nova senha.
-                </p>
-              )}
-
-              {sessaoExpirada && (
-                <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
-                  Sessão encerrada ou desatualizada. Entre de novo — se o erro continuar no Chrome normal, use{" "}
-                  <strong>Limpar dados do site</strong> (cadeado na barra) ou abra em aba anônima para testar.
                 </p>
               )}
 
@@ -229,18 +181,14 @@ function LoginForm() {
                 </Link>
               </p>
 
-              {shouldShowBaixarAppInstallPromo() && (
-                <p className="text-center text-sm mt-4">
-                  <Link
-                    href="/baixar-app"
-                    className="inline-flex items-center gap-1.5 font-semibold text-green-800 hover:text-green-950"
-                  >
-                    Baixar aplicativo — Android e iPhone
-                  </Link>
-                </p>
-              )}
-
-              <PwaRepararAtalhoPanel />
+              <p className="text-center text-sm mt-4">
+                <Link
+                  href="/baixar-app"
+                  className="inline-flex items-center gap-1.5 font-semibold text-green-800 hover:text-green-950"
+                >
+                  Baixar aplicativo — Android e iPhone
+                </Link>
+              </p>
 
               <p className="text-xs text-gray-400 mt-6 text-center leading-relaxed px-2">
                 {AVISO_ACESSO_AUTOMATIZADO_RESUMO}

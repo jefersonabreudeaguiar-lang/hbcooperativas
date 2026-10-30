@@ -30,6 +30,8 @@ export function getCooperativaNome(data: AppData, id?: string): string {
 }
 
 export function getUserCooperativaId(user: Omit<User, "password">, data: AppData): string | undefined {
+  const cnpj = normalizeCnpj(user.cooperativaCnpj ?? "");
+  if (cnpj.length === 14) return findCooperativaByCnpj(data, cnpj)?.id;
   if (user.cooperativaId) return user.cooperativaId;
   if (user.cooperadoId) {
     return data.cooperados.find((c) => c.id === user.cooperadoId)?.cooperativaId;
@@ -64,28 +66,13 @@ export function resolveGestaoCooperativaId(
     return direct;
   }
 
-  const byCnpj = user.cooperativaCnpj ? findCooperativaByCnpj(data, user.cooperativaCnpj) : undefined;
-  if (byCnpj) return byCnpj.id;
+  const cnpj = normalizeCnpj(user.cooperativaCnpj ?? "");
+  if (cnpj.length === 14) return undefined;
 
   const ativas = data.cooperativas.filter((c) => c.status !== "inativa");
   if (ativas.length === 1) return ativas[0].id;
 
-  const coopIdsNotas = new Set(
-    (data.notasPedido ?? [])
-      .map((n) => n.cooperativaId)
-      .filter((id): id is string => Boolean(id?.trim()))
-  );
-  if (coopIdsNotas.size === 1) {
-    const only = [...coopIdsNotas][0]!;
-    if (ativas.some((c) => c.id === only)) return only;
-  }
-
-  const comOperacao = ativas.find(
-    (c) =>
-      data.instituicoes.some((i) => i.cooperativaId === c.id) ||
-      data.cooperados.some((co) => co.cooperativaId === c.id && co.status === "ativo")
-  );
-  return comOperacao?.id ?? direct;
+  return undefined;
 }
 
 export function getUserCooperativaNome(user: Omit<User, "password">, data: AppData): string {

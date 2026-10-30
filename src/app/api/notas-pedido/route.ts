@@ -6,6 +6,7 @@ import { guardCooperativaApi } from "@/lib/security/apiGuard";
 import { logServerMutationAudit } from "@/lib/security/serverAudit";
 import {
   fetchNotasFromStorage,
+  fetchNotaFromStorage,
   fetchNotasFromTable,
   fetchFilaConferenciaFromTable,
   mergeNotasSources,
@@ -17,6 +18,7 @@ import {
   repairFilaConferenciaNotasNaNuvem,
 } from "@/lib/supabase/notasStorage";
 import { sanitizarNotaParaFilaConferencia } from "@/utils/notaStatus";
+import { podeCooperadoEnviarNota } from "@/lib/security/notaPedidoMutationPolicy";
 
 export const dynamic = "force-dynamic";
 /** Listagem completa lê SQL + storage de centenas de notas — folga acima do default serverless. */
@@ -162,12 +164,43 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Cliente Supabase indisponível." }, { status: 503 });
   }
 
+  if (guard.enforced && guard.session?.role === "cooperado") {
+    const cooperadoId = guard.session.cooperadoId;
+    if (!cooperadoId) return NextResponse.json({ error: "Sem permissão." }, { status: 403 });
+    for (const nota of notas) {
+      const { data } = await supabase
+        .from("notas_pedido")
+        .select("payload, status")
+        .eq("id", nota.id)
+        .eq("cooperativa_cnpj", cnpj)
+        .maybeSingle();
+      const existentePayload =
+        data?.payload && typeof data.payload === "object"
+          ? (data.payload as NotaPedido)
+          : null;
+      const existente = existentePayload ?? await fetchNotaFromStorage(supabase, cnpj, nota.id);
+      const statusExistente = data?.status as NotaPedido["status"] | undefined;
+      const existenteComStatus = existente && statusExistente
+        ? { ...existente, status: statusExistente }
+        : existente;
+      if (!podeCooperadoEnviarNota(cooperadoId, nota, existenteComStatus)) {
+        return NextResponse.json(
+          { error: "Sem permissão para publicar ou atualizar esta entrega." },
+          { status: 403 }
+        );
+      }
+    }
+  }
+
   const tableResult = await upsertNotasInTable(
     supabase,
     cnpj,
     notas.map(notaPayloadForTable),
     cooperadoNome
   );
+  if (!tableResult.ok && tableResult.tenantConflict) {
+    return NextResponse.json({ error: tableResult.error }, { status: 409 });
+  }
   if (tableResult.ok) {
     for (const nota of notas) {
       const uploaded = await uploadNotaToStorage(supabase, cnpj, nota, cooperadoNome);

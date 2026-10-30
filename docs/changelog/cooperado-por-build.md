@@ -6,6 +6,20 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v761
+
+### Preview piloto Jeferson
+
+- **Piloto:** revisão 11 marcada para avaliação no Preview antes da promoção para GA.
+- **Responsável/cooperado:** inclui as correções locais de atualização do pacote, isolamento por cooperativa, propriedade das notas e fluxo de conferência multi-foto.
+- **Dados financeiros existentes:** nenhuma reparação retroativa foi executada nesta versão.
+
+## v760
+
+- **Atualização do app:** botão móvel disponível; quando detecta pacote ou deployment antigo, Atualizar inicia o alinhamento do app antes de sincronizar os dados.
+- **Integração:** CNPJ autenticado define o tenant; ambiguidades não escolhem cooperativa arbitrariamente; IDs de notas já pertencentes a outro CNPJ são recusados sem transferir a linha.
+- **Entregas:** cooperado só publica/reenvia suas notas pendentes; responsáveis mantêm a conferência normal.
+
 ## v690
 
 - **Cooperado (travado com A receber visível):** GA volta ao **snapshot-first** no card (sem motor pesado a cada sync); rematerialização GA só se o cache ainda não tem valor.

@@ -66,6 +66,42 @@ const PHASE_ENV: Step[] = [
 const PHASE_BIC: Step[] = [
   {
     phase: "1",
+    title: "Versão do app cooperado, service worker e changelog",
+    cmd: "npx",
+    stepArgs: ["tsx", "scripts/test-cooperado-release-version.ts"],
+  },
+  {
+    phase: "1",
+    title: "Notas do cooperado — propriedade e status de envio",
+    cmd: "npx",
+    stepArgs: ["tsx", "scripts/test-nota-pedido-mutation-policy.ts"],
+  },
+  {
+    phase: "1",
+    title: "Notas do cooperado — isolamento entre cooperativas",
+    cmd: "npx",
+    stepArgs: ["tsx", "scripts/test-nota-pedido-tenant-policy.ts"],
+  },
+  {
+    phase: "1",
+    title: "Tenant multi cooperativa — CNPJ autenticado e ambiguidades",
+    cmd: "npx",
+    stepArgs: ["tsx", "scripts/test-multicoop-tenant-resolution.ts"],
+  },
+  {
+    phase: "1",
+    title: "BIC isolamento por tenant",
+    cmd: "npx",
+    stepArgs: ["tsx", "scripts/test-bic-tenant-guard.ts"],
+  },
+  {
+    phase: "1",
+    title: "BIC facade isolamento por tenant",
+    cmd: "npx",
+    stepArgs: ["tsx", "scripts/test-bic-facade-tenant.ts"],
+  },
+  {
+    phase: "1",
     title: "BIC lab boundary",
     cmd: "npx",
     stepArgs: ["tsx", "scripts/test-bic-lab-boundary.ts"],
@@ -97,6 +133,18 @@ const PHASE_BIC: Step[] = [
 ];
 
 const PHASE_HB: Step[] = [
+  {
+    phase: "2",
+    title: "Conferência multi-foto responsável — progresso, persistência e última foto",
+    cmd: "npx",
+    stepArgs: ["tsx", "scripts/test-conferencia-h82.ts"],
+  },
+  {
+    phase: "2",
+    title: "Conferência multi-foto — conservação de valores nota/ficha",
+    cmd: "npx",
+    stepArgs: ["tsx", "scripts/test-integracao-lancamento-multifoto-h89137.ts"],
+  },
   {
     phase: "2",
     title: "Invariantes E2E alinhamento",

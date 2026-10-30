@@ -31,6 +31,10 @@
     "test:bic-tenant": "npx tsx scripts/test-bic-tenant-guard.ts",
     "test:bic-facade-tenant": "npx tsx scripts/test-bic-facade-tenant.ts",
     "test:bic-fallback-observability": "npx tsx scripts/test-bic-fallback-observability.ts",
+    "test:multicoop-tenant-resolution": "npx tsx scripts/test-multicoop-tenant-resolution.ts",
+    "test:nota-pedido-mutation-policy": "npx tsx scripts/test-nota-pedido-mutation-policy.ts",
+    "test:nota-pedido-tenant-policy": "npx tsx scripts/test-nota-pedido-tenant-policy.ts",
+    "test:cooperado-release-version": "npx tsx scripts/test-cooperado-release-version.ts",
     "test:bic-b3.1-integration": "npx tsx scripts/test-bic-b3.1-integration.ts",
     "test:bic-b3.2-real-readonly": "npx tsx scripts/test-bic-b3.2-real-readonly.ts",
     "test:bic-lab-boundary": "npx tsx scripts/test-bic-lab-boundary.ts",
@@ -126,6 +130,7 @@
     "pg": "^8.23.0",
     "sharp": "^0.34.5",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "ws": "^8.21.0"
   }

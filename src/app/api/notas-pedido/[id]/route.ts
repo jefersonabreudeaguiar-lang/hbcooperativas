@@ -16,6 +16,7 @@ import {
 } from "@/lib/supabase/notasStorage";
 import { mergeNotaComFotos } from "@/utils/fotoEntrega";
 import { applyNotaPedidoDeletedOnOperacionalSync } from "@/lib/supabase/cooperativaSyncStorage";
+import { podeCooperadoEnviarNota } from "@/lib/security/notaPedidoMutationPolicy";
 
 export async function GET(
   request: Request,
@@ -123,6 +124,30 @@ export async function PATCH(
     return NextResponse.json({ error: "Cliente indisponível." }, { status: 503 });
   }
 
+  if (guard.enforced && guard.session?.role === "cooperado") {
+    const cooperadoId = guard.session.cooperadoId;
+    const { data } = await supabase
+      .from("notas_pedido")
+      .select("payload, status")
+      .eq("id", id)
+      .eq("cooperativa_cnpj", cnpj)
+      .maybeSingle();
+    const existente =
+      data?.payload && typeof data.payload === "object"
+        ? (data.payload as NotaPedido)
+        : await fetchNotaFromStorage(supabase, cnpj, id);
+    const statusExistente = (data?.status as NotaPedido["status"] | undefined) ?? existente?.status;
+    const existenteComStatus = existente && statusExistente
+      ? { ...existente, status: statusExistente }
+      : existente;
+    if (!podeCooperadoEnviarNota(cooperadoId, nota, existenteComStatus)) {
+      return NextResponse.json(
+        { error: "Sem permissão para atualizar esta entrega." },
+        { status: 403 }
+      );
+    }
+  }
+
   // Upsert — update com 0 linhas no Supabase retorna sucesso e a entrega
   // ficava eternamente em rascunho (invisível na lista / some no sync).
   const tableResult = await upsertNotasInTable(
@@ -131,6 +156,9 @@ export async function PATCH(
     [notaPayloadForTable(nota)],
     nota.cooperadoNomeSnapshot
   );
+  if (!tableResult.ok && tableResult.tenantConflict) {
+    return NextResponse.json({ error: tableResult.error }, { status: 409 });
+  }
 
   if (tableResult.ok) {
     const forStorage = notaPayloadForTable(nota);

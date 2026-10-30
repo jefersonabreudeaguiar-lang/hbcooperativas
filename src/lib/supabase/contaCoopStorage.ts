@@ -49,7 +49,7 @@ import {
   isV2HbOnlyServer,
 } from "@/lib/hb-credit/hbCreditV2LimiteBase";
 import { buildFichaPlanoBrutoCentsMapForCooperados } from "@/lib/supabase/hbCreditFichaPlanoStorage";
-import { capLimiteContaCoopV2FichaBruto } from "@/lib/hb-credit/hbCreditV2CooperadoLimiteExibicao";
+import { capLimiteContaCoopV2FichaBruto } from "@/lib/hb-credit/hbCreditV2CooperadoLimitePure";
 import { listLimitesV2StaffAlinhadosFichaPlano } from "@/lib/hb-credit/hbCreditV2LimitesStaffLista";
 import { reconcileHbBrutoFromFichaPlano } from "@/lib/supabase/hbCreditFichaPlanoStorage";
 import { resolveLeituraFinanceiraCooperadoCore } from "@/lib/bic/bicLeituraPorta";

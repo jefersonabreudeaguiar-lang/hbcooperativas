@@ -179,6 +179,9 @@ async function processFotoUpload(id: string, input: FotoUploadInput) {
       [notaPayloadForTable(metaNota)],
       cooperadoNome
     );
+    if (!tableResult.ok && tableResult.tenantConflict) {
+      return NextResponse.json({ error: tableResult.error }, { status: 409 });
+    }
     if (!tableResult.ok && !tableResult.tableMissing) {
       return NextResponse.json({ error: tableResult.error ?? "Erro ao registrar entrega." }, { status: 500 });
     }

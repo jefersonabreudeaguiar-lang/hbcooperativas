@@ -17,8 +17,7 @@ import { validateBicTenantContext } from "@/services/bicTenantGuard";
 import {
   cooperadoExibirValorReceberInicio,
   getResumoQuantoVouReceberCooperado,
-  getResumoQuantoVouReceberCooperadoMotorLegado,
-  getValorQuantoVouReceberMotorLegado,
+  getValorQuantoVouReceber,
   type EstadoQuantoVouReceberCooperado,
 } from "@/services/cooperadoEntregasService";
 
@@ -49,7 +48,7 @@ export type BicFacadeTenantGate =
 export type BicProjecaoFinanceiraCooperado = {
   tenant: BicFacadeTenantGate;
   bicProjectionAuthorized: boolean;
-  quantoVouReceber?: ReturnType<typeof getValorQuantoVouReceberMotorLegado>;
+  quantoVouReceber?: ReturnType<typeof getValorQuantoVouReceber>;
   inicio?: ReturnType<typeof cooperadoExibirValorReceberInicio>;
   painelQuantoVouReceber?: ReturnType<typeof getResumoQuantoVouReceberCooperado>;
 };
@@ -119,9 +118,9 @@ export function getProjecaoFinanceiraCooperadoBIC(
     return blockedProjection(validation.status, validation.message);
   }
 
-  const quantoVouReceber = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
+  const quantoVouReceber = getValorQuantoVouReceber(data, cooperadoId, cooperativaId);
   const inicio = cooperadoExibirValorReceberInicio(data, cooperadoId, cooperativaId);
-  const painelQuantoVouReceber = getResumoQuantoVouReceberCooperadoMotorLegado(
+  const painelQuantoVouReceber = getResumoQuantoVouReceberCooperado(
     data,
     cooperadoId,
     cooperativaId,
@@ -161,13 +160,13 @@ export function getQuantoVouReceberCooperadoParaExibicao(
   cooperadoId: string,
   cooperativaId: string | undefined,
   opts?: Pick<BicProjecaoFinanceiraCooperadoOpts, "apresentacaoConsolidada">
-): BicExibicaoEnvelope<ReturnType<typeof getValorQuantoVouReceberMotorLegado>> {
+): BicExibicaoEnvelope<ReturnType<typeof getValorQuantoVouReceber>> {
   const proj = getProjecaoFinanceiraCooperadoBIC(data, cooperadoId, cooperativaId);
   const apresentacaoConsolidada = opts?.apresentacaoConsolidada !== false;
   const raw =
     proj.bicProjectionAuthorized && proj.quantoVouReceber
       ? proj.quantoVouReceber
-      : getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
+      : getValorQuantoVouReceber(data, cooperadoId, cooperativaId);
   const value = cooperadoQuantoVouReceberParaApresentacao(raw, apresentacaoConsolidada);
   if (proj.bicProjectionAuthorized && proj.quantoVouReceber) {
     return envelope(value, proj, "bic");

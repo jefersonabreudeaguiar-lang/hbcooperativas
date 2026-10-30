@@ -1,5 +1,7 @@
 # Marco zero — instabilidade após o primeiro pagamento
 
+**Programa operacional (fases, pilares, constituição):** [`docs/plano-mestre/MARCO-ZERO-PROGRAMA-2026.md`](../plano-mestre/MARCO-ZERO-PROGRAMA-2026.md)
+
 Documento de auditoria e diagnóstico (read-only sobre dados; análise de código e histórico de release).  
 **Cooperativa piloto:** CoopeagriPla — CNPJ `62351750000165`.  
 **Piloto cooperado:** Jeferson — `jefersonabreudeaguiar@gmail.com`, `c_1781981564381_w67gg`.
@@ -166,8 +168,31 @@ Checklist SIM/NÃO (não substituído por commit):
 
 ---
 
-## 11. Histórico deste documento
+## 11. Reauditoria em 2026-10-30 — valores nota × ficha
+
+Consulta somente leitura à cooperativa: 26 cooperados, 346 notas e 408 fichas. Foram encontradas 51 divergências em notas e fichas com status pago; em todas, a ficha tem bruto e líquido menor que a nota. Cada nota tem uma ficha, nenhum vínculo aponta para outro cooperado/tenant, não há divisão registrada, e todas as 51 notas estão explicitamente vinculadas a pagamento.
+
+A rotina `reconciliarFichaFromNotasConferidas` foi executada apenas em memória sobre a cópia lida: não mudou o bruto de nenhuma nota nem ficha, e as 51 divergências permaneceram. Nenhum valor remoto foi reparado.
+
+### Causa identificada
+
+- Em **51/51** casos, o bruto da ficha está a até 1,5% do total da nota dividido pela quantidade de fotos enviadas.
+- Em **51/51** casos, o identificador e a descrição da única ficha correspondem à **última foto (N/N)**. A ficha tem quantidades menores que a nota; os itens da nota somam exatamente o total aprovado.
+- Os casos foram criados entre 2026-08-06 e 2026-10-07. Os eventos de aprovação disponíveis são de setembro e não há ajuste posterior ao pagamento.
+- Isso identifica a falha histórica como perda das partes anteriores ao concluir uma conferência multi-foto; não é uma divisão entre cooperados, colisão de tenant ou deduplicação na leitura do JSON operacional. O histórico do código confirma a sequência: `f128ba92` registra que o responsável mantinha as partes multi-foto somente em memória e que o sync apagava o progresso; `a4c13c9c` depois corrigiu a aprovação da última foto pendente.
+- A versão atual persiste os lançamentos por foto na ficha e, na aprovação, percorre todos os índices. As correções estão no histórico do código em 2026-10-06. Como uma nota divergente foi criada em 2026-10-07 e o histórico de implantação para aquela data ainda não está disponível, a confirmação de quando a correção chegou à produção depende do Vercel e da validação no piloto.
+
+### Validação e contenção
+
+- O smoke de conferência apontava para `NotasPedidoStaffMain.tsx`, que hoje é apenas um arquivo de compatibilidade. Corrigi-o para ler a implementação efetiva em `staff/NotasPedidoStaffResponsavelApp.tsx` e verificar a gravação de todos os índices, inclusive a última foto.
+- Incluí o smoke e o teste de conservação multi-foto no `release:verify:fast`.
+- `npm run release:verify:fast` passou (22 passos). A verificação opcional de ambiente oficial sinalizou que este checkout é `lab-mirror`, sem as flags de produção; por isso não serve para publicar.
+- Os 51 casos são notas já pagas. A nota contém o total agregado, mas não preserva a divisão original dos itens por foto; por isso nenhuma reconstrução financeira remota foi aplicada. Qualquer reparo precisa ser conferido no piloto, preservar os vínculos e status de pagamento e validar contra os pagamentos confirmados.
+- A auditoria Supabase foi somente leitura. A equipe Vercel continua indisponível nesta sessão (`list_teams` retornou zero equipes), então piloto e produção não foram publicados nem verificados.
+
+## 12. Histórico deste documento
 
 | Data | Ação |
 |------|------|
 | 2026-10-26 | Criação do diagnóstico marco zero + execução passo 1 (auditoria nuvem) |
+| 2026-10-30 | Auditoria read-only detalhada; causa multi-foto isolada; smoke corrigido e incluído no gate rápido |

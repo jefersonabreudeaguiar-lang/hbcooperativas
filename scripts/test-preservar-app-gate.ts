@@ -55,7 +55,7 @@ const lkg = readFileSync(join(root, "src/lib/staff/staffGestaoSnapshotGuard.ts")
 assert.match(lkg, /hb-staff-gestao-lkg-v1/);
 assert.match(lkg, /\$\{STAFF_GESTAO_LKG_SESSION_KEY\}:\$\{cnpj\}/);
 
-const persist = readFileSync(join(root, "src/lib/staff/staffGestaoPersistKey.ts"), "utf8");
+const persist = readFileSync(join(root, "src/lib/staff/appDataPersistIo.ts"), "utf8");
 assert.match(persist, /\$\{APP_DATA_STORAGE_KEY\}:\$\{normalizeCnpj\(cnpj\)\}/);
 assert.match(persist, /staffGestaoNuncaGravaBlobGlobal/);
 assert.match(persist, /staffGestaoSemCnpj/);

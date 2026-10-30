@@ -257,10 +257,10 @@ export function mergeCloudCooperadosIntoData(
   const duplicateIds = data.cooperativas
     .filter((c) => normalizeCnpj(String(c.cnpj ?? "")) === digits)
     .map((c) => c.id);
-  let base = alinharCooperadosParaCooperativa(data, coop.id, duplicateIds);
+  const base = alinharCooperadosParaCooperativa(data, coop.id, duplicateIds);
   coop = resolveCooperativaForCloudMerge(base, digits, preferredCoopId) ?? coop;
 
-  let cooperados = [...base.cooperados];
+  const cooperados = [...base.cooperados];
   let changed = false;
   const idRemap = new Map<string, string>();
 
@@ -296,7 +296,7 @@ export function mergeCloudCooperadosIntoData(
       const localPix = local.chavePix?.trim() ?? "";
       const cloudPix = cn.chavePix?.trim() ?? "";
 
-      let chavePix = cloudMaisRecente ? cloudPix || localPix : localPix || cloudPix;
+      const chavePix = cloudMaisRecente ? cloudPix || localPix : localPix || cloudPix;
       let pixValido = cloudMaisRecente ? cn.pixValido ?? local.pixValido : local.pixValido ?? cn.pixValido;
       let pixInvalidoMotivo = cloudMaisRecente ? cn.pixInvalidoMotivo ?? local.pixInvalidoMotivo : local.pixInvalidoMotivo ?? cn.pixInvalidoMotivo;
 
@@ -789,6 +789,9 @@ export function fichaPertenceCooperado(
   cooperativaId?: string
 ): boolean {
   if (!cooperadoId) return false;
+  // O ID do cooperado pode se repetir em instalações/migrações multi-tenant.
+  // Um vínculo explícito a outra cooperativa sempre prevalece sobre o ID.
+  if (cooperativaId && ficha.cooperativaId && ficha.cooperativaId !== cooperativaId) return false;
   if (ficha.cooperadoId === cooperadoId) return true;
 
   const alvo = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
@@ -825,12 +828,15 @@ export function notaPertenceCooperado(
   data: AppData,
   nota: {
     cooperadoId: string;
+    cooperativaId?: string;
     cooperadoNomeSnapshot?: string;
     divisaoEntrega?: { participantes: { cooperadoId: string; cooperadoNome: string }[] };
   },
   cooperadoId: string,
   cooperativaId?: string
 ): boolean {
+  // Não deixe um ID repetido fazer a nota atravessar o limite do tenant.
+  if (cooperativaId && nota.cooperativaId && nota.cooperativaId !== cooperativaId) return false;
   if (nota.cooperadoId === cooperadoId) return true;
   const alvo = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
   const dono = resolverCooperadoIdCanonico(data, nota.cooperadoId, cooperativaId, nota.cooperadoNomeSnapshot);

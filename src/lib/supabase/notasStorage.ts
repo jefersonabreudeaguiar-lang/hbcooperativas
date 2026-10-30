@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NotaPedido } from "@/types";
 import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
 import { protectNotaAgainstStatusDowngrade, isNotaNaFilaConferenciaResponsavel, sanitizarNotaParaFilaConferencia } from "@/utils/notaStatus";
+import { notaPedidoIdsDeOutraCooperativa } from "@/lib/security/notaPedidoTenantPolicy";
 import { mergeNotaComFotos } from "@/utils/fotoEntrega";
 import { isInlineDataUrl } from "@/utils/mediaHelpers";
 
@@ -667,7 +668,7 @@ export async function fetchNotasFromTable(
     return { notas: merged, tableMissing: false, serverWatermark };
   }
 
-  let query = supabase
+  const query = supabase
     .from("notas_pedido")
     .select("payload, status, updated_at")
     .eq("cooperativa_cnpj", cnpj);
@@ -724,21 +725,41 @@ export async function upsertNotasInTable(
   cnpj: string,
   notas: NotaPedido[],
   cooperadoNome?: string
-): Promise<{ ok: true } | { ok: false; tableMissing: boolean; error?: string }> {
+): Promise<{ ok: true } | { ok: false; tableMissing: boolean; tenantConflict?: boolean; error?: string }> {
   if (notas.length === 0) return { ok: true };
 
   const ids = notas.map((n) => n.id);
   const { data: existingRows, error: existingError } = await supabase
     .from("notas_pedido")
-    .select("id, status, payload")
-    .eq("cooperativa_cnpj", cnpj)
+    .select("id, cooperativa_cnpj, status, payload")
     .in("id", ids);
 
   if (existingError && !isNotasPedidoTableMissing(existingError)) {
     console.error("[notas-pedido/upsert-existing]", existingError.message);
+    return {
+      ok: false,
+      tableMissing: false,
+      error: "Não foi possível confirmar a cooperativa proprietária da entrega.",
+    };
   }
   if (existingError && isNotasPedidoTableMissing(existingError)) {
     return { ok: false, tableMissing: true };
+  }
+
+  const foreignIds = notaPedidoIdsDeOutraCooperativa(
+    cnpj,
+    (existingRows ?? []).map((row) => ({
+      id: String(row.id),
+      cooperativa_cnpj: String(row.cooperativa_cnpj ?? ""),
+    }))
+  );
+  if (foreignIds.length > 0) {
+    return {
+      ok: false,
+      tableMissing: false,
+      tenantConflict: true,
+      error: "Uma entrega com este identificador já pertence a outra cooperativa.",
+    };
   }
 
   const existingById = new Map(
@@ -775,12 +796,64 @@ export async function upsertNotasInTable(
     created_at: nota.createdAt,
   }));
 
-  const { error } = await supabase.from("notas_pedido").upsert(rows, { onConflict: "id" });
-  if (error) {
-    if (isNotasPedidoTableMissing(error)) {
-      return { ok: false, tableMissing: true };
+  const existingIds = new Set((existingRows ?? []).map((row) => String(row.id)));
+  const updates = rows.filter((row) => existingIds.has(row.id));
+  const inserts = rows.filter((row) => !existingIds.has(row.id));
+
+  // Existing IDs are updated with both keys in the predicate. New IDs use INSERT,
+  // so a concurrent cross-tenant ID collision fails instead of moving ownership.
+  for (let offset = 0; offset < updates.length; offset += 20) {
+    const batch = updates.slice(offset, offset + 20);
+    const results = await Promise.all(batch.map((row) =>
+      supabase
+        .from("notas_pedido")
+        .update(row)
+        .eq("id", row.id)
+        .eq("cooperativa_cnpj", cnpj)
+        .select("id")
+        .maybeSingle()
+    ));
+    for (const result of results) {
+      if (result.error) {
+        if (isNotasPedidoTableMissing(result.error)) return { ok: false, tableMissing: true };
+        return { ok: false, tableMissing: false, error: result.error.message };
+      }
+      if (!result.data?.id) {
+        return {
+          ok: false,
+          tableMissing: false,
+          error: "A entrega mudou durante a gravação. Atualize a tela e tente novamente.",
+        };
+      }
     }
-    return { ok: false, tableMissing: false, error: error.message };
+  }
+
+  if (inserts.length > 0) {
+    const { error } = await supabase.from("notas_pedido").insert(inserts);
+    if (error) {
+      if (isNotasPedidoTableMissing(error)) return { ok: false, tableMissing: true };
+      // Recheck unique-ID conflicts that raced with the ownership lookup.
+      const { data: racedRows } = await supabase
+        .from("notas_pedido")
+        .select("id, cooperativa_cnpj")
+        .in("id", inserts.map((row) => row.id));
+      const racedForeignIds = notaPedidoIdsDeOutraCooperativa(
+        cnpj,
+        (racedRows ?? []).map((row) => ({
+          id: String(row.id),
+          cooperativa_cnpj: String(row.cooperativa_cnpj ?? ""),
+        }))
+      );
+      if (racedForeignIds.length > 0) {
+        return {
+          ok: false,
+          tableMissing: false,
+          tenantConflict: true,
+          error: "Uma entrega com este identificador já pertence a outra cooperativa.",
+        };
+      }
+      return { ok: false, tableMissing: false, error: error.message };
+    }
   }
   return { ok: true };
 }

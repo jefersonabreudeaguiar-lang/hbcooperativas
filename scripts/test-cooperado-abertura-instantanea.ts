@@ -36,7 +36,9 @@ assert.ok(staffFallback > 0, "login do responsável continua no caminho completo
 const coopFast = loginFn.slice(0, staffFallback);
 assert.match(coopFast, /jwtRoleEarly === "cooperado"/);
 assert.match(coopFast, /void \(async/);
-assert.match(coopFast, /window\.location\.assign/);
+assert.match(coopFast, /scheduleSafeAppNavigation\(redirectTo, 280\)/);
+const navigation = readFileSync(join(root, "src/lib/pwa/safeDocumentNavigation.ts"), "utf8");
+assert.match(navigation, /window\.location\.assign/);
 assert.match(coopFast, /ensureCloudSessionReady/, "nuvem do cooperado só no fundo");
 
 const store = readFileSync(join(root, "src/services/dataStore.ts"), "utf8");

@@ -1,12 +1,15 @@
 import type { AppData, User, UserRole } from "@/types";
 import { isCooperadoAppUser, normalizeUserRole } from "@/permissions";
-import { resolveMobileCooperadoId } from "@/lib/hb-credit/mobileCooperadoLink";
-import { resolveCooperadoExperienceId } from "@/lib/security/responsavelPanelAccess";
-import { evaluateResponsavelIdentidade } from "@/lib/responsavel/responsavelIdentidade";
-import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { getUserCooperativaId } from "@/utils/cooperativa";
+import {
+  resolveMobileCooperadoId,
+  resolveMobileCooperadoIdFromEmail,
+} from "@/lib/hb-credit/mobileCooperadoLink";
+import {
+  canAccessPainelResponsavel,
+  resolveCooperadoExperienceId,
+} from "@/lib/security/responsavelPanelAccess";
 
-export { resolveMobileCooperadoId };
+export { resolveMobileCooperadoId, resolveMobileCooperadoIdFromEmail };
 
 function isAppStandaloneMode(): boolean {
   if (typeof window === "undefined") return false;
@@ -24,63 +27,44 @@ export function isMobileCooperativaApp(): boolean {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 }
 
-function canonicalCooperadoIdForExperience<T extends Omit<User, "password">>(
-  user: T,
-  cooperadoId: string,
-  data?: AppData | null
-): string {
-  if (!data) return cooperadoId;
-  const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
-  if (!coopId) return cooperadoId;
-  return resolverCooperadoIdCanonico(data, cooperadoId, coopId);
-}
-
-function asCooperadoExperience<T extends Omit<User, "password">>(
-  user: T,
-  cooperadoId: string,
-  data?: AppData | null
-): T {
-  const canon = canonicalCooperadoIdForExperience(user, cooperadoId, data);
+function asCooperadoExperience<T extends Omit<User, "password">>(user: T, cooperadoId: string): T {
   return {
     ...user,
     role: "cooperado",
-    cooperadoId: canon,
+    cooperadoId,
   };
 }
 
-function isStaffAccountRole(role: string | undefined): boolean {
-  const n = normalizeUserRole(role ?? "cooperado");
-  return n === "responsavel" || n === "tesoureiro" || n === "admin";
-}
-
-/** Papel da UI = papel do login. Sem troca responsável ↔ cooperado. */
+/** Papel e cooperadoId usados na UI — cooperado sempre cooperado; gestão só para quem foi autorizado. */
 export function resolveExperienceUser<T extends Omit<User, "password">>(
   user: T | null | undefined,
   data?: AppData | null
 ): T | null {
   if (!user) return null;
 
-  const mobile = isMobileCooperativaApp();
-  const identidade = evaluateResponsavelIdentidade({
-    accountUser: user,
-    data,
-    dataReady: Boolean(data),
-    mobile,
-  });
+  if (isCooperadoAppUser(user)) {
+    const cooperadoId = resolveCooperadoExperienceId(user) ?? user.cooperadoId;
+    return cooperadoId ? asCooperadoExperience(user, cooperadoId) : { ...user, role: "cooperado" as UserRole };
+  }
 
-  if (identidade.staffPainelUi || isStaffAccountRole(user.role)) {
+  const allowPainel = canAccessPainelResponsavel(user, data);
+  const mobile = isMobileCooperativaApp();
+
+  if (!allowPainel) {
+    const cooperadoId = resolveCooperadoExperienceId(user);
+    if (cooperadoId) return asCooperadoExperience(user, cooperadoId);
     return user;
   }
 
-  if (identidade.modo === "cooperado" || isCooperadoAppUser(user)) {
-    const cooperadoId =
-      resolveCooperadoExperienceId(user) ??
-      user.cooperadoId ??
-      resolveMobileCooperadoId(user);
-    return cooperadoId
-      ? asCooperadoExperience(user, cooperadoId, data)
-      : { ...user, role: "cooperado" as UserRole };
+  if (!mobile) return user;
+
+  const role = normalizeUserRole(user.role);
+  if (role !== "responsavel" && role !== "tesoureiro" && role !== "admin") {
+    return user;
   }
 
-  return user;
+  const mobileCooperadoId = resolveMobileCooperadoId(user);
+  if (!mobileCooperadoId) return user;
+
+  return asCooperadoExperience(user, mobileCooperadoId);
 }

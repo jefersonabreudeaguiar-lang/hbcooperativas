@@ -1,380 +1,148 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppDataSelector } from "@/hooks/useAppData";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
   cooperadoFinanceiroBloqueiaEntradaApp,
   cooperadoFinanceiroDesatualizado,
-  cooperadoFinanceiroStaleRecuperavelEmBackground,
   limparFichaObsoletaCooperado,
 } from "@/services/fichaSyncGuard";
 import { solicitarRecuperacaoFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
-import {
-  cooperadoLocalResumeReady,
-  isCooperadoManualOperacionalSync,
-  isCooperadoUserSyncVisible,
-  shouldSkipCooperadoSecondaryMountSync,
-} from "@/lib/performance/cooperadoColdStart";
-import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
-import {
-  cooperadoAppReleaseNeedsOperacionalSync,
-  isCooperadoEventDrivenSync,
-} from "@/lib/performance/cooperadoEventDrivenSync";
-import {
-  clearCooperadoPostShellSyncStarted,
-  cooperadoPostShellSyncPermitido,
-  markCooperadoPostShellSyncStarted,
-  scheduleCooperadoPostShellSync,
-} from "@/lib/performance/cooperadoPostShellSync";
-import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import {
-  requestAppSyncImmediate,
-  requestCooperadoAppReleaseSync,
-  requestCooperadoFinanceiroRecoverySync,
-  requestCooperadoPrimeiraCargaSync,
-} from "@/services/syncRequest";
-import { consumeCooperadoPostLoginFinanceSync } from "@/lib/cooperado/cooperadoPostLoginFinanceSync";
-import { markCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
-import { cooperadoRematerializarFinanceiroLocalSePossivel } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
-import { cooperadoPwaMessengerPrecisaSyncOperacionalInicial } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
+import { requestAppSyncImmediate } from "@/services/syncRequest";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
-import { getData, isAppDataWarm } from "@/services/dataStore";
-import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
-import { inicioCardCacheProntoParaAbertura } from "@/lib/cooperadoInicioCardPersistencia";
-import {
-  cooperadoFinanceiroExibicaoCachePronto,
-  lerInicioCardFinanceiroExibicao,
-} from "@/lib/cooperado/cooperadoFinanceiroDisplayCache";
-import { scheduleCooperadoFinanceiroDisplayWarmup } from "@/lib/cooperado/cooperadoFinanceiroDisplayWarmup";
+import { getData, saveDataSafe } from "@/services/dataStore";
 import {
   getCooperadoRunSyncSessionLease,
   saveAppDataIfSyncLeaseCurrent,
 } from "@/services/operacionalPullLease";
-import { markRqlDataReady } from "@/lib/performance/rqlMarks";
-import {
-  CooperadoFinanceiroShellProvider,
-  type CooperadoFinanceiroShellState,
-} from "@/components/cooperado/CooperadoFinanceiroShellContext";
-import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
-import { cooperadoPwaInstantPaintReady } from "@/lib/cooperado/cooperadoPwaInstantResume";
-import {
-  cooperadoGaInicioSomenteCasca,
-  cooperadoMobileDeferOperacionalSyncNaAbertura,
-  isCooperadoMobileGaPromoted,
-} from "@/lib/cooperado/cooperadoMobilePilot";
-import { tryAckCooperadoAppReleaseWhenLocalReady } from "@/lib/cooperado/cooperadoMobileReleaseLocalAck";
-import {
-  scheduleCooperadoGaFinanceiroExibicaoRefresh,
-} from "@/lib/cooperado/cooperadoGaFinanceiroExibicaoRefreshSchedule";
-import { scheduleCooperadoGaPrimeiraCargaSilenciosa } from "@/lib/cooperado/cooperadoGaColdBootstrap";
-import { scheduleCooperadoGaValorRevisionLightSync } from "@/lib/cooperado/cooperadoGaRevisionLightSync";
-import {
-  cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem,
-  cooperadoGaValorReceberExibicaoResolvida,
-} from "@/lib/cooperado/cooperadoGaExibicaoFinanceiraRecovery";
-import { cancelCooperadoGarantiaValorReceberSync } from "@/lib/cooperado/cooperadoGaGarantiaValorReceberSync";
-import { cancelCooperadoBicMobileSessionSync } from "@/lib/cooperado/cooperadoBicMobileSessionSync";
-import { isCooperadoMobileBicLeituraAuthority } from "@/lib/cooperado/cooperadoBicMobileAuthority";
-import { CooperadoBicRevisionPulseHost } from "@/components/cooperado/CooperadoBicRevisionPulseHost";
-import { markCooperadoBicFinanceiroFresh } from "@/lib/bic/cooperadoBicSonataSyncUi";
-import {
-  cooperadoPilotAppDataTemFinanceiroLocal,
-  cooperadoPilotFinanceiroExibirComSnapshotsLocais,
-  scheduleCooperadoPilotFinanceReadRecovery,
-} from "@/lib/cooperado/cooperadoMobilePilotFinanceReadRecovery";
-import {
-  cooperadoMobileUiQuiescenceActive,
-  cooperadoTabSwitchQuiescenceActive,
-} from "@/lib/cooperado/cooperadoTabSwitchQuiescence";
-import { scheduleCooperadoBicHybridIdleTask } from "@/lib/cooperado/cooperadoBicHybridLight";
-import { isCooperadoJefersonRebuildPilot } from "@/lib/cooperado/cooperadoJefersonRebuildPilot";
-import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import { AlertBanner } from "@/components/ui/AlertBanner";
+import { Button } from "@/components/ui/Button";
 
-/** Após este tempo, o conteúdo pode seguir mesmo sem sync (shell já navegável). */
-const SYNC_HINT_MAX_MS = 18_000;
+/** Bloqueio máximo da tela cheia; sync segue em background depois disso. */
+const SYNC_BLOCK_MAX_MS = 18_000;
 
 /**
- * Cooperado: estado financeiro + sync em background.
- * Não bloqueia AppShell — apenas informa o conteúdo via contexto.
+ * Cooperado: sync financeiro na nuvem sem prender o app por minutos.
+ * Só ocupa a tela inteira quando não há dados locais; caso contrário, banner + navegação.
  */
 export function CooperadoFinanceiroGate({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
-  const jefersonRebuild = isCooperadoJefersonRebuildPilot(user);
-  const jefersonSomenteAtualizar = isCooperadoJefersonSomenteAtualizarPilot(user);
-  const jefersonSemSyncAbertura = jefersonRebuild || jefersonSomenteAtualizar;
-  const { syncingForUi, lastSyncedAt } = useSyncStatus();
+  const { user, logout } = useAuth();
+  const { syncing, lastSyncError, lastSyncedAt } = useSyncStatus();
   const [syncWaitExceeded, setSyncWaitExceeded] = useState(false);
-  const dataReadyMarkedRef = useRef(false);
-
-  const cacheInicioCard = useMemo(() => {
-    if (!user?.cooperadoId || user.role !== "cooperado") return null;
-    const data = getData();
-    const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
-    if (!coopId) return null;
-    const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    return lerInicioCardFinanceiroExibicao(cooperadoId, coopId);
-  }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]);
-
-  const padraoJeferson = Boolean(user && isCooperadoMobileGaPromoted(user));
 
   const bloqueiaEntrada = useAppDataSelector((data) => {
-    if (padraoJeferson) return false;
     if (!data || !user?.cooperadoId || user.role !== "cooperado") return false;
     const coopId = getUserCooperativaId(user, data);
     if (!coopId) return true;
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
     return cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, coopId);
-  }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role, padraoJeferson]);
+  }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]);
+
+  const financeiroDesatualizado = useAppDataSelector((data) => {
+    if (!data || !user?.cooperadoId || user.role !== "cooperado") return false;
+    const coopId = getUserCooperativaId(user, data);
+    if (!coopId) return true;
+    const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+    return cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId);
+  }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]);
 
   useEffect(() => {
-    if (jefersonSemSyncAbertura) return;
-    if (user?.role !== "cooperado" || !user.cooperadoId) return;
-    if (!isCooperadoMobileGaPromoted(user)) return;
-    scheduleCooperadoFinanceiroDisplayWarmup(user);
-    scheduleCooperadoPilotFinanceReadRecovery(user);
-    scheduleCooperadoGaFinanceiroExibicaoRefresh(user);
-    if (!cooperadoGaInicioSomenteCasca(user)) {
-      scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
-    }
-    if (isCooperadoMobileBicLeituraAuthority(user)) {
-      markCooperadoBicFinanceiroFresh();
-    }
-    return () => {
-      cancelCooperadoGarantiaValorReceberSync();
-      cancelCooperadoBicMobileSessionSync();
-    };
-  }, [jefersonSemSyncAbertura, user?.id, user?.role, user?.cooperadoId]);
-
-  useEffect(() => {
-    if (jefersonSemSyncAbertura) return;
     if (user?.role !== "cooperado" || !user.cooperadoId) return;
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
-
-    const pullFinanceiroImediato = () => {
-      markCooperadoUserSyncVisible();
-      requestCooperadoFinanceiroRecoverySync();
-      requestCooperadoPrimeiraCargaSync();
-    };
-
-    if (consumeCooperadoPostLoginFinanceSync()) {
-      if (!isCooperadoMobileGaPromoted(user)) {
-        pullFinanceiroImediato();
-      } else if (!cooperadoGaInicioSomenteCasca(user)) {
-        scheduleCooperadoGaPrimeiraCargaSilenciosa(user);
-      }
-    } else if (isAppDataWarm()) {
-      const data = getData();
-      const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
-      if (coopId) {
-        const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-        if (
-          !cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId) &&
-          lastSyncedAt == null &&
-          !syncingForUi &&
-          !isCooperadoMobileGaPromoted(user)
-        ) {
-          pullFinanceiroImediato();
-        }
-      }
-    }
-
-    const runFinanceBootstrap = () => {
-      if (!cooperadoPostShellSyncPermitido()) return;
-      markCooperadoPostShellSyncStarted();
-
-      if (isCooperadoPwaMessengerMode() || isCooperadoMobileGaPromoted(user)) {
-        const runGaLocalBootstrap = () => {
-          if (cooperadoMobileUiQuiescenceActive()) {
-            scheduleCooperadoBicHybridIdleTask(runGaLocalBootstrap, 1_500);
-            return;
-          }
-          cooperadoRematerializarFinanceiroLocalSePossivel(user);
-          tryAckCooperadoAppReleaseWhenLocalReady(user);
-          if (isAppDataWarm() && cooperadoGaExibicaoZeradaPrecisaRecoveryNuvem(user)) {
-            scheduleCooperadoGaValorRevisionLightSync(user);
-          }
-        };
-        scheduleCooperadoBicHybridIdleTask(runGaLocalBootstrap, 600);
-        if (
-          !cooperadoMobileDeferOperacionalSyncNaAbertura(user) &&
-          isCooperadoPwaMessengerMode() &&
-          cooperadoPwaMessengerPrecisaSyncOperacionalInicial(user)
-        ) {
-          markCooperadoUserSyncVisible();
-          requestCooperadoAppReleaseSync();
-        }
-        clearCooperadoPostShellSyncStarted();
-        return;
-      }
-
-      const data = getData();
-      const coopId = getUserCooperativaId(user, data);
-      if (!coopId) {
-        clearCooperadoPostShellSyncStarted();
-        return;
-      }
-      const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId!, coopId);
-
-      if (cooperadoAppReleaseNeedsOperacionalSync()) {
-        cooperadoRematerializarFinanceiroLocalSePossivel(user);
-        requestCooperadoAppReleaseSync();
-      }
-
-      if (!cooperadoTabSwitchQuiescenceActive()) {
-        const limpo = limparFichaObsoletaCooperado(data, cooperadoId, coopId);
-        if (limpo !== data) {
-          saveAppDataIfSyncLeaseCurrent(getCooperadoRunSyncSessionLease() ?? undefined, limpo);
-        }
-      }
-
-      if (isCooperadoEventDrivenSync()) {
-        if (cooperadoFinanceiroBloqueiaEntradaApp(getData(), cooperadoId, coopId)) {
-          requestCooperadoPrimeiraCargaSync();
-          clearCooperadoPostShellSyncStarted();
-          return;
-        }
-        const latest = getData();
-        const desatualizado = cooperadoFinanceiroDesatualizado(latest, cooperadoId, coopId);
-        const staleRecuperavel = cooperadoFinanceiroStaleRecuperavelEmBackground(
-          latest,
-          cooperadoId,
-          coopId
-        );
-        void resolveCooperativaCnpj(latest, coopId, user).then((cnpj) => {
-          if (!cnpj) return;
-          void runCooperadoForegroundOperacionalCheck(cnpj, {
-            financeiroDesatualizado: desatualizado && !staleRecuperavel,
-            cooperadoId,
-            cooperativaId: coopId,
-          });
-        });
-        clearCooperadoPostShellSyncStarted();
-        return;
-      }
-
-      if (!isCooperadoManualOperacionalSync()) {
-        solicitarRecuperacaoFinanceiroCooperado();
-        if (!shouldSkipCooperadoSecondaryMountSync()) {
-          requestAppSyncImmediate();
-        }
-      }
-      clearCooperadoPostShellSyncStarted();
-    };
-
-    scheduleCooperadoPostShellSync(runFinanceBootstrap);
-  }, [jefersonSemSyncAbertura, user?.id, user?.cooperadoId, user?.role]);
-
-  const cooperadoAtivo = user?.role === "cooperado" && Boolean(user?.cooperadoId);
-  const aguardandoSyncInicial =
-    cooperadoAtivo && !padraoJeferson && Boolean(bloqueiaEntrada) && lastSyncedAt == null;
-
-  useEffect(() => {
-    if (!aguardandoSyncInicial) {
-      const resetId = requestAnimationFrame(() => setSyncWaitExceeded(false));
-      return () => cancelAnimationFrame(resetId);
-    }
-    const timer = window.setTimeout(() => setSyncWaitExceeded(true), SYNC_HINT_MAX_MS);
-    return () => window.clearTimeout(timer);
-  }, [aguardandoSyncInicial]);
-
-  useEffect(() => {
-    if (user?.role !== "cooperado" || dataReadyMarkedRef.current) return;
-    if (!isAppDataWarm()) return;
     const data = getData();
     const coopId = getUserCooperativaId(user, data);
-    if (!coopId || !user.cooperadoId) return;
+    if (!coopId) return;
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    const pronto =
-      !cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, coopId) || lastSyncedAt != null;
-    if (!pronto) return;
-    dataReadyMarkedRef.current = true;
-    markRqlDataReady();
-  }, [user?.role, user?.cooperadoId, bloqueiaEntrada, lastSyncedAt]);
-
-  const abrirComCacheInicio =
-    cooperadoAtivo &&
-    user &&
-    (padraoJeferson ||
-      inicioCardCacheProntoParaAbertura(cacheInicioCard) ||
-      cooperadoFinanceiroExibicaoCachePronto(user) ||
-      cooperadoLocalResumeReady(user) ||
-      cooperadoPilotFinanceiroExibirComSnapshotsLocais(user) ||
-      cooperadoPilotAppDataTemFinanceiroLocal(user) ||
-      (isCooperadoPwaMessengerMode() && cooperadoPwaInstantPaintReady(user)));
-
-  const aguardandoDadosFinanceiros =
-    cooperadoAtivo &&
-    !isCooperadoMobileGaPromoted(user) &&
-    Boolean(bloqueiaEntrada) &&
-    (syncingForUi || (lastSyncedAt == null && !syncWaitExceeded && !abrirComCacheInicio));
-
-  const falhaCarregarFicha =
-    cooperadoAtivo &&
-    !isCooperadoMobileGaPromoted(user) &&
-    Boolean(bloqueiaEntrada) &&
-    !syncingForUi &&
-    (syncWaitExceeded || lastSyncedAt != null);
+    const limpo = limparFichaObsoletaCooperado(data, cooperadoId, coopId);
+    if (limpo !== data) {
+      saveAppDataIfSyncLeaseCurrent(getCooperadoRunSyncSessionLease() ?? undefined, limpo);
+    }
+    solicitarRecuperacaoFinanceiroCooperado();
+    requestAppSyncImmediate();
+  }, [user?.id, user?.cooperadoId, user?.role]);
 
   useEffect(() => {
-    if (!falhaCarregarFicha || isCooperadoMobileGaPromoted(user)) return;
-    solicitarRecuperacaoFinanceiroCooperado();
-    scheduleCooperadoPostShellSync(() => {
-      if (!isCooperadoManualOperacionalSync()) {
-        requestAppSyncImmediate();
-      } else if (isCooperadoEventDrivenSync()) {
-        requestCooperadoPrimeiraCargaSync();
-      }
-    });
-  }, [falhaCarregarFicha]);
+    if (user?.role !== "cooperado") {
+      setSyncWaitExceeded(false);
+      return;
+    }
+    if (!bloqueiaEntrada || lastSyncedAt != null) {
+      setSyncWaitExceeded(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setSyncWaitExceeded(true), SYNC_BLOCK_MAX_MS);
+    return () => window.clearTimeout(timer);
+  }, [user?.role, bloqueiaEntrada, lastSyncedAt, user?.id]);
 
   if (!user || user.role !== "cooperado") {
     return <>{children}</>;
   }
 
-  if (jefersonSemSyncAbertura) {
+  const carregandoFinanceiro =
+    bloqueiaEntrada && (syncing || (lastSyncedAt == null && !syncWaitExceeded));
+
+  if (carregandoFinanceiro) {
     return (
-      <CooperadoFinanceiroShellProvider
-        value={{
-          aguardandoDadosFinanceiros: false,
-          bloqueiaEntrada: false,
-          mensagemStatus: jefersonSomenteAtualizar
-            ? "1ª abertura leve. Na 2ª entrada (após 30s), os dados baixam sozinhos; cada aba completa quando você abrir."
-            : null,
-        }}
-      >
-        {children}
-      </CooperadoFinanceiroShellProvider>
+      <div className="max-w-lg mx-auto py-12 space-y-4">
+        <PageSkeleton />
+        <p className="text-center text-sm text-gray-600">
+          Baixando sua ficha e entregas da nuvem…
+        </p>
+      </div>
     );
   }
 
-  let mensagemStatus: string | null = null;
-  if (!padraoJeferson) {
-    if (aguardandoDadosFinanceiros && !isAppDataWarm()) {
-      mensagemStatus = "Atualizando dados da nuvem… Você já pode usar as abas.";
-    } else if (aguardandoDadosFinanceiros || syncingForUi) {
-      mensagemStatus = "Atualizando dados…";
-    }
-  } else if (
-    syncingForUi &&
-    isCooperadoUserSyncVisible() &&
-    !cooperadoGaValorReceberExibicaoResolvida(user)
-  ) {
-    mensagemStatus = "Atualizando dados…";
+  const falhaCarregarFicha =
+    bloqueiaEntrada &&
+    !syncing &&
+    (Boolean(lastSyncError) || lastSyncedAt != null || syncWaitExceeded);
+
+  if (falhaCarregarFicha) {
+    return (
+      <div className="max-w-lg mx-auto py-8 space-y-4">
+        <AlertBanner variant="error" title="Não foi possível carregar sua ficha">
+          {lastSyncError ||
+            "A sincronização demorou demais. Toque em Tentar novamente. Se persistir, saia, limpe o cache do navegador e entre de novo."}
+        </AlertBanner>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={() => {
+              solicitarRecuperacaoFinanceiroCooperado();
+              requestAppSyncImmediate();
+            }}
+            disabled={syncing}
+          >
+            {syncing ? "Baixando…" : "Tentar novamente"}
+          </Button>
+          <Button variant="secondary" onClick={() => logout()}>
+            Sair e entrar de novo
+          </Button>
+        </div>
+      </div>
+    );
   }
 
-  const shellState: CooperadoFinanceiroShellState = {
-    aguardandoDadosFinanceiros: Boolean(aguardandoDadosFinanceiros),
-    bloqueiaEntrada: padraoJeferson ? false : Boolean(bloqueiaEntrada),
-    mensagemStatus,
-  };
+  const bannerAtualizando =
+    financeiroDesatualizado && (syncing || lastSyncedAt == null || Boolean(lastSyncError));
 
   return (
-    <CooperadoFinanceiroShellProvider value={shellState}>
-      <CooperadoBicRevisionPulseHost />
+    <>
+      {bannerAtualizando && (
+        <div className="max-w-lg mx-auto px-4 pt-2">
+          <AlertBanner variant="info" title="Atualizando seus dados">
+            {syncing
+              ? "Baixando ficha e entregas da nuvem. Os valores podem ajustar em instantes."
+              : lastSyncError
+                ? "Última sincronização falhou; exibindo o que há no aparelho. Toque em sincronizar se algo faltar."
+                : "Preparando sua ficha e entregas…"}
+          </AlertBanner>
+        </div>
+      )}
       {children}
-    </CooperadoFinanceiroShellProvider>
+    </>
   );
 }

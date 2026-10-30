@@ -10,13 +10,13 @@ import {
   type CooperadoSyncPresentationInput,
 } from "@/lib/cooperadoApresentacaoFinanceira";
 import {
-  bicCentralQuantoVouReceberParaExibicao,
-  bicCentralResolveInicioParaExibicao,
-  bicCentralResolvePainelParaExibicao,
-} from "@/services/bicLeituraCentralCooperado";
-import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
+  getInicioCooperadoParaExibicao,
+  getPainelQuantoVouReceberCooperadoParaExibicao,
+  getQuantoVouReceberCooperadoParaExibicao,
+  type BicProjecaoFinanceiraCooperadoOpts,
+} from "@/services/bicProjecaoFinanceiraCooperado";
 import { getValorQuantoVouReceber } from "@/services/cooperadoEntregasService";
-import { getPagamentoPendenteAssinaturaReciboCooperado } from "@/services/notaPedidoService";
+import { getPagamentoAguardandoCooperado } from "@/services/notaPedidoService";
 
 export type CooperadoFluxoReadiness = CooperadoSyncPresentationInput;
 
@@ -48,7 +48,7 @@ export function cooperadoFluxoCarregandoFinanceiro(input: CooperadoFluxoReadines
 /** Mesmo critério M7 / ficha — sync ativo ou hydration incompleta. */
 export function cooperadoFluxoPainelProjecaoOpts(
   input: CooperadoFluxoReadiness & { conferindoPagamentoNuvem?: boolean }
-): Pick<import("@/services/bicProjecaoFinanceiraCooperado").BicProjecaoFinanceiraCooperadoOpts, "carregandoNuvem" | "financeiroSincronizando"> {
+): Pick<BicProjecaoFinanceiraCooperadoOpts, "carregandoNuvem" | "financeiroSincronizando"> {
   return {
     carregandoNuvem: Boolean(input.conferindoPagamentoNuvem),
     financeiroSincronizando: !cooperadoFluxoApresentacaoPronta(input),
@@ -78,20 +78,20 @@ export function projetarCooperadoFluxoFinanceiroGlobal(
 ): CooperadoFluxoProjecaoSnapshot {
   const apresentacaoConsolidada = cooperadoFluxoApresentacaoPronta(readiness);
   const painelOpts = cooperadoFluxoPainelProjecaoOpts(readiness);
-  const inicio = bicCentralResolveInicioParaExibicao(data, cooperadoId, cooperativaId, {
-    apresentacaoConsolidada,
-  });
-  const m6 = bicCentralQuantoVouReceberParaExibicao(data, cooperadoId, cooperativaId, {
+  const inicio = getInicioCooperadoParaExibicao(data, cooperadoId, cooperativaId, {
     apresentacaoConsolidada,
   }).value;
-  const painel = bicCentralResolvePainelParaExibicao(data, cooperadoId, cooperativaId, {
-    ...painelOpts,
+  const m6 = getQuantoVouReceberCooperadoParaExibicao(data, cooperadoId, cooperativaId, {
     apresentacaoConsolidada,
-  });
-  const motorValor = isBicCentralReadAuthorityEnabled()
-    ? m6.valor
-    : getValorQuantoVouReceber(data, cooperadoId, cooperativaId).valor;
-  const pg = getPagamentoPendenteAssinaturaReciboCooperado(data, cooperadoId);
+  }).value;
+  const painel = getPainelQuantoVouReceberCooperadoParaExibicao(
+    data,
+    cooperadoId,
+    cooperativaId,
+    painelOpts
+  ).value;
+  const motor = getValorQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const pg = getPagamentoAguardandoCooperado(data, cooperadoId);
   return {
     apresentacaoConsolidada,
     carregando: cooperadoFluxoCarregandoFinanceiro(readiness),
@@ -101,7 +101,7 @@ export function projetarCooperadoFluxoFinanceiroGlobal(
     m6Aguardando: m6.aguardandoAssinatura,
     painelEstado: painel.estado,
     pagamentoAguardandoId: pg?.id ?? null,
-    motorValor,
+    motorValor: motor.valor,
   };
 }
 

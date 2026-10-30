@@ -8,13 +8,13 @@ import { requestStaffGestaoAtualizar } from "@/services/syncRequest";
 import { requestManualCooperadoReleaseUpgrade } from "@/lib/pwa/fetchOfficialClientRelease";
 import {
   COOPERADO_ATUALIZAR_MENSAGEM_AMOR,
+  atualizarVersaoCooperadoSeNecessario,
   executarCooperadoAtualizarManual,
 } from "@/lib/cooperado/cooperadoAtualizarManual";
 import {
   isCooperadoJefersonRebuildEntregasAtivo,
   isCooperadoJefersonRebuildInicioAtivo,
 } from "@/lib/cooperado/cooperadoJefersonRebuildPilot";
-import { isCooperadoJefersonSomenteAtualizarPilot } from "@/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot";
 import {
   COOPERADO_JEFERSON_REBUILD_INICIO_ATUALIZAR_EVENT,
   COOPERADO_JEFERSON_REBUILD_INICIO_DONE_EVENT,
@@ -46,12 +46,16 @@ export function SyncStatusChip({
   showBuild?: boolean;
 }) {
   const { syncing, lastSyncedAt } = useSyncStatus();
-  const [, setTick] = useState(0);
+  const [now, setNow] = useState(0);
 
   useEffect(() => {
     if (syncing || !lastSyncedAt) return;
-    const id = window.setInterval(() => setTick((t) => t + 1), 15_000);
-    return () => window.clearInterval(id);
+    const firstTick = window.setTimeout(() => setNow(Date.now()), 0);
+    const id = window.setInterval(() => setNow(Date.now()), 15_000);
+    return () => {
+      window.clearTimeout(firstTick);
+      window.clearInterval(id);
+    };
   }, [syncing, lastSyncedAt]);
 
   if (showBuild) {
@@ -99,7 +103,7 @@ export function SyncStatusChip({
 
   if (!lastSyncedAt) return null;
 
-  const label = formatRelativo(Date.now() - lastSyncedAt);
+  const label = formatRelativo(now > 0 ? now - lastSyncedAt : 0);
 
   return (
     <span
@@ -185,10 +189,6 @@ export function CooperadoAtualizarButton({
   const rebuildInicioAtualizar =
     user && isCooperadoJefersonRebuildInicioAtivo(user) && pathname === "/dashboard";
   const rebuildLeveAtualizar = rebuildEntregasAtualizar || rebuildInicioAtualizar;
-  const jefersonSomenteAutomatico =
-    user &&
-    isCooperadoJefersonSomenteAtualizarPilot(user) &&
-    !rebuildLeveAtualizar;
 
   useEffect(() => {
     if (rebuildLeveAtualizar) return;
@@ -225,10 +225,6 @@ export function CooperadoAtualizarButton({
 
   const loveVisible = showLoveMessage && spinning;
 
-  if (jefersonSomenteAutomatico) {
-    return null;
-  }
-
   return (
     <>
     <button
@@ -238,11 +234,17 @@ export function CooperadoAtualizarButton({
         sawSyncUiRef.current = false;
         setBusy(true);
         if (rebuildEntregasAtualizar) {
-          window.dispatchEvent(new Event(COOPERADO_JEFERSON_REBUILD_ENTREGAS_ATUALIZAR_EVENT));
+          void atualizarVersaoCooperadoSeNecessario().then((updatingRelease) => {
+            if (updatingRelease) return;
+            window.dispatchEvent(new Event(COOPERADO_JEFERSON_REBUILD_ENTREGAS_ATUALIZAR_EVENT));
+          });
           return;
         }
         if (rebuildInicioAtualizar) {
-          window.dispatchEvent(new Event(COOPERADO_JEFERSON_REBUILD_INICIO_ATUALIZAR_EVENT));
+          void atualizarVersaoCooperadoSeNecessario().then((updatingRelease) => {
+            if (updatingRelease) return;
+            window.dispatchEvent(new Event(COOPERADO_JEFERSON_REBUILD_INICIO_ATUALIZAR_EVENT));
+          });
           return;
         }
         void executarCooperadoAtualizarManual().then((ok) => {
