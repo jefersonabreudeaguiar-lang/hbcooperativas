@@ -84,7 +84,7 @@ import { StaffPainelSafeRoot } from "@/components/responsavel/StaffPainelSafeRoo
 import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { cooperadoLeituraFinanceiraExibicao } from "@/lib/cooperado/cooperadoLeituraFinanceiraExibicao";
-import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
+import { cooperadoFinanceiroLocalAusente } from "@/services/fichaSyncGuard";
 import {
   requestCooperadoFinanceiroRecoverySync,
   requestVotacaoOperacionalSync,
@@ -316,7 +316,10 @@ function CooperadoDashboardMain() {
       const coopId = getUserCooperativaId(user, data);
       if (!coopId) return false;
       const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-      return cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId);
+      // A ficha completa contra notas envolve reconciliar dados de toda a cooperativa.
+      // Esta consulta roda em cada notificação do AppData, então aqui usamos apenas
+      // a verificação local do cooperado; a reconciliação fica no sync em background.
+      return cooperadoFinanceiroLocalAusente(data, cooperadoId, coopId);
     },
     [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]
   );
