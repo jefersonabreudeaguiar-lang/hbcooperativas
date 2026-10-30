@@ -29,7 +29,7 @@ import {
 } from "@/services/cooperadoEntregasService";
 import { getInicioCooperadoParaExibicao } from "@/services/bicProjecaoFinanceiraCooperado";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
+import { cooperadoFinanceiroLocalAusente } from "@/services/fichaSyncGuard";
 import { requestAppSyncImmediate, requestVotacaoOperacionalSync } from "@/services/syncRequest";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExibirAguardandoAssinatura";
@@ -77,7 +77,8 @@ function CooperadoDashboard() {
     const coopId = getUserCooperativaId(user, data);
     if (!coopId) return false;
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    return cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId);
+    // A reconciliação completa da cooperativa é do fluxo de sync, não do render.
+    return cooperadoFinanceiroLocalAusente(data, cooperadoId, coopId);
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]);
 
   useEffect(() => {
