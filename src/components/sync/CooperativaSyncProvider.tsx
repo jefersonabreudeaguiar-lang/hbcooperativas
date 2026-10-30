@@ -20,7 +20,6 @@ import {
   getCooperativaCnpj,
   pushNotasPedidoToCloud,
   pushNotaComFotosEmStreaming,
-  flushPendingNotaDeletes,
   fetchNotaPedidoFromCloud,
   finalizeNotaEntregaNaNuvem,
   refreshCooperadoNotasEmAnalise,
@@ -62,7 +61,7 @@ import { refreshContaCoopDescontosAfterOperacionalSync } from "@/lib/hb-credit/s
 import { isStaffConferenciaModalOpen } from "@/lib/performance/staffConferenciaSyncTier";
 import { isStaffHbCoopBackgroundSyncRoute } from "@/lib/hb-credit/staffHbSyncRoute";
 import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
-import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes, notaPertenceCooperado } from "@/services/cooperadoCloudService";
+import { pushCooperadoToCloud, resolverCooperadoIdCanonico, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import {
   registerSyncHandler,
   registerVotacaoOperacionalSyncHandler,
@@ -770,10 +769,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         return;
       }
 
-      await flushPendingCooperadoPushes(cnpj);
-      await runCooperadoDeliveryQueueMaintenance({ cnpj });
-      await flushPendingNotaDeletes(cnpj);
-
       const cooperadoLogado = currentUser.role === "cooperado";
       let cooperadoSyncSession: CooperativaSyncSessionLease | undefined;
 
@@ -957,6 +952,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
       completed = true;
 
+      if (cooperadoLogado) {
+        window.setTimeout(() => {
+          void runCooperadoDeliveryQueueMaintenance({ cnpj }).catch(() => undefined);
+        }, 1_000);
+      }
+
       if (!cooperadoLogado) {
         const align = await ensureOperacionalAlinhadoComNuvem(cnpj, currentCoopId);
         if (!align.ok) {
@@ -1021,12 +1022,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           user: currentUser,
         });
       };
-      const messengerCooperado = cooperadoLogado && isCooperadoPwaMessengerMode();
-      if (cooperadoAtualizarRapido && !messengerCooperado) {
-        void refreshHb();
-      } else if (cooperadoAtualizarRapido && messengerCooperado) {
-        await refreshHb();
-      } else if (cooperadoLogado || opts?.force) {
+      if (cooperadoLogado) {
+        window.setTimeout(() => {
+          void refreshHb().catch(() => undefined);
+        }, 1_000);
+      } else if (opts?.force) {
         await refreshHb();
       } else {
         window.setTimeout(() => void refreshHb(), staffUser ? 14_000 : 2_500);
