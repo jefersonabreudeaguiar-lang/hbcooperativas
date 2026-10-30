@@ -372,9 +372,10 @@ export function cooperadoFinanceiroBloqueiaEntradaApp(
   cooperadoId: string,
   cooperativaId: string
 ): boolean {
-  const sane = aplicarSanidadeFinanceiroCooperadoLocal(data, cooperadoId, cooperativaId);
-  if (!cooperadoFinanceiroLocalAusente(sane, cooperadoId, cooperativaId)) return false;
-  return !cooperadoTemDadosFinanceirosMinimos(sane, cooperadoId, cooperativaId);
+  // Esta verificação roda durante a renderização. A projeção completa percorre
+  // notas e fichas da cooperativa inteira; reconciliação pertence ao sync, não ao gate.
+  if (!cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId)) return false;
+  return !cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, cooperativaId);
 }
 
 /** Ficha/notas ausentes ou valor a receber possivelmente incompleto (sync parcial). */
@@ -399,19 +400,17 @@ export function cooperadoFinanceiroDesatualizado(
 ): boolean {
   const cnpj = cnpjFromCooperativaId(data, cooperativaId);
   if (cnpj.length === 14 && isOperacionalCloudAuthoritative(cnpj)) {
-    const sane = aplicarSanidadeFinanceiroCooperadoLocal(data, cooperadoId, cooperativaId);
     return (
-      cooperadoFinanceiroLocalAusente(sane, cooperadoId, cooperativaId) ||
-      cooperadoFichaValoresDesalinhados(sane, cooperadoId, cooperativaId, {
+      cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId) ||
+      cooperadoFichaValoresDesalinhados(data, cooperadoId, cooperativaId, {
         fichaOperacionalNaNuvem: true,
       })
     );
   }
-  const sane = aplicarSanidadeFinanceiroCooperadoLocal(data, cooperadoId, cooperativaId);
   return (
-    cooperadoFinanceiroLocalAusente(sane, cooperadoId, cooperativaId) ||
-    cooperadoPrecisaFullSyncFinanceiro(sane, cooperadoId, cooperativaId) ||
-    cooperadoFichaValoresDesalinhados(sane, cooperadoId, cooperativaId)
+    cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId) ||
+    cooperadoPrecisaFullSyncFinanceiro(data, cooperadoId, cooperativaId) ||
+    cooperadoFichaValoresDesalinhados(data, cooperadoId, cooperativaId)
   );
 }
 

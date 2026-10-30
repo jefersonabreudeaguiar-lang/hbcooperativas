@@ -34,21 +34,24 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
   const { syncing, syncInProgress, lastSyncError, lastSyncedAt } = useSyncStatus();
   const [syncWaitExceeded, setSyncWaitExceeded] = useState(false);
 
-  const bloqueiaEntrada = useAppDataSelector((data) => {
-    if (!data || !user?.cooperadoId || user.role !== "cooperado") return false;
+  const financeiro = useAppDataSelector((data) => {
+    if (!data || !user?.cooperadoId || user.role !== "cooperado") {
+      return { bloqueiaEntrada: false, desatualizado: false };
+    }
     const coopId = getUserCooperativaId(user, data);
-    if (!coopId) return true;
+    if (!coopId) return { bloqueiaEntrada: true, desatualizado: true };
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    return cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, coopId);
+    const bloqueiaEntrada = cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, coopId);
+    return {
+      bloqueiaEntrada,
+      // Se a tela precisa aguardar a primeira carga, não execute também a
+      // reconciliação completa usada apenas para o aviso de dados desatualizados.
+      desatualizado:
+        bloqueiaEntrada || cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId),
+    };
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]);
-
-  const financeiroDesatualizado = useAppDataSelector((data) => {
-    if (!data || !user?.cooperadoId || user.role !== "cooperado") return false;
-    const coopId = getUserCooperativaId(user, data);
-    if (!coopId) return true;
-    const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    return cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId);
-  }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]);
+  const bloqueiaEntrada = financeiro?.bloqueiaEntrada ?? false;
+  const financeiroDesatualizado = financeiro?.desatualizado ?? false;
 
   useEffect(() => {
     if (user?.role !== "cooperado" || !user.cooperadoId) return;
