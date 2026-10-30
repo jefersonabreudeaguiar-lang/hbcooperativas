@@ -5,8 +5,8 @@ import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppDataSelector } from "@/hooks/useAppData";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
-  cooperadoFinanceiroBloqueiaEntradaApp,
-  cooperadoFinanceiroDesatualizado,
+  cooperadoFinanceiroLocalAusente,
+  cooperadoTemDadosFinanceirosMinimos,
   limparFichaObsoletaCooperado,
 } from "@/services/fichaSyncGuard";
 import { solicitarRecuperacaoFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
@@ -41,13 +41,14 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     const coopId = getUserCooperativaId(user, data);
     if (!coopId) return { bloqueiaEntrada: true, desatualizado: true };
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    const bloqueiaEntrada = cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, coopId);
+    const financeiroAusente = cooperadoFinanceiroLocalAusente(data, cooperadoId, coopId);
+    const bloqueiaEntrada =
+      financeiroAusente && !cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId);
     return {
       bloqueiaEntrada,
-      // Se a tela precisa aguardar a primeira carga, não execute também a
-      // reconciliação completa usada apenas para o aviso de dados desatualizados.
-      desatualizado:
-        bloqueiaEntrada || cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId),
+      // O aviso usa apenas uma consulta local do cooperado. Reconciliação de
+      // valores desalinhados fica no sync em background, fora da renderização.
+      desatualizado: financeiroAusente,
     };
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]);
   const bloqueiaEntrada = financeiro?.bloqueiaEntrada ?? false;
