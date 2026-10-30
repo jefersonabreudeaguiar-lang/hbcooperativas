@@ -347,6 +347,8 @@ async function runCooperadoFotoUploadsInBackground(
 
 export type SyncStatusValue = {
   syncing: boolean;
+  /** Inclui sincronizações silenciosas que não aparecem no estado visual global. */
+  syncInProgress: boolean;
   /** HX 9.0 — cooperado: false durante sync silencioso de abertura. */
   syncingForUi: boolean;
   /** Timestamp da última sync concluída (sucesso ou tentativa com fim). */
@@ -362,6 +364,7 @@ export type SyncStatusValue = {
 
 const SyncStatusContext = createContext<SyncStatusValue>({
   syncing: false,
+  syncInProgress: false,
   syncingForUi: false,
   lastSyncedAt: null,
   lastSyncError: "",
@@ -408,6 +411,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   userRef.current = user;
 
   const [syncing, setSyncing] = useState(false);
+  const [syncInProgress, setSyncInProgress] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(() =>
     typeof window !== "undefined" && user?.role === "cooperado"
       ? readCooperadoLastOperacionalSyncAt()
@@ -727,6 +731,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       opts?.silent === true;
 
     syncingRef.current = true;
+    setSyncInProgress(true);
     if (cooperadoUiSync && staffGestaoUiSync && !silentCooperadoOpen && !silentStaffOpen) {
       setSyncing(true);
     }
@@ -1074,6 +1079,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       const queuedCooperadoRefresh = cooperadoUserRefreshQueuedRef.current;
       cooperadoUserRefreshQueuedRef.current = false;
       syncingRef.current = false;
+      setSyncInProgress(false);
       const nowEnd = Date.now();
       const chainQueuedRefresh =
         queuedCooperadoRefresh &&
@@ -1533,12 +1539,13 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   const status = useMemo(
     () => ({
       syncing,
+      syncInProgress,
       syncingForUi,
       lastSyncedAt,
       lastSyncError: lastSyncErrorPublic,
       cooperadoPagamentosHydrated,
     }),
-    [syncing, syncingForUi, lastSyncedAt, lastSyncErrorPublic, cooperadoPagamentosHydrated]
+    [syncing, syncInProgress, syncingForUi, lastSyncedAt, lastSyncErrorPublic, cooperadoPagamentosHydrated]
   );
 
   return (

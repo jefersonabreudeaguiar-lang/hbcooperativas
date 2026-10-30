@@ -31,7 +31,17 @@ export function getCooperativaNome(data: AppData, id?: string): string {
 
 export function getUserCooperativaId(user: Omit<User, "password">, data: AppData): string | undefined {
   const cnpj = normalizeCnpj(user.cooperativaCnpj ?? "");
-  if (cnpj.length === 14) return findCooperativaByCnpj(data, cnpj)?.id;
+  if (cnpj.length === 14) {
+    const byCnpj = findCooperativaByCnpj(data, cnpj)?.id;
+    if (byCnpj) return byCnpj;
+    // A sessão pode chegar antes do catálogo local. Preserve o vínculo
+    // autenticado para permitir que a sincronização busque o cadastro na nuvem.
+    if (user.cooperativaId) return user.cooperativaId;
+    if (user.cooperadoId) {
+      return data.cooperados.find((c) => c.id === user.cooperadoId)?.cooperativaId;
+    }
+    return undefined;
+  }
   if (user.cooperativaId) return user.cooperativaId;
   if (user.cooperadoId) {
     return data.cooperados.find((c) => c.id === user.cooperadoId)?.cooperativaId;

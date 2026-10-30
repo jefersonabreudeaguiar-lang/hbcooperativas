@@ -31,7 +31,7 @@ const SYNC_BLOCK_MAX_MS = 18_000;
  */
 export function CooperadoFinanceiroGate({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
-  const { syncing, lastSyncError, lastSyncedAt } = useSyncStatus();
+  const { syncing, syncInProgress, lastSyncError, lastSyncedAt } = useSyncStatus();
   const [syncWaitExceeded, setSyncWaitExceeded] = useState(false);
 
   const bloqueiaEntrada = useAppDataSelector((data) => {
@@ -83,7 +83,8 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
   }
 
   const carregandoFinanceiro =
-    bloqueiaEntrada && (syncing || (lastSyncedAt == null && !syncWaitExceeded));
+    bloqueiaEntrada &&
+    (syncInProgress || syncing || (lastSyncedAt == null && !syncWaitExceeded));
 
   if (carregandoFinanceiro) {
     return (
@@ -98,6 +99,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
 
   const falhaCarregarFicha =
     bloqueiaEntrada &&
+    !syncInProgress &&
     !syncing &&
     (Boolean(lastSyncError) || lastSyncedAt != null || syncWaitExceeded);
 
