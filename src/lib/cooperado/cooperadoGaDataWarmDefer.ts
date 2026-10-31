@@ -1,6 +1,6 @@
 /**
  * Celular GA: bloqueia `getData()` → `preloadAppData` na abertura (Chrome OOM / tela travada).
- * Liberado após «Atualizar» ou após janela longa (~90s).
+ * Liberado após «Atualizar» ou após uma janela curta de estabilização da tela.
  */
 import {
   cooperadoGaMobileViewportAtivoLite,
@@ -11,9 +11,9 @@ import { COOPERADO_INICIO_ABERTURA_QUIET_MS_MOBILE_GA } from "@/lib/cooperado/co
 const SESSION_UNLOCK_KEY = "hb.coop.gaDataWarmUnlocked.v1";
 const DEFER_UNTIL_KEY = "hb.coop.gaDataWarmDeferUntil.v1";
 
-/** Margem após quiescência — operacional só em idle tardio. */
+/** Margem curta após quiescência para começar a aquecer os dados locais. */
 export const COOPERADO_GA_MOBILE_DATA_WARM_DEFER_MS =
-  COOPERADO_INICIO_ABERTURA_QUIET_MS_MOBILE_GA + 45_000;
+  COOPERADO_INICIO_ABERTURA_QUIET_MS_MOBILE_GA + 5_000;
 
 function sessionUnlocked(): boolean {
   if (typeof sessionStorage === "undefined") return false;

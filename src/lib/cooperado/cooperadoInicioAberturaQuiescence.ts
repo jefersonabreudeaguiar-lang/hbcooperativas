@@ -6,8 +6,8 @@ import {
 /** Após abrir o Início, UI interativa primeiro; sync/BIC pesado espera. */
 const UNTIL_KEY = "hb.coop.inicio-abertura-quiet-until";
 export const COOPERADO_INICIO_ABERTURA_QUIET_MS = 2_000;
-/** Celular GA: janela longa — parse do operacional + rematerialização depois da casca estável. */
-export const COOPERADO_INICIO_ABERTURA_QUIET_MS_MOBILE_GA = 45_000;
+/** Celular GA: pequena janela para pintar a casca antes de aquecer os dados locais. */
+export const COOPERADO_INICIO_ABERTURA_QUIET_MS_MOBILE_GA = 3_000;
 
 function resolveInicioAberturaQuietMs(): number {
   const session = readCooperadoSessionLite();
