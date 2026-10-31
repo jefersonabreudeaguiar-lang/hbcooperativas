@@ -106,7 +106,7 @@
               ? next
               : "/login?hb-pwa=" + BUILD_FALLBACK + "&next=%2Fdashboard";
           location.replace(
-            "/pwa-launch.html?next=" + encodeURIComponent(coopNext)
+            "/pwa-launch.html?purge=1&next=" + encodeURIComponent(coopNext)
           );
           return;
         }

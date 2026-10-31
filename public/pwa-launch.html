@@ -58,13 +58,20 @@
           return "/login?hb-pwa=" + pageBuild + "&next=%2Fdashboard";
         }
 
+        function withCurrentBuild(route, pageBuild) {
+          try {
+            var url = new URL(route || "/login", location.origin);
+            url.searchParams.set("hb-pwa", String(pageBuild));
+            return url.pathname + url.search + url.hash;
+          } catch (e) {
+            return defaultLoginTarget(pageBuild);
+          }
+        }
+
         function resolveTarget(pageBuild) {
           var target = defaultLoginTarget(pageBuild);
           if (next && next.charAt(0) === "/") {
-            target =
-              next.indexOf("hb-pwa=") >= 0
-                ? next
-                : next + (next.indexOf("?") >= 0 ? "&" : "?") + "hb-pwa=" + pageBuild;
+            target = withCurrentBuild(next, pageBuild);
           } else if (hasSession) {
             target = "/dashboard?hb-pwa=" + pageBuild;
           }
