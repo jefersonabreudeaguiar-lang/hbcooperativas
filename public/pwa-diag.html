@@ -218,28 +218,26 @@
               };
               if (appDataRaw.length <= 20_000_000 && typeof Worker !== "undefined") {
                 diag.appDataStorageProbe.parsed = await new Promise(function (resolve) {
-                  var source = "onmessage=function(e){var t=performance.now();try{JSON.parse(e.data);postMessage({ok:true,ms:Math.round((performance.now()-t)*100)/100})}catch(x){postMessage({ok:false,error:String(x&&x.name||'parse_error')})}}";
-                  var workerUrl = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
-                  var worker = new Worker(workerUrl);
+                  var worker = new Worker("/pwa-data-probe-worker.js");
                   var timer = setTimeout(function () {
                     worker.terminate();
-                    URL.revokeObjectURL(workerUrl);
                     resolve({ ok: false, error: "timeout_5s" });
                   }, 5000);
                   worker.onmessage = function (event) {
                     clearTimeout(timer);
                     worker.terminate();
-                    URL.revokeObjectURL(workerUrl);
                     resolve(event.data);
                   };
-                  worker.onerror = function () {
+                  worker.onerror = function (event) {
                     clearTimeout(timer);
                     worker.terminate();
-                    URL.revokeObjectURL(workerUrl);
-                    resolve({ ok: false, error: "worker_error" });
+                    resolve({ ok: false, error: String(event.message || "worker_error").slice(0, 120) });
                   };
                   worker.postMessage(appDataRaw);
                 });
+                if (diag.appDataStorageProbe.parsed && diag.appDataStorageProbe.parsed.ok) {
+                  diag.appDataStorageProbe.parseMs = diag.appDataStorageProbe.parsed.ms;
+                }
               } else {
                 diag.appDataStorageProbe.parsed = {
                   ok: false,

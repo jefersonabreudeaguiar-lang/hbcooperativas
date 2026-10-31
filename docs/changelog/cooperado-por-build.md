@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v769
+
+- **Diagnóstico do piloto:** mede o tempo de parse em worker local compatível com a política de segurança do site.
+
 ## v768
 
 - **Diagnóstico do piloto:** mede tamanho e tempo de leitura dos dados locais em worker, sem exibir nem enviar o conteúdo.
