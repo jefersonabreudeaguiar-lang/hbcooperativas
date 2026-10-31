@@ -54,11 +54,8 @@ export function CooperadoBootShellDismiss() {
       if (painelJaTemConteudo(pathname)) {
         window.clearInterval(iv);
         dismissCooperadoBootShell();
-        return;
-      }
-      if (ticks >= 12) {
+      } else if (ticks >= 300) {
         window.clearInterval(iv);
-        dismissCooperadoBootShell();
       }
     }, 200);
     return () => window.clearInterval(iv);

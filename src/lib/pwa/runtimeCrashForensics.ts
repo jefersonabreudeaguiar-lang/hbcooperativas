@@ -17,6 +17,12 @@ export type RuntimeCrashLogEntry = {
   chunkDpls?: string[];
 };
 
+/** Captura falhas gerais de boot em armazenamento local, sem enviar dados do cooperado. */
+export function buildInlineGeneralRuntimeCrashRecorderScript(): string {
+  const storageKey = RUNTIME_CRASH_LOG_KEY;
+  return `(function(){try{var K=${JSON.stringify(storageKey)};function record(type,message,src,line){try{var text=String(message||"Falha sem mensagem").slice(0,400);var entry={t:Date.now(),type:type,message:text,src:src?String(src).split("?")[0].slice(0,500):null,line:line||null,href:location.pathname||"/",dpl:document.documentElement.getAttribute("data-dpl-id"),build:document.documentElement.getAttribute("data-app-build")};var raw=localStorage.getItem(K);var rows=raw?JSON.parse(raw):[];if(!Array.isArray(rows))rows=[];var last=rows[rows.length-1];if(last&&last.type===entry.type&&last.message===entry.message&&Date.now()-last.t<1500)return;rows.push(entry);if(rows.length>10)rows=rows.slice(-10);localStorage.setItem(K,JSON.stringify(rows));}catch(e){}}window.addEventListener("error",function(e){record("error",e.message||"Falha de JavaScript",e.filename,e.lineno);});window.addEventListener("unhandledrejection",function(e){var r=e.reason;record("rejection",r&&r.message?r.message:r,null,null);});}catch(e){}})();`;
+}
+
 export function readRuntimeCrashLog(): RuntimeCrashLogEntry[] {
   if (typeof localStorage === "undefined") return [];
   try {

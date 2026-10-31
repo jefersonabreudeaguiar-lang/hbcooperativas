@@ -15,7 +15,10 @@ import {
   buildInlineServiceWorkerMigrationScript,
   type ClientReleaseInfo,
 } from "@/lib/pwa/clientRelease";
-import { buildInlineRuntimeCrashRecorderScript } from "@/lib/pwa/runtimeCrashForensics";
+import {
+  buildInlineGeneralRuntimeCrashRecorderScript,
+  buildInlineRuntimeCrashRecorderScript,
+} from "@/lib/pwa/runtimeCrashForensics";
 import { buildInlineStaleProfileGuardScript } from "@/lib/pwa/staleProfileGuard";
 import { buildInlinePwaLoginHbPwaRepairAckScript } from "@/lib/pwa/pwaLoginHbPwaAckInline";
 import { buildInlinePwaBrowserDetachServiceWorkerScript } from "@/lib/pwa/pwaBrowserDetachServiceWorkerInline";
@@ -98,6 +101,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       data-staff-tab-keep-alive={staffTabKeepAliveOn ? "1" : "0"}
     >
       <head>
+        <script dangerouslySetInnerHTML={{ __html: buildInlineGeneralRuntimeCrashRecorderScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineRuntimeCrashRecorderScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineCooperadoBrowserSkipDestructiveHeadBootScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlinePwaBrowserDetachServiceWorkerScript() }} />
