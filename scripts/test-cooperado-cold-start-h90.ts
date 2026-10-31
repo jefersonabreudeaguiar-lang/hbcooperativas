@@ -103,6 +103,11 @@ assert(
   "cooperado não parseia o AppData no head antes do primeiro paint"
 );
 assert(
+  cold.includes('session?.role === "cooperado"') && cold.includes("preloadAppData();") &&
+    read("src/services/dataStore.ts").includes("window.requestAnimationFrame(() => window.requestAnimationFrame(scheduleIdle))"),
+  "cooperado pinta o shell antes do parse local do AppData"
+);
+assert(
   read("src/components/cooperado/CooperadoPwaMessengerAppDataWarm.tsx").includes(
     "scheduleCooperadoPaintFirst"
   ),

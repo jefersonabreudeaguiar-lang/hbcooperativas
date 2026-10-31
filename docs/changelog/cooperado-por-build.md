@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v767
+
+- **Abertura do cooperado:** exibe primeiro a interface e deixa a leitura completa dos dados locais para depois da primeira pintura.
+
 ## v766
 
 - **Abertura do cooperado:** evita interpretar a ficha local inteira no `<head>`; a interface inicia antes do aquecimento dos dados.

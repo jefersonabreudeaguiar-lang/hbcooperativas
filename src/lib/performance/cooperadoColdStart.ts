@@ -164,6 +164,12 @@ export function ensureCooperadoAppDataEagerWarm(): void {
     scheduleDeferredAppDataEagerWarm(COOPERADO_INICIO_ABERTURA_QUIET_MS_MOBILE_GA + 5_000);
     return;
   }
+  if (session?.role === "cooperado") {
+    // O AppData local pode ser grande. Deixe o shell pintar antes da leitura/parse.
+    // preloadAppData() detecta a sessão e agenda o trabalho para depois de dois frames.
+    preloadAppData();
+    return;
+  }
   if (shouldDeferAppDataEagerWarmForSession(session)) {
     preloadAppData();
     scheduleDeferredAppDataEagerWarm();

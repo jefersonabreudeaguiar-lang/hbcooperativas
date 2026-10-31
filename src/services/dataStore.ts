@@ -874,7 +874,11 @@ function scheduleAutomaticTasksIfNeeded(data: AppData): AppData {
 function cooperadoMobileDeferPreloadParse(opts?: {
   userInitiated?: boolean;
 }): boolean {
-  if (!opts?.userInitiated) return false;
+  // A abertura do cooperado precisa pintar o shell antes de interpretar todo o AppData.
+  // Ações explícitas continuam podendo aquecer imediatamente.
+  if (!opts?.userInitiated) {
+    return readCooperadoSessionLite()?.role === "cooperado";
+  }
   const session = readCooperadoSessionLite();
   return Boolean(session?.role === "cooperado" && cooperadoGaMobileViewportAtivoLite());
 }
@@ -905,11 +909,15 @@ export function preloadAppData(opts?: {
   }
 
   if (cooperadoMobileDeferPreloadParse(opts)) {
-    if (typeof requestIdleCallback !== "undefined") {
-      requestIdleCallback(run, { timeout: 1_500 });
-    } else {
-      window.setTimeout(run, 400);
-    }
+    const scheduleIdle = () => {
+      if (typeof requestIdleCallback !== "undefined") {
+        requestIdleCallback(run, { timeout: 3_000 });
+      } else {
+        window.setTimeout(run, 1_000);
+      }
+    };
+    // Dois frames deixam React e o navegador exibirem primeiro a tela de entrada.
+    window.requestAnimationFrame(() => window.requestAnimationFrame(scheduleIdle));
     return;
   }
 
