@@ -192,6 +192,7 @@
             temSessao: false,
             serviceWorker: { controller: null, registrations: [] },
             caches: [],
+            appDataStorageProbe: null,
             clientReleaseApi: null,
             manifestStartUrl: null,
             probes: {},
@@ -202,6 +203,54 @@
             diag.temSessao = !!localStorage.getItem("coopeagriplla_session");
           } catch (e) {
             diag.temSessao = "erro";
+          }
+
+          // Mede o tamanho/parse sem travar a própria página de diagnóstico.
+          // O conteúdo fica no navegador e não é incluído no relatório.
+          try {
+            var appDataRaw = localStorage.getItem("coopeagriplla_data");
+            if (appDataRaw) {
+              diag.appDataStorageProbe = {
+                rawChars: appDataRaw.length,
+                approximateMiB: Math.round((appDataRaw.length * 2 / (1024 * 1024)) * 100) / 100,
+                parseMs: null,
+                parsed: null,
+              };
+              if (appDataRaw.length <= 20_000_000 && typeof Worker !== "undefined") {
+                diag.appDataStorageProbe.parsed = await new Promise(function (resolve) {
+                  var source = "onmessage=function(e){var t=performance.now();try{JSON.parse(e.data);postMessage({ok:true,ms:Math.round((performance.now()-t)*100)/100})}catch(x){postMessage({ok:false,error:String(x&&x.name||'parse_error')})}}";
+                  var workerUrl = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
+                  var worker = new Worker(workerUrl);
+                  var timer = setTimeout(function () {
+                    worker.terminate();
+                    URL.revokeObjectURL(workerUrl);
+                    resolve({ ok: false, error: "timeout_5s" });
+                  }, 5000);
+                  worker.onmessage = function (event) {
+                    clearTimeout(timer);
+                    worker.terminate();
+                    URL.revokeObjectURL(workerUrl);
+                    resolve(event.data);
+                  };
+                  worker.onerror = function () {
+                    clearTimeout(timer);
+                    worker.terminate();
+                    URL.revokeObjectURL(workerUrl);
+                    resolve({ ok: false, error: "worker_error" });
+                  };
+                  worker.postMessage(appDataRaw);
+                });
+              } else {
+                diag.appDataStorageProbe.parsed = {
+                  ok: false,
+                  error: appDataRaw.length > 20_000_000 ? "over_20m_chars" : "worker_unavailable",
+                };
+              }
+            } else {
+              diag.appDataStorageProbe = { rawChars: 0, parsed: null };
+            }
+          } catch (e) {
+            diag.appDataStorageProbe = { error: e && e.name ? String(e.name) : "storage_error" };
           }
 
           if ("serviceWorker" in navigator) {

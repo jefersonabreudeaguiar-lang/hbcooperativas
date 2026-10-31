@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v768
+
+- **Diagnóstico do piloto:** mede tamanho e tempo de leitura dos dados locais em worker, sem exibir nem enviar o conteúdo.
+
 ## v767
 
 - **Abertura do cooperado:** exibe primeiro a interface e deixa a leitura completa dos dados locais para depois da primeira pintura.
