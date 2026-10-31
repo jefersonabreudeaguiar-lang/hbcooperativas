@@ -868,7 +868,10 @@ function runAutomaticTasks(data: AppData): AppData {
 }
 
 /** Tarefas pesadas após primeira pintura — evita travar o celular na abertura. */
-function scheduleAutomaticTasksIfNeeded(data: AppData): AppData {
+function scheduleAutomaticTasksIfNeeded(
+  data: AppData,
+  traceWarm?: (stage: string, sizeChars?: number) => void
+): AppData {
   if (automaticTasksScheduled || typeof window === "undefined") return data;
   automaticTasksScheduled = true;
 
@@ -876,15 +879,26 @@ function scheduleAutomaticTasksIfNeeded(data: AppData): AppData {
     void (async () => {
       try {
         if (isCloudSyncInProgress()) {
+          traceWarm?.("automatic-tasks-wait-sync");
           setTimeout(run, 1500);
           return;
         }
         // Usar dados atuais (pós-sync) — baseline da abertura podia apagar ficha recém-puxada da nuvem.
+        traceWarm?.("before-automatic-transform");
         let working = runAutomaticTasks(getData());
+        traceWarm?.("after-automatic-transform");
+        traceWarm?.("before-photo-idb-migration");
         working = await migrateInlinePhotosToIdb(working);
+        traceWarm?.("after-photo-idb-migration");
+        traceWarm?.("before-final-strip");
         working = stripBinaryForPersist(working);
+        traceWarm?.("after-final-strip");
+        traceWarm?.("before-automatic-serialize");
         const serialized = JSON.stringify(working);
+        traceWarm?.("after-automatic-serialize");
+        traceWarm?.("before-automatic-save", serialized.length);
         if (serialized !== lastPersistedSerialized) saveDataSafe(working);
+        traceWarm?.("after-automatic-save", serialized.length);
       } catch {
         /* não bloqueia o app */
       }
@@ -1074,7 +1088,7 @@ function loadData(forceReload = false): AppData {
 
     memoryCache = data;
     noteStaffGestaoLastGood(data);
-    scheduleAutomaticTasksIfNeeded(data);
+    scheduleAutomaticTasksIfNeeded(data, traceWarm ?? undefined);
     traceWarm?.("done", persistedBlobSize);
     return data;
   } catch {

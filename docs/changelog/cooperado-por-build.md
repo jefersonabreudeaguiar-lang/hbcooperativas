@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v771
+
+- **Diagnóstico do piloto:** detalha as tarefas automáticas após a leitura local para localizar o bloqueio restante.
+
 ## v770
 
 - **Diagnóstico do piloto:** registra localmente a etapa de abertura dos dados e tarefas que bloqueiam a interface, apenas quando o teste é iniciado manualmente.
