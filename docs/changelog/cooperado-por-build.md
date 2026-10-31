@@ -6,6 +6,14 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v773
+
+- **Diagnóstico do piloto:** acrescenta atribuição de tarefas longas e marcações da montagem da autenticação, do shell e do painel do cooperado.
+
+## v772
+
+- **Diagnóstico do piloto:** registra, apenas quando ativado manualmente, em qual etapa da autenticação e da montagem do início o navegador para.
+
 ## v771
 
 - **Diagnóstico do piloto:** detalha as tarefas automáticas após a leitura local para localizar o bloqueio restante.

@@ -37,6 +37,7 @@ import {
   tryCooperadoPinnedInstantTabSwitch,
 } from "@/lib/performance/cooperadoPinnedTabFastPath";
 import { COOPERADO_FINANCEIRO_TAB_HREF } from "@/lib/hb-credit/hbCreditNavPrefetch";
+import { traceCooperadoStartup } from "@/lib/performance/cooperadoStartupTrace";
 import {
   cooperadoTabWarmOnPointerDown,
   cooperadoTabWarmOnTouchStart,
@@ -527,6 +528,7 @@ export function MobileNav() {
 }
 
 function AppShellInner({ children }: { children: React.ReactNode }) {
+  traceCooperadoStartup("app-shell-inner-render");
   const pathname = usePathname();
   useStaffPrimeiroDiaContratos();
   const mercadoQrImmersive = pathname === "/mercado-parceiro/cobrar";
@@ -693,6 +695,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  traceCooperadoStartup("app-shell-render");
   return (
     <AppShellNavigationProvider>
       <AppShellInner>{children}</AppShellInner>

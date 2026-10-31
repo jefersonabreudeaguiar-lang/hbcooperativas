@@ -41,6 +41,7 @@ import { markCooperadoInicioAberturaQuiescence } from "@/lib/cooperado/cooperado
 import { armCooperadoGaMobileDataWarmDefer } from "@/lib/cooperado/cooperadoGaDataWarmDefer";
 import { cooperadoGaMobileViewportAtivoLite } from "@/lib/cooperado/cooperadoSessionLite";
 import { scheduleEmpacotarModeloAparelhoJeferson } from "@/lib/cooperado/cooperadoAparelhoJefersonPacote";
+import { traceCooperadoStartup } from "@/lib/performance/cooperadoStartupTrace";
 import {
   getSession,
   login as doLogin,
@@ -107,6 +108,7 @@ function enrichAccountSession(
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  traceCooperadoStartup("auth-provider-render");
   /** Igual ao SSR — sessão/localStorage só após hydrate (evita React #418). */
   const [accountUser, setAccountUser] = useState<Omit<User, "password"> | null>(
     cooperadoMobilePilotInitialAccountUser
@@ -120,9 +122,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const appDataWarmRef = useRef(isAppDataWarm());
 
   const user = useMemo(() => {
+    traceCooperadoStartup("auth-user-resolution-start");
     const data =
       cooperadoGaShouldDeferDataWarmFromGetData() || !isAppDataWarm() ? null : getData();
-    return resolveExperienceUser(accountUser, data);
+    const resolved = resolveExperienceUser(accountUser, data);
+    traceCooperadoStartup("auth-user-resolution-done");
+    return resolved;
   }, [accountUser, viewportTick, dataTick, painelPrefTick]);
 
   const refresh = useCallback(() => {
@@ -151,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useLayoutEffect(() => {
+    traceCooperadoStartup("auth-provider-hydration-start");
     const sessionLite = readCooperadoSessionLite();
     if (sessionLite?.role === "cooperado" && cooperadoGaMobileViewportAtivoLite()) {
       markCooperadoInicioAberturaQuiescence();
@@ -163,6 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ensureCooperadoAppDataEagerWarm();
     }
     refresh();
+    traceCooperadoStartup("auth-provider-session-refreshed");
     const session =
       sessionLite ??
       (cooperadoGaShouldDeferDataWarmFromGetData() ? null : getSession());

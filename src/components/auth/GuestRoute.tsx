@@ -7,6 +7,7 @@ import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell"
 import { markPwaRepairSessionForBuild } from "@/lib/pwa/cooperadoPwaInstallPrepare";
 import { resolveAppHomePath } from "@/lib/product/v2HbOnly";
 import { scheduleSafeAppNavigation } from "@/lib/pwa/safeDocumentNavigation";
+import { traceCooperadoStartup } from "@/lib/performance/cooperadoStartupTrace";
 
 function isStandalonePwa(): boolean {
   if (typeof window === "undefined") return false;
@@ -25,6 +26,7 @@ export function GuestRoute({
   /** false = não redireciona (ex.: cadastro cooperado → PIX) */
   authenticatedRedirect?: string | false;
 }) {
+  traceCooperadoStartup("guest-route-render");
   const { user, loading } = useAuth();
   const router = useRouter();
 
@@ -47,6 +49,7 @@ export function GuestRoute({
       window.location.pathname === "/login" && params.has("hb-pwa");
 
     const go = () => {
+      traceCooperadoStartup("guest-route-redirect-commit");
       if (onLoginWithPwaRepair) {
         markPwaRepairSessionForBuild();
       }
@@ -56,6 +59,7 @@ export function GuestRoute({
     };
 
     if (document.readyState === "complete") {
+      traceCooperadoStartup("guest-route-redirect-scheduled");
       const t = window.setTimeout(go, 0);
       return () => window.clearTimeout(t);
     }

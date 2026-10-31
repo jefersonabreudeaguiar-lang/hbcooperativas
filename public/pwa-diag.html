@@ -194,6 +194,7 @@
             caches: [],
             appDataStorageProbe: null,
             appDataWarmTrace: null,
+            startupTrace: [],
             longTaskTrace: [],
             clientReleaseApi: null,
             manifestStartUrl: null,
@@ -256,6 +257,8 @@
           try {
             var warmTraceRaw = localStorage.getItem("hb-coop-data-warm-trace");
             diag.appDataWarmTrace = warmTraceRaw ? JSON.parse(warmTraceRaw) : null;
+            var startupTraceRaw = localStorage.getItem("hb-coop-startup-trace");
+            diag.startupTrace = startupTraceRaw ? JSON.parse(startupTraceRaw) : [];
             var longTaskRaw = localStorage.getItem("hb-coop-longtask-trace");
             diag.longTaskTrace = longTaskRaw ? JSON.parse(longTaskRaw) : [];
           } catch (e) {
@@ -496,11 +499,12 @@
           try {
             localStorage.setItem("hb-coop-data-warm-trace-enabled", "1");
             localStorage.setItem("hb-coop-data-warm-trace", "null");
+            localStorage.setItem("hb-coop-startup-trace", "[]");
             localStorage.setItem("hb-coop-longtask-trace", "[]");
           } catch (e) {
             /* trace é opcional */
           }
-          location.href = "/login?hb-pwa=771";
+          location.href = "/login?hb-pwa=773";
         });
 
         document.getElementById("clearLocal").addEventListener("click", function () {

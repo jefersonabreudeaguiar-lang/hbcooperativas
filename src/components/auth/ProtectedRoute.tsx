@@ -3,8 +3,10 @@
 import { useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
+import { traceCooperadoStartup } from "@/lib/performance/cooperadoStartupTrace";
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  traceCooperadoStartup("protected-route-render");
   const { user, loading } = useAuth();
   const router = useRouter();
 

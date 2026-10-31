@@ -62,17 +62,23 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { cooperadoTemAppInstalado, isAppStandalone, resumoInstalacaoApp } from "@/services/cooperadoAppInstallService";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { RestoreOperacionalPanel } from "@/components/sync/RestoreOperacionalPanel";
+import { traceCooperadoStartup } from "@/lib/performance/cooperadoStartupTrace";
 
 function CooperadoDashboard() {
+  traceCooperadoStartup("cooperado-dashboard-render-start");
   const { user } = useAuth();
   const router = useRouter();
   const { syncing, lastSyncError } = useSyncStatus();
+  traceCooperadoStartup("dashboard-contexts-ready");
   const { apresentacaoConsolidada, carregandoValoresFinanceiros } =
     useCooperadoApresentacaoFinanceiraConsolidada();
+  traceCooperadoStartup("dashboard-finance-hook-ready");
   const recoverySyncRef = useRef(false);
   const hbDescontosRevision = useContaCoopDescontosRevision();
+  traceCooperadoStartup("dashboard-revision-hook-ready");
 
   const financeiroAusente = useAppDataSelector((data) => {
+    traceCooperadoStartup("dashboard-finance-missing-selector-start");
     if (!data || !user?.cooperadoId) return false;
     const coopId = getUserCooperativaId(user, data);
     if (!coopId) return false;
@@ -80,6 +86,7 @@ function CooperadoDashboard() {
     // A reconciliação completa da cooperativa é do fluxo de sync, não do render.
     return cooperadoFinanceiroLocalAusente(data, cooperadoId, coopId);
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]);
+  traceCooperadoStartup("dashboard-finance-missing-selector-done");
 
   useEffect(() => {
     recoverySyncRef.current = false;
@@ -99,6 +106,7 @@ function CooperadoDashboard() {
   }, [financeiroAusente]);
 
   const contaCoopSync = useAppDataSelector((data) => {
+    traceCooperadoStartup("dashboard-account-sync-selector-start");
     if (!data || !user?.cooperadoId) return null;
     const coopId = getUserCooperativaId(user, data);
     if (!coopId) return null;
@@ -116,20 +124,24 @@ function CooperadoDashboard() {
       cooperadoNome: exibicaoOpts.cooperadoNome,
     };
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]);
+  traceCooperadoStartup("dashboard-account-sync-selector-done");
 
   useSyncContaCoopValorReceberPilot(contaCoopSync ? { ...contaCoopSync, user } : undefined);
 
   const aguardandoAssinaturaLocal = useAppDataSelector((data) => {
+    traceCooperadoStartup("dashboard-signature-selector-start");
     if (!data || !user?.cooperadoId) return false;
     const coopId = getUserCooperativaId(user, data);
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
     return getValorQuantoVouReceber(data, cooperadoId, coopId).aguardandoAssinatura;
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]);
+  traceCooperadoStartup("dashboard-signature-selector-done");
 
   const { exibirAguardandoAssinatura, conferindoPagamentoNuvem } =
     useCooperadoExibirAguardandoAssinatura(Boolean(aguardandoAssinaturaLocal));
 
   const view = useAppDataSelector((data) => {
+    traceCooperadoStartup("dashboard-view-selector-start");
     if (!data || !user?.cooperadoId) return null;
 
     const coopId = getUserCooperativaId(user, data);
@@ -140,6 +152,7 @@ function CooperadoDashboard() {
     const valorReceber = getInicioCooperadoParaExibicao(data, cooperadoId, coopId, {
       apresentacaoConsolidada,
     }).value;
+    traceCooperadoStartup("dashboard-view-finance-done");
     const precisaPix = cooperado ? cooperadoPrecisaCadastrarPix(cooperado.chavePix, cooperado.pixValido) : false;
     const notasPendentes = listarNotasPendentesCooperado(data, cooperadoId, coopId);
     const rejeitadas = notasPendentes.filter((n) => n.status === "rejeitada");
@@ -149,10 +162,12 @@ function CooperadoDashboard() {
       (n) => n.status === "aguardando_conferencia" && !pendingDeletes.has(n.id)
     );
     const fotosEmAnalise = contarFotosEmAnaliseCooperado(notasEmAnalise);
+    traceCooperadoStartup("dashboard-view-deliveries-done");
     const resumoMens = getResumoMensalidadesCooperado(data, cooperadoId, coopId);
     const mensalidadeAberta = resumoMens.situacao === "atrasada";
     const prestacao = coopId ? prestacaoPrincipalCooperado(data, cooperadoId, coopId) : undefined;
     const prestacaoAberta = prestacao ? prestacaoExigeAtencaoCooperado(prestacao) : false;
+    traceCooperadoStartup("dashboard-view-monthly-report-ready");
     const avulsosPendentesTotal = totalValoresAvulsosPendentes(data, cooperadoId, undefined, coopId);
     const avulsosJaNoCardPrincipal =
       valorReceber.exibir &&
@@ -163,7 +178,9 @@ function CooperadoDashboard() {
     const comunicados = coopId ? getComunicadosInicioCooperado(data, coopId, cooperadoId) : [];
     const pautasAbertas = coopId ? listPautasAbertasCooperado(data, coopId, cooperadoId) : [];
     const resultadoVotacao = coopId ? resultadoVisivelCooperado(data, coopId) : null;
+    traceCooperadoStartup("dashboard-view-communications-votes-done");
     const resolvidos = listarResolvidosInicioCooperado(data, cooperadoId, coopId);
+    traceCooperadoStartup("dashboard-view-done");
     const mostrarAssinaturaPilot = cooperadoUsaAssinaturaCadastroPilot(cooperadoId);
     const precisaAssinatura =
       mostrarAssinaturaPilot && cooperadoPrecisaCadastrarAssinatura(cooperadoId, cooperado);
@@ -546,6 +563,7 @@ function AdminDashboard() {
 }
 
 export default function DashboardPage() {
+  traceCooperadoStartup("dashboard-page-render");
   const { user, accountUser } = useAuth();
   if (!user) return null;
 
