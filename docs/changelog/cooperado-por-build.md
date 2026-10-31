@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v774
+
+- **Diagnóstico do piloto:** divide a montagem da navegação, do menu e das abas móveis em etapas para localizar o bloqueio antes do painel.
+
 ## v773
 
 - **Diagnóstico do piloto:** acrescenta atribuição de tarefas longas e marcações da montagem da autenticação, do shell e do painel do cooperado.

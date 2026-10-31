@@ -186,13 +186,35 @@ function BrandHeader({ compact = false }: { compact?: boolean }) {
 }
 
 export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose?: () => void }) {
+  traceCooperadoStartup("sidebar-render-start");
   const pathname = usePathname();
   const { logout } = useAuth();
   const shell = useAppShellNavigationContext();
+  traceCooperadoStartup("sidebar-navigation-ready");
   if (!shell) return null;
   const { navUser, desktopMenu, drawerMenu } = shell;
   const menuItems = mobile && isCooperadoAppUser(navUser) ? drawerMenu : desktopMenu;
   const staffUser = navUser && !isCooperadoAppUser(navUser);
+  const menuElements = menuItems.map((item) => {
+    const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        prefetch={shouldPrefetchHbCreditNav(item.href)}
+        onClick={() => onClose?.()}
+        scroll={false}
+        className={cn(
+          "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+          active ? "bg-green-700 text-white" : "text-green-200 hover:bg-green-800 hover:text-white"
+        )}
+      >
+        {navIcon(item.href, item.resource)}
+        {item.label}
+      </Link>
+    );
+  });
+  traceCooperadoStartup("sidebar-menu-ready");
 
   return (
     <aside className={cn(
@@ -209,25 +231,7 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
       </div>
 
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-        {menuItems.map((item) => {
-          const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              prefetch={shouldPrefetchHbCreditNav(item.href)}
-              onClick={() => onClose?.()}
-              scroll={false}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                active ? "bg-green-700 text-white" : "text-green-200 hover:bg-green-800 hover:text-white"
-              )}
-            >
-              {navIcon(item.href, item.resource)}
-              {item.label}
-            </Link>
-          );
-        })}
+        {menuElements}
       </nav>
 
       <div className="p-4 border-t border-green-800 space-y-1">
@@ -261,18 +265,21 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
 }
 
 export function MobileNav() {
+  traceCooperadoStartup("mobile-nav-render-start");
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const cooperadoEffectiveTabPath = useCooperadoEffectiveTabPath(pathname);
   const staffEffectiveTabPath = useStaffEffectiveTabPath(pathname);
   const router = useRouter();
   const shell = useAppShellNavigationContext();
+  traceCooperadoStartup("mobile-nav-context-ready");
   const navUser = shell?.navUser;
   const mobileItems = shell?.mobileMenu ?? [];
   const pilotHbBottomNav = cooperadoPilotMobileBottomNavEnabled(
     navUser,
     Boolean(shell?.moduleNavEligible)
   );
+  traceCooperadoStartup("mobile-nav-state-ready");
 
   useLayoutEffect(() => {
     if (!navUser) return;
@@ -530,9 +537,12 @@ export function MobileNav() {
 function AppShellInner({ children }: { children: React.ReactNode }) {
   traceCooperadoStartup("app-shell-inner-render");
   const pathname = usePathname();
+  traceCooperadoStartup("app-shell-path-ready");
   useStaffPrimeiroDiaContratos();
+  traceCooperadoStartup("app-shell-staff-hook-ready");
   const mercadoQrImmersive = pathname === "/mercado-parceiro/cobrar";
   const shell = useAppShellNavigationContext();
+  traceCooperadoStartup("app-shell-navigation-ready");
   const navUser = shell?.navUser ?? null;
   const staffPainelUi = shell?.staffPainelUi ?? false;
   const cooperadoKeepAliveShell =
@@ -551,7 +561,9 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       ? "staff"
       : "none";
   const cooperadoEffectiveTabPath = useCooperadoEffectiveTabPath(pathname);
+  traceCooperadoStartup("app-shell-cooperado-tab-ready");
   const staffEffectiveTabPath = useStaffEffectiveTabPath(pathname);
+  traceCooperadoStartup("app-shell-staff-tab-ready");
   const scrollPathname =
     mobileTabScrollMode === "cooperado" && cooperadoKeepAliveShell
       ? cooperadoEffectiveTabPath
@@ -562,6 +574,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     pathname: scrollPathname,
     scrollMode: mobileTabScrollMode,
   });
+  traceCooperadoStartup("app-shell-scroll-ready");
 
   useLayoutEffect(() => {
     try {
@@ -611,6 +624,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   }, [navUser, cooperadoKeepAliveShell, staffKeepAliveShell]);
 
   useHbCreditDescontosWarmup(navUser);
+  traceCooperadoStartup("app-shell-credit-warm-ready");
 
   const router = useRouter();
 
@@ -648,6 +662,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           </CooperadoPostDeployGate>
         )
       : routePanels;
+  traceCooperadoStartup("app-shell-panels-ready");
 
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden">

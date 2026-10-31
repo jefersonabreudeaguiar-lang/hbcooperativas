@@ -35,6 +35,7 @@ import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import { cooperadoPilotMobileBottomNavItems } from "@/lib/cooperado/cooperadoMobilePilotBottomNav";
 import { isMobileCooperativaApp } from "@/lib/mobileExperience";
 import { usePainelResponsavelMobilePref } from "@/hooks/usePainelResponsavelMobilePref";
+import { traceCooperadoStartup } from "@/lib/performance/cooperadoStartupTrace";
 
 export type AppShellMenuItem = { href: string; label: string; resource: Resource };
 
@@ -72,7 +73,9 @@ function hbModuleNavEligible(
  * HX 8.1 — menu e identidade do shell em um selector + memos (evita useAppData no layout).
  */
 export function useAppShellNavigation(): AppShellNavigation | null {
+  traceCooperadoStartup("app-shell-navigation-hook-start");
   const { user, accountUser } = useAuth();
+  traceCooperadoStartup("app-shell-navigation-auth-ready");
   const experienceUser = user ?? accountUser;
   const coldData = isAppDataWarm() ? getData() : null;
   const preferPainel = usePainelResponsavelMobilePref();
@@ -85,6 +88,7 @@ export function useAppShellNavigation(): AppShellNavigation | null {
     mobile,
     preferPainelResponsavel: preferPainel,
   });
+  traceCooperadoStartup("app-shell-navigation-identity-ready");
   const mobileCooperadoShell = identidade.modo === "cooperado";
   const subject = experienceUser;
   useEnsureAppDataWarm();
@@ -93,6 +97,7 @@ export function useAppShellNavigation(): AppShellNavigation | null {
     () => (isAppDataWarm() ? getDataRevision() : -1),
     () => 0
   );
+  traceCooperadoStartup("app-shell-navigation-revision-ready");
 
   const shellCore = useMemo(() => {
     const gestao = identidade.staffPainelUi ? accountUser ?? user : null;
@@ -153,6 +158,7 @@ export function useAppShellNavigation(): AppShellNavigation | null {
   ]);
 
   const credit = useHbCreditEnabled(shellCore?.navUser ?? null);
+  traceCooperadoStartup("app-shell-navigation-credit-ready");
 
   return useMemo(() => {
     if (!shellCore) return null;
@@ -234,6 +240,7 @@ export function useAppShellNavigation(): AppShellNavigation | null {
       data,
       moduleNavEligible
     );
+    traceCooperadoStartup("app-shell-navigation-menu-ready");
 
     return {
       navUser,
