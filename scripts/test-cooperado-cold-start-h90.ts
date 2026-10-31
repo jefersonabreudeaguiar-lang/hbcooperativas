@@ -79,8 +79,11 @@ assert(
 );
 assert(appLayout.includes("CooperadoSubtleUpdateNotice"), "aviso sutil nova atualizacao");
 assert(provider.includes("scheduleCooperadoColdStartSync"), "provider agenda sync único");
-assert(gate.includes("shouldSkipCooperadoSecondaryMountSync"), "gate dedupe sync mount");
-assert(gate.includes("syncingForUi"), "gate usa syncingForUi");
+assert(
+  gate.includes("[user?.id, user?.cooperadoId, user?.role]"),
+  "gate solicita recuperação uma vez por sessão do cooperado"
+);
+assert(gate.includes("syncInProgress") && gate.includes("syncing"), "gate reflete sync ativo");
 assert(
   auth.includes("useLayoutEffect") &&
     (auth.includes("ensureCooperadoAppDataEagerWarm") || auth.includes("preloadAppData")),
@@ -93,7 +96,12 @@ assert(
 const rootLayout = read("src/app/layout.tsx");
 assert(rootLayout.includes("buildInlineCooperadoAppDataWarmScript"), "parse AppData inline no head");
 assert(rootLayout.includes("hb-coop-boot-shell"), "boot shell estático antes do React");
-assert(rootLayout.includes("buildInlineCooperadoBootShellScript"), "boot shell cooperado no layout");
+assert(!rootLayout.includes("buildInlineCooperadoBootShellScript"), "sem mutação do shell antes da hidratação");
+const inlineWarmSkip = read("src/lib/cooperado/cooperadoJefersonSomenteAtualizarPilot.ts");
+assert(
+  inlineWarmSkip.includes('if(s.role==="cooperado")return;'),
+  "cooperado não parseia o AppData no head antes do primeiro paint"
+);
 assert(
   read("src/components/cooperado/CooperadoPwaMessengerAppDataWarm.tsx").includes(
     "scheduleCooperadoPaintFirst"
@@ -101,7 +109,10 @@ assert(
   "AppData PWA mensageiro após 1º paint (não post-interactive 2.8s)"
 );
 assert(provider.includes("scheduleCooperadoPostShellSync(() =>") && provider.includes("runSync({ force: true, silent: true })"), "sync cold start apos shell");
-assert(gate.includes("CooperadoFinanceiroShellProvider"), "gate shell-first com contexto");
+assert(
+  gate.includes("SYNC_BLOCK_MAX_MS") && gate.includes("syncWaitExceeded"),
+  "gate deixa de bloquear a entrada após o limite de espera"
+);
 assert(!gate.includes("min-h-screen bg-gray-50"), "gate sem tela cheia bloqueante");
 assert(appLayout.includes("CooperadoFinanceiroSyncBanner"), "banner discreto no conteudo");
 assert(

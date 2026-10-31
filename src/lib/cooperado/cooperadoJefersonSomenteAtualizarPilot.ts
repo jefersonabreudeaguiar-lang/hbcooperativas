@@ -106,13 +106,11 @@ export function cooperadoJefersonBloqueiaSyncAutomatico(
   return true;
 }
 
-/** Fragmento `<head>` — cooperado mobile/PWA: não parseia AppData no cold start. */
+/** Fragmento `<head>` — nenhuma sessão cooperado parseia o AppData antes da interface montar. */
 export function cooperadoJefersonSomenteAtualizarInlineHeadSkipAppDataWarmJs(): string {
   if (!COOPERADO_MOBILE_SYNC_LEVE_GA_PROMOTED) return "";
   return (
     `try{var raw=localStorage.getItem("coopeagriplla_session");if(raw){var s=JSON.parse(raw);` +
-    `if(s.role==="cooperado"){var mob=window.matchMedia&&window.matchMedia("(max-width:1023px)").matches;` +
-    `var pwa=window.matchMedia&&window.matchMedia("(display-mode:standalone)").matches;` +
-    `if(mob||pwa)return;}}}catch(e){}`
+    `if(s.role==="cooperado")return;}}catch(e){}`
   );
 }

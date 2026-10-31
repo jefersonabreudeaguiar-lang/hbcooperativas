@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v766
+
+- **Abertura do cooperado:** evita interpretar a ficha local inteira no `<head>`; a interface inicia antes do aquecimento dos dados.
+
 ## v761
 
 ### Preview piloto Jeferson
