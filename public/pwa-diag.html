@@ -193,6 +193,8 @@
             serviceWorker: { controller: null, registrations: [] },
             caches: [],
             appDataStorageProbe: null,
+            appDataWarmTrace: null,
+            longTaskTrace: [],
             clientReleaseApi: null,
             manifestStartUrl: null,
             probes: {},
@@ -249,6 +251,15 @@
             }
           } catch (e) {
             diag.appDataStorageProbe = { error: e && e.name ? String(e.name) : "storage_error" };
+          }
+
+          try {
+            var warmTraceRaw = localStorage.getItem("hb-coop-data-warm-trace");
+            diag.appDataWarmTrace = warmTraceRaw ? JSON.parse(warmTraceRaw) : null;
+            var longTaskRaw = localStorage.getItem("hb-coop-longtask-trace");
+            diag.longTaskTrace = longTaskRaw ? JSON.parse(longTaskRaw) : [];
+          } catch (e) {
+            diag.appDataWarmTrace = { error: "trace_unavailable" };
           }
 
           if ("serviceWorker" in navigator) {
@@ -482,7 +493,14 @@
           location.href = "/pwa-rescue.html?next=%2Fpwa-diag.html";
         });
         document.getElementById("login").addEventListener("click", function () {
-          location.href = "/pwa-boot.html?next=%2Flogin";
+          try {
+            localStorage.setItem("hb-coop-data-warm-trace-enabled", "1");
+            localStorage.setItem("hb-coop-data-warm-trace", "null");
+            localStorage.setItem("hb-coop-longtask-trace", "[]");
+          } catch (e) {
+            /* trace é opcional */
+          }
+          location.href = "/login?hb-pwa=770";
         });
 
         document.getElementById("clearLocal").addEventListener("click", function () {

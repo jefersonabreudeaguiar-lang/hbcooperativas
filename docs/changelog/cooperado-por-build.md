@@ -6,6 +6,10 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
+## v770
+
+- **Diagnóstico do piloto:** registra localmente a etapa de abertura dos dados e tarefas que bloqueiam a interface, apenas quando o teste é iniciado manualmente.
+
 ## v769
 
 - **Diagnóstico do piloto:** mede o tempo de parse em worker local compatível com a política de segurança do site.

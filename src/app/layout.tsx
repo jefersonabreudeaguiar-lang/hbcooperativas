@@ -34,6 +34,7 @@ import { PwaStandaloneRepairAck } from "@/components/pwa/PwaStandaloneRepairAck"
 import { buildInlineCooperadoPwaStealthReloadScript } from "@/lib/pwa/cooperadoPwaStealthReload";
 import { CooperadoPwaStealthReloadHost } from "@/components/cooperado/CooperadoPwaStealthReloadHost";
 import { CooperadoFleetMaintenanceHost } from "@/components/pwa/CooperadoFleetMaintenanceHost";
+import { buildInlineCooperadoPilotLongTaskTraceScript } from "@/lib/performance/cooperadoPilotLongTaskTrace";
 
 const geist = Geist({
   variable: "--font-geist-sans",
@@ -112,6 +113,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: buildInlineDeploymentBootScript(pageRelease) }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineRescuePendingVerifyScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineRqlPerfStubScript() }} />
+        <script dangerouslySetInnerHTML={{ __html: buildInlineCooperadoPilotLongTaskTraceScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineCooperadoAppDataWarmScript() }} />
       </head>
       <body className="min-h-full antialiased">

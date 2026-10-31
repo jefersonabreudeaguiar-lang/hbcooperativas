@@ -118,6 +118,37 @@ const CONFERENCIA_DEFER_PERSIST_FLUSH_MS = 360;
 let dataRevision = 0;
 let dataWarmScheduled = false;
 let dataWarmInFlight = false;
+const COOPERADO_WARM_TRACE_ENABLED_KEY = "hb-coop-data-warm-trace-enabled";
+const COOPERADO_WARM_TRACE_KEY = "hb-coop-data-warm-trace";
+
+function createCooperadoWarmTrace() {
+  if (typeof window === "undefined") return null;
+  try {
+    if (localStorage.getItem(COOPERADO_WARM_TRACE_ENABLED_KEY) !== "1") return null;
+  } catch {
+    return null;
+  }
+  const startedAt = performance.now();
+  let lastAt = startedAt;
+  return (stage: string, sizeChars?: number) => {
+    const now = performance.now();
+    try {
+      localStorage.setItem(
+        COOPERADO_WARM_TRACE_KEY,
+        JSON.stringify({
+          stage,
+          totalMs: Math.round((now - startedAt) * 100) / 100,
+          stageMs: Math.round((now - lastAt) * 100) / 100,
+          sizeChars: sizeChars ?? null,
+          at: new Date().toISOString(),
+        })
+      );
+    } catch {
+      /* diagnóstico opcional; nunca interfere no carregamento */
+    }
+    lastAt = now;
+  };
+}
 
 export function getDataRevision(): number {
   return dataRevision;
@@ -958,6 +989,8 @@ function scheduleDataWarmIfNeeded(): void {
 
 function loadData(forceReload = false): AppData {
   if (typeof window === "undefined") return emptyInitialData;
+  const traceWarm = createCooperadoWarmTrace();
+  traceWarm?.("start");
   attachStorageListener();
 
   if (memoryCache && !forceReload) {
@@ -974,6 +1007,7 @@ function loadData(forceReload = false): AppData {
       ? takeInlineParsedAppData()
       : null;
   const stored = inlineRaw == null ? readAppDataPersistRaw() : null;
+  traceWarm?.("storage-read", stored?.length ?? 0);
   if (!stored && inlineRaw == null) {
     const lkg = sessionRoleLooksStaffGestao() ? peekStaffGestaoLastGood() : null;
     if (lkg && staffGestaoRiquezaTotal(medirRiquezaStaffGestao(lkg)) > 0) {
@@ -992,14 +1026,17 @@ function loadData(forceReload = false): AppData {
   }
 
   try {
-    let data = migrateData(
-      inlineRaw != null ? (inlineRaw as AppData) : JSON.parse(stored as string)
-    );
+    const parsedData = inlineRaw != null ? (inlineRaw as AppData) : JSON.parse(stored as string);
+    traceWarm?.("json-parsed", stored?.length ?? 0);
+    let data = migrateData(parsedData);
+    traceWarm?.("migrated", stored?.length ?? 0);
     const ensured = ensureCreatorAdminAccount(data);
     data = ensured.data;
     const reset = applyOperationalResetIfNeeded(data);
     data = reset.data;
+    traceWarm?.("reset-applied", stored?.length ?? 0);
     data = restoreStaffGestaoFromLastGoodIfNeeded(data);
+    traceWarm?.("last-good-restored", stored?.length ?? 0);
 
     if (ensured.changed) {
       const saved = saveDataSafe(data);
@@ -1024,8 +1061,12 @@ function loadData(forceReload = false): AppData {
     const persistedBlobSize =
       stored != null ? stored.length : JSON.stringify(inlineRaw ?? data).length;
     if (persistedBlobSize >= 2_000_000) {
+      traceWarm?.("before-strip-binary", persistedBlobSize);
       const slim = stripBinaryForPersist(data, { role: persistRoleFromSession() });
+      traceWarm?.("after-strip-binary", persistedBlobSize);
+      traceWarm?.("before-save-slim", persistedBlobSize);
       const saved = saveDataSafe(slim);
+      traceWarm?.("after-save-slim", persistedBlobSize);
       if (saved.ok) {
         data = memoryCache ?? slim;
       }
@@ -1034,6 +1075,7 @@ function loadData(forceReload = false): AppData {
     memoryCache = data;
     noteStaffGestaoLastGood(data);
     scheduleAutomaticTasksIfNeeded(data);
+    traceWarm?.("done", persistedBlobSize);
     return data;
   } catch {
     if (memoryCache) return memoryCache;
