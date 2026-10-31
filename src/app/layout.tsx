@@ -28,9 +28,6 @@ import { buildInlineHtmlDeploymentAlignScript } from "@/lib/pwa/htmlDeploymentAl
 import { buildInlineRescuePendingVerifyScript } from "@/lib/pwa/pwaReleaseConsistency";
 import { buildInlineRqlPerfStubScript } from "@/lib/performance/rqlPerfReport";
 import { buildInlineCooperadoAppDataWarmScript } from "@/lib/performance/cooperadoAppDataInlineWarm";
-import {
-  buildInlineCooperadoBootShellScript,
-} from "@/lib/performance/cooperadoBootShell";
 import { RqlPerfDebugBootstrap } from "@/components/performance/RqlPerfDebugBootstrap";
 import { CooperadoBootShellDismiss } from "@/components/performance/CooperadoBootShellDismiss";
 import { PwaStandaloneRepairAck } from "@/components/pwa/PwaStandaloneRepairAck";
@@ -132,6 +129,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           <div style={{ height: 56, background: "#14532d", flexShrink: 0 }} />
           <div style={{ flex: 1, padding: 16, maxWidth: 512, margin: "0 auto", width: "100%" }}>
+            <p style={{ margin: 0, color: "#111827", fontWeight: 600 }}>Carregando o app do cooperado…</p>
+            <p style={{ margin: "8px 0 16px", color: "#4b5563", fontSize: 14 }}>
+              Se a tela não abrir, acesse novamente pelo login.
+            </p>
+            <a href="/login" style={{ color: "#166534", fontWeight: 600, textDecoration: "underline" }}>
+              Abrir login
+            </a>
             <div style={{ height: 32, width: 192, background: "#e5e7eb", borderRadius: 8 }} />
             <div
               style={{
@@ -144,7 +148,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             />
           </div>
         </div>
-        <script dangerouslySetInnerHTML={{ __html: buildInlineCooperadoBootShellScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineCooperadoPwaStealthReloadScript() }} />
         <AuthProvider>
           <CooperadoBootShellDismiss />
