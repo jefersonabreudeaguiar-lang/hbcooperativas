@@ -50,6 +50,6 @@ const keepAliveUi = readFileSync(
 );
 assert.ok(keepAliveUi.includes("if (!enabled || !mobile)"), "keep-alive só no mobile gestão");
 assert.ok(keepAliveUi.includes("useStaffMobileViewport"), "desktop rota única sem 4 painéis");
-assert.ok(keepAliveUi.includes("return [activeKey]"), "só uma aba no DOM por vez");
+assert.ok(keepAliveUi.includes('mode={active ? "visible" : "hidden"}'), "só uma aba visível; estado das visitadas preservado");
 
 console.log("test-staff-mobile-tab-keep-alive-u4: OK");

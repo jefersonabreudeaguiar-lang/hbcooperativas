@@ -73,10 +73,10 @@ const keepAlive = readFileSync(
   join(import.meta.dirname ?? __dirname, "../src/components/performance/StaffMobileTabKeepAlive.tsx"),
   "utf8"
 );
-assert.ok(keepAlive.includes("useStaffEffectiveTabPath"), "keep-alive usa caminho otimista");
-assert.ok(keepAlive.includes("registerStaffTabPanelCacheProbe"), "keep-alive publica o cache");
+assert.ok(keepAlive.includes("activeHref={pathname}"), "painel segue a rota confirmada");
+assert.ok(keepAlive.includes("<RetainedPanel key={href}"), "painéis de folha mantêm identidade");
 assert.ok(keepAlive.includes("markStaffTabPathChange"), "quiescência na troca de aba");
-assert.ok(keepAlive.includes("useDeferredValue"), "conteúdo pesado não bloqueia o paint");
+assert.ok(keepAlive.includes('mode={active ? "visible" : "hidden"}'), "Activity pausa efeitos das telas ocultas");
 assert.ok(keepAlive.includes("useStaffMobileViewport"), "desktop sem keep-alive paralelo");
 
 const dash = readFileSync(
@@ -101,4 +101,4 @@ assert.ok(layout.includes("tryStaffCachedInstantTabSwitch"), "toque do responsá
 assert.ok(layout.includes("setStaffOptimisticTab"), "otimista só no ramo staff");
 assert.ok(layout.includes("tryCooperadoPinnedInstantTabSwitch"), "ramo cooperado intacto");
 
-console.log("ok: troca de abas do responsável pinta o lastro na hora");
+console.log("ok: troca de abas preserva painéis e segue a rota confirmada");

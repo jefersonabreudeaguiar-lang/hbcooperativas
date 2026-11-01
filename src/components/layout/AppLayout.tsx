@@ -633,7 +633,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       )
     : staffKeepAliveShell
       ? (
-          <StaffMobileTabKeepAlive pathname={pathname}>{children}</StaffMobileTabKeepAlive>
+          <StaffMobileTabKeepAlive key={`${navUser?.id}:${navUser?.cooperativaCnpj ?? navUser?.cooperativaId}`} pathname={pathname}>{children}</StaffMobileTabKeepAlive>
         )
       : children;
 

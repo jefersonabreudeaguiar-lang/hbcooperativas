@@ -65,6 +65,6 @@ assert.ok(staffNotas.includes("if (isCooperado || !tabActive) return"), "prefetc
 
 const keepAliveStaff = read("src/components/performance/StaffMobileTabKeepAlive.tsx");
 assert.ok(keepAliveStaff.includes("useStaffMobileViewport"), "gestão desktop não monta 4 abas");
-assert.ok(keepAliveStaff.includes("isStaffTabPinned(href)"), "cache pinado não evicta");
+assert.ok(keepAliveStaff.includes("trimStaffTabCacheOrder"), "cache pinado não evicta");
 
 console.log("OK — test-staff-responsavel-desempenho");
