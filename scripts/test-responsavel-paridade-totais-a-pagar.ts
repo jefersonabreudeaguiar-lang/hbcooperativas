@@ -13,6 +13,7 @@ import {
 } from "../src/services/responsavelPainelIndex.ts";
 import { round2 } from "../src/utils/calculations.ts";
 import { inicioPeriodoLivroCaixaComHistorico } from "../src/services/livroCaixaService";
+import { responsavelBadgeFilaPagarCount } from "../src/lib/responsavel/responsavelGestaoLeitura";
 
 const COOP = "coop-paridade";
 const COOP2 = "coop-pix";
@@ -137,6 +138,8 @@ function assertParidade(data: typeof emptyInitialData, coopId: string) {
 }
 
 assertParidade(fixtureFichaPendente(), COOP);
+assert.equal(responsavelBadgeFilaPagarCount({ cooperadosParaPagarCount: 12, aguardandoAssinaturaCount: 2, aguardandoVerificacaoCount: 1, cnpjDigits: "" }), 12);
+assert.equal(responsavelBadgeFilaPagarCount({ cooperadosParaPagarCount: 0, aguardandoAssinaturaCount: 2, aguardandoVerificacaoCount: 1, cnpjDigits: "" }), 0);
 assertParidade(fixtureNotaSemPixAposConfirmado(), COOP2);
 assert.equal(getTotalAPagarCooperado(fixtureNotaSemPixAposConfirmado(), "c2", undefined, COOP2), 0);
 

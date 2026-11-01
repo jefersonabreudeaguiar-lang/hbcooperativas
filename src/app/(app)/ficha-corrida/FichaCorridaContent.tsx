@@ -2308,9 +2308,7 @@ function FichaCorridaPageInner() {
             className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 ${aba === "pagar" ? "border-green-600 text-green-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}
           >
             <CreditCard size={16} /> Pagar
-            {(cooperadosParaPagar.length > 0 ||
-              pagamentosAguardandoAssinatura.length > 0 ||
-              pagamentosAguardandoVerificacao.length > 0) && (
+            {totalBadgeFilaPagar > 0 && (
               <span className="bg-amber-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
                 {totalBadgeFilaPagar}
               </span>
@@ -2359,7 +2357,7 @@ function FichaCorridaPageInner() {
 
           {pagamentosAguardandoAssinatura.length > 0 && (
             <Card
-              title={`Falta assinar (${pagamentosAguardandoAssinatura.length})`}
+              title={`Pagamento registrado — falta assinar recibo (${pagamentosAguardandoAssinatura.length})`}
               className="border-violet-200"
             >
               <p className="text-sm text-gray-600 mb-3">
@@ -2410,7 +2408,7 @@ function FichaCorridaPageInner() {
           )}
 
           {pagamentosAguardandoVerificacao.length > 0 && (
-            <Card title={`Verificar recibo (${pagamentosAguardandoVerificacao.length})`} className="border-emerald-200">
+            <Card title={`Já pago — conferir recibo (${pagamentosAguardandoVerificacao.length})`} className="border-emerald-200">
               <p className="text-sm text-gray-600 mb-3">
                 O cooperado já assinou. Confira o recibo e marque como verificado.
               </p>

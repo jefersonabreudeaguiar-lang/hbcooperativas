@@ -50,11 +50,8 @@ export function responsavelBadgeFilaPagarCount(opts: {
   aguardandoVerificacaoCount: number;
   cnpjDigits: string;
 }): number {
-  return (
-    opts.cooperadosParaPagarCount +
-    opts.aguardandoAssinaturaCount +
-    opts.aguardandoVerificacaoCount
-  );
+  // Conferir/assinar recibo é uma pendência documental de pagamento já registrado.
+  return opts.cooperadosParaPagarCount;
 }
 
 export function responsavelInboxCooperadosPagarCount(
