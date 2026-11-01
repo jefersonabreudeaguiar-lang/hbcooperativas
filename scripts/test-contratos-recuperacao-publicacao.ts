@@ -32,6 +32,8 @@ assert.equal(JSON.stringify(data), before);
 assert.equal(merged.fichaCorrida, data.fichaCorrida);
 assert.equal(merged.pagamentosCooperado, data.pagamentosCooperado);
 const newerDeletion = { ...data, instituicoesExcluidas: [{ id: "original", cooperativaId: "coop", deletedAt: "2026-11-02T00:00:00Z" }] };
+const republicado = { ...restored, updatedAt: "2026-11-03T00:00:00Z" };
+assert.equal(getTodosProdutosCatalogo(mergeContratosIntoData(newerDeletion, republicado, "coop"), "coop").length, 1, "republicação supera exclusão antiga mesmo preservando a data original do cadastro");
 assert.equal(getTodosProdutosCatalogo(mergeContratosIntoData(newerDeletion, restored, "coop"), "coop").length, 0);
 const leituraStaff = alinharCatalogoSnapshotStaff(data, merged);
 assert.equal(getContratosEntrega(leituraStaff, "coop").length, 1, "lastro financeiro antigo não esconde o contrato publicado");

@@ -877,7 +877,7 @@ export function mergeContratosIntoData(data: AppData, cloud: ContratosSyncPayloa
     (data.instituicoesExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
     cloudExcluidas
   ).filter((e) => !cloud.instituicoes.some(
-    (i) => i.id === e.id && catalogoUpdatedAtMs(i.updatedAt) > catalogoUpdatedAtMs(e.deletedAt)
+    (i) => i.id === e.id && Math.max(catalogoUpdatedAtMs(i.updatedAt), catalogoUpdatedAtMs(cloud.updatedAt)) > catalogoUpdatedAtMs(e.deletedAt)
   ));
   const excluidasIds = new Set(mergedExcluidasCoop.map((e) => e.id));
 
