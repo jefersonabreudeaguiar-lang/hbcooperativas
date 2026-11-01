@@ -79,12 +79,11 @@ import {
   bicCentralGetResumoPagamentoExibicao,
   bicCentralGetValorExibicaoCooperado,
 } from "@/services/bicLeituraCentralFicha";
-import { listarPagamentosAguardandoAssinatura, listarPagamentosReciboAguardandoVerificacao } from "@/services/filaDoDiaService";
+import { buildFichaCorridaStaffQueues } from "@/lib/responsavel/fichaCorridaStaffQueues";
 import {
   appDataParaPagarCooperadosResponsavel,
   cooperadoTemNotaConferidaSemPix,
   listarMesesNotaConferidaSemPix,
-  listCooperadosPagamentoPendenteResponsavel,
 } from "@/services/responsavelPainelIndex";
 import {
   cooperativaCnpjDigitsFromAppData,
@@ -92,7 +91,7 @@ import {
   responsavelBadgeFilaPagarCount,
   responsavelFichaAppDataDomains,
 } from "@/lib/responsavel/responsavelGestaoLeitura";
-import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
+import { getCooperadoNomeResolvido, resolverCooperadoParaPagamento, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
 import { useContaCoopDescontosRevisionWhenLive } from "@/hooks/useContaCoopDescontosRevision";
@@ -739,25 +738,14 @@ function FichaCorridaPageInner() {
     return [...set].sort().reverse();
   }, [data]);
 
-  const cooperadosComFicha = useMemo(() => {
-    if (!data || !coopId) return [];
-    return listCooperadosComFichaNoMes(data, coopId, mesAtivo);
-  }, [data, coopId, mesAtivo]);
-
-  const cooperadosParaPagar = useMemo(() => {
-    if (!data || !coopId) return [];
-    return listCooperadosPagamentoPendenteResponsavel(data, coopId);
-  }, [data, coopId]);
-
-  const pagamentosAguardandoAssinatura = useMemo(() => {
-    if (!data || !coopId) return [];
-    return listarPagamentosAguardandoAssinatura(data, coopId);
-  }, [data, coopId]);
-
-  const pagamentosAguardandoVerificacao = useMemo(() => {
-    if (!data || !coopId) return [];
-    return listarPagamentosReciboAguardandoVerificacao(data, coopId);
-  }, [data, coopId]);
+  const {
+    cooperadosComFicha,
+    cooperadosParaPagar,
+    pagamentosAguardandoAssinatura,
+    pagamentosAguardandoVerificacao,
+  } = useMemo(() => buildFichaCorridaStaffQueues({
+    active: tabActive, isCooperado, data, cooperativaId: coopId, mes: mesAtivo,
+  }), [tabActive, isCooperado, data, coopId, mesAtivo]);
 
   const coopCnpjDigits = useMemo(
     () => cooperativaCnpjDigitsFromAppData(data, coopId),
@@ -1127,9 +1115,9 @@ function FichaCorridaPageInner() {
   ]);
 
   const cooperadosParaDivisao = useMemo(() => {
-    if (!data || !coopId || !cooperadoSelecionadoId) return [];
+    if (!tabActive || isCooperado || !data || !coopId || !cooperadoSelecionadoId) return [];
     return listCooperadosDaCooperativa(data, coopId).filter((c) => c.id !== cooperadoSelecionadoId);
-  }, [data, coopId, cooperadoSelecionadoId]);
+  }, [tabActive, isCooperado, data, coopId, cooperadoSelecionadoId]);
 
   const notaDivisaoAtual = useMemo(() => {
     if (!data || !divisaoFicha) return undefined;
