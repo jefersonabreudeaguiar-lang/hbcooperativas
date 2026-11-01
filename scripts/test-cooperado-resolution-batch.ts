@@ -1,0 +1,17 @@
+import assert from "node:assert/strict";
+import { emptyInitialData } from "../src/mock/data";
+import type { AppData } from "../src/types";
+import { resolverCooperadoIdCanonico, withCooperadoResolutionBatch } from "../src/services/cooperadoCloudService";
+let scans=0;
+const people=[{id:"canonical",cooperativaId:"coop",nomeCompleto:"Maria"}];
+const cooperados=new Proxy(people,{get(target,key,receiver){if(key==="find") scans++;return Reflect.get(target,key,receiver);}});
+const data={...emptyInitialData,cooperados,notasPedido:[{id:"note",cooperadoId:"old",cooperativaId:"coop",cooperadoNomeSnapshot:"Maria"}]} as AppData;
+withCooperadoResolutionBatch(()=>{for(let i=0;i<100;i++) assert.equal(resolverCooperadoIdCanonico(data,"old","coop"),"canonical"); withCooperadoResolutionBatch(()=>assert.equal(resolverCooperadoIdCanonico(data,"old","coop"),"canonical"));});
+assert.equal(scans,2,"mesma identidade só é pesquisada uma vez durante o lote");
+people[0]={id:"new",cooperativaId:"coop",nomeCompleto:"Maria"};
+assert.equal(resolverCooperadoIdCanonico(data,"old","coop"),"new","não reutiliza cache fora da leitura");
+assert.throws(()=>withCooperadoResolutionBatch(()=>{throw new Error("failure");}),/failure/);
+people[0]={id:"after-error",cooperativaId:"coop",nomeCompleto:"Maria"};
+assert.equal(resolverCooperadoIdCanonico(data,"old","coop"),"after-error","erro também libera o cache");
+assert.equal(withCooperadoResolutionBatch(()=>resolverCooperadoIdCanonico(data,"old","other")),"old","cooperativa diferente não compartilha identidade");
+console.log("OK: identidade reutilizada só dentro do lote; escopo e invalidação preservados");

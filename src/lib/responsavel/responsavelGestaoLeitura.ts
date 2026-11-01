@@ -131,6 +131,8 @@ export function valorAPagarCooperadoEmAberto(
   cooperadoId: string,
   cooperativaId: string
 ): { meses: string[]; porMes: MesValorAPagarEmAberto[]; total: number } {
+  // Cada resumo percorre somente as entregas e débitos deste cooperado.
+  data = cooperadoFinanceiroScopedData(data, cooperadoId, cooperativaId);
   const fichaNotas = new Set(data.fichaCorrida.map(f => f.notaPedidoId));
   if (data.notasPedido.some(n => n.cooperadoId === cooperadoId && n.cooperativaId === cooperativaId && n.status === "conferida" && !fichaNotas.has(n.id))) {
     const fonte = cooperadoFinanceiroScopedData(data, cooperadoId, cooperativaId);

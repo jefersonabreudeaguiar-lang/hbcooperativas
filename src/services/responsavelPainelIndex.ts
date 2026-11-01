@@ -8,6 +8,7 @@ import {
   fichaPertenceCooperado,
   listCooperadosDaCooperativa,
   resolverCooperadoIdCanonico,
+  withCooperadoResolutionBatch,
 } from "@/services/cooperadoCloudService";
 import { getDataOperationalTruth, getDataRevision } from "@/services/dataStore";
 import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
@@ -365,6 +366,10 @@ function preservarValoresNumericosDaFonte(fonte: AppData, projetado: AppData): A
 }
 
 export function appDataParaPagarCooperadosResponsavel(data: AppData, coopId?: string): AppData {
+  return withCooperadoResolutionBatch(() => appDataParaPagarCooperadosResponsavelLeitura(data, coopId));
+}
+
+function appDataParaPagarCooperadosResponsavelLeitura(data: AppData, coopId?: string): AppData {
   garantirCacheDoBuildAtual();
   const key = coopId ?? "";
   const fp = gestaoLeituraCacheFootprint(data, key);

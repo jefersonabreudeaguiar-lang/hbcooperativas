@@ -645,8 +645,31 @@ export function resolverCooperadoParaPagamento(
   return candidatos.find((c) => c.id === canonico) ?? candidatos[0];
 }
 
-/** Unifica ID local quando o cooperado veio de outro aparelho (nome/CPF). */
+let resolutionBatch: WeakMap<AppData, Map<string, string>> | null = null;
+
+/** Cache só durante uma leitura síncrona. Não sobrevive a alterações ou sessões. */
+export function withCooperadoResolutionBatch<T>(read: () => T): T {
+  if (resolutionBatch) return read();
+  resolutionBatch = new WeakMap();
+  try { return read(); } finally { resolutionBatch = null; }
+}
+
 export function resolverCooperadoIdCanonico(
+  data: AppData, cooperadoId: string, cooperativaId?: string, nomeFallback?: string,
+): string {
+  if (!resolutionBatch) return resolverCooperadoIdCanonicoSemCache(data, cooperadoId, cooperativaId, nomeFallback);
+  let cache = resolutionBatch.get(data);
+  if (!cache) { cache = new Map(); resolutionBatch.set(data, cache); }
+  const key = JSON.stringify([cooperadoId, cooperativaId, nomeFallback]);
+  const cached = cache.get(key);
+  if (cached !== undefined) return cached;
+  const resolved = resolverCooperadoIdCanonicoSemCache(data, cooperadoId, cooperativaId, nomeFallback);
+  cache.set(key, resolved);
+  return resolved;
+}
+
+/** Unifica ID local quando o cooperado veio de outro aparelho (nome/CPF). */
+function resolverCooperadoIdCanonicoSemCache(
   data: AppData,
   cooperadoId: string,
   cooperativaId?: string,

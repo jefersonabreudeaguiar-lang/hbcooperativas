@@ -36,3 +36,12 @@ const cooperado = buildFichaCorridaStaffQueues({
 });
 assert.equal(Object.values(cooperado).every((queue) => queue.length === 0), true, "troca de papel não carrega a fila anterior");
 console.log("OK: Financeiro cooperado não acessa filas coletivas; responsável mantém suas filas; aba inativa não calcula");
+
+const resumed = buildFichaCorridaStaffQueues({active:true,isCooperado:false,data,cooperativaId:"coop-test",mes:"2026-10"});
+assert.equal(resumed, staff, "retorno à aba com dados iguais reutiliza filas");
+const changed = { ...data, pagamentosCooperado: [] };
+const refreshed = buildFichaCorridaStaffQueues({active:true,isCooperado:false,data:changed,cooperativaId:"coop-test",mes:"2026-10"});
+assert.equal(refreshed.pagamentosAguardandoAssinatura.length,0,"pagamento alterado invalida a leitura");
+const otherTenant = buildFichaCorridaStaffQueues({active:true,isCooperado:false,data,cooperativaId:"other-coop",mes:"2026-10"});
+assert.equal(otherTenant.pagamentosAguardandoAssinatura.length,0,"cache não cruza cooperativas");
+console.log("OK: retorno sem recálculo; dados alterados e cooperativa diferente invalidam cache");
