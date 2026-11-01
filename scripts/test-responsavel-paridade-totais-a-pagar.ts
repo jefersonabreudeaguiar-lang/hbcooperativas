@@ -12,6 +12,7 @@ import {
   resetResponsavelPainelIndexCache,
 } from "../src/services/responsavelPainelIndex.ts";
 import { round2 } from "../src/utils/calculations.ts";
+import { inicioPeriodoLivroCaixaComHistorico } from "../src/services/livroCaixaService";
 
 const COOP = "coop-paridade";
 const COOP2 = "coop-pix";
@@ -138,5 +139,18 @@ function assertParidade(data: typeof emptyInitialData, coopId: string) {
 assertParidade(fixtureFichaPendente(), COOP);
 assertParidade(fixtureNotaSemPixAposConfirmado(), COOP2);
 assert.equal(getTotalAPagarCooperado(fixtureNotaSemPixAposConfirmado(), "c2", undefined, COOP2), 0);
+
+{
+  const data = fixtureFichaPendente();
+  data.cooperados.push({ ...data.cooperados[0]!, id: "cadastro-recriado" });
+  resetResponsavelPainelIndexCache();
+  const linhas = getRelatorioLancamentosEmAbertoResponsavel(data, COOP);
+  assert.equal(linhas.length, 1, "cadastro recriado com a mesma ficha não duplica dívida");
+  assert.equal(linhas[0]?.total, 100);
+  assert.equal(inicioPeriodoLivroCaixaComHistorico(data, COOP), null, "não fixa período antes do histórico");
+  data.pagamentosCooperado = [{ id: "pg", cooperadoId: "c1", cooperativaId: COOP, status: "confirmado", pagoEm: "2026-09-21T15:00:00Z", createdAt: "2026-09-21T15:00:00Z" } as never];
+  assert.equal(inicioPeriodoLivroCaixaComHistorico(data, COOP), "2026-09-21");
+  assert.equal(inicioPeriodoLivroCaixaComHistorico(data, "outra-coop"), null);
+}
 
 console.log("OK test-responsavel-paridade-totais-a-pagar");

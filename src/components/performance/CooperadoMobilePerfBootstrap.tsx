@@ -14,8 +14,8 @@ import { getData } from "@/services/dataStore";
 import { resolveGestaoCooperativaId } from "@/utils/cooperativa";
 
 /**
- * Aquecimento agressivo após login — Financeiro cooperado e rotas staff no celular.
- * Não altera dados; só baixa JS antes do toque.
+ * Pré-carrega rotas e recupera a base da gestão após login.
+ * Somente leitura da nuvem; aplica cadastro, contratos, pagamentos e caixa ao cache local.
  */
 export function CooperadoMobilePerfBootstrap() {
   const { user } = useAuth();
@@ -33,11 +33,16 @@ export function CooperadoMobilePerfBootstrap() {
         if (!cnpj || cancelled) return;
         const coopId = await cloud.ensureCooperativaLocalForCnpj(cnpj);
         if (!coopId || cancelled) return;
-        const { syncContratosFromCloud } = await import("@/services/cooperativaSyncCloudService");
-        await Promise.allSettled([
-          cloud.syncCooperadosFromCloud(cnpj, coopId),
-          syncContratosFromCloud(cnpj, coopId),
-        ]);
+        const { syncContratosFromCloud, syncOperacionalFromCloud } = await import("@/services/cooperativaSyncCloudService");
+        // Aplicar as leituras em sequência evita salvar fatias sobre um snapshot anterior.
+        await cloud.syncCooperadosFromCloud(cnpj, coopId);
+        if (cancelled) return;
+        await syncContratosFromCloud(cnpj, coopId);
+        if (cancelled) return;
+        // Pagamentos e caixa devem chegar junto da ficha, antes da revisão dos saldos.
+        await syncOperacionalFromCloud(cnpj, { skipDestructiveReset: true });
+        const { resetResponsavelPainelIndexCache } = await import("@/services/responsavelPainelIndex");
+        resetResponsavelPainelIndexCache();
       })().catch(() => { /* o botão Atualizar mantém a retomada manual disponível */ });
     }, 800);
     return () => { cancelled = true; window.clearTimeout(timer); };

@@ -768,9 +768,9 @@ export function fundirLinhasEmAbertoEstavel(
   data: AppData,
   coopId: string
 ): LinhaPagarCooperadoEmAberto[] {
-  const motorLimpo = motor
+  const motorLimpo = removerLinhasDuplicadasDaMesmaFicha(motor
     .map((l) => linhaEmAbertoSemValoresPagos(l, data, coopId))
-    .filter((l): l is LinhaPagarCooperadoEmAberto => l !== null);
+    .filter((l): l is LinhaPagarCooperadoEmAberto => l !== null), data, coopId);
 
   if (anterior.length === 0) return motorLimpo;
 
@@ -782,6 +782,23 @@ export function fundirLinhasEmAbertoEstavel(
     if (vivo) byId.set(old.cooperadoId, vivo);
   }
   return [...byId.values()].sort((a, b) => a.cooperado.localeCompare(b.cooperado, "pt-BR"));
+}
+
+/** Dois cadastros que resolvem exatamente as mesmas fichas não são duas dívidas. */
+export function removerLinhasDuplicadasDaMesmaFicha(
+  linhas: LinhaPagarCooperadoEmAberto[], data: AppData, coopId: string
+): LinhaPagarCooperadoEmAberto[] {
+  const seen = new Set<string>();
+  return linhas.filter((linha) => {
+    const fichas = [...new Set(linha.meses.flatMap((mes) =>
+      listarFichasEmAbertoPagamento(data, linha.cooperadoId, mes, coopId).map((f) => f.id)
+    ))].sort();
+    if (fichas.length === 0) return true;
+    const key = JSON.stringify([fichas, Math.round(linha.total * 100)]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /** Lista da fila a partir de um snapshot — sem cache da revisão ao vivo. */

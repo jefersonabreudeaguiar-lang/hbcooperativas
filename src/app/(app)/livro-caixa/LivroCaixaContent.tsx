@@ -33,7 +33,7 @@ import {
   isLancamentoSemSequenciaLegado,
   mesesLivroCaixa,
   mesReferenciaInicialLivroCaixa,
-  dataInicioMovimentoLivroCaixa,
+  inicioPeriodoLivroCaixaComHistorico,
   parseNumeroSequenciaInput,
   podeExcluirLancamentoLivroCaixa,
   resumoLivroCaixa,
@@ -183,7 +183,11 @@ export default function LivroCaixaPage() {
 
   useEffect(() => {
     if (!dataCaixa || !coopId || periodoInicializadoRef.current) return;
-    setFiltroDe(dataInicioMovimentoLivroCaixa(dataCaixa, coopId));
+    // A primeira renderização pode ocorrer antes do pull dos pagamentos/caixa.
+    // Só fixa o período quando há histórico; senão novembro vazio fica preso na tela.
+    const inicio = inicioPeriodoLivroCaixaComHistorico(dataCaixa, coopId);
+    if (!inicio) return;
+    setFiltroDe(inicio);
     periodoInicializadoRef.current = true;
   }, [dataCaixa, coopId]);
 
@@ -615,10 +619,10 @@ export default function LivroCaixaPage() {
           ) : (
             <div className="grid grid-cols-2 gap-3 flex-1 max-w-md">
               <FormField label="Início">
-                <Input type="date" value={filtroDe} onChange={(e) => setFiltroDe(e.target.value)} />
+                <Input type="date" value={filtroDe} onChange={(e) => { periodoInicializadoRef.current = true; setFiltroDe(e.target.value); }} />
               </FormField>
               <FormField label="Fim">
-                <Input type="date" value={filtroAte} onChange={(e) => setFiltroAte(e.target.value)} />
+                <Input type="date" value={filtroAte} onChange={(e) => { periodoInicializadoRef.current = true; setFiltroAte(e.target.value); }} />
               </FormField>
             </div>
           )}

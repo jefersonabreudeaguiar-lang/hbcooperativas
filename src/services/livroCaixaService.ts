@@ -936,6 +936,13 @@ export function dataInicioMovimentoLivroCaixa(data: AppData, cooperativaId: stri
   return `${getCurrentMesReferencia()}-01`;
 }
 
+/** null significa que o histórico ainda não chegou; não fixar um mês vazio no primeiro frame. */
+export function inicioPeriodoLivroCaixaComHistorico(data: AppData, cooperativaId: string): string | null {
+  const temMovimento = (data.livroCaixa ?? []).some((l) => l.cooperativaId === cooperativaId) ||
+    data.pagamentosCooperado.some((p) => p.cooperativaId === cooperativaId && p.status === "confirmado");
+  return temMovimento ? dataInicioMovimentoLivroCaixa(data, cooperativaId) : null;
+}
+
 export function mesReferenciaInicialLivroCaixa(data: AppData, cooperativaId: string): string {
   for (const m of mesesLivroCaixa(data, cooperativaId)) {
     if (lancamentosLivroCaixa(data, cooperativaId, m).length > 0) return m;
