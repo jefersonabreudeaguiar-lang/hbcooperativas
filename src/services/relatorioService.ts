@@ -1,3 +1,4 @@
+import { listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import type { AppData, Cooperado, FichaCorrida, FechamentoMensal, Instituicao, NotaPedido, NotaPedidoItem } from "@/types";
 import { getCooperadoNome, round2, sumBy } from "@/utils/calculations";
 import { formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia } from "@/utils/format";
@@ -410,7 +411,7 @@ export function getRelatorioPagarCooperadoEmAberto(
   cooperadoId?: string
 ): LinhaPagarCooperadoEmAberto[] {
   const escopo = cooperativaId
-    ? data.cooperados.filter((c) => c.cooperativaId === cooperativaId && c.status === "ativo")
+    ? listCooperadosDaCooperativa(data, cooperativaId).filter((c) => c.status === "ativo")
     : data.cooperados.filter((c) => c.status === "ativo");
   return escopo
     .filter((c) => !cooperadoId || c.id === cooperadoId)

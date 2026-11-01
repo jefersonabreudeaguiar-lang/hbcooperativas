@@ -14,17 +14,18 @@ import {
   listarFichasPendentesPagamento,
   mesesReferenciaComDebitoAberto,
   notaQuitadaPorPagamentoCooperativaRegistrado,
+  reconciliarFichaFromNotasConferidas,
   resumoFromPagamento,
   type AjustesResumoPagamento,
   type ResumoPagamentoCooperado,
 } from "@/services/notaPedidoService";
 import {
-  hbCreditCreditoBaseReais,
   listarMesesFichaEmAbertoCooperado,
 } from "@/lib/hb-credit/hbCreditCreditoBaseCalculo";
 import type { PagamentoCooperadoRegistro } from "@/types";
 import { listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import { cooperadoFinanceiroScopedData } from "@/lib/cooperado/cooperadoFinanceiroScopedData";
 import { round2 } from "@/utils/calculations";
 
 export function responsavelFichaAppDataDomains(isCooperado: boolean): AppDataNotifyDomain[] {
@@ -63,25 +64,6 @@ export function responsavelInboxCooperadosPagarCount(
   return cooperadosParaPagarCount;
 }
 
-function somaNotasConferidasSemPix(
-  data: AppData,
-  cooperadoId: string,
-  cooperativaId: string
-): number {
-  let total = 0;
-  for (const n of data.notasPedido ?? []) {
-    if (n.cooperativaId !== cooperativaId) continue;
-    if (n.cooperadoId !== cooperadoId) continue;
-    if (n.status !== "conferida") continue;
-    if (notaQuitadaPorPagamentoCooperativaRegistrado(data, n, cooperadoId)) continue;
-    const liq = Number(n.valorLiquido);
-    const bruto = Number(n.valorBruto);
-    const valor = liq > 0.005 ? liq : bruto > 0.005 ? bruto : 0;
-    if (valor > 0.005) total = round2(total + valor);
-  }
-  return total;
-}
-
 /**
  * Total «a pagar» do Início / relatórios.
  * Ficha em aberto; se a ficha ainda não gravou, usa o líquido da nota conferida sem PIX.
@@ -92,7 +74,7 @@ export function getTotalValoresAPagarGestaoCooperativa(
   _opts?: { bicCentralRead?: boolean }
 ): number {
   const cooperados = cooperativaId
-    ? data.cooperados.filter((c) => c.cooperativaId === cooperativaId && c.status === "ativo")
+    ? listCooperadosDaCooperativa(data, cooperativaId).filter((c) => c.status === "ativo")
     : data.cooperados.filter((c) => c.status === "ativo");
 
   return round2(
@@ -100,10 +82,7 @@ export function getTotalValoresAPagarGestaoCooperativa(
       const coopScope = cooperativaId ?? c.cooperativaId;
       if (!coopScope) return s;
       const aberto = valorAPagarCooperadoEmAberto(data, c.id, coopScope);
-      if (aberto.total > 0.005) return s + aberto.total;
-      const ficha = hbCreditCreditoBaseReais(data, c.id, coopScope);
-      if (ficha > 0.005) return s + ficha;
-      return s + somaNotasConferidasSemPix(data, c.id, coopScope);
+      return s + aberto.total;
     }, 0)
   );
 }
@@ -152,6 +131,23 @@ export function valorAPagarCooperadoEmAberto(
   cooperadoId: string,
   cooperativaId: string
 ): { meses: string[]; porMes: MesValorAPagarEmAberto[]; total: number } {
+  const fichaNotas = new Set(data.fichaCorrida.map(f => f.notaPedidoId));
+  if (data.notasPedido.some(n => n.cooperadoId === cooperadoId && n.cooperativaId === cooperativaId && n.status === "conferida" && !fichaNotas.has(n.id))) {
+    const fonte = cooperadoFinanceiroScopedData(data, cooperadoId, cooperativaId);
+    const reconciliado = reconciliarFichaFromNotasConferidas(fonte);
+    const originais = new Map(fonte.notasPedido.map(n => [n.id, n]));
+    data = {
+      ...reconciliado,
+      notasPedido: reconciliado.notasPedido.map(n => {
+        const original = originais.get(n.id);
+        return original && !Number.isFinite(n.valorLiquido) ? { ...n, valorBruto: original.valorBruto, valorLiquido: original.valorLiquido, valorDesconto: original.valorDesconto } : n;
+      }),
+      fichaCorrida: reconciliado.fichaCorrida.map(f => {
+        const original = originais.get(f.notaPedidoId);
+        return original && !Number.isFinite(f.valorLiquido) ? { ...f, valorBruto: original.valorBruto, valorLiquido: original.valorLiquido, descontos: original.valorDesconto ?? 0 } : f;
+      }),
+    };
+  }
   const meses = mesesReferenciaComDebitoAberto(data, cooperadoId, cooperativaId);
   const porMes: MesValorAPagarEmAberto[] = [];
   let total = 0;

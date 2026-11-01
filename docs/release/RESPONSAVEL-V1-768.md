@@ -1,0 +1,7 @@
+# Responsável V1 — build 768
+
+Nova aba Adicionar imagens em Conferir entregas. Responsável identifica o cooperado, escolhe data e uma ou mais imagens da mesma entrega. Contrato opcional, definido na conferência quando necessário. Envio usa compressão e API autenticada existentes. Imagens permanecem em rascunho até confirmação integral; publicação confirmada retorna à fila normal. Retry mantém ID e índices de imagens confirmadas. Nenhum valor é lançado pelo envio.
+
+Totais do responsável passam a incluir cooperados identificados por notas/fichas quando o cadastro local ainda não carregou. Entregas conferidas sem ficha são projetadas em memória, preservando valores legados válidos. Total do Início respeita o líquido após descontos, inclusive zero, em vez de recuperar o valor anterior. Relatório Em aberto usa os mesmos candidatos. Bootstrap de prefetch agressivo fica limitado ao celular.
+
+Validação: compilação e TypeScript; envio parcial, retomada, falha na publicação e identidade; financeiro HB/avulsos/estorno/zero; paridade Início/Em aberto/Pagar; preservação PIX e livro caixa. Gate Fase R passou núcleo, experiência, cadastro ausente, desempenho, navegação, fila e isolamento; falha de prefetch corrigida e testes restantes executados separadamente. Homologação read-only nuvem: 309 fichas e 38 pagamentos. Sessão real abriu Pagar e Conferir antes da publicação. Envio de imagem real depende das imagens do usuário; não foram criados lançamentos fictícios em produção.

@@ -1,3 +1,4 @@
+import { getTotalValoresAPagarGestaoCooperativa, valorAPagarCooperadoEmAberto } from "../src/lib/responsavel/responsavelGestaoLeitura";
 import assert from "node:assert/strict";
 import { emptyInitialData } from "../src/mock/data";
 import type { AppData } from "../src/types";
@@ -53,3 +54,6 @@ assert.equal(repaired.fichaCorrida.filter(f => f.notaPedidoId === missingNote.id
 assert.equal(leituraFinanceiraParidadeCooperado(repaired, actor, coop).resumo.valorEntregas, 3500, "nota conferida sem ficha entra no total");
 assert.equal(reconciliarFichaFromNotasConferidas(repaired).fichaCorrida.filter(f => f.notaPedidoId === missingNote.id).length, 1, "reconciliação não duplica entrega");
 console.log("OK: entrega conferida sem ficha incluída, sem mutação ou duplicação");
+assert.equal(getTotalValoresAPagarGestaoCooperativa(data, coop), 0, "responsável não recupera entregas quando descontos zeram o saldo");
+assert.equal(valorAPagarCooperadoEmAberto(gap, actor, coop).total, 3500, "responsável também inclui nota conferida sem ficha");
+console.log("OK: totais do responsável incluem nota sem ficha e respeitam descontos integrais");

@@ -274,6 +274,8 @@ const ResponsavelFilaCooperadosList = dynamic(
   { loading: () => <div className="py-6 text-center text-sm text-gray-500">Carregando fila…</div> }
 );
 
+const ResponsavelAdicionarImagens = dynamic(() => import("@/components/notas/ResponsavelAdicionarImagens"), { loading: () => <p role="status">Abrindo envio de imagens…</p> });
+
 const NotasPedidoConferirItensTable = dynamic(
   () =>
     import("@/components/notas/NotasPedidoConferirItensTable").then((m) => ({
@@ -561,6 +563,8 @@ export default function NotasPedidoStaffMain() {
 
   const [statusFilter, setStatusFilter] = useState(isCooperado ? "pendentes" : "");
   const filtroResponsavelIniciado = useRef(false);
+  const [adicionarImagens, setAdicionarImagens] = useState(false);
+  const [imagensVisitado, setImagensVisitado] = useState(false);
   const [anexarModal, setAnexarModal] = useState(false);
   const [conferirModal, setConferirModal] = useState(false);
 
@@ -647,6 +651,7 @@ export default function NotasPedidoStaffMain() {
   const [, startVistaTransition] = useTransition();
   const trocarVistaResponsavel = useCallback(
     (v: "fila" | "cooperado" | "historico" | "correcoes" | "aberto") => {
+      setAdicionarImagens(false);
       startVistaTransition(() => setVistaResponsavel(v));
     },
     []
@@ -4557,6 +4562,7 @@ export default function NotasPedidoStaffMain() {
         <nav
           className="mb-4 rounded-xl border border-gray-200 bg-white p-1.5 shadow-sm flex flex-wrap gap-1 sticky top-0 z-20"
           aria-label="Seções de entregas"
+          onClickCapture={(e) => { const button = (e.target as HTMLElement).closest("button"); if (button && !button.dataset.adicionarImagens) setAdicionarImagens(false); }}
         >
           <button
             type="button"
@@ -4568,7 +4574,7 @@ export default function NotasPedidoStaffMain() {
             }}
             className={cn(
               "flex-1 min-w-[7rem] px-3 py-2.5 text-sm font-semibold rounded-lg transition-colors",
-              vistaResponsavel === "fila" || vistaResponsavel === "cooperado"
+              !adicionarImagens && (vistaResponsavel === "fila" || vistaResponsavel === "cooperado")
                 ? "bg-green-600 text-white shadow-sm"
                 : "text-gray-600 hover:bg-gray-100"
             )}
@@ -4584,7 +4590,7 @@ export default function NotasPedidoStaffMain() {
             onPointerEnter={prefetchStaffNotasLancamentosAbertoChunk}
             className={cn(
               "flex-1 min-w-[7rem] px-3 py-2.5 text-sm font-semibold rounded-lg transition-colors",
-              vistaResponsavel === "aberto"
+              !adicionarImagens && vistaResponsavel === "aberto"
                 ? "bg-green-600 text-white shadow-sm"
                 : "text-gray-600 hover:bg-gray-100"
             )}
@@ -4601,7 +4607,7 @@ export default function NotasPedidoStaffMain() {
               onPointerEnter={prefetchStaffNotasCorrecoesChunk}
               className={cn(
                 "flex-1 min-w-[7rem] px-3 py-2.5 text-sm font-semibold rounded-lg transition-colors",
-                vistaResponsavel === "correcoes"
+                !adicionarImagens && vistaResponsavel === "correcoes"
                   ? "bg-green-600 text-white shadow-sm"
                   : "text-gray-600 hover:bg-gray-100"
               )}
@@ -4615,16 +4621,25 @@ export default function NotasPedidoStaffMain() {
             onPointerEnter={prefetchStaffNotasHistoricoChunk}
             className={cn(
               "flex-1 min-w-[7rem] px-3 py-2.5 text-sm font-semibold rounded-lg transition-colors",
-              vistaResponsavel === "historico"
+              !adicionarImagens && vistaResponsavel === "historico"
                 ? "bg-green-600 text-white shadow-sm"
                 : "text-gray-600 hover:bg-gray-100"
             )}
           >
             Histórico
           </button>
+          {check("notas_pedido", "create") && <button type="button" data-adicionar-imagens="true" onClick={() => { setImagensVisitado(true); setAdicionarImagens(true); }} aria-pressed={adicionarImagens}
+            className={cn("flex-1 min-w-[7rem] px-3 py-2.5 text-sm font-semibold rounded-lg transition-colors", adicionarImagens ? "bg-green-600 text-white shadow-sm" : "text-gray-600 hover:bg-gray-100")}>
+            Adicionar imagens
+          </button>}
         </nav>
       )}
 
+      {!isCooperado && imagensVisitado && coopId && <div hidden={!adicionarImagens}>
+        <ResponsavelAdicionarImagens key={coopId} coopId={coopId} cooperados={cooperadosCoop} instituicoes={instituicoesCadastradas}
+          onSent={() => { setSuccessMsg("Imagens enviadas à nuvem. A entrega está na fila para conferência."); trocarVistaResponsavel("fila"); setStatusFilter("aguardando_conferencia"); setFiltroCooperadoId(""); setAbaConferenciaKey(""); }} />
+      </div>}
+      <div hidden={adicionarImagens}>
       {successMsg && (
         <AlertBanner variant="success" title="Entrega enviada!" onDismiss={() => setSuccessMsg("")}>
           {successMsg}
@@ -5196,6 +5211,7 @@ export default function NotasPedidoStaffMain() {
         disabled={processandoFoto || enviando || limiteFotosSessaoAtingido}
       />
 
+      </div>
       {anexarModal && (
       <Modal
         open={anexarModal}
