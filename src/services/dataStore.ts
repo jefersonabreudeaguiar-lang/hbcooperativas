@@ -874,7 +874,7 @@ function scheduleAutomaticTasksIfNeeded(data: AppData): AppData {
 function cooperadoMobileDeferPreloadParse(opts?: {
   userInitiated?: boolean;
 }): boolean {
-  if (!opts?.userInitiated) return false;
+  if (!opts?.userInitiated) return readCooperadoSessionLite()?.role === "cooperado";
   const session = readCooperadoSessionLite();
   return Boolean(session?.role === "cooperado" && cooperadoGaMobileViewportAtivoLite());
 }
@@ -899,17 +899,20 @@ export function preloadAppData(opts?: {
     }
   };
 
-  if (opts?.eager) {
+  if (opts?.eager && !cooperadoMobileDeferPreloadParse(opts)) {
     run();
     return;
   }
 
   if (cooperadoMobileDeferPreloadParse(opts)) {
-    if (typeof requestIdleCallback !== "undefined") {
-      requestIdleCallback(run, { timeout: 1_500 });
-    } else {
-      window.setTimeout(run, 400);
-    }
+    const scheduleIdle = () => {
+      if (typeof requestIdleCallback !== "undefined") {
+        requestIdleCallback(run, { timeout: 1_500 });
+      } else {
+        window.setTimeout(run, 400);
+      }
+    };
+    window.requestAnimationFrame(() => window.requestAnimationFrame(scheduleIdle));
     return;
   }
 
@@ -1632,6 +1635,22 @@ export async function login(email: string, password: string): Promise<User | nul
 
   const cloud = await loginViaCloudApi(email, password);
   if (cloud) {
+    // O cookie já foi validado pelo servidor. A entrada do cooperado não depende
+    // de reler/migrar/persistir o operacional inteiro (inclusive fotos) no login.
+    if (normalizeUserRole(cloud.user.role) === "cooperado") {
+      const user: User = {
+        ...cloud.user,
+        email: normalizeCreatorEmail(cloud.user.email),
+        role: "cooperado",
+        password: "",
+        active: true,
+      };
+      const { password: _, ...session } = user;
+      persistSession(session);
+      setActiveCloudProfile(userToCloudProfile(session));
+      clearCloudBootstrapCredentials();
+      return user;
+    }
     if (normalizeUserRole(cloud.user.role) === "parceiro") {
       return loginParceiroViaNuvem(cloud.user, password);
     }

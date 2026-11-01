@@ -323,13 +323,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     const result = await doLogin(email, password);
     if (result) {
-      const sessionNow = getSession();
+      const cooperadoLogin = normalizeUserRole(result.role) === "cooperado";
+      const sessionNow = cooperadoLogin ? readCooperadoSessionLite() : getSession();
       const safeUserEarly = enrichAccountSession(
         sessionNow ??
           (() => {
             const { password: _, ...u } = result;
             return u;
-          })()
+          })(),
+        { skipAppData: cooperadoLogin }
       );
       const jwtRoleEarly = normalizeUserRole(sessionNow?.role ?? result.role);
       if (jwtRoleEarly === "cooperado") {
