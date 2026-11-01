@@ -9,6 +9,25 @@ const MAX_CACHE_ENTRIES = 128;
 const blobCache = new Map<string, string>();
 const inflight = new Map<string, Promise<string | null>>();
 
+/** Exibe a primeira fonte válida; uma leitura lenta não segura a outra. */
+export async function primeiraFotoConferenciaDisponivel(
+  local: Promise<string | null | undefined>,
+  nuvem: Promise<string | null>,
+  validarLocal: (url: string) => boolean
+): Promise<string | null> {
+  const localValida = local.then((url) => {
+    if (url && validarLocal(url)) return url;
+    throw new Error("Foto local indisponível");
+  });
+  const cloudValida = nuvem.then((url) => {
+    if (url) return url;
+    throw new Error("Foto na nuvem indisponível");
+  });
+  const escolhida = await Promise.any([localValida, cloudValida]).catch(() => null);
+  // As URLs pertencem aos caches de origem; não revogar a fonte que perdeu.
+  return escolhida;
+}
+
 export type ConferenciaFotoFetchOpts = {
   preview?: boolean;
   partCount?: number;
