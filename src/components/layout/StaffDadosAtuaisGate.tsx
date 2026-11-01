@@ -14,6 +14,7 @@ function PainelAtualizado({ children }: { children: ReactNode }) {
 export function StaffDadosAtuaisGate({ user, children }: { user: Omit<User, "password">; children: ReactNode }) {
   const [status, setStatus] = useState<"carregando" | "pronto" | "erro">("carregando");
   const [tentativa, setTentativa] = useState(0);
+  const [erro, setErro] = useState("A consulta demorou além do esperado. Tente novamente.");
   useEffect(() => {
     let ativa = true;
     const timeout = window.setTimeout(() => {
@@ -23,7 +24,7 @@ export function StaffDadosAtuaisGate({ user, children }: { user: Omit<User, "pas
     void import("@/services/staffEntradaAtualizadaService")
       .then(({ atualizarEntradaStaff }) => atualizarEntradaStaff(user, () => ativa))
       .then(() => { if (ativa) setStatus("pronto"); })
-      .catch(() => { if (ativa) setStatus("erro"); })
+      .catch((e: unknown) => { if (ativa) { setErro(e instanceof Error ? e.message : "Não foi possível consultar a nuvem."); setStatus("erro"); } })
       .finally(() => window.clearTimeout(timeout));
     return () => { ativa = false; window.clearTimeout(timeout); };
   // Atualizações do objeto de perfil não devem reiniciar a entrada ao salvar a base.
@@ -34,7 +35,7 @@ export function StaffDadosAtuaisGate({ user, children }: { user: Omit<User, "pas
   return <section className="mx-auto mt-12 max-w-md rounded-2xl border bg-white p-8 text-center" aria-live="polite" aria-busy={status === "carregando"}>
     <RefreshCw className={`mx-auto mb-4 text-green-700 ${status === "carregando" ? "animate-spin" : ""}`} size={28} aria-hidden />
     <h1 className="text-lg font-semibold text-gray-900">{status === "carregando" ? "Buscando dados atualizados" : "Não foi possível atualizar"}</h1>
-    <p className="mt-2 text-sm text-gray-600">{status === "carregando" ? "Conferindo entregas, pagamentos, contratos e Livro Caixa na nuvem." : "Verifique a conexão e tente novamente para abrir o painel com os dados atuais."}</p>
+    <p className="mt-2 text-sm text-gray-600">{status === "carregando" ? "Conferindo entregas, pagamentos, contratos e Livro Caixa na nuvem." : erro}</p>
     {status === "erro" && <button type="button" className="mt-5 rounded-xl bg-green-700 px-5 py-3 font-medium text-white" onClick={() => { setStatus("carregando"); setTentativa((v) => v + 1); }}>Tentar novamente</button>}
   </section>;
 }

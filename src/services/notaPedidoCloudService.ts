@@ -509,7 +509,7 @@ export function mergeCloudNotasIntoData(
 
 export async function fetchNotasPedidoFromCloud(
   cnpj: string,
-  options?: { since?: string; forceFull?: boolean }
+  options?: { since?: string; forceFull?: boolean; repairFila?: boolean }
 ): Promise<{
   ok: boolean;
   notas: NotaPedido[];
@@ -526,7 +526,7 @@ export async function fetchNotasPedidoFromCloud(
   try {
     const qs = new URLSearchParams({ cnpj: digits, lite: "1" });
     if (since) qs.set("since", since);
-    if (forceFull && typeof sessionStorage !== "undefined") {
+    if (forceFull && options?.repairFila !== false && typeof sessionStorage !== "undefined") {
       const repairKey = `hb_repair_fila_done:${digits}:v2`;
       if (!sessionStorage.getItem(repairKey)) {
         qs.set("repairFila", "1");
