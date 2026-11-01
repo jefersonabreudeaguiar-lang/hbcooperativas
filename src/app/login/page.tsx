@@ -126,6 +126,8 @@ function LoginForm() {
             "E-mail ou senha inválidos. Se usa Gmail, tente com ou sem pontos no e-mail."
         );
       }
+    } catch {
+      setError("Não foi possível concluir a entrada. Verifique sua conexão e tente novamente.");
     } finally {
       setSubmitting(false);
     }
@@ -169,7 +171,7 @@ function LoginForm() {
                 </p>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-4" aria-busy={submitting}>
                 <div>
                   <Label htmlFor="email">E-mail</Label>
                   <Input
@@ -208,7 +210,7 @@ function LoginForm() {
                 </div>
 
                 {error && (
-                  <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+                  <p role="alert" className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
                 )}
 
                 <Button type="submit" className="w-full" size="lg" disabled={submitting}>

@@ -1945,7 +1945,19 @@ export function notaQuitadaPorPagamentoCooperativaRegistrado(
     /** PIX com ficha/nota explícitas não quita lançamento novo do mesmo mês. */
     const escopoExplicito =
       (p.fichaIds?.length ?? 0) > 0 || (p.notaPedidoIds?.length ?? 0) > 0;
-    if (escopoExplicito) continue;
+    if (escopoExplicito) {
+      if (pagamentoEscopoIdsResolvemNoAppData(data, p)) continue;
+      // Restore pode trocar IDs. Só inferimos quitação de referências perdidas
+      // para PIX confirmado e entrega com data anterior ao pagamento.
+      if (p.status !== "confirmado") continue;
+      const entregaTs = notaReferenciaTemporalEscopoPagamento(nota);
+      const pagamentoTs = Date.parse(p.pagoEm ?? p.createdAt ?? "");
+      if (!Number.isFinite(entregaTs) || !Number.isFinite(pagamentoTs)) continue;
+      if (entregaTs > pagamentoTs) continue;
+      const conferenciaTs = Date.parse(nota.dataConferencia ?? "");
+      if (!Number.isFinite(conferenciaTs) || conferenciaTs > pagamentoTs) continue;
+      return true;
+    }
 
     const pagoTs = Date.parse(p.pagoEm ?? p.createdAt ?? "");
     if (nota.dataConferencia && Number.isFinite(pagoTs)) {

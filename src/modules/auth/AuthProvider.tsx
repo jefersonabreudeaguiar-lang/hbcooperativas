@@ -320,7 +320,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [accountUser?.id, accountUser?.role, accountUser?.cooperadoId, accountUser?.mobileCooperadoId, loading, refresh]);
 
   const login = async (email: string, password: string) => {
-    setLoading(true);
+    // O formulário mantém seu estado de envio; loading é do bootstrap da sessão.
+    // Ocultar a árvore pública aqui fazia a tentativa parecer uma tela em branco.
     const result = await doLogin(email, password);
     if (result) {
       const cooperadoLogin = normalizeUserRole(result.role) === "cooperado";

@@ -25,6 +25,7 @@ import {
 } from "../src/services/livroCaixaService.ts";
 import { getRelatorioPagarCooperadoEmAberto } from "../src/services/relatorioService.ts";
 import type { PagamentoCooperadoRegistro } from "../src/types/index.ts";
+import { notaQuitadaPorPagamentoCooperativaRegistrado } from "../src/services/notaPedidoService.ts";
 
 const COOP = "coop-1";
 
@@ -762,6 +763,23 @@ function evaluateDashboardStaffOpen(
   assert.equal(relatorio.length, 1);
   assert.equal(relatorio[0].porMes.length, 1);
   assert.equal(relatorio[0].porMes[0].mes, mesNovo);
+
+  const notaAntiga = data.notasPedido[0];
+  const pagamento = data.pagamentosCooperado[0];
+  assert.equal(notaQuitadaPorPagamentoCooperativaRegistrado(data, notaAntiga), true);
+  const entregaDepois = { ...notaAntiga, id: "n-complementar", dataEntrega: "2026-08-25", dataConferencia: "2026-08-26T00:00:00.000Z" };
+  assert.equal(notaQuitadaPorPagamentoCooperativaRegistrado(data, entregaDepois), false, "entrega posterior no mesmo mês continua em aberto");
+  assert.equal(notaQuitadaPorPagamentoCooperativaRegistrado(data, { ...notaAntiga, dataEntrega: undefined }), false, "sem data confiável não inferir quitação de IDs perdidos");
+  assert.equal(notaQuitadaPorPagamentoCooperativaRegistrado(data, { ...notaAntiga, dataConferencia: undefined }), false, "sem conferência datada não inferir quitação de IDs perdidos");
+  assert.equal(notaQuitadaPorPagamentoCooperativaRegistrado(data, { ...notaAntiga, dataConferencia: "2026-08-25T00:00:00.000Z" }), false, "entrega conferida após o PIX continua complementar");
+  pagamento.status = "aguardando_confirmacao";
+  assert.equal(notaQuitadaPorPagamentoCooperativaRegistrado(data, notaAntiga), false, "referências perdidas exigem pagamento confirmado");
+  pagamento.status = "confirmado";
+  pagamento.fichaIds = [data.fichaCorrida[1].id];
+  assert.equal(notaQuitadaPorPagamentoCooperativaRegistrado(data, notaAntiga), false, "escopo explícito ainda resolvido não quita outra entrega");
+  pagamento.fichaIds = ["f-agosto-id-antigo"];
+  pagamento.cooperativaId = "outra-cooperativa";
+  assert.equal(notaQuitadaPorPagamentoCooperativaRegistrado(data, notaAntiga), false, "pagamento de outra cooperativa não quita a nota");
 }
 
 console.log("test-responsavel-panel-access-etapa622: OK");
