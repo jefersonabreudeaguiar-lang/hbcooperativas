@@ -10,6 +10,8 @@ import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetc
 import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewport";
 import { isStaffGestaoRole } from "@/lib/performance/cooperadoColdStart";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
+import { getData } from "@/services/dataStore";
+import { resolveGestaoCooperativaId } from "@/utils/cooperativa";
 
 /**
  * Aquecimento agressivo após login — Financeiro cooperado e rotas staff no celular.
@@ -18,6 +20,28 @@ import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMesseng
 export function CooperadoMobilePerfBootstrap() {
   const { user } = useAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    if (!user || !isStaffGestaoRole(user.role)) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const cloud = await import("@/services/cooperadoCloudService");
+        const { resolveCooperativaCnpj } = await import("@/services/notaPedidoCloudService");
+        const data = getData();
+        const cnpj = await resolveCooperativaCnpj(data, resolveGestaoCooperativaId(user, data), user);
+        if (!cnpj || cancelled) return;
+        const coopId = await cloud.ensureCooperativaLocalForCnpj(cnpj);
+        if (!coopId || cancelled) return;
+        const { syncContratosFromCloud } = await import("@/services/cooperativaSyncCloudService");
+        await Promise.allSettled([
+          cloud.syncCooperadosFromCloud(cnpj, coopId),
+          syncContratosFromCloud(cnpj, coopId),
+        ]);
+      })().catch(() => { /* o botão Atualizar mantém a retomada manual disponível */ });
+    }, 800);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [user?.id, user?.role, user?.cooperativaCnpj]);
 
   useEffect(() => {
     if (!user) return;

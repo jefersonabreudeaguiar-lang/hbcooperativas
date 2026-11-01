@@ -30,6 +30,12 @@ export function getCooperativaNome(data: AppData, id?: string): string {
 }
 
 export function getUserCooperativaId(user: Omit<User, "password">, data: AppData): string | undefined {
+  // Sessões antigas podem guardar o ID anterior à restauração. O CNPJ identifica
+  // a mesma cooperativa na nuvem e evita telas vazias por IDs divergentes.
+  if (user.cooperativaCnpj) {
+    const byCnpj = findCooperativaByCnpj(data, user.cooperativaCnpj);
+    if (byCnpj) return byCnpj.id;
+  }
   if (user.cooperativaId) return user.cooperativaId;
   if (user.cooperadoId) {
     return data.cooperados.find((c) => c.id === user.cooperadoId)?.cooperativaId;
