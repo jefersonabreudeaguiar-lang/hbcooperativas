@@ -66,6 +66,7 @@ import { rematerializarCooperadoValorCardLeve } from "@/lib/cooperado/cooperadoG
 import { useCooperadoInicioAberturaQuiescenceActive } from "@/hooks/useCooperadoInicioAberturaQuiescenceActive";
 import { scheduleCooperadoBicHybridIdleTask } from "@/lib/cooperado/cooperadoBicHybridLight";
 import { useAuth } from "@/modules/auth/AuthProvider";
+import { useCooperadoFinanceiroRemoto } from "@/hooks/useCooperadoFinanceiroRemoto";
 import { cooperadoPwaFinanceiroSnapshotsAusentes } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
@@ -109,6 +110,10 @@ export function useCooperadoInicioValorReceberCardState(input: {
   atualizando: boolean;
 } {
   const { user: sessionUser } = useAuth();
+  const financeiroRemoto = useCooperadoFinanceiroRemoto({
+    active: sessionUser?.role === "cooperado" && input.tabAtiva !== false,
+    userId: sessionUser?.id, cooperadoId: input.cooperadoId, cooperativaId: input.cooperativaId,
+  });
   const inicioAberturaQuiet = useCooperadoInicioAberturaQuiescenceActive();
   const latchRef = useRef<InicioCardLatchState | null>(null);
   const tenantKeyRef = useRef("");
@@ -649,6 +654,10 @@ export function useCooperadoInicioValorReceberCardState(input: {
   latchRef.current = resolved.latch;
 
   const snapshotExibido = useMemo(() => {
+    if (financeiroRemoto) {
+      const p = financeiroRemoto.paridade;
+      return { mesLabel: p.mesLabel || "—", valor: p.valorLiquido, valorRecibo: p.consolidado.aguardandoAssinatura ? p.valorLiquido : 0, aguardandoAssinatura: p.consolidado.aguardandoAssinatura };
+    }
     let base = resolved.display;
     if (
       !cooperadoMotorTemObrigacaoReceber(base) &&
@@ -703,6 +712,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
     persistidoTick,
     appDataWarmKey,
     hbDescontosRevision,
+    financeiroRemoto,
   ]);
 
   useEffect(() => {
@@ -762,6 +772,6 @@ export function useCooperadoInicioValorReceberCardState(input: {
 
   return {
     snapshot: snapshotExibido,
-    atualizando,
+    atualizando: financeiroRemoto ? false : atualizando,
   };
 }

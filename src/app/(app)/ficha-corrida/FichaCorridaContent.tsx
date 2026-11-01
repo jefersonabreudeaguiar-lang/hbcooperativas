@@ -11,6 +11,7 @@ import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify"
 import { isAppDataWarm } from "@/services/dataStore";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { useCooperadoFinanceiroUiSnapshot } from "@/hooks/useCooperadoFinanceiroUiSnapshot";
+import { useCooperadoFinanceiroRemoto } from "@/hooks/useCooperadoFinanceiroRemoto";
 import { useCooperadoMessengerReadModelRevision } from "@/hooks/useCooperadoMessengerReadModelRevision";
 import { useCooperadoDormantAppData } from "@/hooks/useCooperadoDormantAppData";
 import {
@@ -287,6 +288,10 @@ function FichaCorridaPageInner() {
   const ready = useEnsureAppDataWarm();
   const tabActive = useCooperadoTabPanelActive("/ficha-corrida");
   const { user, isCooperado, cooperadoId, check, coopId: coopIdPerm } = usePermissions();
+  const financeiroRemoto = useCooperadoFinanceiroRemoto({
+    active: tabActive && isCooperado, userId: user?.id, cooperadoId,
+    cooperativaId: coopIdPerm ?? user?.cooperativaId,
+  });
   const fichaAppDataDomains = useMemo(
     (): AppDataNotifyDomain[] => responsavelFichaAppDataDomains(isCooperado),
     [isCooperado]
@@ -570,6 +575,7 @@ function FichaCorridaPageInner() {
   /** Uma leitura BIC/paridade por revisão — cooperado mobile. */
   const paridadeCooperadoMobile = useMemo(() => {
     if (!tabActive || !isCooperado || !cooperadoId) return null;
+    if (financeiroRemoto) return financeiroRemoto.paridade;
     const readParidade = (d: NonNullable<typeof data>) =>
       cooperadoLeituraFinanceiraExibicao(d, cooperadoId, coopId, {
         apresentacaoConsolidada: apresentacaoFinanceiroUi,
@@ -624,6 +630,7 @@ function FichaCorridaPageInner() {
     fichaResumoSnap,
     apresentacaoFinanceiroUi,
     appDataWarmTick,
+    financeiroRemoto,
   ]);
 
   const mesEmAberto = useMemo(() => {
@@ -1462,7 +1469,7 @@ function FichaCorridaPageInner() {
       : (resumoExibicao?.valorLiquido ?? financeiroAberto?.valorLiquido ?? 0);
 
   const descontosExtrasResumo = useMemo(() => {
-    if (isCooperado && paridadeCooperadoMobile) {
+    if (isCooperado && !visualizandoHistorico && paridadeCooperadoMobile) {
       return paridadeCooperadoMobile.descontosExtras;
     }
     if (!data || !cooperadoSelecionadoId) return [];
@@ -2075,9 +2082,19 @@ function FichaCorridaPageInner() {
             title="Financeiro"
             subtitle="Mês em aberto com valores pendentes — meses pagos ficam nas abas ao lado"
           />
+          {financeiroRemoto ? <Card title="Resumo financeiro">
+            <ResumoDescontosMes
+              valorBruto={financeiroRemoto.paridade.resumo.valorBruto}
+              descontoCooperativa={financeiroRemoto.paridade.resumo.descontoCooperativa}
+              descontoPadraoPct={0}
+              valorEntregas={financeiroRemoto.paridade.resumo.valorEntregas}
+              descontosExtras={financeiroRemoto.paridade.descontosExtras}
+              totalLiquido={financeiroRemoto.paridade.valorLiquido}
+            />
+          </Card> :
           <p className="text-sm text-gray-600 bg-white border border-gray-200 rounded-2xl px-4 py-6">
             Buscando a ficha em aberto da cooperativa…
-          </p>
+          </p>}
         </div>
       );
     }
@@ -2088,8 +2105,8 @@ function FichaCorridaPageInner() {
   const resumoFichaAberto = paridadeCooperadoMobile?.resumo ?? resumoExibicao;
   const descontosFichaAberto = paridadeCooperadoMobile?.descontosExtras ?? descontosExtrasResumo;
   const totalEmAbertoFicha =
-    (paridadeCooperadoMobile?.valorLiquido ?? 0) > 0.005
-      ? paridadeCooperadoMobile!.valorLiquido
+    paridadeCooperadoMobile != null
+      ? paridadeCooperadoMobile.valorLiquido
       : (valorReceberConsolidado?.valor ?? resumoFichaAberto?.valorLiquido ?? 0);
 
   const pixOk = cooperadoSelecionado && !cooperadoPrecisaCadastrarPix(cooperadoSelecionado.chavePix, cooperadoSelecionado.pixValido);

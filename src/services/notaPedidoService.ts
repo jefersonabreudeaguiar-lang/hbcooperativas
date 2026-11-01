@@ -2484,14 +2484,10 @@ export function getResumoPagamentoCooperado(
   const mesesFichaEmAbertoAvulso = [
     ...new Set(
       (data.fichaCorrida ?? [])
-        .filter(
-          (f) =>
-            f.mesReferencia &&
-            listarFichasEmAbertoPagamento(data, cooperadoCanonico, f.mesReferencia, coopIdResolved).length > 0
-        )
+        .filter((f) => fichaPertenceCooperado(data, f, cooperadoCanonico, coopIdResolved))
         .map((f) => f.mesReferencia)
     ),
-  ];
+  ].filter((mes) => mes && listarFichasEmAbertoPagamento(data, cooperadoCanonico, mes, coopIdResolved).length > 0);
   for (const avulso of valoresAvulsosPendentesParaMesPagamento(
     data,
     cooperadoCanonico,
@@ -2505,12 +2501,14 @@ export function getResumoPagamentoCooperado(
         tipo: "manual",
         motivo: avulso.motivo.trim() || "Débito avulso",
         valor: avulso.valor,
+        origem: "debito_avulso", referenciaId: avulso.id, dataLancamento: avulso.dataLancamento,
       });
     } else {
       descontosExtras.push({
         tipo: "credito_avulso",
         motivo: avulso.motivo.trim() || "Valor avulso a receber",
         valor: avulso.valor,
+        origem: "credito_avulso", referenciaId: avulso.id, dataLancamento: avulso.dataLancamento,
       });
     }
   }

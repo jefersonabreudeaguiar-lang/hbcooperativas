@@ -129,7 +129,7 @@ export function dedupeDescontosExtrasContaCoop(extras: FichaCorridaDesconto[]): 
     if (d.tipo !== "conta_coop" && !(d.tipo === "credito_avulso" && isEstornoContaCoop(d.motivo))) {
       return true;
     }
-    const key = `${d.tipo}|${round2(d.valor)}|${d.motivo}`;
+    const key = d.hbTransactionId ? `${d.tipo}|${d.hbTransactionId}` : `${d.tipo}|${round2(d.valor)}|${d.motivo}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -176,6 +176,7 @@ export function descontosContaCoopLinhasExibicao(descontos: DescontoContaCoopRem
       tipo: isEstornoContaCoop(d.motivo) ? ("credito_avulso" as const) : ("conta_coop" as const),
       motivo: d.motivo,
       valor: round2(d.valorReais),
+      origem: "hb_creditos" as const, hbTransactionId: d.hbTransactionId, dataLancamento: d.createdAt,
     }));
 }
 
@@ -197,6 +198,7 @@ export function mergeDescontosContaCoopNoResumo(
       tipo: isEstorno ? "credito_avulso" : "conta_coop",
       motivo: item.motivo,
       valor: round2(item.valorReais),
+      origem: "hb_creditos", hbTransactionId: item.hbTransactionId, dataLancamento: item.createdAt,
     });
   }
 

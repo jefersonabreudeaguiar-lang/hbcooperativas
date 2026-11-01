@@ -70,6 +70,10 @@ export function leituraFinanceiraParidadeCooperado(
   const descontosExtras = mesesHb.length
     ? getDescontosExtrasExibicaoCooperadoFinanceiro(data, cooperadoId, cooperativaId, mesesHb)
     : [];
+  if (!aguardandoAssinatura) {
+    valorLiquido = valorLiquidoFromResumoPartes(resumo.valorEntregas, descontosExtras);
+    resumo = { ...resumo, descontosExtras, valorLiquido };
+  }
   return {
     consolidado: {
       ...consolidado,

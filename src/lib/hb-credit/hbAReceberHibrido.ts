@@ -1,7 +1,7 @@
 /**
  * A receber híbrido: ficha (conta_coop) + overlay local das compras HB.
  * A ficha ganha. Overlay só cobre o buraco até a linha gravar.
- * Nunca zera o lastro.
+ * O saldo líquido fica em zero quando os descontos cobrem as entregas.
  */
 import type { FichaCorridaDesconto } from "@/types";
 import type { DescontoContaCoopRemoto } from "@/lib/hb-credit/mergeFichaDescontos";
@@ -81,14 +81,13 @@ export function escolherDebitoHbHibrido(opts: {
   return { valorReais: 0, linhas: [], fonte: "nenhum" };
 }
 
-/** Lastros com valor: desconta HB. Se o desconto comeria o lastro, mantém o lastro. */
+/** O líquido nunca é negativo; desconto integral resulta em zero. */
 export function aplicarDebitoHbHibridoNoValor(valorLastro: number, debitoReais: number): number {
   const lastro = Number.isFinite(valorLastro) ? valorLastro : 0;
   const debito = Number.isFinite(debitoReais) ? debitoReais : 0;
   if (lastro <= 0.005 || debito <= 0.005) return lastro;
   const next = round2(lastro - debito);
-  if (next <= 0.005) return lastro;
-  return next;
+  return Math.max(0, next);
 }
 
 export function linhasOverlayParaDescontosExtras(linhas: DescontoContaCoopRemoto[]): FichaCorridaDesconto[] {
@@ -120,7 +119,7 @@ export function aplicarDebitoHbHibridoNaParidade(
   const extras = mesclarDescontosExtrasComHbHibrido(paridade.descontosExtras, debito);
   const valorEntregas = paridade.resumo?.valorEntregas ?? paridade.valorLiquido;
   const liquido = valorLiquidoFromResumoPartes(valorEntregas, extras);
-  const seguro = liquido > 0.005 ? liquido : paridade.valorLiquido;
+  const seguro = liquido;
   return {
     ...paridade,
     descontosExtras: extras,

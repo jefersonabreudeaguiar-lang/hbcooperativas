@@ -367,6 +367,10 @@ export interface FichaCorridaDesconto {
   tipo: "cooperativa" | "mensalidade" | "cota" | "manual" | "credito_avulso" | "conta_coop";
   motivo: string;
   valor: number;
+  origem?: "hb_creditos" | "debito_avulso" | "credito_avulso";
+  referenciaId?: string;
+  hbTransactionId?: string;
+  dataLancamento?: string;
 }
 
 /** Participante na divisão de uma entrega entre cooperados. */

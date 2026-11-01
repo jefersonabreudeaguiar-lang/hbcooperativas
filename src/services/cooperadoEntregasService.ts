@@ -176,7 +176,15 @@ export function listarMesesReferenciaResumoFinanceiroParidade(
   cooperadoId: string,
   cooperativaId?: string
 ): string[] {
-  return [...listarMesesEmAbertoPagamentoResponsavel(data, cooperadoId, cooperativaId)].sort();
+  const meses = new Set(listarMesesEmAbertoPagamentoResponsavel(data, cooperadoId, cooperativaId));
+  const candidatos = new Set(data.fichaCorrida
+    .filter((f) => fichaPertenceCooperado(data, f, cooperadoId, cooperativaId))
+    .map((f) => f.mesReferencia));
+  for (const mes of candidatos) {
+    // Saldo zero por descontos não apaga a ficha nem as linhas explicativas.
+    if (listarFichasEmAbertoPagamento(data, cooperadoId, mes, cooperativaId).length > 0) meses.add(mes);
+  }
+  return [...meses].sort();
 }
 
 /** Valor a receber no início — oculta mês quitado ou sem valor pendente. */

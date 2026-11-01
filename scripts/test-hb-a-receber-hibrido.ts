@@ -1,5 +1,5 @@
 /**
- * A receber híbrido: ficha ganha; overlay cobre o buraco; lastro não zera.
+ * A receber híbrido: ficha ganha; overlay cobre o buraco; descontos integrais zeram o líquido.
  * npx tsx scripts/test-hb-a-receber-hibrido.ts
  */
 import assert from "node:assert/strict";
@@ -43,8 +43,8 @@ const overlay = [
 }
 
 {
-  assert.equal(aplicarDebitoHbHibridoNoValor(80, 80), 80, "desconto igual ao lastro não zera");
-  assert.equal(aplicarDebitoHbHibridoNoValor(50, 80), 50, "desconto maior que o lastro não zera");
+  assert.equal(aplicarDebitoHbHibridoNoValor(80, 80), 0, "desconto integral zera o líquido");
+  assert.equal(aplicarDebitoHbHibridoNoValor(50, 80), 0, "desconto maior que a base não restaura valor antigo");
   assert.equal(aplicarDebitoHbHibridoNoValor(0, 80), 0);
 }
 

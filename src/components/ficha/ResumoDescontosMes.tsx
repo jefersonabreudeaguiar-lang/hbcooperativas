@@ -1,10 +1,11 @@
 "use client";
 
 import { displayHbCreditText, HB_CREDIT_PRODUCT_NAME } from "@/config/hbCreditBranding";
-import { formatCurrency } from "@/utils/format";
+import { formatCurrency, formatDate } from "@/utils/format";
 import type { FichaCorridaDesconto } from "@/types";
 
 function labelDescontoExtra(d: FichaCorridaDesconto): string {
+  if (d.origem === "debito_avulso") return `Débito avulso — ${d.motivo}`;
   if (d.tipo === "mensalidade") return "Mensalidade";
   if (d.tipo === "conta_coop") {
     const m = d.motivo.trim();
@@ -49,6 +50,7 @@ export function ResumoDescontosMes({
   const escuro = tema === "escuro";
   const extrasHb = descontosExtras.filter((d) => d.tipo === "conta_coop");
   const extrasSemHb = descontosExtras.filter((d) => d.tipo !== "conta_coop");
+  const saldoCalculado = valorEntregas + descontosExtras.reduce((sum, d) => sum + (isCredito(d) ? d.valor : -d.valor), 0);
 
   return (
     <div
@@ -77,7 +79,7 @@ export function ResumoDescontosMes({
       </div>
       {extrasHb.map((d, i) => (
         <div key={`hb-${i}-${d.motivo}`} className={`flex justify-between ${escuro ? "" : "text-red-600"}`}>
-          <span className="pr-3 min-w-0 break-words">{labelDescontoExtra(d)}</span>
+          <span className="pr-3 min-w-0 break-words">{labelDescontoExtra(d)}{d.dataLancamento && <span className="block text-xs opacity-75">{formatDate(d.dataLancamento)}</span>}</span>
           <span className="shrink-0">- {formatCurrency(d.valor)}</span>
         </div>
       ))}
@@ -94,10 +96,11 @@ export function ResumoDescontosMes({
                 : "text-red-600"
           }`}
         >
-          <span>{labelDescontoExtra(d)}</span>
+          <span className="pr-3 min-w-0 break-words">{labelDescontoExtra(d)}{d.dataLancamento && <span className="block text-xs opacity-75">{formatDate(d.dataLancamento)}</span>}</span>
           <span>{isCredito(d) ? "+ " : "- "}{formatCurrency(d.valor)}</span>
         </div>
       ))}
+      {saldoCalculado < -0.005 && <p className="pt-2 text-xs text-amber-700">Os descontos excedem as entregas em {formatCurrency(-saldoCalculado)}. O valor a receber neste resumo é zero.</p>}
       <div
         className={`flex justify-between font-bold text-base pt-2 border-t ${
           escuro
