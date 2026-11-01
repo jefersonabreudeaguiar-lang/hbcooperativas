@@ -876,7 +876,9 @@ export function mergeContratosIntoData(data: AppData, cloud: ContratosSyncPayloa
   const mergedExcluidasCoop = mergeInstituicoesExcluidasByNewer(
     (data.instituicoesExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
     cloudExcluidas
-  );
+  ).filter((e) => !cloud.instituicoes.some(
+    (i) => i.id === e.id && catalogoUpdatedAtMs(i.updatedAt) > catalogoUpdatedAtMs(e.deletedAt)
+  ));
   const excluidasIds = new Set(mergedExcluidasCoop.map((e) => e.id));
 
   const localInst = data.instituicoes.filter((i) => i.cooperativaId !== coopId);
@@ -2294,7 +2296,9 @@ export async function syncContratosFromCloud(
   if (existing) return existing;
 
   const job = (async () => {
-    const bundle = await fetchSyncBundle(digits);
+    const response = await secureApiFetch(`/api/cooperativa-sync?cnpj=${digits}&section=contratos`, { cache: "no-store" });
+    if (!response.ok) return false;
+    const bundle = await response.json() as { contratos?: ContratosSyncPayload | null };
     if (!bundle?.contratos) return false;
     const current = getData();
     const coopId = preferredCoopId || resolveCoopId(current, digits);

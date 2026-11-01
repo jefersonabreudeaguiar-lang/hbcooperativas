@@ -1,0 +1,34 @@
+import assert from "node:assert/strict";
+import { emptyInitialData } from "../src/mock/data";
+import { publicacaoContratosApagariaItens } from "../src/services/contratosPublicacaoGuard";
+import { mergeContratosIntoData } from "../src/services/cooperativaSyncCloudService";
+import { getTodosProdutosCatalogo } from "../src/services/catalogoContratosService";
+import type { ContratosSyncPayload } from "../src/lib/supabase/cooperativaSyncStorage";
+
+const restored: ContratosSyncPayload = {
+  updatedAt: "2026-11-01T15:32:00Z",
+  instituicoes: [{ id: "original", cooperativaId: "coop", nome: "PNAE", updatedAt: "2026-11-01T15:32:00Z" } as never],
+  produtosInstituicao: [{ id: "abobora", cooperativaId: "coop", instituicaoId: "original", nome: "ABÓBORA", precoUnitario: 5.71, ativo: true, updatedAt: "2026-11-01T15:32:00Z" } as never],
+  instituicoesExcluidas: [{ id: "vazio", cooperativaId: "coop", deletedAt: "2026-11-01T15:32:00Z" }],
+};
+assert.equal(publicacaoContratosApagariaItens(restored, { ...restored, produtosInstituicao: [] }), true);
+assert.equal(publicacaoContratosApagariaItens(null, { ...restored, produtosInstituicao: [] }), false);
+assert.equal(publicacaoContratosApagariaItens(restored, restored), false);
+assert.equal(publicacaoContratosApagariaItens(restored, { ...restored, produtosInstituicao: [], instituicoesExcluidas: [{ id: "original", cooperativaId: "coop", deletedAt: restored.updatedAt }] }), false);
+const data = {
+  ...emptyInitialData,
+  instituicoes: [{ id: "vazio", cooperativaId: "coop", nome: "PNAE" } as never],
+  produtosInstituicao: [],
+  instituicoesExcluidas: [{ id: "original", cooperativaId: "coop", deletedAt: "2026-10-26T00:00:00Z" }],
+};
+const before = JSON.stringify(data);
+const merged = mergeContratosIntoData(data, restored, "coop");
+assert.equal(getTodosProdutosCatalogo(merged, "coop")[0]?.precoUnitario, 5.71);
+assert.equal(getTodosProdutosCatalogo(merged, "outra-coop").length, 0);
+assert.equal(merged.instituicoes.some((i) => i.id === "vazio"), false);
+assert.equal(JSON.stringify(data), before);
+assert.equal(merged.fichaCorrida, data.fichaCorrida);
+assert.equal(merged.pagamentosCooperado, data.pagamentosCooperado);
+const newerDeletion = { ...data, instituicoesExcluidas: [{ id: "original", cooperativaId: "coop", deletedAt: "2026-11-02T00:00:00Z" }] };
+assert.equal(getTodosProdutosCatalogo(mergeContratosIntoData(newerDeletion, restored, "coop"), "coop").length, 0);
+console.log("OK: recuperação do contrato, proteção de publicação vazia, exclusão posterior, escopo e financeiro preservados.");

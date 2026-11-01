@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { publicacaoContratosApagariaItens } from "@/services/contratosPublicacaoGuard";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { guardCooperativaApi } from "@/lib/security/apiGuard";
@@ -51,6 +52,11 @@ export async function GET(request: Request) {
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ configured: false, contratos: null, operacional: null });
+  }
+
+  if (searchParams.get("section") === "contratos") {
+    const contratos = await fetchContratosSync(supabase, cnpj);
+    return NextResponse.json({ configured: true, contratos });
   }
 
   if (searchParams.get("revisionOnly") === "1") {
@@ -112,6 +118,10 @@ export async function POST(request: Request) {
 
   const section = String(body.section);
   if (section === "contratos") {
+    const existing = await fetchContratosSync(supabase, cnpj);
+    if (publicacaoContratosApagariaItens(existing, body.payload)) {
+      return NextResponse.json({ error: "O catálogo recebido está vazio. Atualize os contratos da nuvem antes de publicar." }, { status: 409 });
+    }
     const uploaded = await uploadContratosSync(supabase, cnpj, body.payload as ContratosSyncPayload);
     if (!uploaded.ok) return NextResponse.json({ error: uploaded.error }, { status: 500 });
     if (guard.session) {

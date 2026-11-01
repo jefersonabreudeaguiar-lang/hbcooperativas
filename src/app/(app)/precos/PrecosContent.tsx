@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Search, Tag, RefreshCw } from "lucide-react";
 import { useAppDataReady, useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
@@ -29,7 +29,7 @@ import { labelUnidade } from "@/utils/unidades";
 import { sortPorOrdemLancamento } from "@/utils/produtos";
 import { cn } from "@/utils/format";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
+import { syncContratosFromCloud } from "@/services/cooperativaSyncCloudService";
 import {
   getInstituicoesCatalogo,
   getTodosProdutosCatalogo,
@@ -70,6 +70,7 @@ function PrecosPageMain() {
   const [instSelecionada, setInstSelecionada] = useState<string>("");
   const [busca, setBusca] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState(false);
   const [messengerCatalogo, setMessengerCatalogo] = useState<CooperadoPwaPrecosCatalogoView>(() => {
     if (typeof window === "undefined") return emptyCooperadoPwaPrecosCatalogoView();
     const session = getSession();
@@ -77,20 +78,31 @@ function PrecosPageMain() {
     return messenger && id ? lerCooperadoPrecosCatalogoLeitura(id) : emptyCooperadoPwaPrecosCatalogoView();
   });
 
-  const runSync = async () => {
+  const runSync = useCallback(async () => {
     if (!coopId || !user) return;
     const d = getData();
     if (!d) return;
     setSyncing(true);
+    setSyncError(false);
     try {
       const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
+      if (!cnpj || !(await syncContratosFromCloud(cnpj, coopId))) {
+        setSyncError(true);
+        return;
+      }
       persistirCooperadoPwaPrecosCatalogoSnapshotFromUser(user);
       if (messenger) setMessengerCatalogo(lerCooperadoPrecosCatalogoLeitura(coopId));
+    } catch {
+      setSyncError(true);
     } finally {
       setSyncing(false);
     }
-  };
+  }, [coopId, user, messenger]);
+
+  useEffect(() => {
+    if (!ready || !tabActive || !user?.id || !coopId) return;
+    void runSync();
+  }, [ready, tabActive, user?.id, coopId, runSync]);
 
   useEffect(() => {
     if (!messenger || !coopId) return;
@@ -154,6 +166,8 @@ function PrecosPageMain() {
           {syncing ? "Atualizando…" : "Atualizar preços"}
         </Button>
       </div>
+
+      {syncError && <p role="status" className="mb-4 text-sm text-amber-800">Não foi possível atualizar os preços. Os últimos valores disponíveis foram mantidos. Toque em Atualizar preços para tentar novamente.</p>}
 
       {instituicoes.length === 0 && produtosDaCoop.length === 0 ? (
         <div className="text-center py-16 text-gray-500 bg-white rounded-2xl border">
