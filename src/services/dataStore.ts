@@ -22,7 +22,6 @@ import {
   isAppDataPersistStorageKey,
   quarantineStaffGestaoPersistCorrupt,
   readAppDataPersistRaw,
-  removeAppDataPersistRaw,
   writeAppDataPersistRaw,
 } from "@/lib/staff/appDataPersistIo";
 import {
@@ -496,14 +495,6 @@ export async function runWithBatchedSaveAsync(
 const STORAGE_FULL_MESSAGE =
   "Armazenamento do navegador cheio. Com internet, tente lançar de novo — o app remove fotos antigas já salvas na nuvem para liberar espaço.";
 
-const LOCAL_KEYS_PRESERVE = new Set([
-  STORAGE_KEY,
-  SESSION_KEY,
-  DEMO_PURGED_KEY,
-  "coopeagriplla_access_token",
-  "coopeagriplla_cloud_bootstrap",
-]);
-
 function persistRoleFromSession(): string | undefined {
   try {
     return getSession()?.role;
@@ -512,38 +503,9 @@ function persistRoleFromSession(): string | undefined {
   }
 }
 
-/** Libera quota removendo caches auxiliares antes de gravar o operacional. */
-function pruneAuxiliaryLocalStorage(): void {
-  if (typeof localStorage === "undefined") return;
-  const keys: string[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && !LOCAL_KEYS_PRESERVE.has(key) && !isAppDataPersistStorageKey(key)) keys.push(key);
-  }
-  for (const key of keys) {
-    try {
-      localStorage.removeItem(key);
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
+/** Uma falha de quota nunca apaga a base anterior nem filas pendentes. */
 function writeStoragePayload(serialized: string): boolean {
-  if (writeAppDataPersistRaw(serialized)) return true;
-  try {
-    removeAppDataPersistRaw();
-    if (writeAppDataPersistRaw(serialized)) return true;
-  } catch (e) {
-    if (!isStorageQuotaError(e)) return false;
-  }
-  pruneAuxiliaryLocalStorage();
-  try {
-    removeAppDataPersistRaw();
-    return writeAppDataPersistRaw(serialized);
-  } catch {
-    return false;
-  }
+  return writeAppDataPersistRaw(serialized);
 }
 
 function buildPersistCandidates(data: AppData): AppData[] {

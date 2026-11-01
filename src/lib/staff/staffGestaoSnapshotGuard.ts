@@ -7,6 +7,7 @@ import type { AppData, NotaPedido } from "@/types";
 import { stripBinaryForPersist } from "@/utils/fotoEntrega";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { protectNotaAgainstStatusDowngrade } from "@/utils/notaStatus";
+import { compactPersisted, decodePersisted } from "@/lib/staff/appDataPersistIo";
 
 export type StaffGestaoRiqueza = {
   cooperados: number;
@@ -85,9 +86,10 @@ function persistLastGoodToSessionNow(cnpj: string, data: AppData): void {
     const json = JSON.stringify(slim);
     if (json.length > STAFF_GESTAO_LKG_MAX_CHARS) return;
     const key = staffLkgSessionKey(cnpj);
-    sessionStorage.setItem(key, json);
+    const compact = compactPersisted(json);
+    sessionStorage.setItem(key, compact);
     try {
-      localStorage.setItem(key, json);
+      localStorage.setItem(key, compact);
     } catch {
       /* quota / private — session ainda vale nesta aba */
     }
@@ -125,7 +127,7 @@ function bindStaffGestaoLkgPagehide(): void {
 function parseStaffLastGoodJson(raw: string | null, cnpj: string): AppData | null {
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as AppData;
+    const parsed = JSON.parse(decodePersisted(raw) ?? "null") as AppData;
     if (!parsed || typeof parsed !== "object") return null;
     if (staffGestaoRiquezaTotal(medirRiquezaStaffGestao(parsed)) <= 0) return null;
     const owner = primaryStaffGestaoCnpjFromData(parsed);
@@ -162,7 +164,7 @@ function adoptLegacyLastGoodFromStore(store: Storage, cnpj: string): AppData | n
   try {
     const raw = store.getItem(STAFF_GESTAO_LKG_SESSION_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as AppData;
+    const parsed = JSON.parse(decodePersisted(raw) ?? "null") as AppData;
     if (!parsed || typeof parsed !== "object") return null;
     const owner = primaryStaffGestaoCnpjFromData(parsed);
     if (owner && owner !== cnpj) return null;

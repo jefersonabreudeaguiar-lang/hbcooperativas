@@ -4,6 +4,18 @@
  */
 import type { AppData } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import { compressToUTF16, decompressFromUTF16 } from "lz-string";
+
+const COMPRESSED_PREFIX = "hb-json-lz-v1:";
+export function decodePersisted(raw: string | null): string | null {
+  if (!raw?.startsWith(COMPRESSED_PREFIX)) return raw;
+  return decompressFromUTF16(raw.slice(COMPRESSED_PREFIX.length)) || null;
+}
+export function compactPersisted(raw: string): string {
+  if (raw.startsWith(COMPRESSED_PREFIX)) return raw;
+  const compact = COMPRESSED_PREFIX + compressToUTF16(raw);
+  return compact.length < raw.length ? compact : raw;
+}
 
 function primaryStaffGestaoCnpjFromLegacyBlob(data: AppData): string {
   const ranked = (data.cooperativas ?? [])
@@ -108,7 +120,7 @@ export function migrateLegacyAppDataIfMatches(
   const store = storage ?? browserStorage();
   if (!store) return null;
   try {
-    const raw = store.getItem(APP_DATA_STORAGE_KEY);
+    const raw = decodePersisted(store.getItem(APP_DATA_STORAGE_KEY));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as AppData;
     if (!parsed || typeof parsed !== "object") return null;
@@ -127,9 +139,9 @@ export function readAppDataPersistRaw(opts?: AppDataPersistHint): string | null 
   if (staffGestaoSemCnpj(hint)) return null;
   const key = resolveAppDataStorageKey({ role: hint.role, cnpj: hint.cnpj, storage: hint.storage });
   if (key === APP_DATA_STORAGE_KEY) {
-    return hint.storage.getItem(APP_DATA_STORAGE_KEY);
+    return decodePersisted(hint.storage.getItem(APP_DATA_STORAGE_KEY));
   }
-  const scoped = hint.storage.getItem(key);
+  const scoped = decodePersisted(hint.storage.getItem(key));
   if (scoped) return scoped;
   return migrateLegacyAppDataIfMatches(hint.cnpj, hint.storage);
 }
@@ -144,7 +156,24 @@ export function writeAppDataPersistRaw(serialized: string, opts?: AppDataPersist
     hint.storage.setItem(key, serialized);
     return true;
   } catch {
-    return false;
+    // Sob quota, grava a mesma informação compactada. setItem é atômico:
+    // uma falha mantém a cópia anterior, sem apagar lançamentos pendentes.
+    if (!sessionLooksStaffGestao(hint.role)) return false;
+    try {
+      // O lastro é uma segunda cópia da base; compactá-lo também libera
+      // espaço sem descartar nenhum registro ou chave de outra conta.
+      const backupKey = `hb-staff-gestao-lkg-v1:${hint.cnpj}`;
+      const backup = hint.storage.getItem(backupKey);
+      if (backup) {
+        try { hint.storage.setItem(backupKey, compactPersisted(backup)); } catch { /* preserva o anterior */ }
+      }
+      const compact = compactPersisted(serialized);
+      if (compact.length >= serialized.length) return false;
+      hint.storage.setItem(key, compact);
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 

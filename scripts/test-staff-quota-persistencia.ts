@@ -1,0 +1,24 @@
+import assert from "node:assert/strict";
+import { readAppDataPersistRaw, writeAppDataPersistRaw, staffGestaoPersistKey, compactPersisted, decodePersisted } from "../src/lib/staff/appDataPersistIo";
+const cnpj = "62351750000165";
+const key = staffGestaoPersistKey(cnpj);
+const entries = new Map<string, string>([[key, '{"anterior":true}'], ["fila-pendente", "NÃO APAGAR"]]);
+let quota = 3000;
+const storage = { getItem: (k: string) => entries.get(k) ?? null, removeItem: (k: string) => { entries.delete(k); }, setItem: (k: string, v: string) => { if (v.length > quota) throw new DOMException("Quota", "QuotaExceededError"); entries.set(k,v); } };
+const opts = {role: "responsavel", cnpj, storage};
+const data = JSON.stringify({ livroCaixa: Array.from({length: 500}, (_, i) => ({id: `l_${i}`, valor: 123.45, descricao: "Entrega paga e desconto registrado", cooperado: "Cooperado teste"})), fotoPendente: "idb:foto-nao-enviada" });
+assert(data.length > quota);
+assert.equal(writeAppDataPersistRaw(data, opts), true);
+assert((entries.get(key)?.length ?? 99999) < quota);
+assert.equal(readAppDataPersistRaw(opts), data, "Reabertura recupera cada registro sem perda");
+const before = entries.get(key);
+quota = 0;
+assert.equal(writeAppDataPersistRaw('{"novo":true}',opts), false);
+assert.equal(entries.get(key), before, "Quota não apaga a base anterior");
+assert.equal(entries.get("fila-pendente"), "NÃO APAGAR");
+console.log("OK: quota cheia, compactação, reabertura integral e preservação na falha");
+
+const acentos = JSON.stringify({nome: "Jeferson — São João 🌱", foto: "idb:pendente", historico: [1,2,3]});
+assert.equal(decodePersisted(compactPersisted(acentos)), acentos);
+assert.equal(readAppDataPersistRaw({...opts, cnpj: "00000000000000"}), null, "Compactação mantém isolamento entre cooperativas");
+console.log("OK: acentos, mídia pendente e isolamento entre cooperativas");
