@@ -1,5 +1,5 @@
 import type { LivroCaixaExcluidoRef, LivroCaixaLancamento, PagamentoCooperadoRegistro } from "@/types";
-import { pagamentoIdFromOrigemId } from "@/services/livroCaixaService";
+import { pagamentoIdFromOrigemId, isLancamentoManualEditavel } from "@/services/livroCaixaService";
 
 export type OperacionalLivroCaixaSlice = {
   pagamentosCooperado?: PagamentoCooperadoRegistro[];
@@ -84,5 +84,28 @@ export function preservarLivroCaixaDePagamentosConfirmados<T extends Operacional
 export function aplicarPreservacaoLivroCaixaPagamentosConfirmadosNoOperacional<
   T extends OperacionalLivroCaixaSlice,
 >(existing: T | null | undefined, incoming: T): PreservarLivroCaixaPixResult<T> {
-  return preservarLivroCaixaDePagamentosConfirmados(existing, incoming);
+  const protectedPayments = preservarLivroCaixaDePagamentosConfirmados(existing, incoming);
+  if (!existing?.livroCaixa?.length) return protectedPayments;
+  const linhas = new Map((protectedPayments.payload.livroCaixa ?? []).map((l) => [l.id, l]));
+  const excluidos = [...(existing.livroCaixaExcluidos ?? []), ...(incoming.livroCaixaExcluidos ?? [])];
+  const excluidosUnicos = [...new Map(excluidos.map((e) => [`${e.cooperativaId ?? ""}:${e.id}`, e])).values()];
+  let removeuExcluido = false;
+  for (const [id, linha] of linhas) {
+    if (isLancamentoManualEditavel(linha) && excluidosUnicos.some((e) => e.id === id && (!e.cooperativaId || e.cooperativaId === linha.cooperativaId))) {
+      linhas.delete(id);
+      removeuExcluido = true;
+    }
+  }
+  const restauradas = [...protectedPayments.restauradas];
+  for (const linha of existing.livroCaixa) {
+    if (!isLancamentoManualEditavel(linha)) continue;
+    if (excluidos.some((e) => e.id === linha.id && (!e.cooperativaId || e.cooperativaId === linha.cooperativaId))) continue;
+    const recebida = linhas.get(linha.id);
+    if (recebida && recebida.cooperativaId !== linha.cooperativaId) continue;
+    if (recebida && (recebida.updatedAt || recebida.createdAt) >= (linha.updatedAt || linha.createdAt)) continue;
+    linhas.set(linha.id, linha);
+    restauradas.push(linha.id);
+  }
+  if (!removeuExcluido && restauradas.length === protectedPayments.restauradas.length && excluidosUnicos.length === (incoming.livroCaixaExcluidos ?? []).length) return protectedPayments;
+  return { payload: { ...protectedPayments.payload, livroCaixa: [...linhas.values()], livroCaixaExcluidos: excluidosUnicos }, restauradas };
 }

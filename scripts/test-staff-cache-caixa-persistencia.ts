@@ -1,0 +1,43 @@
+import assert from "node:assert/strict";
+import { emptyInitialData } from "../src/mock/data";
+import { aplicarCatalogoCloudLeitura, registrarCatalogoCloudLeitura, invalidarCatalogoCloudLeitura } from "../src/lib/staff/staffCatalogoCloudLeitura";
+import { alinharCatalogoSnapshotStaff } from "../src/lib/staff/staffGestaoPainelLeitura";
+import { aplicarPreservacaoLivroCaixaPagamentosConfirmadosNoOperacional } from "../src/services/livroCaixaPagamentoGuard";
+import { solicitarEncerramentoAnoLivroCaixa, confirmarEncerramentoAnoLivroCaixaContador } from "../src/services/livroCaixaService";
+import type { AppData } from "../src/types";
+
+const base = structuredClone(emptyInitialData);
+const catalogo = { updatedAt: "2026-11-01T00:00:00Z", instituicoes: [], produtosInstituicao: [] };
+registrarCatalogoCloudLeitura("coop", catalogo);
+const first = aplicarCatalogoCloudLeitura(base);
+for (let i = 0; i < 1000; i++) assert.equal(aplicarCatalogoCloudLeitura(base), first, "mesma base não dispara novos recálculos");
+registrarCatalogoCloudLeitura("coop", structuredClone(catalogo));
+assert.equal(aplicarCatalogoCloudLeitura(base), first, "resposta repetida não invalida as abas");
+registrarCatalogoCloudLeitura("coop", { ...catalogo, updatedAt: "2026-11-02T00:00:00Z" });
+assert.notEqual(aplicarCatalogoCloudLeitura(base), first);
+const atual = { ...base, instituicoes: [{ id: "inst", cooperativaId: "coop" } as never] };
+const aligned = alinharCatalogoSnapshotStaff(base, atual);
+for (let i = 0; i < 1000; i++) assert.equal(alinharCatalogoSnapshotStaff(base, atual), aligned);
+invalidarCatalogoCloudLeitura("coop");
+
+const manual = { id: "manual-1", cooperativaId: "coop", data: "2026-10-10", mesReferencia: "2026-10", tipo: "credito" as const, valor: 120, historico: "Recebimento da cooperativa", origem: "credito_avulso" as const, createdAt: "2026-10-10T12:00:00Z", updatedAt: "2026-10-10T12:00:00Z" };
+const stored = { pagamentosCooperado: [], livroCaixa: [manual], livroCaixaExcluidos: [] };
+const empty = { pagamentosCooperado: [], livroCaixa: [], livroCaixaExcluidos: [] };
+const restored = aplicarPreservacaoLivroCaixaPagamentosConfirmadosNoOperacional(stored, empty);
+assert.deepEqual(restored.payload.livroCaixa, [manual], "sync incompleto preserva lançamento manual sem pagamento associado");
+const edited = { ...manual, valor: 130, updatedAt: "2026-10-11T00:00:00Z" };
+assert.equal(aplicarPreservacaoLivroCaixaPagamentosConfirmadosNoOperacional(stored, { ...empty, livroCaixa: [edited] }).payload.livroCaixa[0]?.valor, 130);
+assert.equal(aplicarPreservacaoLivroCaixaPagamentosConfirmadosNoOperacional({ ...stored, livroCaixa: [edited] }, stored).payload.livroCaixa[0]?.valor, 130, "aparelho antigo não desfaz edição mais recente");
+const deleted = { ...empty, livroCaixaExcluidos: [{ id: manual.id, cooperativaId: "coop", excluidoEm: "2026-10-12T00:00:00Z" }] };
+assert.equal(aplicarPreservacaoLivroCaixaPagamentosConfirmadosNoOperacional(stored, deleted).payload.livroCaixa.length, 0);
+const staleAfterDeletion = aplicarPreservacaoLivroCaixaPagamentosConfirmadosNoOperacional({ ...stored, livroCaixaExcluidos: deleted.livroCaixaExcluidos }, stored);
+assert.equal(staleAfterDeletion.payload.livroCaixa.length, 0, "exclusão explícita permanece mesmo quando aparelho antigo esquece o marcador");
+
+const livro: AppData = { ...base, ...stored, livroCaixaControleAnual: [{ cooperativaId: "coop", anoLivro: 2026, proximoSequencia: 2, historicoEncerramentos: [], updatedAt: "2026-10-10T00:00:00Z" } as never] };
+const pending = solicitarEncerramentoAnoLivroCaixa(livro, "coop", { id: "resp", name: "Responsável", role: "responsavel" }, { anoEncerrado: 2026, backupConfirmado: true, relatoriosImpressosConfirmados: true });
+const closed = confirmarEncerramentoAnoLivroCaixaContador(pending, "coop", { id: "contador", name: "Contador", role: "contador" });
+assert.equal(closed.livroCaixaControleAnual?.[0]?.anoLivro, 2027);
+assert.deepEqual(closed.livroCaixa, livro.livroCaixa, "fechamento não apaga lançamentos anteriores");
+const reopened = JSON.parse(JSON.stringify(closed));
+assert.deepEqual(reopened.livroCaixa, livro.livroCaixa, "fechar/reabrir a base mantém histórico");
+console.log("OK: leitura estável, invalidação por dados novos, manual preservado no sync e após fechamento, edição e exclusão explícitas respeitadas.");

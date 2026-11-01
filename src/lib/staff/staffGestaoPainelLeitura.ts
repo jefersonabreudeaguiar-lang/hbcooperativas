@@ -10,22 +10,28 @@ import {
 } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { appDataParaPagarCooperadosResponsavel } from "@/services/responsavelPainelIndex";
 import { aplicarCatalogoCloudLeitura } from "@/lib/staff/staffCatalogoCloudLeitura";
+const catalogoAlinhadoCache = new WeakMap<AppData, { atual: AppData; data: AppData }>();
 
 /** O lastro financeiro não pode substituir o catálogo atual por uma cópia antiga. */
 export function alinharCatalogoSnapshotStaff(base: AppData, atual: AppData): AppData {
+  if (base === atual) return base;
+  const cached = catalogoAlinhadoCache.get(base);
+  if (cached?.atual === atual) return cached.data;
   const ids = new Set([
     ...atual.instituicoes.map((i) => i.cooperativaId),
     ...atual.produtosInstituicao.map((p) => p.cooperativaId),
     ...(atual.instituicoesExcluidas ?? []).map((e) => e.cooperativaId),
   ]);
   if (ids.size === 0 || base === atual) return base;
-  return {
+  const next = {
     ...base,
     instituicoes: [...base.instituicoes.filter((i) => !ids.has(i.cooperativaId)), ...atual.instituicoes],
     produtosInstituicao: [...base.produtosInstituicao.filter((p) => !ids.has(p.cooperativaId)), ...atual.produtosInstituicao],
     instituicoesExcluidas: [...(base.instituicoesExcluidas ?? []).filter((e) => !ids.has(e.cooperativaId)), ...(atual.instituicoesExcluidas ?? [])],
     cronogramasContrato: [...(base.cronogramasContrato ?? []).filter((c) => !ids.has(c.cooperativaId)), ...(atual.cronogramasContrato ?? []).filter((c) => ids.has(c.cooperativaId))],
   };
+  catalogoAlinhadoCache.set(base, { atual, data: next });
+  return next;
 }
 
 /** Warm × lastro — sem projeção Pagar (evita reconciliar ficha em todo useAppData). */
