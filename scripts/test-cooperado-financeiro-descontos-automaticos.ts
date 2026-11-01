@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { emptyInitialData } from "../src/mock/data";
 import type { AppData } from "../src/types";
-import { persistDescontosContaCoopNoArquivo, valorLiquidoFromResumoPartes } from "../src/services/notaPedidoService";
+import { persistDescontosContaCoopNoArquivo, valorLiquidoFromResumoPartes, reconciliarFichaFromNotasConferidas } from "../src/services/notaPedidoService";
 import { leituraFinanceiraParidadeCooperado } from "../src/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import { cooperadoFinanceiroScopedData } from "../src/lib/cooperado/cooperadoFinanceiroScopedData";
 
@@ -42,3 +42,14 @@ const crossTenant = { ...data.valoresAvulsosReceber![0], id: "other", cooperativ
 const scoped = cooperadoFinanceiroScopedData({ ...data, valoresAvulsosReceber: [...data.valoresAvulsosReceber!, crossTenant] }, actor, coop);
 assert.equal(scoped.valoresAvulsosReceber!.some((v) => v.id === "other"), false, "outro CNPJ não entra no resumo");
 console.log("OK: HB + avulsos + créditos + estorno, sem duplicação; saldo zero detalhado; isolamento; cálculo somente leitura");
+
+// Nota conferida na nuvem pode existir antes da ficha operacional ser sincronizada.
+const missingNote = { ...data.notasPedido[0], id: "missing-cloud-note", valorBruto: 2500, valorLiquido: 2500, descontoCooperativa: 0, itens: [{ produtoId: "p-test", quantidade: 1, precoUnitario: 2500 }], createdAt: "2026-10-19T12:00:00Z", updatedAt: "2026-10-19T12:00:00Z" } as AppData["notasPedido"][0];
+const gap = { ...data, valoresAvulsosReceber: [], arquivosMensais: [], notasPedido: [...data.notasPedido, missingNote] };
+const beforeRepair = JSON.stringify(gap);
+const repaired = reconciliarFichaFromNotasConferidas(gap);
+assert.equal(JSON.stringify(gap), beforeRepair, "reconciliação não altera a fonte");
+assert.equal(repaired.fichaCorrida.filter(f => f.notaPedidoId === missingNote.id).length, 1);
+assert.equal(leituraFinanceiraParidadeCooperado(repaired, actor, coop).resumo.valorEntregas, 3500, "nota conferida sem ficha entra no total");
+assert.equal(reconciliarFichaFromNotasConferidas(repaired).fichaCorrida.filter(f => f.notaPedidoId === missingNote.id).length, 1, "reconciliação não duplica entrega");
+console.log("OK: entrega conferida sem ficha incluída, sem mutação ou duplicação");

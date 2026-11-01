@@ -7,7 +7,7 @@ import type { NotaPedido } from "@/types";
 import { listCooperadoContaCoopDescontosAbateValorReceber } from "@/lib/supabase/contaCoopStorage";
 import { cooperativaFromCloudRow } from "@/utils/cooperativaCadastro";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { persistDescontosContaCoopNoArquivo } from "@/services/notaPedidoService";
+import { persistDescontosContaCoopNoArquivo, reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import { cooperadoFinanceiroScopedData } from "@/lib/cooperado/cooperadoFinanceiroScopedData";
 import type { CooperadoFinanceiroRemoto } from "@/lib/cooperado/cooperadoFinanceiroRemotoTypes";
@@ -50,6 +50,8 @@ async function read(cnpj: string, cooperadoId: string): Promise<CooperadoFinance
   if (data.fichaCorrida.some((f) => f.status === "pendente" && !data.notasPedido.some((n) => n.id === f.notaPedidoId))) {
     throw new Error("Notas da ficha ainda indisponíveis");
   }
+  // Reconstrói somente em memória as fichas ausentes de notas já conferidas na nuvem.
+  data = cooperadoFinanceiroScopedData(reconciliarFichaFromNotasConferidas(data), canon, coop.id);
   const meses = [...new Set([
     ...data.fichaCorrida.map((f) => f.mesReferencia),
     ...(data.valoresAvulsosReceber ?? []).filter((v) => v.status === "pendente").map((v) => v.mesReferencia),
