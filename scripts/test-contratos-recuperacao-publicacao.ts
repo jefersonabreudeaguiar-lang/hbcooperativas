@@ -3,6 +3,8 @@ import { emptyInitialData } from "../src/mock/data";
 import { publicacaoContratosApagariaItens } from "../src/services/contratosPublicacaoGuard";
 import { mergeContratosIntoData } from "../src/services/cooperativaSyncCloudService";
 import { getTodosProdutosCatalogo } from "../src/services/catalogoContratosService";
+import { alinharCatalogoSnapshotStaff } from "../src/lib/staff/staffGestaoPainelLeitura";
+import { getContratosEntrega } from "../src/utils/contratosEntrega";
 import type { ContratosSyncPayload } from "../src/lib/supabase/cooperativaSyncStorage";
 
 const restored: ContratosSyncPayload = {
@@ -31,4 +33,12 @@ assert.equal(merged.fichaCorrida, data.fichaCorrida);
 assert.equal(merged.pagamentosCooperado, data.pagamentosCooperado);
 const newerDeletion = { ...data, instituicoesExcluidas: [{ id: "original", cooperativaId: "coop", deletedAt: "2026-11-02T00:00:00Z" }] };
 assert.equal(getTodosProdutosCatalogo(mergeContratosIntoData(newerDeletion, restored, "coop"), "coop").length, 0);
+const leituraStaff = alinharCatalogoSnapshotStaff(data, merged);
+assert.equal(getContratosEntrega(leituraStaff, "coop").length, 1, "lastro financeiro antigo não esconde o contrato publicado");
+assert.equal(getTodosProdutosCatalogo(leituraStaff, "coop")[0]?.precoUnitario, 5.71);
+assert.equal(leituraStaff.fichaCorrida, data.fichaCorrida);
+assert.equal(leituraStaff.pagamentosCooperado, data.pagamentosCooperado);
+assert.equal(leituraStaff.livroCaixa, data.livroCaixa);
+const excluido = alinharCatalogoSnapshotStaff(merged, { ...merged, instituicoes: [], produtosInstituicao: [], instituicoesExcluidas: [{ id: "original", cooperativaId: "coop", deletedAt: "2026-11-02T00:00:00Z" }] });
+assert.equal(getContratosEntrega(excluido, "coop").length, 0, "catálogo antigo não ressuscita contrato excluído");
 console.log("OK: recuperação do contrato, proteção de publicação vazia, exclusão posterior, escopo e financeiro preservados.");

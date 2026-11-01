@@ -10,6 +10,23 @@ import {
 } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { appDataParaPagarCooperadosResponsavel } from "@/services/responsavelPainelIndex";
 
+/** O lastro financeiro não pode substituir o catálogo atual por uma cópia antiga. */
+export function alinharCatalogoSnapshotStaff(base: AppData, atual: AppData): AppData {
+  const ids = new Set([
+    ...atual.instituicoes.map((i) => i.cooperativaId),
+    ...atual.produtosInstituicao.map((p) => p.cooperativaId),
+    ...(atual.instituicoesExcluidas ?? []).map((e) => e.cooperativaId),
+  ]);
+  if (ids.size === 0 || base === atual) return base;
+  return {
+    ...base,
+    instituicoes: [...base.instituicoes.filter((i) => !ids.has(i.cooperativaId)), ...atual.instituicoes],
+    produtosInstituicao: [...base.produtosInstituicao.filter((p) => !ids.has(p.cooperativaId)), ...atual.produtosInstituicao],
+    instituicoesExcluidas: [...(base.instituicoesExcluidas ?? []).filter((e) => !ids.has(e.cooperativaId)), ...(atual.instituicoesExcluidas ?? [])],
+    cronogramasContrato: [...(base.cronogramasContrato ?? []).filter((c) => !ids.has(c.cooperativaId)), ...(atual.cronogramasContrato ?? []).filter((c) => ids.has(c.cooperativaId))],
+  };
+}
+
 /** Warm × lastro — sem projeção Pagar (evita reconciliar ficha em todo useAppData). */
 export function escolherStaffGestaoSnapshotParaLeitura(coopId?: string): AppData | null {
   const lkg = peekStaffGestaoLastGood();
@@ -18,7 +35,7 @@ export function escolherStaffGestaoSnapshotParaLeitura(coopId?: string): AppData
   if (!lkg) return warm;
   const rWarm = staffGestaoRiquezaTotal(medirRiquezaStaffGestao(warm, coopId));
   const rLkg = staffGestaoRiquezaTotal(medirRiquezaStaffGestao(lkg, coopId));
-  return rLkg > rWarm ? lkg : warm;
+  return rLkg > rWarm ? alinharCatalogoSnapshotStaff(lkg, warm) : warm;
 }
 
 function escolherStaffGestaoSnapshotBase(coopId?: string): AppData | null {

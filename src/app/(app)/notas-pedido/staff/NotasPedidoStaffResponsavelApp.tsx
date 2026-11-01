@@ -2427,12 +2427,12 @@ export default function NotasPedidoStaffMain() {
       return;
     }
     if (!tabActive) return;
-    if (getInstituicoesCatalogo(getData(), coopId).length > 0) return;
+    if (getContratosEntrega(getData(), coopId).length > 0) return;
     void (async () => {
       const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
       if (cnpj) {
         try {
-          await syncContratosFromCloud(cnpj);
+          await syncContratosFromCloud(cnpj, coopId);
         } catch {
           /* offline — mantém contratos locais */
         }
