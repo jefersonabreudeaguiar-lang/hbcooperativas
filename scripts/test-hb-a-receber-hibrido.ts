@@ -95,6 +95,16 @@ const overlay = [
   const h = aplicarDebitoHbHibridoNaParidade(paridade, overlay);
   assert.equal(h.valorLiquido, 420);
   assert.ok(h.descontosExtras.some((d) => d.tipo === "conta_coop"));
+  const original = JSON.stringify(paridade);
+  let telaAnterior = h;
+  for (let retorno = 0; retorno < 100; retorno++) {
+    telaAnterior = aplicarDebitoHbHibridoNaParidade(telaAnterior, overlay);
+    assert.equal(telaAnterior.valorLiquido, 420, "voltar ao Início não reaplica o mesmo desconto");
+    assert.equal(aplicarDebitoHbHibridoNaParidade(paridade, overlay).valorLiquido, 420);
+  }
+  assert.equal(JSON.stringify(paridade), original, "leitura não modifica a base financeira");
+  const integral = aplicarDebitoHbHibridoNaParidade(paridade, [{ ...overlay[0]!, valorReais: 500 }]);
+  assert.equal(aplicarDebitoHbHibridoNaParidade(integral, overlay).valorLiquido, 0);
 }
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
@@ -109,6 +119,8 @@ assert.doesNotMatch(
 
 const inicio = readFileSync(join(ROOT, "src/hooks/useCooperadoInicioValorReceberCardState.ts"), "utf8");
 assert.match(inicio, /escolherDebitoHbHibrido/, "Início aplica híbrido no A receber");
+assert.doesNotMatch(inicio, /aplicarDebitoHbHibridoNoValor/, "Início nunca subtrai HB do líquido persistido");
+assert.match(inicio, /aplicarDebitoHbHibridoNaParidade\(paridadeBase, overlayLinhas\)/);
 assert.match(inicio, /permitirQuedaPorHb/, "Início pode cair quando há débito HB");
 
 const financeiro = readFileSync(join(ROOT, "src/app/(app)/ficha-corrida/FichaCorridaContent.tsx"), "utf8");

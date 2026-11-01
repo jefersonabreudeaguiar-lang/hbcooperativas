@@ -43,7 +43,7 @@ import {
   resolveParidadeFromFichaResumoSnapshot,
 } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import {
-  aplicarDebitoHbHibridoNoValor,
+  aplicarDebitoHbHibridoNaParidade,
   escolherDebitoHbHibrido,
   linhasOverlayDebitoHbAReceber,
 } from "@/lib/hb-credit/hbAReceberHibrido";
@@ -675,9 +675,11 @@ export function useCooperadoInicioValorReceberCardState(input: {
     let fichaMes = fichaSnap?.paridade?.mesLabel ?? fichaSnap?.consolidado?.mesLabel;
     const overlayLinhas = linhasOverlayDebitoHbAReceber(input.cooperadoId, coopId);
     let extrasFicha = fichaSnap?.paridade?.descontosExtras ?? [];
+    let paridadeBase = fichaSnap?.paridade;
     let permitirQuedaPorHb = false;
     if (isAppDataWarm() && coopId) {
       const live = cooperadoLeituraFinanceiraExibicao(getData(), input.cooperadoId, coopId);
+      paridadeBase = live;
       extrasFicha = live.descontosExtras;
       const temDebitoHb = live.descontosExtras.some((d) => d.tipo === "conta_coop");
       if (live.valorLiquido > fichaValor) {
@@ -694,11 +696,16 @@ export function useCooperadoInicioValorReceberCardState(input: {
       linhasOverlay: overlayLinhas,
     });
     if (hibrido.fonte === "overlay" && hibrido.valorReais > 0.005) {
-      const baseValor = cooperadoMotorTemObrigacaoReceber(base) ? base.valor : fichaValor;
-      const alvo = aplicarDebitoHbHibridoNoValor(baseValor > 0.005 ? baseValor : fichaValor, hibrido.valorReais);
-      if (alvo + 0.005 < (base.valor ?? 0) || alvo + 0.005 < fichaValor) {
-        fichaValor = alvo;
-        permitirQuedaPorHb = alvo > 0.005;
+      // O card persistido já é líquido. Nunca descontar novamente dele ao remontar a aba.
+      // Sem a base detalhada, preserva a leitura conhecida até a resposta da nuvem.
+      if (paridadeBase?.resumo && Number.isFinite(paridadeBase.resumo.valorEntregas)) {
+        const recalculada = aplicarDebitoHbHibridoNaParidade(paridadeBase, overlayLinhas);
+        return {
+          mesLabel: recalculada.mesLabel || base.mesLabel,
+          valor: recalculada.valorLiquido,
+          valorRecibo: 0,
+          aguardandoAssinatura: false,
+        };
       }
     } else if (hibrido.fonte === "ficha" && hibrido.valorReais > 0.005) {
       permitirQuedaPorHb = fichaValor > 0.005;
