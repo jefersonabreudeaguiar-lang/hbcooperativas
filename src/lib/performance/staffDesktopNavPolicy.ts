@@ -1,9 +1,4 @@
-/**
- * Desktop gestão: navegação 100% pelo Next (URL = tela).
- * Otimista / history.replace só no mobile — evita menu “travado” no PC.
- */
-import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewport";
-
+/** Gestão: o Next confirma URL e conteúdo juntos, inclusive no celular. */
 export function staffGestaoUsaNavegacaoOtimista(): boolean {
-  return isStaffMobileViewportActive();
+  return false;
 }

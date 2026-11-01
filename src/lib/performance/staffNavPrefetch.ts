@@ -1,7 +1,4 @@
-import { isLowMemoryDevice } from "@/services/imagePipelineService";
 import type { CooperadoNavPrefetchRouter } from "@/lib/performance/cooperadoNavPrefetch";
-import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
-import { prefetchStaffTabRouteChunks } from "@/lib/performance/prefetchStaffTabRouteChunks";
 import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewport";
 import { staffGestaoPerfilPrefetchNavDelayMs } from "@/lib/staff/staffGestaoPerfilDesktop";
 
@@ -26,20 +23,6 @@ export const STAFF_MOBILE_PREFETCH_HREFS: readonly string[] = [
   "/prestacao-contas",
 ];
 
-function prefetchStaffNavRoutes(
-  router: CooperadoNavPrefetchRouter,
-  hrefs: readonly string[]
-): void {
-  for (const href of hrefs) {
-    try {
-      router.prefetch(href);
-      if (href === "/notas-pedido") prefetchStaffNotasPedidoRouteBundle();
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
 /** PC: um prefetch leve das rotas do dia — sem dynamic import de abas inteiras. */
 export function scheduleStaffNavPrefetchDesktop(router: CooperadoNavPrefetchRouter): () => void {
   let cancelled = false;
@@ -59,51 +42,30 @@ export function scheduleStaffNavPrefetchDesktop(router: CooperadoNavPrefetchRout
   };
 }
 
-/** Prefetch em camadas para gestão mobile — paridade com cooperadoNavPrefetch. */
+const mobileSchedules = new WeakMap<CooperadoNavPrefetchRouter, { users: number; stop: () => void }>();
+
+/** Um único aquecimento gradual; nunca importa seis telas pesadas simultaneamente. */
 export function scheduleStaffNavPrefetchEarly(router: CooperadoNavPrefetchRouter): () => void {
-  if (typeof window !== "undefined" && !isStaffMobileViewportActive()) {
-    return () => {};
+  if (typeof window === "undefined" || !isStaffMobileViewportActive()) return () => {};
+  const existing = mobileSchedules.get(router);
+  if (existing) {
+    existing.users++;
+    return () => { if (--existing.users === 0) { existing.stop(); mobileSchedules.delete(router); } };
   }
   let cancelled = false;
-  const safe = (fn: () => void) => {
-    if (!cancelled) fn();
-  };
-  const lowMemory = isLowMemoryDevice();
-  const idleHrefs = lowMemory
-    ? (["/dashboard", "/notas-pedido", "/ficha-corrida"] as readonly string[])
-    : STAFF_MOBILE_PREFETCH_HREFS;
-
-  queueMicrotask(() => {
-    safe(() => prefetchStaffNavRoutes(router, STAFF_NAV_PREFETCH_PRIORITY));
-    safe(() => prefetchStaffTabRouteChunks());
-  });
-
-  if (lowMemory) {
-    return () => {
-      cancelled = true;
-    };
-  }
-
-  const idlePrefetch = () => {
-    safe(() => prefetchStaffNavRoutes(router, idleHrefs));
-    safe(() => prefetchStaffTabRouteChunks());
-  };
-
-  let idleHandle: number | undefined;
-  if (typeof requestIdleCallback === "function") {
-    idleHandle = requestIdleCallback(idlePrefetch, {
-      timeout: 2800,
-    });
-  } else {
-    idleHandle = window.setTimeout(idlePrefetch, 900);
-  }
-
-  return () => {
-    cancelled = true;
-    if (typeof requestIdleCallback === "function" && idleHandle !== undefined) {
-      cancelIdleCallback(idleHandle);
-    } else if (idleHandle !== undefined) {
-      window.clearTimeout(idleHandle);
+  let index = 0;
+  let timer: number;
+  const tick = () => {
+    if (cancelled) return;
+    if (document.visibilityState === "visible") {
+      const href = STAFF_NAV_PREFETCH_PRIORITY[index++];
+      if (!href) return;
+      try { router.prefetch(href); } catch { /* navegação normal permanece disponível */ }
     }
+    timer = window.setTimeout(tick, 1_500);
   };
+  timer = window.setTimeout(tick, 4_000);
+  const entry = { users: 1, stop: () => { cancelled = true; window.clearTimeout(timer); } };
+  mobileSchedules.set(router, entry);
+  return () => { if (--entry.users === 0) { entry.stop(); mobileSchedules.delete(router); } };
 }
