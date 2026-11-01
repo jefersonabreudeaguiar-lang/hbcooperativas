@@ -101,7 +101,8 @@ function PrecosPageMain() {
 
   useEffect(() => {
     if (!ready || !tabActive || !user?.id || !coopId) return;
-    void runSync();
+    const timer = window.setTimeout(() => { void runSync(); }, 0);
+    return () => window.clearTimeout(timer);
   }, [ready, tabActive, user?.id, coopId, runSync]);
 
   useEffect(() => {
