@@ -76,7 +76,7 @@ import {
 } from "@/lib/performance/rqlMarks";
 import { CooperadoFinanceiroSyncBanner } from "@/components/cooperado/CooperadoFinanceiroShellContext";
 import { useMobileTabScrollRestore } from "@/hooks/useMobileTabScrollRestore";
-import { useStaffPrimeiroDiaContratos } from "@/hooks/useStaffPrimeiroDiaContratos";
+import { StaffDadosAtuaisGate } from "@/components/layout/StaffDadosAtuaisGate";
 import type { MobileTabScrollMode } from "@/lib/performance/mobileTabScrollMemory";
 import { CooperadoApresentacaoFinanceiraGate } from "@/components/cooperado/CooperadoApresentacaoFinanceiraGate";
 import { applyCooperadoMobilePilotPerfDomFlag } from "@/lib/cooperado/cooperadoMobilePilotPerf";
@@ -527,7 +527,6 @@ export function MobileNav() {
 
 function AppShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  useStaffPrimeiroDiaContratos();
   const mercadoQrImmersive = pathname === "/mercado-parceiro/cobrar";
   const shell = useAppShellNavigationContext();
   const navUser = shell?.navUser ?? null;
@@ -644,7 +643,9 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
             <CooperadoApresentacaoFinanceiraGate>{routePanels}</CooperadoApresentacaoFinanceiraGate>
           </CooperadoPostDeployGate>
         )
-      : routePanels;
+      : navUser && (staffPainelUi || navUser.role === "responsavel" || navUser.role === "tesoureiro")
+        ? <StaffDadosAtuaisGate key={`${navUser.id}:${navUser.role}:${navUser.cooperativaCnpj ?? navUser.cooperativaId}`} user={navUser}>{routePanels}</StaffDadosAtuaisGate>
+        : navUser ? routePanels : <div role="status" className="p-8 text-sm text-gray-600">Preparando seu painel…</div>;
 
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden">

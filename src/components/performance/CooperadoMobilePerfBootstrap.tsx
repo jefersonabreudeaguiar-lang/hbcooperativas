@@ -10,43 +10,13 @@ import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetc
 import { isStaffMobileViewportActive } from "@/lib/performance/staffMobileViewport";
 import { isStaffGestaoRole } from "@/lib/performance/cooperadoColdStart";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
-import { getData } from "@/services/dataStore";
-import { resolveGestaoCooperativaId } from "@/utils/cooperativa";
 
 /**
- * Pré-carrega rotas e recupera a base da gestão após login.
- * Somente leitura da nuvem; aplica cadastro, contratos, pagamentos e caixa ao cache local.
+ * Pré-carrega rotas após login. A base da gestão é confirmada pelo StaffDadosAtuaisGate.
  */
 export function CooperadoMobilePerfBootstrap() {
   const { user } = useAuth();
   const router = useRouter();
-
-  useEffect(() => {
-    if (!user || !isStaffGestaoRole(user.role)) return;
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        const cloud = await import("@/services/cooperadoCloudService");
-        const { resolveCooperativaCnpj } = await import("@/services/notaPedidoCloudService");
-        const data = getData();
-        const cnpj = await resolveCooperativaCnpj(data, resolveGestaoCooperativaId(user, data), user);
-        if (!cnpj || cancelled) return;
-        const coopId = await cloud.ensureCooperativaLocalForCnpj(cnpj);
-        if (!coopId || cancelled) return;
-        const { syncContratosFromCloud, syncOperacionalFromCloud } = await import("@/services/cooperativaSyncCloudService");
-        // Aplicar as leituras em sequência evita salvar fatias sobre um snapshot anterior.
-        await cloud.syncCooperadosFromCloud(cnpj, coopId);
-        if (cancelled) return;
-        await syncContratosFromCloud(cnpj, coopId);
-        if (cancelled) return;
-        // Pagamentos e caixa devem chegar junto da ficha, antes da revisão dos saldos.
-        await syncOperacionalFromCloud(cnpj, { skipDestructiveReset: true });
-        const { resetResponsavelPainelIndexCache } = await import("@/services/responsavelPainelIndex");
-        resetResponsavelPainelIndexCache();
-      })().catch(() => { /* o botão Atualizar mantém a retomada manual disponível */ });
-    }, 800);
-    return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [user?.id, user?.role, user?.cooperativaCnpj]);
 
   useEffect(() => {
     if (!user) return;
