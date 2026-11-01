@@ -1,4 +1,5 @@
 import type { AppData, InstituicaoExcluida } from "@/types";
+import { invalidarCatalogoCloudLeitura } from "@/lib/staff/staffCatalogoCloudLeitura";
 import { removerCronogramasInstituicao } from "@/services/cronogramaContratoService";
 
 export function idsInstituicoesExcluidas(data: AppData, cooperativaId?: string): Set<string> {
@@ -39,6 +40,7 @@ export function excluirInstituicaoContrato(
   const excluidas = [...(data.instituicoesExcluidas ?? [])];
 
   if (alvo) {
+    invalidarCatalogoCloudLeitura(alvo.cooperativaId);
     const tombstone: InstituicaoExcluida = {
       id: instituicaoId,
       cooperativaId: alvo.cooperativaId,

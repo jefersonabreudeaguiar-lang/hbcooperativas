@@ -9,6 +9,7 @@ import {
   staffGestaoRiquezaTotal,
 } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { appDataParaPagarCooperadosResponsavel } from "@/services/responsavelPainelIndex";
+import { aplicarCatalogoCloudLeitura } from "@/lib/staff/staffCatalogoCloudLeitura";
 
 /** O lastro financeiro não pode substituir o catálogo atual por uma cópia antiga. */
 export function alinharCatalogoSnapshotStaff(base: AppData, atual: AppData): AppData {
@@ -30,12 +31,12 @@ export function alinharCatalogoSnapshotStaff(base: AppData, atual: AppData): App
 /** Warm × lastro — sem projeção Pagar (evita reconciliar ficha em todo useAppData). */
 export function escolherStaffGestaoSnapshotParaLeitura(coopId?: string): AppData | null {
   const lkg = peekStaffGestaoLastGood();
-  if (!isAppDataWarm()) return lkg;
+  if (!isAppDataWarm()) return lkg ? aplicarCatalogoCloudLeitura(lkg) : null;
   const warm = getData();
-  if (!lkg) return warm;
+  if (!lkg) return aplicarCatalogoCloudLeitura(warm);
   const rWarm = staffGestaoRiquezaTotal(medirRiquezaStaffGestao(warm, coopId));
   const rLkg = staffGestaoRiquezaTotal(medirRiquezaStaffGestao(lkg, coopId));
-  return rLkg > rWarm ? alinharCatalogoSnapshotStaff(lkg, warm) : warm;
+  return aplicarCatalogoCloudLeitura(rLkg > rWarm ? alinharCatalogoSnapshotStaff(lkg, warm) : warm);
 }
 
 function escolherStaffGestaoSnapshotBase(coopId?: string): AppData | null {

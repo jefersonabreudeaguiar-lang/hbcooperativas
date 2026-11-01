@@ -5,6 +5,7 @@ import { mergeContratosIntoData } from "../src/services/cooperativaSyncCloudServ
 import { getTodosProdutosCatalogo } from "../src/services/catalogoContratosService";
 import { alinharCatalogoSnapshotStaff } from "../src/lib/staff/staffGestaoPainelLeitura";
 import { getContratosEntrega } from "../src/utils/contratosEntrega";
+import { registrarCatalogoCloudLeitura, aplicarCatalogoCloudLeitura, invalidarCatalogoCloudLeitura } from "../src/lib/staff/staffCatalogoCloudLeitura";
 import type { ContratosSyncPayload } from "../src/lib/supabase/cooperativaSyncStorage";
 
 const restored: ContratosSyncPayload = {
@@ -36,6 +37,13 @@ const republicado = { ...restored, updatedAt: "2026-11-03T00:00:00Z" };
 assert.equal(getTodosProdutosCatalogo(mergeContratosIntoData(newerDeletion, republicado, "coop"), "coop").length, 1, "republicação supera exclusão antiga mesmo preservando a data original do cadastro");
 assert.equal(getTodosProdutosCatalogo(mergeContratosIntoData(newerDeletion, restored, "coop"), "coop").length, 0);
 const leituraStaff = alinharCatalogoSnapshotStaff(data, merged);
+registrarCatalogoCloudLeitura("coop", restored);
+const leituraPublicada = aplicarCatalogoCloudLeitura(newerDeletion);
+assert.equal(getContratosEntrega(leituraPublicada, "coop").length, 1, "resposta confirmada da nuvem chega ao formulário mesmo com persist antigo");
+assert.equal(leituraPublicada.fichaCorrida, newerDeletion.fichaCorrida);
+assert.equal(leituraPublicada.pagamentosCooperado, newerDeletion.pagamentosCooperado);
+invalidarCatalogoCloudLeitura("coop");
+assert.equal(aplicarCatalogoCloudLeitura(newerDeletion), newerDeletion);
 assert.equal(getContratosEntrega(leituraStaff, "coop").length, 1, "lastro financeiro antigo não esconde o contrato publicado");
 assert.equal(getTodosProdutosCatalogo(leituraStaff, "coop")[0]?.precoUnitario, 5.71);
 assert.equal(leituraStaff.fichaCorrida, data.fichaCorrida);

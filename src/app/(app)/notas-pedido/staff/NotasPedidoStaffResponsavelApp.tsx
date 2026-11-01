@@ -2427,7 +2427,6 @@ export default function NotasPedidoStaffMain() {
       return;
     }
     if (!tabActive) return;
-    if (getContratosEntrega(getData(), coopId).length > 0) return;
     void (async () => {
       const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
       if (cnpj) {
@@ -2439,7 +2438,7 @@ export default function NotasPedidoStaffMain() {
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCooperado, user?.id, coopId, tabActive]);
+  }, [isCooperado, user?.id, coopId, tabActive, data !== null]);
 
   useEffect(() => {
     if (!anexarModal || !data || !coopId) return;

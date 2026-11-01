@@ -9,6 +9,7 @@ import { peekStaffGestaoLastGood, preservarStaffGestaoContraWipe } from "@/lib/s
 import { staffGestaoPerfilReaplicarAbaLastGoodPermitido } from "@/lib/staff/staffGestaoPerfilDesktop";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
+import { registrarCatalogoCloudLeitura } from "@/lib/staff/staffCatalogoCloudLeitura";
 import { getData, getDataOperationalTruth, saveDataSafe, runWithBatchedSaveAsync } from "@/services/dataStore";
 import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
@@ -2002,11 +2003,13 @@ export async function pushContratosToCloud(
 
   payload.updatedAt = new Date().toISOString();
   try {
-    await secureApiFetch("/api/cooperativa-sync", {
+    const response = await secureApiFetch("/api/cooperativa-sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cnpj: digits, section: "contratos", payload }),
     });
+    if (!response.ok) return;
+    registrarCatalogoCloudLeitura(cid, payload);
     if (options?.authoritative) {
       markContratosAuthoritativePush(cid);
       saveAbaLastGoodFromData(merged, cid, "contratos");
@@ -2303,6 +2306,7 @@ export async function syncContratosFromCloud(
     const current = getData();
     const coopId = preferredCoopId || resolveCoopId(current, digits);
     if (!coopId) return false;
+    registrarCatalogoCloudLeitura(coopId, bundle.contratos);
     saveAbaLastGoodFromData(current, coopId, "contratos");
     const merged = reaplicarAbaLastGoodSeRegrediu(
       mergeContratosIntoData(current, bundle.contratos, coopId),
