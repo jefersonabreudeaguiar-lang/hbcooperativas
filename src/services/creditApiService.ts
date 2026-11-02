@@ -538,7 +538,9 @@ export async function authorizeCreditPayment(input: {
     };
 
     const valorDebito =
-      typeof input.amountReais === "number" && Number.isFinite(input.amountReais)
+      typeof data.creditoDebitadoCents === "number" && Number.isFinite(data.creditoDebitadoCents)
+        ? Math.max(0, Math.round(data.creditoDebitadoCents)) / 100
+        : typeof input.amountReais === "number" && Number.isFinite(input.amountReais)
         ? Math.round(input.amountReais * 100) / 100
         : 0;
     if (valorDebito > 0.005) {

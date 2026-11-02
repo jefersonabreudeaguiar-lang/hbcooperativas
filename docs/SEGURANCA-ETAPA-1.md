@@ -324,6 +324,8 @@ continuarem pendentes.
   Cashback solicitado é limitado pelo banco ao saldo real e ao valor da compra.
   Comprovante repetido vem do resultado original; fallback consulta também CNPJ
   e cooperado, sem inventar código quando a consulta falha. Disponível zero é válido.
+- A projeção imediata na ficha passa a usar o crédito efetivamente debitado
+  retornado pelo servidor, incluindo zero, em vez da estimativa anterior ao pagamento.
 - Teste local usa SDK real com transporte simulado e hash/PIN de teste: recuperação,
   PIN errado/bloqueado, rejeição do banco, comprovante ausente e saldo zero.
 - Oito suítes SQL passaram com a rotina atual. Tentativa adicional em conexões
