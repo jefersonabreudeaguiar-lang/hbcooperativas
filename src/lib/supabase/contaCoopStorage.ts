@@ -1,3 +1,4 @@
+import { getAppRepasseSnapshot } from "@/lib/supabase/hbCreditAppRepasseSnapshot";
 import { getMarketReceivableSnapshot } from "@/lib/supabase/hbCreditMarketReceivableSnapshot";
 import { liquidateConfirmedSettlementDiscounts } from "@/lib/supabase/hbCreditDiscountSettlement";
 import { isHbOwnedBalanceOperationsReady } from "@/config/hbOwnedBalanceRollout";
@@ -90,7 +91,6 @@ import {
   pickBestHbCreditAccountRow,
   titularCooperadoIds,
 } from "@/lib/hb-credit/hbCreditLimiteTitularPick";
-import { cooperadosUnicosParaCobranca } from "@/utils/cooperadoDedupe";
 import { mesCicloEntregasPagamentosCompletos } from "@/services/repasseCicloEntregasGateService";
 
 /** Recebíveis em liquidação ou já pagos ao mercado não podem ser estornados. */
@@ -5444,48 +5444,18 @@ export async function getAppRepassePreview(
 ): Promise<ContaCoopAppRepassePreview> {
   const digits = normalizeCnpj(cnpj);
 
-  const { data: existing, error: existingError } = await supabase
-    .from("hb_credit_app_repasse")
-    .select("*")
-    .eq("cooperative_cnpj", digits)
-    .eq("mes_referencia", mesReferencia)
-    .maybeSingle();
-  if (existingError) throw new Error("Não foi possível conferir o repasse deste mês.");
-
+  const { existing, amountCents, allocCount } = await getAppRepasseSnapshot(supabase, digits, mesReferencia);
   if (existing) {
-    const { count, error } = await supabase.from("hb_credit_discount_allocations")
-      .select("id", { count: "exact", head: true })
-      .eq("cooperative_cnpj", digits).eq("mes_referencia", mesReferencia)
-      .eq("app_pool_status", "LIQUIDATED").is("app_repasse_id", null)
-      .neq("cashback_status", "REVERSED").gt("app_cents", 0);
-    if (error || count === null) throw new Error("Não foi possível conferir descontos posteriores ao repasse.");
-    if (count > 0) return {
-      mesReferencia, amountCents: 0, allocCount: count, alreadyPaid: false,
+    if (allocCount > 0) return {
+      mesReferencia, amountCents: 0, allocCount, alreadyPaid: false,
       repasse: mapAppRepasseRow(existing), requerConferenciaFechamento: true,
       bloqueioMensagem: "Há novos descontos após o repasse deste mês. Confira o fechamento antes de confirmar.",
     };
     return {
-      mesReferencia,
-      amountCents: 0,
-      allocCount: 0,
-      alreadyPaid: true,
+      mesReferencia, amountCents: 0, allocCount: 0, alreadyPaid: true,
       repasse: mapAppRepasseRow(existing),
     };
   }
-
-  const { data: rows, error: allocationsError } = await supabase
-    .from("hb_credit_discount_allocations")
-    .select("app_cents")
-    .eq("cooperative_cnpj", digits)
-    .eq("mes_referencia", mesReferencia)
-    .eq("app_pool_status", "LIQUIDATED")
-    .is("app_repasse_id", null)
-    .neq("cashback_status", "REVERSED")
-    .gt("app_cents", 0);
-  if (allocationsError) throw new Error("Não foi possível conferir os descontos do repasse.");
-
-  const amountCents = (rows ?? []).reduce((sum, row) => sum + Number(row.app_cents), 0);
-  const allocCount = rows?.length ?? 0;
 
   if (amountCents <= 0) {
     return {
@@ -5497,28 +5467,17 @@ export async function getAppRepassePreview(
     };
   }
 
-  const { data: coopRow } = await supabase.from("cooperativas").select("id").eq("cnpj", digits).maybeSingle();
+  const { data: coopRow, error: coopError } = await supabase.from("cooperativas").select("id").eq("cnpj", digits).maybeSingle();
+  if (coopError || !coopRow?.id) throw new Error("Não foi possível conferir a cooperativa do repasse.");
   const cooperativeId = coopRow?.id ? String(coopRow.id) : "";
   const operacional = cooperativeId ? await fetchOperacionalSync(supabase, digits) : null;
-  const cooperadosRaw = cooperativeId ? await fetchCooperadosFromStorage(supabase, digits) : [];
-  const { data: loginRows } = cooperativeId
-    ? await supabase
-        .from("app_users")
-        .select("cooperado_id")
-        .eq("cooperativa_cnpj", digits)
-        .eq("active", true)
-        .not("cooperado_id", "is", null)
-    : { data: [] as { cooperado_id: string }[] };
-  const loginCooperadoIds = new Set(
-    (loginRows ?? []).map((r) => String(r.cooperado_id)).filter(Boolean)
-  );
-  const cooperadosAtivos = cooperadosUnicosParaCobranca(cooperadosRaw, loginCooperadoIds);
+  if (!operacional) throw new Error("Não foi possível conferir os pagamentos do ciclo deste repasse.");
 
   const pagamentos = mesCicloEntregasPagamentosCompletos(
     operacional,
     cooperativeId,
     mesReferencia,
-    cooperadosAtivos
+    []
   );
 
   if (!pagamentos.ok) {
@@ -5558,6 +5517,11 @@ export async function confirmAppRepasse(
   repasse?: ContaCoopAppRepasse;
   livroCaixaOrigemId?: string;
 }> {
+  const preview = await getAppRepassePreview(supabase, params.cnpj, params.mesReferencia);
+  if (preview.requerConferenciaFechamento || preview.aguardandoPagamentosCooperados ||
+      (!preview.alreadyPaid && preview.amountCents <= 0)) {
+    return { ok: false, error: preview.bloqueioMensagem ?? "Não há repasse confirmado disponível neste mês." };
+  }
   const repasseId = genId("apprep");
   const { data, error } = await supabase.rpc("hb_credit_confirm_app_repasse", {
     p_cooperative_cnpj: normalizeCnpj(params.cnpj),

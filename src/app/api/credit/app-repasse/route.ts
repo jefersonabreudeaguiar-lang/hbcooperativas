@@ -17,18 +17,23 @@ export async function GET(request: Request) {
   const mesReferencia = searchParams.get("mes") ?? currentMesReferencia();
 
   if (cnpj.length !== 14) return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mesReferencia)) return NextResponse.json({ error: "Mês inválido." }, { status: 400 });
 
   const denyCoop = requireCreditCnpj(gate.ctx, cnpj);
   if (denyCoop) return denyCoop;
   const denyStaff = requireCreditStaff(gate.ctx);
   if (denyStaff) return denyStaff;
 
-  const preview = await getAppRepassePreview(gate.ctx.supabase, cnpj, mesReferencia);
-  return NextResponse.json({ ok: true, preview });
+  try {
+    const preview = await getAppRepassePreview(gate.ctx.supabase, cnpj, mesReferencia);
+    return NextResponse.json({ ok: true, preview });
+  } catch {
+    return NextResponse.json({ ok: false, error: "Não foi possível conferir o repasse. Atualize e confira o fechamento." }, { status: 503 });
+  }
 }
 
 export async function POST(request: Request) {
-  const gate = await requireCreditApi(request);
+  const gate = await requireCreditApi(request, { requireOperations: true });
   if (!gate.ok) return gate.response;
 
   const body = await request.json().catch(() => null);
@@ -38,6 +43,7 @@ export async function POST(request: Request) {
   const responsavelNome = String(body?.responsavelNome ?? gate.ctx.session?.name ?? "Responsável");
 
   if (cnpj.length !== 14) return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mesReferencia)) return NextResponse.json({ error: "Mês inválido." }, { status: 400 });
 
   const denyCoop = requireCreditCnpj(gate.ctx, cnpj);
   if (denyCoop) return denyCoop;
@@ -50,7 +56,9 @@ export async function POST(request: Request) {
     responsavelUserId: gate.ctx.session?.sub ?? "system",
     responsavelNome,
     comprovanteMemo,
-  });
+  }).catch(() => null);
+
+  if (!result) return NextResponse.json({ ok: false, error: "Não foi possível conferir o repasse. Atualize e confira o fechamento." }, { status: 503 });
 
   if (!result.ok) {
     return NextResponse.json({ error: result.error ?? "Falha ao confirmar repasse." }, { status: 400 });

@@ -4,6 +4,8 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const cli = require.resolve("tsx/cli");
 const fixtures = [
+  "test-repasse-ciclo-completo.ts",
+  "test-hb-operacional-financial-projection.ts",
   "test-hb-payment-retry-service.ts",
   "test-hb-owned-balance-foundation.ts",
   "test-hb-cashback-receivable-projection.ts",

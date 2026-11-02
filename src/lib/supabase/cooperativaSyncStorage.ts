@@ -1,5 +1,5 @@
 import { preservarCotasIngresso } from "@/services/cotaIngressoMerge";
-import { projectCashbackLedgerReceivables } from "./hbCreditCashbackReceivableProjection";
+import { projectOperationalFinancialRecords } from "./hbCreditOperacionalFinancialProjection";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PagamentoDowngradeBloqueado } from "@/services/pagamentoRegistroMerge";
 import { aplicarPreservacaoPagamentosConfirmadosNoOperacionalComAudit } from "@/services/pagamentoIntegridadeService";
@@ -205,8 +205,8 @@ export async function uploadOperacionalSync(
   if (existing && !options?.skipCotaProtection) {
     toUpload = { ...toUpload, arquivosMensais: preservarCotasIngresso(existing.arquivosMensais ?? [], toUpload.arquivosMensais ?? []) };
   }
-  // A cópia do aparelho não pode apagar um crédito confirmado no banco.
-  toUpload = (await projectCashbackLedgerReceivables(supabase, cnpj, toUpload, existing))!;
+  // A cópia do aparelho não pode apagar cashback ou repasse confirmado no banco.
+  toUpload = (await projectOperationalFinancialRecords(supabase, cnpj, toUpload, existing))!;
   const uploaded = await uploadJson(supabase, cnpj, "operacional.json", toUpload);
   if (!uploaded.ok) return uploaded;
   return { ok: true, blockedDowngrades };
@@ -217,7 +217,7 @@ export async function fetchOperacionalSync(
   cnpj: string
 ): Promise<OperacionalSyncPayload | null> {
   const payload = await fetchJson<OperacionalSyncPayload>(supabase, cnpj, "operacional.json");
-  return projectCashbackLedgerReceivables(supabase, cnpj, payload);
+  return projectOperationalFinancialRecords(supabase, cnpj, payload);
 }
 
 /** Tombstone + ficha na nuvem quando a entrega foi apagada via API (não depende só do push do staff). */

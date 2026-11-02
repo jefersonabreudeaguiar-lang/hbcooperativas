@@ -1,0 +1,22 @@
+import assert from "node:assert/strict";
+import { mesCicloEntregasPagamentosCompletos } from "../src/services/repasseCicloEntregasGateService";
+import type { OperacionalSyncPayload } from "../src/lib/supabase/cooperativaSyncStorage";
+
+const base = { fichaCorrida: [], arquivosMensais: [], pagamentosCooperado: [], valoresAvulsosReceber: [] } as unknown as OperacionalSyncPayload;
+const check = (data: OperacionalSyncPayload) => mesCicloEntregasPagamentosCompletos(data, "coop", "2026-11", []);
+const fichas = Array.from({ length: 1501 }, (_, n) => ({ cooperativaId: "coop", cooperadoId: `m${n}`, mesReferencia: "2026-11", status: "pago" }));
+const pagamentos = Array.from({ length: 1500 }, (_, n) => ({ cooperativaId: "coop", cooperadoId: `m${n}`, mesReferencia: "2026-11", status: "confirmado" }));
+const data = { ...base, fichaCorrida: fichas, pagamentosCooperado: pagamentos } as OperacionalSyncPayload;
+assert.deepEqual(check(data).pendentes, ["m1500"], "Participante fora da página do cadastro também bloqueia");
+data.pagamentosCooperado.push({ cooperativaId: "other", cooperadoId: "m1500", mesReferencia: "2026-11", status: "confirmado" } as never);
+assert.equal(check(data).ok, false, "Pagamento de outra cooperativa não quita o ciclo");
+data.pagamentosCooperado.push({ cooperativaId: "coop", cooperadoId: "m1500", mesReferencia: "2026-11", status: "confirmado" } as never);
+assert.equal(check(data).ok, true);
+data.valoresAvulsosReceber = [{ cooperativaId: "coop", cooperadoId: "sem-cadastro", mesReferencia: "2026-11", status: "pendente" } as never];
+assert.deepEqual(check(data).pendentes, ["sem-cadastro"], "Desligamento ou ausência de login não apaga obrigação pendente");
+data.valoresAvulsosReceber[0].status = "pago";
+assert.equal(check(data).ok, true);
+data.fichaCorrida![0].status = "pendente";
+assert.equal(check(data).ok, false, "Pagamento anterior não quita nova ficha pendente");
+assert.equal(mesCicloEntregasPagamentosCompletos(null, "coop", "2026-11", []).ok, false);
+console.log("PASS: ciclo completo, sem limite de cadastro, isolamento de cooperativa, avulsos pendentes e nova ficha bloqueiam repasse.");

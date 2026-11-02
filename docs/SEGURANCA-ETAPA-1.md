@@ -340,3 +340,37 @@ continuarem pendentes.
 - Validação final desta etapa: 16 suítes locais, oito suítes SQL e compilação
   Next/TypeScript em Node 24 aprovadas; pacote de persistência conferido. Auditor
   do banco sem ERROR/WARN, mantendo apenas avisos informativos já conhecidos.
+
+### Repasses completos e Livro Caixa permanente — 02/11/2026
+
+- `20261102222652_hb_credit_app_repasse_snapshot.sql` aplicada somente na homologação:
+  soma/contagem no banco sem corte de mil registros; composição exige liquidação
+  confirmada, recebível liquidado, pagamento lançado e mesmo mês/cooperado/cooperativa.
+  Inconsistência impede tanto o resumo quanto a confirmação. Parcela paga não
+  volta a Em aberto; desconto posterior exige conferência do fechamento.
+- Serviço de confirmação também confere o ciclo. A conferência usa todos os
+  participantes financeiros do mês, independentemente de cadastro paginado ou
+  login ativo, e isola pagamentos por cooperativa. Arquivo/cadastro indisponível
+  não vira quitação. Removidas leituras individuais do cadastro dessa prévia.
+- `20261102223147_hb_credit_operational_book_snapshot.sql` aplicada somente na
+  homologação: cashback e repasses confirmados são lidos em uma única consulta.
+  Pull/push do operacional reconstrói a linha do repasse a partir do banco, com
+  origem única, valor canônico e data brasileira. Mantém sequência já registrada,
+  deduplica aparelhos e restaura linha automática indevidamente excluída.
+- Ativo automaticamente só na homologação; habilitação futura na produção exige
+  migrations e `HB_FINANCIAL_LEDGER_PROJECTION=true` (ou a flag anterior de cashback).
+  Não cobre ainda toda a contabilidade: lançamentos manuais/PIX/Asaas, estornos de
+  períodos liquidados, encerramento anual e concorrência do operacional continuam
+  sujeitos às demais verificações do plano.
+- Testes novos: 1501 parcelas (valor confirmado igual ao resumo), 1501 participantes
+  (último não pago detectado), mês anterior, isolamento, permanência do caixa,
+  deduplicação, sequência, upload atrasado e falha de consulta sem publicar vazio.
+- Dezoito suítes locais, dez suítes SQL e compilação Next/TypeScript em Node 24
+  aprovadas; a compilação foi repetida após o tratamento de arquivo ausente.
+- Consulta ao painel de backups por Computer Use interrompida pelo próprio
+  controle de segurança: URL do navegador Windows não pôde ser confirmada.
+  Nenhuma restauração foi executada. Backup completo/restauração real permanece
+  requisito pendente, não substituído por exportação parcial do script antigo.
+- Instrução vigente do usuário: seguir todas as etapas sem novos pedidos de
+  continuação, publicar os blocos validados na homologação e apresentar evidências
+  e riscos ao fim. **Qualquer publicação no aplicativo oficial aguarda OK explícito.**
