@@ -70,11 +70,6 @@ const CooperadoHbCreditResumoCard = dynamic(
     ),
   { ssr: false, loading: () => null }
 );
-const ContaCoopFilaCloudPanel = dynamic(
-  () =>
-    import("@/components/hb-credit/ContaCoopFilaCloudPanel").then((m) => m.ContaCoopFilaCloudPanel),
-  { ssr: false, loading: () => null }
-);
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import { useReconciliarLivroCaixaGestao } from "@/hooks/useReconciliarLivroCaixaGestao";
 import { StaffPainelSafeRoot } from "@/components/responsavel/StaffPainelSafeRoot";
@@ -1064,7 +1059,6 @@ function AdminDashboard() {
         </Link>
       )}
 
-      {creditFlag.enabled && cnpj.length === 14 && <ContaCoopFilaCloudPanel cnpj={cnpj} />}
 
       {stats ? (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

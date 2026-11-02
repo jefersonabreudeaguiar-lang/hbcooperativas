@@ -13,8 +13,6 @@ import type { ContaCoopLiquidacaoPreview, ContaCoopParceiro } from "@/modules/hb
 import { fetchLiquidacaoPreview, registrarPagamentoMercado } from "@/services/creditApiService";
 import { gerarPixCopiaCola } from "@/utils/pix";
 import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
-import { isHbCreditMercadoNfDispensada } from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
-import Link from "next/link";
 import { Copy, Paperclip, QrCode, Smartphone } from "lucide-react";
 
 interface ContaCoopLiquidacaoPanelProps {
@@ -188,7 +186,7 @@ export function ContaCoopLiquidacaoPanel({
         <div>
           <h3 className="font-semibold text-gray-900">Liquidar mercado parceiro</h3>
           <p className="mt-1 text-sm text-gray-600">
-            Confira as NFs, pague via PIX (QR Code) e anexe o comprovante para concluir a liquidação do mês.
+            Confira os recebíveis, pague via PIX (QR Code) e anexe o comprovante para concluir a liquidação do mês.
           </p>
         </div>
         <div className="grid gap-3 md:grid-cols-3">
@@ -240,65 +238,9 @@ export function ContaCoopLiquidacaoPanel({
         </AlertBanner>
       )}
 
-      {partnerId && (
-        <p className="text-xs text-gray-500">
-          Liquidação HB Créditos usa as <strong>notas fiscais (NF)</strong> conferidas na aba{" "}
-          <strong>Conferir NFs</strong> — não confundir com notas de entrega do PNAE ou do pedido.
-        </p>
-      )}
 
       {preview && (
         <>
-          {preview.fiscalResumo && (
-            <Card className="space-y-3 !p-5">
-              <h4 className="font-semibold text-gray-900">Conferência fiscal × pagamento</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                <div className="rounded-xl bg-gray-50 p-3">
-                  <p className="text-gray-500 text-xs">Vendas no app</p>
-                  <p className="font-bold">{formatCentsBRL(preview.fiscalResumo.totalVendasCents)}</p>
-                </div>
-                <div className="rounded-xl bg-gray-50 p-3">
-                  <p className="text-gray-500 text-xs">NFs conferidas</p>
-                  <p className="font-bold text-green-800">
-                    {formatCentsBRL(preview.fiscalResumo.totalConferidasCents)}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-gray-50 p-3">
-                  <p className="text-gray-500 text-xs">A pagar (elegível)</p>
-                  <p className="font-bold text-green-900">{formatCentsBRL(preview.totalCents)}</p>
-                </div>
-                <div className="rounded-xl bg-gray-50 p-3">
-                  <p className="text-gray-500 text-xs">Pendências NF</p>
-                  <p className="font-bold text-amber-800">
-                    {preview.fiscalResumo.pendentesAnexo +
-                      preview.fiscalResumo.aguardandoConferencia +
-                      preview.fiscalResumo.correcaoPedida}
-                  </p>
-                </div>
-              </div>
-
-              {preview.pagamentoAprovado ? (
-                <AlertBanner variant="info" title="Pagamento aprovado">
-                  {isHbCreditMercadoNfDispensada()
-                    ? "Compras HB Créditos liberadas para recebimento. Use o QR Code PIX abaixo, anexe o comprovante e registre o pagamento."
-                    : "Todas as NFs conferidas. Use o QR Code PIX abaixo, anexe o comprovante e registre o pagamento."}
-                </AlertBanner>
-              ) : (
-                <AlertBanner variant="warning" title="Pagamento bloqueado">
-                  {preview.bloqueioPagamento ??
-                    (isHbCreditMercadoNfDispensada()
-                      ? "O pagamento deste mercado ainda não está liberado."
-                      : "Finalize a conferência fiscal antes de pagar.")}{" "}
-                  {!isHbCreditMercadoNfDispensada() && (
-                    <Link href="/conta-coop?tab=conferir_nf" className="font-semibold underline">
-                      Ir para Conferir NFs
-                    </Link>
-                  )}
-                </AlertBanner>
-              )}
-            </Card>
-          )}
-
           <Card className="space-y-4 !p-5 border-2 border-green-200 bg-green-50/30">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -316,11 +258,6 @@ export function ContaCoopLiquidacaoPanel({
             {motivoPagamentoBloqueado && (
               <AlertBanner variant="warning" title="Pagamento ainda não liberado">
                 {motivoPagamentoBloqueado}{" "}
-                {!preview.pagamentoAprovado && (
-                  <Link href="/conta-coop?tab=conferir_nf" className="font-semibold underline">
-                    Ir para Conferir NFs
-                  </Link>
-                )}
               </AlertBanner>
             )}
 

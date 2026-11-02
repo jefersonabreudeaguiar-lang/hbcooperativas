@@ -21,13 +21,10 @@ import {
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import type { ContaCoopRecebiveisResumo } from "@/modules/hb-credit/types";
 import type { ContaCoopCompraEstornavel, ContaCoopIntent, ContaCoopParceiro, ContaCoopSettlement, ContaCoopSolicitacaoEstorno } from "@/modules/hb-credit/types";
-import { ContaCoopFiscalNotesMercadoPanel } from "@/components/hb-credit/ContaCoopFiscalNotesMercadoPanel";
-import { MercadoHbCreditNfDispensadaAviso } from "@/components/hb-credit/MercadoHbCreditNfDispensadaAviso";
 import { MercadoContaCoopTermosGate } from "@/components/hb-credit/MercadoContaCoopTermosGate";
-import { isHbCreditMercadoNfDispensada } from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
 import { textoResumoAcordoDescontoMercado, getClausulasTermoMercadoContaCoop, TERMO_MERCADO_CONTA_COOP_VERSAO } from "@/config/termoUsoMercadoContaCoop";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
-import { cn, formatCpfCnpj, formatDateTime, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+import { cn, formatCpfCnpj, formatDateTime, formatMesReferencia } from "@/utils/format";
 import { Eye } from "lucide-react";
 import {
   clearHbCreditMercadoCobrancaDraft,
@@ -101,7 +98,6 @@ function MercadoParceiroContent() {
   const [estornoFormError, setEstornoFormError] = useState("");
   const [estornoFormSuccess, setEstornoFormSuccess] = useState("");
   const estornoFormRef = useRef<HTMLDivElement>(null);
-  const [fiscalPendentes, setFiscalPendentes] = useState(0);
   const [cooperativaNome, setCooperativaNome] = useState("Cooperativa parceira");
   const [needsTermsAcceptance, setNeedsTermsAcceptance] = useState(false);
   const [pixChangePending, setPixChangePending] = useState(false);
@@ -122,7 +118,6 @@ function MercadoParceiroContent() {
       setIntents(data.intents ?? []);
       setRecebiveis(data.recebiveis ?? []);
       setSettlements(data.settlements ?? []);
-      setFiscalPendentes(Number(data.fiscalPendentes ?? 0));
       setCooperativaNome(data.cooperativaNome ?? "Cooperativa parceira");
       setNeedsTermsAcceptance(Boolean(data.needsTermsAcceptance));
       setPixChangePending(Boolean(data.pixChange?.pending));
@@ -358,7 +353,6 @@ function MercadoParceiroContent() {
   };
 
   const pendenteConfirmacao = settlements.find((s) => s.status === "aguardando_mercado");
-  const mesReferencia = getCurrentMesReferencia();
 
   const irParaConfirmacaoLiquidacao = () => {
     setTab("mais");
@@ -410,12 +404,6 @@ function MercadoParceiroContent() {
         <Button size="sm" variant="secondary" onClick={() => void reload()} disabled={loading}>{loading ? "Atualizando…" : "Atualizar saldos"}</Button>
       </header>
 
-      {parceiro && (
-        <MercadoHbCreditNfDispensadaAviso
-          partnerId={parceiro.id}
-          cooperativaCnpj={parceiro.cooperativaCnpj}
-        />
-      )}
 
       <ContaCoopSegmentTabs
         tabs={[
@@ -449,20 +437,6 @@ function MercadoParceiroContent() {
             <p className="mt-1 text-xs text-green-200">Todos os meses · valor líquido das vendas aguardando repasse</p>
             <p className="mt-2 text-xs text-green-100">Consultado em {new Date(resumoRecebiveis.consultadoEm).toLocaleString("pt-BR")}{error ? " · Não atualizado: tente novamente" : ""}</p>
             {resumoRecebiveis.emRevisaoCents > 0 && <p className="mt-2 text-sm">Em revisão: {formatCentsBRL(resumoRecebiveis.emRevisaoCents)}</p>}
-            {!isHbCreditMercadoNfDispensada() && (
-            <div className="mt-5 space-y-2">
-              <div className="flex justify-between text-xs text-green-100">
-                <span>Com NF conferida {formatCentsBRL(resumoMercado.elegivelCents)}</span>
-                <span>Aguardando NF {formatCentsBRL(resumoMercado.abertoCents)}</span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-green-900/40">
-                <div
-                  className="h-full rounded-full bg-white/90 transition-all"
-                  style={{ width: `${resumoMercado.nfPercent}%` }}
-                />
-              </div>
-            </div>
-            )}
             {(resumoMercado.emLiquidacaoCents > 0 || resumoMercado.aguardandoAssinaturaCents > 0) && (
               <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-green-100">
                 {resumoMercado.emLiquidacaoCents > 0 && (
@@ -480,21 +454,17 @@ function MercadoParceiroContent() {
               <p className="text-xs text-gray-500">Pronto p/ pagamento</p>
               <p className="mt-1 text-lg font-bold text-gray-900">
                 {formatCentsBRL(
-                  isHbCreditMercadoNfDispensada()
-                    ? resumoMercado.aReceberCents
-                    : resumoMercado.elegivelCents
+                  resumoMercado.aReceberCents
                 )}
               </p>
             </Card>
             <Card className="!p-4 text-center">
               <p className="text-xs text-gray-500">
-                {isHbCreditMercadoNfDispensada() ? "Aguardando confirmação" : "Aguardando NF"}
+                {"Aguardando confirmação"}
               </p>
               <p className="mt-1 text-lg font-bold text-gray-900">
                 {formatCentsBRL(
-                  isHbCreditMercadoNfDispensada()
-                    ? resumoMercado.aguardandoAssinaturaCents
-                    : resumoMercado.abertoCents
+                  resumoMercado.aguardandoAssinaturaCents
                 )}
               </p>
             </Card>
@@ -998,7 +968,6 @@ function MercadoParceiroContent() {
             </div>
           )}
 
-          {ativo && !isHbCreditMercadoNfDispensada() && <ContaCoopFiscalNotesMercadoPanel />}
 
           <Card className="p-5 space-y-2">
             <h3 className="font-semibold">Histórico de liquidações</h3>
@@ -1039,12 +1008,6 @@ function MercadoParceiroContent() {
         {success && (
           <AlertBanner variant="info" title="Tudo certo">
             {success}
-          </AlertBanner>
-        )}
-        {ativo && !isHbCreditMercadoNfDispensada() && fiscalPendentes > 0 && (
-          <AlertBanner variant="warning" title="Notas fiscais pendentes">
-            Você tem {fiscalPendentes} venda(s) sem NF conferida em {formatMesReferencia(mesReferencia)}. Anexe as notas
-            na aba Mais para liberar o pagamento.
           </AlertBanner>
         )}
         {pendente && (

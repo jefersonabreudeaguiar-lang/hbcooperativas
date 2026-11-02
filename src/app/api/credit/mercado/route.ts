@@ -13,7 +13,6 @@ import {
   hasPendingPartnerPinResetRequest,
   updatePartnerPix,
 } from "@/lib/supabase/contaCoopStorage";
-import { countPartnerFiscalPending } from "@/lib/supabase/hbCreditFiscalNotesStorage";
 import { promoverRecebiveisParceiroSemNf } from "@/lib/supabase/hbCreditReceivableStorage";
 import { isHbCreditMercadoNfDispensada } from "@/lib/hb-credit/hbCreditMercadoNfPolicy";
 import { getSettlementComprovanteSignedUrl } from "@/lib/supabase/hbCreditSettlementStorage";
@@ -25,7 +24,6 @@ import {
 import type { ContaCoopSettlement } from "@/modules/hb-credit/types";
 import { requireCreditApi } from "@/lib/security/creditGuard";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
-import { getCurrentMesReferencia } from "@/utils/format";
 
 export async function GET(request: Request) {
   const gate = await requireCreditApi(request);
@@ -48,13 +46,11 @@ export async function GET(request: Request) {
       await promoverRecebiveisParceiroSemNf(gate.ctx.supabase, parceiro.id);
     }
 
-    const mesReferencia = getCurrentMesReferencia();
-    const [intents, snapshot, settlementsRaw, hasPin, fiscalPendentes, nomeCooperativa, pixChange, pinResetPending] = await Promise.all([
+    const [intents, snapshot, settlementsRaw, hasPin, nomeCooperativa, pixChange, pinResetPending] = await Promise.all([
       listIntentsParceiro(gate.ctx.supabase, parceiro.id),
       getMarketReceivableSnapshot(gate.ctx.supabase, parceiro.cooperativaCnpj, parceiro.id),
       listSettlementsForPartner(gate.ctx.supabase, parceiro.id),
       hasPartnerFinancialPin(gate.ctx.supabase, parceiro.id),
-      countPartnerFiscalPending(gate.ctx.supabase, parceiro.id, mesReferencia).catch(() => 0),
       getCooperativaNomeByCnpj(gate.ctx.supabase, parceiro.cooperativaCnpj),
       getPartnerPixChangeStatus(gate.ctx.supabase, parceiro.id),
       hasPendingPartnerPinResetRequest(gate.ctx.supabase, parceiro.cooperativaCnpj, parceiro.id),
@@ -86,8 +82,6 @@ export async function GET(request: Request) {
       hasPin,
       pinLocked,
       pinResetPending,
-      fiscalPendentes,
-      mesReferenciaFiscal: mesReferencia,
       cooperativaNome,
       needsTermsAcceptance,
       pixChange,

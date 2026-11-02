@@ -95,13 +95,6 @@ const ContaCoopLiquidacaoPanel = dynamic(
     })),
   { loading: panelFallback, ssr: false }
 );
-const ContaCoopFiscalNotesConferenciaPanel = dynamic(
-  () =>
-    import("@/components/hb-credit/ContaCoopFiscalNotesConferenciaPanel").then((m) => ({
-      default: m.ContaCoopFiscalNotesConferenciaPanel,
-    })),
-  { loading: panelFallback, ssr: false }
-);
 const ContaCoopEstornosPanel = dynamic(
   () =>
     import("@/components/hb-credit/ContaCoopEstornosPanel").then((m) => ({
@@ -231,7 +224,7 @@ function mergeCreditosBaseMaps(
   return next;
 }
 
-type Tab = "painel" | "limites" | "mercados" | "descontos" | "conferir_nf" | "liquidar" | "estornos";
+type Tab = "painel" | "limites" | "mercados" | "descontos" | "liquidar" | "estornos";
 
 export default function ContaCoopPage() {
   return (
@@ -252,7 +245,6 @@ function ContaCoopContent() {
   const initialTab = searchParams.get("tab");
   const [tab, setTab] = useState<Tab>(() => {
     if (
-      initialTab === "conferir_nf" ||
       initialTab === "liquidar" ||
       initialTab === "estornos" ||
       initialTab === "limites" ||
@@ -851,7 +843,7 @@ function ContaCoopContent() {
   }, [cnpj, tabActive]);
 
   useEffect(() => {
-    if (!tabActive || !cnpj || !["mercados", "conferir_nf", "liquidar", "estornos"].includes(tab)) return;
+    if (!tabActive || !cnpj || !["mercados", "liquidar", "estornos"].includes(tab)) return;
     const initial = window.setTimeout(() => void loadParceiros(), 0);
     const refresh = () => { if (document.visibilityState === "visible") void loadParceiros(true); };
     window.addEventListener("focus", refresh);
@@ -1282,7 +1274,6 @@ function ContaCoopContent() {
           { id: "limites", label: "Limites" },
           { id: "mercados", label: "Mercados" },
           { id: "descontos", label: "Descontos" },
-          { id: "conferir_nf", label: "Conferir NFs" },
           { id: "liquidar", label: "Liquidar" },
           { id: "estornos", label: "Estornos" },
         ]}
@@ -1752,16 +1743,6 @@ function ContaCoopContent() {
         </div>
       )}
 
-      {tab === "conferir_nf" && (
-        <div>
-          <ContaCoopFiscalNotesConferenciaPanel
-            cnpj={cnpj}
-            parceiros={parceiros}
-            cooperadoNome={cooperadoNome}
-            responsavelNome={user?.name ?? "Responsável"}
-          />
-        </div>
-      )}
 
       {tab === "liquidar" && (
         <div>
