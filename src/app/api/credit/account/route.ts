@@ -134,7 +134,7 @@ export async function POST(request: Request) {
   if (action === "cashback_to_receivable") {
     const mesReferencia = String(body?.mesReferencia ?? "").trim();
     const valorAvulsoId = String(body?.valorAvulsoId ?? "").trim();
-    if (!/^\d{4}-\d{2}$/.test(mesReferencia)) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mesReferencia)) {
       return NextResponse.json({ error: "Mês de referência inválido." }, { status: 400 });
     }
     if (!valorAvulsoId) {

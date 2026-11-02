@@ -203,3 +203,43 @@ continuarem pendentes.
   de cashback. Ainda pendentes a homologação visual, concorrência em conexões
   distintas, sincronização completa com Livro Caixa, recuperação de todas as
   etapas de liquidação e restauração integral. Não liberar produção nesta fase.
+
+## Cashback para A receber — registro durável
+
+- Revisão confirmou duas gravações separadas no fluxo antigo: baixa do cashback
+  no RPC e criação do avulso no aparelho/operacional.json. Além disso, o RPC antigo
+  tentava inserir ledger sem transaction_id, enquanto a coluna é NOT NULL na
+  homologação. Não foi copiado sem revisão.
+- `20261102184911_hb_credit_cashback_receivable_durable.sql` aplicada só na
+  homologação: baixa, transação ADJUSTMENT, ledger e auditoria gravados juntos.
+  O crédito não depende mais de a segunda gravação do aparelho ser concluída.
+  Nenhum limite ou dívida HB é alterado pela conversão para A receber.
+- Chave de repetição fica restrita à cooperativa, ao cooperado e ao mês. Repetição
+  retorna a conversão anterior antes de consultar saldo novo; reaproveitamento do
+  identificador por outro cooperado/mês é recusado. Mês 13 também é recusado.
+- Leitura `hb_credit_cashback_receivables_snapshot` é agregada, sem limite de
+  página, e restrita ao servidor. A cópia operacional reconstrói esses avulsos
+  pela origem financeira em leituras e gravações, sem duplicação.
+- Ativação restrita: automática quando HB_HOMOLOGATION_ONLY=true; fora da
+  homologação exige HB_CASHBACK_LEDGER_PROJECTION=true e instalação prévia das
+  duas rotinas. Não habilitado nem aplicado no banco de produção.
+- Projeção preserva o estado pago conhecido na cópia do servidor ao receber
+  cópia antiga do aparelho. Não presume que um pagamento do mesmo mês quitou
+  este crédito específico. A preservação não substitui a futura identificação
+  canônica dos avulsos efetivamente incluídos em cada pagamento.
+- Operacional indisponível com créditos existentes gera falha explícita; não
+  cria um arquivo vazio que poderia sobrescrever outros lançamentos. Erros de
+  leitura do ledger também não são tratados como saldo zero.
+- `supabase/tests/hb_cashback_receivable_durable.sql` passou: baixa/destino,
+  dívida preservada, recuperação, repetição sem consumir cashback novo,
+  cooperado/mês/cooperativa e nova conversão posterior. Fixtures revertidas.
+- `test-hb-cashback-receivable-projection.ts` passou: reconstrução sem cópia
+  local, dedupe, pago anterior preservado, não presumir quitação por competência,
+  falha de consulta e recusa de origem inconsistente. As 14 suítes locais passaram.
+- Permanecem duas rotinas ausentes: transferência entre cooperados e sweep de
+  cashback para crédito. As versões antigas aumentam o limite liberado sem
+  modelar separadamente o crédito próprio recebido, podendo divergir do snapshot
+  de lastro em entregas. Exigem solução própria antes de serem instaladas.
+- Pendentes: fluxo visual por perfil, perda de resposta/rede em aparelho real,
+  pagamento/cancelamento dos créditos derivados, identificação canônica da
+  quitação e validação da leitura agregada da taxa HB antes do primeiro repasse.
