@@ -1,6 +1,8 @@
 /**
  * Leitura do painel gestão — preferir o snapshot mais rico (warm × lastro).
  */
+import { mergeArquivosMensaisFromCloud } from "@/services/notaPedidoService";
+import { unirValoresAvulsosReceber } from "@/services/valoresAvulsosReceberService";
 import type { AppData } from "@/types";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import {
@@ -10,6 +12,15 @@ import {
 } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { appDataParaPagarCooperadosResponsavel } from "@/services/responsavelPainelIndex";
 import { aplicarCatalogoCloudLeitura } from "@/lib/staff/staffCatalogoCloudLeitura";
+const riquezaCache = new WeakMap<AppData, Map<string, number>>();
+function riqueza(data: AppData, coopId?: string): number {
+  let cache = riquezaCache.get(data);
+  if (!cache) { cache = new Map(); riquezaCache.set(data, cache); }
+  const key = coopId ?? "";
+  let value = cache.get(key);
+  if (value === undefined) { value = staffGestaoRiquezaTotal(medirRiquezaStaffGestao(data, coopId)); cache.set(key, value); }
+  return value;
+}
 const catalogoAlinhadoCache = new WeakMap<AppData, { atual: AppData; data: AppData }>();
 
 /** O lastro financeiro não pode substituir o catálogo atual por uma cópia antiga. */
@@ -22,9 +33,11 @@ export function alinharCatalogoSnapshotStaff(base: AppData, atual: AppData): App
     ...atual.produtosInstituicao.map((p) => p.cooperativaId),
     ...(atual.instituicoesExcluidas ?? []).map((e) => e.cooperativaId),
   ]);
-  if (ids.size === 0 || base === atual) return base;
+
   const next = {
     ...base,
+    arquivosMensais: mergeArquivosMensaisFromCloud(atual, base.arquivosMensais, atual.arquivosMensais),
+    valoresAvulsosReceber: unirValoresAvulsosReceber(base.valoresAvulsosReceber, atual.valoresAvulsosReceber),
     instituicoes: [...base.instituicoes.filter((i) => !ids.has(i.cooperativaId)), ...atual.instituicoes],
     produtosInstituicao: [...base.produtosInstituicao.filter((p) => !ids.has(p.cooperativaId)), ...atual.produtosInstituicao],
     instituicoesExcluidas: [...(base.instituicoesExcluidas ?? []).filter((e) => !ids.has(e.cooperativaId)), ...(atual.instituicoesExcluidas ?? [])],
@@ -40,8 +53,8 @@ export function escolherStaffGestaoSnapshotParaLeitura(coopId?: string): AppData
   if (!isAppDataWarm()) return lkg ? aplicarCatalogoCloudLeitura(lkg) : null;
   const warm = getData();
   if (!lkg) return aplicarCatalogoCloudLeitura(warm);
-  const rWarm = staffGestaoRiquezaTotal(medirRiquezaStaffGestao(warm, coopId));
-  const rLkg = staffGestaoRiquezaTotal(medirRiquezaStaffGestao(lkg, coopId));
+  const rWarm = riqueza(warm, coopId);
+  const rLkg = riqueza(lkg, coopId);
   return aplicarCatalogoCloudLeitura(rLkg > rWarm ? alinharCatalogoSnapshotStaff(lkg, warm) : warm);
 }
 

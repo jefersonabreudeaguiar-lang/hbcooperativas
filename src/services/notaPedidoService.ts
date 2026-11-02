@@ -1,3 +1,4 @@
+import { mergeCotaIngressoState } from "@/services/cotaIngressoMerge";
 import type {
   AppData,
   NotaPedido,
@@ -579,6 +580,7 @@ export function upsertArquivoMensal(
       descontoAvulso: patch.descontoAvulso,
       descontoAvulsoMotivo: patch.descontoAvulsoMotivo,
       cotaIngressoPaga: patch.cotaIngressoPaga,
+      cotaIngressoUpdatedAt: patch.cotaIngressoPaga !== undefined ? now : undefined,
       contaCoopDescontos: patch.contaCoopDescontos,
       contaCoopDescontosUpdatedAt: patch.contaCoopDescontosUpdatedAt,
       updatedAt: now,
@@ -599,6 +601,7 @@ export function upsertArquivoMensal(
     descontoAvulso: patch.descontoAvulso !== undefined ? patch.descontoAvulso : cur.descontoAvulso,
     descontoAvulsoMotivo: patch.descontoAvulsoMotivo !== undefined ? patch.descontoAvulsoMotivo : cur.descontoAvulsoMotivo,
     cotaIngressoPaga: patch.cotaIngressoPaga !== undefined ? patch.cotaIngressoPaga : cur.cotaIngressoPaga,
+    cotaIngressoUpdatedAt: patch.cotaIngressoPaga !== undefined ? now : cur.cotaIngressoUpdatedAt,
     contaCoopDescontos: patch.contaCoopDescontos !== undefined ? patch.contaCoopDescontos : cur.contaCoopDescontos,
     contaCoopDescontosUpdatedAt:
       patch.contaCoopDescontosUpdatedAt !== undefined
@@ -622,29 +625,8 @@ function arquivoMensalTime(a: ArquivoMensalCooperado): number {
 
 /** Mantém cota paga; só desmarca se o lado mais recente tiver false explícito
  *  E o outro lado não for true com mesmo/maior updatedAt (responsável não “volta sozinho”). */
-function mergeCotaIngressoPagaField(
-  a: ArquivoMensalCooperado,
-  b: ArquivoMensalCooperado
-): boolean | undefined {
-  const aTrue = a.cotaIngressoPaga === true;
-  const bTrue = b.cotaIngressoPaga === true;
-  const aFalse = a.cotaIngressoPaga === false;
-  const bFalse = b.cotaIngressoPaga === false;
-
-  if (aTrue && bTrue) return true;
-  if (aTrue && !bFalse) return true;
-  if (bTrue && !aFalse) return true;
-
-  // Um true e um false: só aceita false se o registro com false for estritamente mais novo.
-  if (aTrue && bFalse) {
-    return arquivoMensalTime(b) > arquivoMensalTime(a) ? false : true;
-  }
-  if (bTrue && aFalse) {
-    return arquivoMensalTime(a) > arquivoMensalTime(b) ? false : true;
-  }
-
-  if (aFalse || bFalse) return false;
-  return undefined;
+function mergeCotaIngressoPagaField(a: ArquivoMensalCooperado, b: ArquivoMensalCooperado): boolean | undefined {
+  return mergeCotaIngressoState(a, b).cotaIngressoPaga;
 }
 
 function contaCoopDescontosHbTime(arquivo: ArquivoMensalCooperado): number {
@@ -708,6 +690,7 @@ function mergeParArquivoMensal(
     descontoAvulso: newer.descontoAvulso ?? older.descontoAvulso,
     descontoAvulsoMotivo: newer.descontoAvulsoMotivo ?? older.descontoAvulsoMotivo,
     cotaIngressoPaga: mergeCotaIngressoPagaField(a, b),
+    cotaIngressoUpdatedAt: mergeCotaIngressoState(a, b).cotaIngressoUpdatedAt,
     contaCoopDescontos: mergeContaCoopDescontosField(hbLocal, hbCloud),
     contaCoopDescontosUpdatedAt:
       contaCoopDescontosHbTime(a) >= contaCoopDescontosHbTime(b)
@@ -754,6 +737,8 @@ export function overlayContaCoopDescontosLocalAposReplace(
     const key = arquivoMensalSyncKey(data, cloud);
     const local = localCoop.find((a) => arquivoMensalSyncKey(data, a) === key);
     if (!local) return cloud;
+    const cota = mergeCotaIngressoPagaField(local, cloud);
+    cloud = { ...cloud, cotaIngressoPaga: cota, cotaIngressoUpdatedAt: mergeCotaIngressoState(local, cloud).cotaIngressoUpdatedAt };
     const locaisComTx = (local.contaCoopDescontos ?? []).filter((d) => Boolean(d.hbTransactionId?.trim()));
     if (!locaisComTx.length) return cloud;
     const merged = mergeContaCoopDescontosField({ ...local, contaCoopDescontos: locaisComTx }, cloud);
@@ -772,7 +757,7 @@ export function overlayContaCoopDescontosLocalAposReplace(
     const key = arquivoMensalSyncKey(data, local);
     if (seen.has(key)) continue;
     const temTx = (local.contaCoopDescontos ?? []).some((d) => Boolean(d.hbTransactionId?.trim()));
-    if (!temTx) continue;
+    if (!temTx && local.cotaIngressoPaga === undefined) continue;
     out.push(local);
     seen.add(key);
   }

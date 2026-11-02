@@ -484,6 +484,8 @@ export interface ArquivoMensalCooperado {
   descontoAvulsoMotivo?: string;
   /** Responsável confirma pagamento da cota de ingresso. */
   cotaIngressoPaga?: boolean;
+  /** Data da alteração explícita da cota, independente de outras edições do arquivo. */
+  cotaIngressoUpdatedAt?: string;
   /** Compras HB Créditos sincronizadas da nuvem — abatem do valor líquido a receber. */
   contaCoopDescontos?: Array<{
     motivo: string;

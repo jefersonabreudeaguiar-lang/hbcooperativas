@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard, History, Users, ChevronDown, Pencil, RefreshCw, Eye } from "lucide-react";
 import { useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
@@ -1051,10 +1051,15 @@ function FichaCorridaPageInner() {
     [user, isCooperado, pushOperacional]
   );
 
+  const [cotaSaving, setCotaSaving] = useState(false);
+  const [cotaError, setCotaError] = useState("");
+  const cotaSavingRef = useRef(false);
   const confirmarCotaIngressoPaga = useCallback(() => {
+    if (cotaSavingRef.current) return;
     if (!user || !cooperadoSelecionadoId || !coopId || isCooperado) return;
     if (!check("ficha_corrida", "edit")) return;
-    if (getStatusCotaCooperado(getData(), cooperadoSelecionadoId, mesAtivo) === "paga") return;
+    if (getStatusCotaCooperado(getData(), cooperadoSelecionadoId, mesAtivo) === "paga" && !cotaError) return;
+    cotaSavingRef.current = true; setCotaSaving(true); setCotaError("");
 
     const next = updateData((d) =>
       addAuditEntry(setCotaIngressoCooperado(d, cooperadoSelecionadoId, coopId, mesAtivo, true), {
@@ -1068,25 +1073,32 @@ function FichaCorridaPageInner() {
     );
 
     void (async () => {
-      const cnpj = await resolveCooperativaCnpj(next, coopId, user);
-      if (cnpj) await pushOperacionalToCloud(cnpj, next, coopId, { authoritative: true });
+      try {
+        const cnpj = await resolveCooperativaCnpj(next, coopId, user);
+        if (!cnpj) throw new Error("Não foi possível identificar a cooperativa para salvar a cota.");
+        await pushOperacionalToCloud(cnpj, next, coopId, { authoritative: true, throwOnError: true, skipBulkCooperadosCloudPush: true });
+      } catch (e) { setCotaError(e instanceof Error ? e.message : "Não foi possível salvar a cota na nuvem."); }
+      finally { cotaSavingRef.current = false; setCotaSaving(false); }
     })();
-  }, [user, cooperadoSelecionadoId, coopId, isCooperado, mesAtivo, check]);
+  }, [user, cooperadoSelecionadoId, coopId, isCooperado, mesAtivo, check, cotaError]);
+
+  useEffect(() => { const timer = window.setTimeout(() => setCotaError(""), 0); return () => window.clearTimeout(timer); }, [cooperadoSelecionadoId, mesAtivo]);
 
   const blocoCotaIngressoResponsavel =
     !isCooperado && cooperadoSelecionadoId && check("ficha_corrida", "edit") ? (
       <div className="flex flex-wrap items-center gap-3 mb-4">
+        {cotaError && <div className="w-full text-sm text-red-700" role="alert">{cotaError}<Button size="sm" variant="secondary" className="ml-2" onClick={confirmarCotaIngressoPaga} disabled={cotaSaving}>Tentar salvar novamente</Button></div>}
         {statusCota === "paga" ? (
           <span className="inline-flex items-center gap-1 text-sm font-medium text-green-700 bg-green-50 px-3 py-1 rounded-full">
-            <CheckCircle2 size={14} /> Cota paga · {formatMesReferencia(mesAtivo)}
+            <CheckCircle2 size={14} /> {cotaSaving ? "Salvando cota…" : cotaError ? "Cota pendente de sincronização" : "Cota paga"} · {formatMesReferencia(mesAtivo)}
           </span>
         ) : (
           <>
             <span className="inline-flex items-center gap-1 text-sm font-bold text-red-600 bg-red-50 px-3 py-1 rounded-full border border-red-200">
               Cota não paga · {formatMesReferencia(mesAtivo)}
             </span>
-            <Button size="sm" variant="secondary" onClick={confirmarCotaIngressoPaga}>
-              Confirmar cota paga
+            <Button size="sm" variant="secondary" onClick={confirmarCotaIngressoPaga} disabled={cotaSaving}>
+              {cotaSaving ? "Salvando cota…" : "Confirmar cota paga"}
             </Button>
           </>
         )}

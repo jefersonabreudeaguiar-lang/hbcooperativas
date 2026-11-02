@@ -2027,6 +2027,7 @@ export async function pushOperacionalToCloud(
     authoritative?: boolean;
     skipOperationalResetPush?: boolean;
     forceOperacionalPush?: boolean;
+    throwOnError?: boolean;
     /** Evita N POST /api/cooperados antes do operacional (conferência / notas). */
     skipBulkCooperadosCloudPush?: boolean;
   }
@@ -2061,6 +2062,7 @@ export async function pushOperacionalToCloudInternal(
     authoritative?: boolean;
     skipOperationalResetPush?: boolean;
     forceOperacionalPush?: boolean;
+    throwOnError?: boolean;
     skipBulkCooperadosCloudPush?: boolean;
   }
 ): Promise<void> {
@@ -2075,9 +2077,11 @@ export async function pushOperacionalToCloudInternal(
 
   let bundle: Awaited<ReturnType<typeof fetchSyncBundle>> | null = await fetchSyncBundle(digits);
   if (cloudOperacionalRestoreAtivo(bundle?.operacional) && !options?.forceOperacionalPush) {
+    if (options?.throwOnError) throw new Error("Atualização dos dados em andamento. Tente salvar a cota novamente em instantes.");
     return;
   }
   if (!bundle?.operacional && !options?.forceOperacionalPush) {
+    if (options?.throwOnError) throw new Error("Não foi possível consultar os dados na nuvem para salvar a cota.");
     return;
   }
 
@@ -2250,11 +2254,12 @@ export async function pushOperacionalToCloudInternal(
         json.code ?? "",
         json.error ?? res.statusText
       );
+      if (options?.throwOnError) throw new Error(json.error ?? "Não foi possível salvar na nuvem. Tente novamente.");
       return;
     }
     lastOperacionalPushFingerprint.set(pushKey, fingerprint);
-  } catch {
-    /* offline */
+  } catch (error) {
+    if (options?.throwOnError) throw error;
   }
 }
 

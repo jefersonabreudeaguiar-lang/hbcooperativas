@@ -1,3 +1,4 @@
+import { preservarCotasIngresso } from "@/services/cotaIngressoMerge";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PagamentoDowngradeBloqueado } from "@/services/pagamentoRegistroMerge";
 import { aplicarPreservacaoPagamentosConfirmadosNoOperacionalComAudit } from "@/services/pagamentoIntegridadeService";
@@ -155,6 +156,8 @@ export type UploadOperacionalSyncOptions = {
   existingOperacional?: OperacionalSyncPayload | null;
   /** Uso interno / break-glass futuro — não usar no fluxo normal. */
   skipPagamentoConfirmadoProtection?: boolean;
+  /** Somente reset administrativo explícito da cota. */
+  skipCotaProtection?: boolean;
 };
 
 export type UploadOperacionalSyncResult =
@@ -198,6 +201,9 @@ export async function uploadOperacionalSync(
     ).payload;
   }
 
+  if (existing && !options?.skipCotaProtection) {
+    toUpload = { ...toUpload, arquivosMensais: preservarCotasIngresso(existing.arquivosMensais ?? [], toUpload.arquivosMensais ?? []) };
+  }
   const uploaded = await uploadJson(supabase, cnpj, "operacional.json", toUpload);
   if (!uploaded.ok) return uploaded;
   return { ok: true, blockedDowngrades };

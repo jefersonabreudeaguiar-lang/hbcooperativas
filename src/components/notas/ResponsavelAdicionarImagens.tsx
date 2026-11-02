@@ -87,8 +87,8 @@ export default function ResponsavelAdicionarImagens({ coopId, cooperados, instit
 
   if (!permit) return null;
   return <section className="rounded-xl border bg-white p-5 mb-6 space-y-4" aria-labelledby="adicionar-imagens-titulo">
-    <div><h2 id="adicionar-imagens-titulo" className="text-lg font-bold text-gray-900">Adicionar imagens de entrega</h2>
-      <p className="text-sm text-gray-600 mt-1">Selecione o cooperado e as imagens da mesma entrega. Depois do envio, confira os itens e valores na fila.</p></div>
+    <div><h2 id="adicionar-imagens-titulo" className="text-lg font-bold text-gray-900">Adicionar serviço</h2>
+      <p className="text-sm text-gray-600 mt-1">Selecione o cooperado e adicione até 30 fotos do mesmo serviço. Depois do envio, confira os itens e valores na fila.</p></div>
     <fieldset disabled={locked} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="text-sm font-medium">Cooperado
@@ -101,10 +101,21 @@ export default function ResponsavelAdicionarImagens({ coopId, cooperados, instit
           </select></label>
         <label className="text-sm font-medium">Data da entrega<input type="date" className="mt-1 w-full rounded-lg border p-3" value={dataEntrega} onChange={e => setDataEntrega(e.target.value)} /></label>
       </div>
-      <label className="block text-sm font-medium">Imagens da entrega
-        <input ref={inputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" className="mt-2 block w-full text-sm" onChange={e => { setFiles(Array.from(e.target.files ?? [])); setError(""); }} />
-      </label>
-      {files.length > 0 && <ul className="text-sm text-gray-600 max-h-40 overflow-auto">{files.map((f, i) => <li key={`${i}-${f.name}`} className="break-words">{i + 1}. {f.name}</li>)}</ul>}
+      <div className="space-y-2">
+        <input ref={inputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" className="hidden" aria-label="Selecionar fotos do serviço" onChange={e => {
+          const incoming = Array.from(e.target.files ?? []);
+          const next = [...files];
+          for (const file of incoming) {
+            if (!next.some(f => f.name === file.name && f.size === file.size && f.lastModified === file.lastModified)) next.push(file);
+          }
+          if (next.length > MAX_FOTOS_POR_SESSAO_ENTREGA) setError(`Selecione até ${MAX_FOTOS_POR_SESSAO_ENTREGA} fotos por serviço.`);
+          else { setFiles(next); setError(""); }
+          e.target.value = "";
+        }} />
+        <button type="button" onClick={() => inputRef.current?.click()} className="rounded-lg border border-green-700 px-4 py-2 font-semibold text-green-800 disabled:opacity-50">Adicionar fotos</button>
+        <p className="text-xs text-gray-600">Selecione várias fotos de uma vez ou clique novamente para acrescentar mais. {files.length}/{MAX_FOTOS_POR_SESSAO_ENTREGA} fotos.</p>
+      </div>
+      {files.length > 0 && <ul className="space-y-2 text-sm text-gray-600 max-h-48 overflow-auto">{files.map((f, i) => <li key={`${i}-${f.name}`} className="flex items-center justify-between gap-3"><span className="break-all">{i + 1}. {f.name}</span><button type="button" className="shrink-0 rounded border px-2 py-1 text-red-700" aria-label={`Remover foto ${i + 1}`} onClick={() => setFiles(current => current.filter((_, index) => index !== i))}>Remover</button></li>)}</ul>}
       <label className="block text-sm font-medium">Observações (opcional)<textarea className="mt-1 w-full rounded-lg border p-3" rows={2} value={observacoes} onChange={e => setObservacoes(e.target.value)} /></label>
     </fieldset>
     {error && <p role="alert" className="text-sm text-red-700">{error}{hasPending && " As imagens confirmadas serão reaproveitadas ao tentar novamente."}</p>}

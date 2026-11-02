@@ -4639,7 +4639,7 @@ export default function NotasPedidoStaffMain() {
           </button>
           {check("notas_pedido", "create") && <button type="button" data-adicionar-imagens="true" onClick={() => { setImagensVisitado(true); setAdicionarImagens(true); }} aria-pressed={adicionarImagens}
             className={cn("flex-1 min-w-[7rem] px-3 py-2.5 text-sm font-semibold rounded-lg transition-colors", adicionarImagens ? "bg-green-600 text-white shadow-sm" : "text-gray-600 hover:bg-gray-100")}>
-            Adicionar imagens
+            Adicionar serviço
           </button>}
         </nav>
       )}

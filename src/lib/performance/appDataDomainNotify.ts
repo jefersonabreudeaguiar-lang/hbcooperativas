@@ -92,6 +92,8 @@ export function inferAppDataDomainsTouched(before: AppData, after: AppData): App
     arrayTouched(before.fichaCorrida, after.fichaCorrida) ||
     arrayTouched(before.pagamentosCooperado, after.pagamentosCooperado) ||
     arrayTouched(before.arquivosMensais, after.arquivosMensais) ||
+    arrayTouched(before.valoresAvulsosReceber, after.valoresAvulsosReceber) ||
+    arrayTouched(before.cotas, after.cotas) ||
     arrayTouched(before.mensalidades, after.mensalidades) ||
     arrayTouched(before.descontos, after.descontos) ||
     arrayTouched(before.pagamentos, after.pagamentos) ||
