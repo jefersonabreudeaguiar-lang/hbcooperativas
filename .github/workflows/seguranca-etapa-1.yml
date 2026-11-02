@@ -1,0 +1,24 @@
+name: Segurança e regressão V1
+on:
+  push:
+    branches: [codex/seguranca-etapa-1, codex/restore-v1-login]
+  pull_request:
+    branches: [codex/restore-v1-login]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validar-candidato:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=moderate
+      - run: npm audit --audit-level=high
+      - run: npm run test:seguranca-etapa1
+      - run: npm run build

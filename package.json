@@ -96,7 +96,8 @@
     "apply:app-users": "npx tsx scripts/apply-app-users-schema.ts",
     "apply:password-reset": "npx tsx scripts/apply-password-reset-schema.ts",
     "homologate:hb-credit": "npx tsx scripts/homologate-hb-credit.ts",
-    "activate:hb-credit": "npx tsx scripts/activate-hb-credit-sequence.ts"
+    "activate:hb-credit": "npx tsx scripts/activate-hb-credit-sequence.ts",
+    "test:seguranca-etapa1": "node scripts/test-seguranca-etapa-1.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
@@ -109,7 +110,7 @@
     "jszip": "^3.10.1",
     "lucide-react": "^1.21.0",
     "lz-string": "^1.5.0",
-    "next": "16.2.12",
+    "next": "16.4.3",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4"
@@ -123,10 +124,11 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.12",
+    "eslint-config-next": "16.4.3",
     "pg": "^8.23.0",
-    "sharp": "^0.34.5",
+    "sharp": "0.35.5",
     "tailwindcss": "^4",
+    "tsx": "4.23.15",
     "typescript": "^5",
     "ws": "^8.21.0"
   }
