@@ -2803,31 +2803,19 @@ export async function authorizePayment(
   }
   const accountCooperadoId = accountFound.accountCooperadoId;
 
-  const [pinCheck, intentCheck] = await Promise.all([
-    verifyFinancialPin(
-      supabase,
-      input.cooperativaCnpj,
-      accountCooperadoId,
-      input.pin,
-      input.actorUserId
-    ),
-    validateIntentForCooperado(
-      supabase,
-      input.intentId,
-      input.nonce,
-      accountCooperadoId,
-      input.cooperativaCnpj,
-      { useCashback: Boolean(input.useCashback), forAuthorize: true, fast: true }
-    ),
-  ]);
+  const pinCheck = await verifyFinancialPin(
+    supabase,
+    input.cooperativaCnpj,
+    accountCooperadoId,
+    input.pin,
+    input.actorUserId
+  );
 
   if (!pinCheck.ok) return { ok: false, error: pinCheck.error };
-  if (!intentCheck.ok) return { ok: false, error: intentCheck.error, code: intentCheck.code };
-
-  let cashbackAppliedCents = 0;
-  if (input.useCashback) {
-    cashbackAppliedCents = intentCheck.limite.cashbackDisponivelCents ?? 0;
-  }
+  // A RPC confere cobrança, vínculo, nonce e saldos sob bloqueio. Revalidar
+  // aqui como cobrança pendente impediria recuperar uma compra já confirmada.
+  // Solicita todo o cashback quando escolhido; o banco limita ao saldo e à compra.
+  const cashbackAppliedCents = input.useCashback ? Number.MAX_SAFE_INTEGER : 0;
 
   const transacaoId = genId("tx");
   const recebivelId = genId("recv");
@@ -2869,6 +2857,7 @@ export async function authorizePayment(
     disponivel_apos_centavos?: number;
     own_balance_available_cents?: number;
     credit_debited_cents?: number;
+    receipt_code?: string;
   };
   if (!result?.ok) {
     const mapped = mapAuthorizeRpcError(result);
@@ -2876,18 +2865,23 @@ export async function authorizePayment(
   }
 
   const txId = result.transacao_id ?? transacaoId;
-  let finalReceiptCode = receiptCode;
+  let finalReceiptCode = result.receipt_code || receiptCode;
   let disponivelAposCents = Number(result.disponivel_apos_centavos ?? 0);
   if (result.duplicate) {
-    const { data: existingTx } = await supabase
-      .from("hb_credit_transactions")
-      .select("receipt_code")
-      .eq("id", txId)
-      .maybeSingle();
-    if (existingTx?.receipt_code) {
+    if (!result.receipt_code) {
+      const { data: existingTx, error: receiptError } = await supabase
+        .from("hb_credit_transactions")
+        .select("receipt_code")
+        .eq("id", txId)
+        .eq("cooperative_cnpj", normalizeCnpj(input.cooperativaCnpj))
+        .eq("cooperado_id", accountCooperadoId)
+        .maybeSingle();
+      if (receiptError || !existingTx?.receipt_code) {
+        return { ok: false, error: "Pagamento já registrado. Consulte o extrato para recuperar o comprovante." };
+      }
       finalReceiptCode = String(existingTx.receipt_code);
     }
-    if (!Number.isFinite(disponivelAposCents) || disponivelAposCents <= 0) {
+    if (result.disponivel_apos_centavos == null || !Number.isFinite(disponivelAposCents)) {
       const limiteDup = await getLimiteCooperadoAlinhadoAEntregas(
         supabase,
         input.cooperativaCnpj,

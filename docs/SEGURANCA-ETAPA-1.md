@@ -308,3 +308,33 @@ continuarem pendentes.
   reset/reconciliação, frescor de snapshots do QR, idempotência concorrente da
   compra, reparos antigos, Livro Caixa e validação autenticada por perfil. Esta
   etapa não libera uso na produção nem conclui o plano completo.
+
+### Identidade e recuperação de compras — 02/11/2026
+
+- Reproduzido no banco de testes: a mesma chave podia retornar sucesso para
+  outro cooperado antes de validar cobrança/nonce. O teste novo falhou na versão
+  anterior com “Chave de outra pessoa aceita como compra confirmada”.
+- Aplicadas somente na homologação `20261102220126_hb_credit_payment_retry_identity.sql`
+  e `20261102220606_hb_credit_payment_reserved_owner.sql`. A rotina serializa por
+  chave e cobrança, valida cooperativa/nonce/vínculo reservado e limita repetição
+  ao mesmo cooperado, cobrança e pagamento ainda lançado. Estorno não volta como
+  compra confirmada. Chave vazia/reutilizada é recusada.
+- O serviço mantém verificação do PIN, mas deixa a validação financeira final
+  com a RPC, evitando que uma prévia exija pagar novamente uma compra concluída.
+  Cashback solicitado é limitado pelo banco ao saldo real e ao valor da compra.
+  Comprovante repetido vem do resultado original; fallback consulta também CNPJ
+  e cooperado, sem inventar código quando a consulta falha. Disponível zero é válido.
+- Teste local usa SDK real com transporte simulado e hash/PIN de teste: recuperação,
+  PIN errado/bloqueado, rejeição do banco, comprovante ausente e saldo zero.
+- Oito suítes SQL passaram com a rotina atual. Tentativa adicional em conexões
+  distintas testou mesma chave, chaves diferentes no mesmo QR e dois QRs com
+  saldo para somente uma compra; em cada caso ocorreu apenas um débito. Porém os
+  horários comprovaram que o conector serializou as chamadas, sem sobreposição.
+  **Concorrência real permanece pendente**; não contar esse ensaio como teste
+  simultâneo. Os registros persistidos desse ensaio foram removidos por seu
+  identificador exclusivo; consulta final retornou zero contas/transações fictícias.
+- Trava de transferências permanece false. A etapa não muda a produção e não
+  conclui revisão contábil, restauração ou testes autenticados por perfil.
+- Validação final desta etapa: 16 suítes locais, oito suítes SQL e compilação
+  Next/TypeScript em Node 24 aprovadas; pacote de persistência conferido. Auditor
+  do banco sem ERROR/WARN, mantendo apenas avisos informativos já conhecidos.
