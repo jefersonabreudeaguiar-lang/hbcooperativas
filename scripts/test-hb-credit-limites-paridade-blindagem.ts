@@ -1,5 +1,5 @@
 /**
- * Blindagem paridade HB — ensurePersisted + prepareHbCreditPaymentAuthorize unificado.
+ * Paridade HB: GET de conta somente leitura; pagamento exige base persistida.
  * npx tsx scripts/test-hb-credit-limites-paridade-blindagem.ts
  */
 import { readFileSync } from "node:fs";
@@ -32,6 +32,7 @@ assert(
 );
 
 const account = read("src/app/api/credit/account/route.ts");
-assert(account.includes("ensurePersisted: true"), "account GET liga blindagem");
+assert(account.includes("getLimiteCooperadoExibicaoParidadeLimites"), "account GET usa a mesma leitura da aba Limites");
+assert(!account.includes("ensurePersisted: true"), "account GET não publica limite ao consultar saldo");
 
 console.log("\nHB limites paridade blindagem OK");

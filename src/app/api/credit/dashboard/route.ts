@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { requireCreditApi, requireCreditCnpj, requireCreditStaff } from "@/lib/security/creditGuard";
 import { getDashboardResumo } from "@/lib/supabase/contaCoopStorage";
 import { validateCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseValidation";
+import { resolveAuthoritativeCreditBase } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
+import { fetchCooperadosFromStorage } from "@/lib/supabase/cooperadosStorage";
 import { normalizeCnpj } from "@/utils/cooperativa";
+
+export const maxDuration = 60;
 
 async function loadDashboard(request: Request) {
   const gate = await requireCreditApi(request);
@@ -38,6 +42,15 @@ async function loadDashboard(request: Request) {
   const denyStaff = requireCreditStaff(gate.ctx);
   if (denyStaff) return { error: denyStaff };
 
+  // O navegador pode trazer uma prévia antiga; os totais oficiais vêm da nuvem.
+  const cooperados = await fetchCooperadosFromStorage(gate.ctx.supabase, cnpj);
+  const ids = cooperados.filter((c) => c.status === "ativo").map((c) => c.id);
+  creditosBaseCents = {};
+  if (ids.length) {
+    const authoritative = await resolveAuthoritativeCreditBase(gate.ctx.supabase, cnpj, ids);
+    if (!authoritative.ok) return { error: NextResponse.json({ error: authoritative.message, code: authoritative.code }, { status: 503 }) };
+    creditosBaseCents = authoritative.creditosBaseCents;
+  }
   const dashboard = await getDashboardResumo(gate.ctx.supabase, cnpj, creditosBaseCents);
   return { dashboard };
 }

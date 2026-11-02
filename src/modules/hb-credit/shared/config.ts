@@ -38,6 +38,8 @@ function isHbCreditEnabledViaContaCoopPublicProduction(): boolean {
 /** Servidor: autoridade para operações financeiras. */
 export function isHbCreditEnabledServer(): boolean {
   if (isProductionWithoutAuthSecret()) return false;
+  const explicit = process.env[SERVER_FLAG];
+  if (explicit != null && explicit.trim() !== "") return parseFlag(explicit);
   return (
     parseFlag(process.env[SERVER_FLAG]) ||
     isDevLabServerEnabled() ||
@@ -62,6 +64,8 @@ export function assertHbCreditOperationsEnabled(): void {
 
 /** Cliente: somente indica intenção de UI; nunca autoriza operação financeira. */
 export function isHbCreditEnabledClient(): boolean {
+  const explicit = process.env[CLIENT_FLAG];
+  if (explicit != null && explicit.trim() !== "") return parseFlag(explicit);
   return (
     parseFlag(process.env[CLIENT_FLAG]) ||
     isDevLabClientEnabled() ||
@@ -73,6 +77,7 @@ export function isHbCreditEnabledClient(): boolean {
  * UI habilitada = flag pública TRUE AND confirmação segura do servidor.
  */
 export function isHbCreditUiAllowed(serverConfirmed: boolean): boolean {
+  if (typeof window === "undefined") return false;
   return isHbCreditEnabledClient() && serverConfirmed === true;
 }
 

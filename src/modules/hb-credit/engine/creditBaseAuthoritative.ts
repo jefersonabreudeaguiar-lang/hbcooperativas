@@ -131,7 +131,12 @@ export async function resolveAuthoritativeCreditBase(
     return { ok: false, code: "EMPTY_COOPERADOS", message: "Informe ao menos um cooperado." };
   }
 
-  const operacional = await fetchOperacionalSync(supabase, digits);
+  const [operacional, cooperativaLookup, cooperados, tableResult] = await Promise.all([
+    fetchOperacionalSync(supabase, digits),
+    supabase.from("cooperativas").select("id").eq("cnpj", digits).maybeSingle(),
+    fetchCooperadosFromStorage(supabase, digits),
+    fetchNotasFromTable(supabase, digits),
+  ]);
   if (!operacional) {
     return {
       ok: false,
@@ -140,14 +145,12 @@ export async function resolveAuthoritativeCreditBase(
     };
   }
 
-  const { data: coopRow } = await supabase.from("cooperativas").select("id").eq("cnpj", digits).maybeSingle();
+  const { data: coopRow } = cooperativaLookup;
   const cooperativaId = coopRow?.id ? String(coopRow.id) : "";
   if (!cooperativaId) {
     return { ok: false, code: "COOPERATIVA_NOT_FOUND", message: "Cooperativa não encontrada." };
   }
 
-  const cooperados = await fetchCooperadosFromStorage(supabase, digits);
-  const tableResult = await fetchNotasFromTable(supabase, digits);
   // Com tabela SQL, evita N downloads no bucket (timeout na liberação coletiva de limites).
   const storageNotas = tableResult.tableMissing ? await fetchNotasFromStorage(supabase, digits) : [];
   const notas = mergeNotasSources(tableResult.notas, storageNotas).map((n) => ({

@@ -47,9 +47,17 @@ export async function GET(request: Request) {
     await promoverRecebiveisParceiroSemNf(gate.ctx.supabase, parceiro.id);
   }
 
-  const intents = await listIntentsParceiro(gate.ctx.supabase, parceiro.id);
-  const recebiveis = await listRecebiveisParceiro(gate.ctx.supabase, parceiro.id);
-  const settlementsRaw = await listSettlementsForPartner(gate.ctx.supabase, parceiro.id);
+  const mesReferencia = getCurrentMesReferencia();
+  const [intents, recebiveis, settlementsRaw, hasPin, fiscalPendentes, nomeCooperativa, pixChange, pinResetPending] = await Promise.all([
+    listIntentsParceiro(gate.ctx.supabase, parceiro.id),
+    listRecebiveisParceiro(gate.ctx.supabase, parceiro.id),
+    listSettlementsForPartner(gate.ctx.supabase, parceiro.id),
+    hasPartnerFinancialPin(gate.ctx.supabase, parceiro.id),
+    countPartnerFiscalPending(gate.ctx.supabase, parceiro.id, mesReferencia).catch(() => 0),
+    getCooperativaNomeByCnpj(gate.ctx.supabase, parceiro.cooperativaCnpj),
+    getPartnerPixChangeStatus(gate.ctx.supabase, parceiro.id),
+    hasPendingPartnerPinResetRequest(gate.ctx.supabase, parceiro.cooperativaCnpj, parceiro.id),
+  ]);
   const settlements: ContaCoopSettlement[] = await Promise.all(
     settlementsRaw.map(async (s) => {
       if (!s.comprovanteStoragePath) return s;
@@ -60,27 +68,12 @@ export async function GET(request: Request) {
       return { ...s, comprovanteUrl };
     })
   );
-  const hasPin = await hasPartnerFinancialPin(gate.ctx.supabase, parceiro.id);
+
   const pinLocked = Boolean(
     parceiro.pinLockedUntil && new Date(parceiro.pinLockedUntil).getTime() > Date.now()
   );
-  const mesReferencia = getCurrentMesReferencia();
-  let fiscalPendentes = 0;
-  try {
-    fiscalPendentes = await countPartnerFiscalPending(gate.ctx.supabase, parceiro.id, mesReferencia);
-  } catch {
-    fiscalPendentes = 0;
-  }
-
-  const cooperativaNome =
-    (await getCooperativaNomeByCnpj(gate.ctx.supabase, parceiro.cooperativaCnpj)) ?? "Cooperativa parceira";
+  const cooperativaNome = nomeCooperativa ?? "Cooperativa parceira";
   const needsTermsAcceptance = partnerNeedsTermsAcceptance(parceiro);
-  const pixChange = await getPartnerPixChangeStatus(gate.ctx.supabase, parceiro.id);
-  const pinResetPending = await hasPendingPartnerPinResetRequest(
-    gate.ctx.supabase,
-    parceiro.cooperativaCnpj,
-    parceiro.id
-  );
 
   return NextResponse.json({
     ok: true,

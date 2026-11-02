@@ -845,6 +845,10 @@ async function writeLimiteCooperadoCents(
     .eq("cooperado_id", cooperadoId)
     .maybeSingle();
 
+  if (existing?.status === "suspended") {
+    return { ok: false, error: "Conta HB suspensa. Use o cadastro atual do cooperado." };
+  }
+
   const usado = existing ? Number(existing.amount_used_cents) : 0;
   if (novoLimiteCents < usado) {
     return { ok: false, error: "Novo limite não pode ser menor que o valor já usado." };
@@ -922,6 +926,10 @@ async function writeLimiteCooperadoAuthoritativeSync(
     .eq("cooperative_cnpj", digits)
     .eq("cooperado_id", cooperadoId)
     .maybeSingle();
+
+  if (existing?.status === "suspended") {
+    return { ok: false, error: "Conta HB suspensa. Use o cadastro atual do cooperado." };
+  }
 
   const usado = existing ? Number(existing.amount_used_cents) : 0;
   if (novoLimiteCents < usado) {
@@ -1182,6 +1190,13 @@ export async function syncLimiteCooperadoFromCreditoBase(
   | { ok: true; limite: ContaCoopLimiteCooperado; action?: "reset" | "tightened" | "synced" | "unchanged" }
   | { ok: false; error: string }
 > {
+  // Uma conta antiga suspensa pela reconciliação nunca ganha crédito de novo no sync.
+  const atualSuspensa = await supabase.from("hb_credit_accounts").select("*")
+    .eq("cooperative_cnpj", normalizeCnpj(cnpj)).eq("cooperado_id", cooperadoId).maybeSingle();
+  if (atualSuspensa.error) return { ok: false, error: atualSuspensa.error.message };
+  if (atualSuspensa.data?.status === "suspended") {
+    return { ok: true, limite: mapLimiteRow(atualSuspensa.data), action: "unchanged" };
+  }
   const base = Math.max(0, Math.round(Number(creditoBaseCents) || 0));
   if (base === 0) {
     if (opts?.liquidacaoConfirmadaPeloResponsavel === true && opts.pagamentoId) {
@@ -1967,13 +1982,14 @@ export async function setFinancialPin(
 
   const { data: existing } = await supabase
     .from("hb_credit_accounts")
-    .select("id, limit_released_cents, amount_used_cents, status")
+    .select("id, limit_released_cents, amount_used_cents, status, pin_hash")
     .eq("cooperative_cnpj", digits)
     .eq("cooperado_id", cooperadoId)
     .maybeSingle();
 
+  if (existing?.pin_hash) return { ok: false, error: "PIN já cadastrado. Solicite a redefinição ao responsável." };
   if (existing) {
-    const { error } = await supabase
+    const { data: changed, error } = await supabase
       .from("hb_credit_accounts")
       .update({
         pin_hash: pinHash,
@@ -1983,9 +1999,10 @@ export async function setFinancialPin(
         updated_at: now,
       })
       .eq("cooperative_cnpj", digits)
-      .eq("cooperado_id", cooperadoId);
+      .eq("cooperado_id", cooperadoId).is("pin_hash", null).select("id").maybeSingle();
 
     if (error) return { ok: false, error: error.message };
+    if (!changed) return { ok: false, error: "PIN já cadastrado. Solicite a redefinição ao responsável." };
     return { ok: true };
   }
 
@@ -2301,7 +2318,7 @@ export async function setPartnerFinancialPin(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const pinHash = await hashPassword(pin);
   const now = new Date().toISOString();
-  const { error } = await supabase
+  const { data: changed, error } = await supabase
     .from("hb_credit_partners")
     .update({
       pin_hash: pinHash,
@@ -2310,9 +2327,10 @@ export async function setPartnerFinancialPin(
       pin_locked_until: null,
       updated_at: now,
     })
-    .eq("id", partnerId);
+    .eq("id", partnerId).is("pin_hash", null).select("id").maybeSingle();
 
   if (error) return { ok: false, error: error.message };
+  if (!changed) return { ok: false, error: "PIN já cadastrado. Solicite a redefinição ao responsável." };
   return { ok: true };
 }
 

@@ -36,7 +36,6 @@ import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
 import { normalizeCreatorEmail, normalizeAuthEmail } from "@/lib/security/appCreator";
 import {
   CREATOR_ADMIN_EMAIL,
-  CREATOR_ADMIN_PASSWORD,
   ensureCreatorAdminAccount,
 } from "@/services/creatorAdminPasswordReset";
 import {
@@ -1444,23 +1443,10 @@ function prepareDataForLogin(): AppData {
   return data;
 }
 
-/** Login direto do criador em /admin — valida hash local, nuvem em segundo plano. */
-export async function loginCreatorAdminPortal(
-  email: string,
-  password: string
-): Promise<User | null> {
-  if (typeof window === "undefined") return null;
+/** Portal administrativo usa a mesma autenticação validada pelo servidor. */
+export async function loginCreatorAdminPortal(email: string, password: string): Promise<User | null> {
   if (normalizeCreatorEmail(email) !== normalizeCreatorEmail(CREATOR_ADMIN_EMAIL)) return null;
-
-  const data = prepareDataForLogin();
-  const user = findUserByEmail(data, CREATOR_ADMIN_EMAIL);
-  if (!user) return null;
-
-  const hashOk = verifyPasswordSync(password, user.password);
-  const plainOk = password === CREATOR_ADMIN_PASSWORD;
-  if (!hashOk && !plainOk) return null;
-
-  return await finishLoginSession(user, data, password);
+  return login(email, password);
 }
 
 const CLOUD_BOOTSTRAP_ROLES: UserRole[] = ["cooperado", "responsavel", "tesoureiro", "admin", "contador", "parceiro"];
@@ -1625,6 +1611,7 @@ export async function login(email: string, password: string): Promise<User | nul
     return await finishLoginSession(bootstrapped, getData(), password);
   }
 
+  if (process.env.NODE_ENV === "production" && normalizeCreatorEmail(email) === normalizeCreatorEmail(CREATOR_ADMIN_EMAIL)) return null;
   const cloudErr = getLastCloudSyncError();
   if (cloudErr && !/indispon|503|configurad/i.test(cloudErr)) {
     return null;
