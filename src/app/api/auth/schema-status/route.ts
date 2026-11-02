@@ -20,7 +20,17 @@ export async function GET() {
     });
   }
 
-  const { error } = await supabase.from("app_users").select("id").limit(1);
+  let error: { code?: string; message?: string } | null;
+  try {
+    ({ error } = await supabase.from("app_users").select("id").limit(1));
+  } catch {
+    return NextResponse.json({
+      configured: true,
+      appUsersTableOk: false,
+      code: "APP_USERS_UNAVAILABLE",
+      message: "Não foi possível confirmar a conexão de autenticação. Tente novamente.",
+    }, { status: 503 });
+  }
   if (error && isAppUsersTableMissing(error)) {
     return NextResponse.json({
       configured: true,
@@ -33,20 +43,12 @@ export async function GET() {
 
   if (error) {
     console.error("[schema-status] app_users probe:", error.message);
-    if (isAppUsersTableMissing(error)) {
-      return NextResponse.json({
-        configured: true,
-        appUsersTableOk: false,
-        message: error.message,
-        code: "APP_USERS_MISSING",
-      });
-    }
     return NextResponse.json({
       configured: true,
-      appUsersTableOk: true,
-      message: "Autenticação na nuvem pronta.",
-      probeWarning: error.message,
-    });
+      appUsersTableOk: false,
+      code: "APP_USERS_UNAVAILABLE",
+      message: "Não foi possível confirmar a conexão de autenticação. Tente novamente.",
+    }, { status: 503 });
   }
 
   return NextResponse.json({

@@ -59,6 +59,44 @@ Foi criado o projeto Vercel exclusivo `hbcooperativas-homologacao-v1` (`prj_1dqk
 
 O ignoreCommand impede a branch candidata de criar preview no projeto que compartilha o banco real. Uma cópia ZIP do código estável e checksum foi guardada em backups locais. Isso não é backup dos dados.
 
+## Verificação de implantação — 02/11/2026
+
+- O usuário cadastrou `SUPABASE_SERVICE_ROLE_KEY`; metadados da Vercel confirmam
+  segredo separado nos ambientes Preview e Production somente do projeto de testes.
+  O conteúdo da chave não foi consultado nem validado por esse exame de metadados.
+- Candidato `a0fe21e231f62ed695d060b18f83580f11906190` publicado como Preview,
+  deployment `dpl_HUB1oaCspVBn38tdSzmsbQVASDAW`, estado READY.
+- Consulta autenticada pelo plugin Vercel a `/api/client-release`: HTTP 200,
+  SHA e deployment correspondem ao candidato. A versão base permanece 790.
+- `/api/credit/status`: HTTP 200; módulo e flags habilitados. Esse endpoint
+  não comprova conexão ao banco, funcionamento do login ou execução financeira.
+- Não foi publicada mudança no projeto oficial nesta verificação.
+- A pendência anterior de cadastro da chave foi resolvida; permanecem a validação
+  funcional da conexão, diferenças de schema, permissões e restauração.
+
 Ainda não há restauração integral comprovada nem homologação financeira completa.
 Não declarar a etapa concluída ou atualizar a produção enquanto esses critérios
 continuarem pendentes.
+
+## Continuação — proteção do banco e indicação de conexão
+
+- Consulta de `/api/auth/schema-status` no preview confirmou leitura de `app_users`
+  pelo servidor; isso não substitui homologação de login por perfil.
+- Migração `20261102162441_hb_credit_fiscal_notes_server_only.sql` aplicada somente
+  em `ocyfzramxvxqbtkorubn`: RLS ativa, nenhum privilégio direto para anon ou
+  authenticated, acesso de service_role preservado. Consulta posterior confirmou
+  os três resultados. O advisor deixou de apontar RLS desabilitada.
+- A ausência de políticas nessa tabela é deliberada: nenhum usuário acessa a tabela
+  pela Data API; a API própria autoriza o acesso no servidor. Permanecem avisos de
+  search_path em 13 funções, que exigem revisão das rotinas antes de alteração.
+- A rota de diagnóstico deixa de responder autenticação pronta quando o banco
+  retorna erro de permissão ou chave inválida; responde indisponível sem divulgar
+  o detalhe interno. Também trata exceção do cliente.
+- Nova suíte executa a rota com o cliente Supabase e transporte simulado. As 11
+  suítes isoladas passaram, assim como a compilação Next 16.4.3 em Node 24.
+- Migração `20261102162805_hb_v1_schema_compatibility.sql` preparada a partir das
+  estruturas existentes no repositório, com acesso das tabelas novas restrito ao
+  servidor. Não recria rotinas financeiras antigas nem copia usuários ou saldos.
+  **Ainda não aplicada:** a confirmação do conector Supabase expirou duas vezes.
+- A homologação financeira permanece pendente de compatibilidade estrutural,
+  rotinas revisadas, dados fictícios e testes completos. Produção permanece 790.
