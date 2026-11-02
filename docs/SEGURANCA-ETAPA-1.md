@@ -97,6 +97,47 @@ continuarem pendentes.
 - Migração `20261102162805_hb_v1_schema_compatibility.sql` preparada a partir das
   estruturas existentes no repositório, com acesso das tabelas novas restrito ao
   servidor. Não recria rotinas financeiras antigas nem copia usuários ou saldos.
-  **Ainda não aplicada:** a confirmação do conector Supabase expirou duas vezes.
+  Aplicação inicialmente pendente por expiração da confirmação do conector.
+  Após o usuário solicitar o reenvio, aplicada com sucesso em 02/11/2026 somente
+  em `ocyfzramxvxqbtkorubn`. Consulta posterior confirmou as dez tabelas, RLS
+  ativa, acesso direto negado a anon/authenticated e acesso do servidor preservado.
+  Advisor posterior não apresentou erros; permanecem 13 avisos de search_path
+  e informações de RLS sem políticas nas tabelas deliberadamente exclusivas do servidor.
 - A homologação financeira permanece pendente de compatibilidade estrutural,
   rotinas revisadas, dados fictícios e testes completos. Produção permanece 790.
+
+## Validação de rotinas financeiras — 02/11/2026
+
+- Consulta consolidada `hb_credit_market_receivable_snapshot` instalada na
+  homologação a partir da migração já versionada de 01/11.
+- `supabase/tests/market_receivable_snapshot.sql` passou no banco com execução
+  como service_role: 27 registros no mercado principal, dois mercados adicionais,
+  meses distintos, valores bruto e líquido diferentes, lançamentos pagos,
+  transações estornadas e tentativa de leitura de outra cooperativa.
+  O total não depende da lista de 20 itens; inconsistência sem recebível é
+  sinalizada; execução anônima é recusada. Todas as fixtures foram revertidas.
+- Migração `20261102175313_hb_v1_rpc_server_only.sql` aplicada só em homologação.
+  Treze rotinas previamente revisadas tiveram search_path fixado e execução
+  direta retirada de PUBLIC/anon/authenticated, preservando service_role.
+  Advisor posterior: nenhum ERROR ou WARN; nove INFO de RLS sem políticas,
+  intencionais em tabelas exclusivas do servidor com privilégios públicos revogados.
+  Referência: https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy
+- Teste adicional reproduziu pagamento permitido para conta `suspended`.
+  Corrigido na homologação pela migração `20261102175603_hb_credit_authorize_active_account.sql`,
+  preservando o corpo atual de validação de snapshot e exigindo status `active`.
+- A coexistência da assinatura antiga e da atual com argumento opcional causou
+  ambiguidade na chamada com nove parâmetros, detectada pelo teste.
+  A migração `20261102175724_hb_credit_remove_legacy_authorize_overload.sql`
+  remove somente a assinatura antiga, sem CASCADE. A atual aceita nove ou dez
+  parâmetros e mantém a mesma validação de segurança em ambos os casos.
+- `supabase/tests/hb_payment_server_access.sql` passou: débito único, recebível
+  líquido, distribuição 60/30/10 do desconto, cooperativa/nonce incorretos
+  recusados, conta suspensa recusada nas duas formas de chamada, ausência de
+  snapshot recusada também na chamada compatível, repetição sem débito duplo e
+  rotinas HB sem execução pública. Nenhuma integração financeira externa chamada.
+- Consulta após os testes confirmou zero contas, mercados e transações de fixture
+  persistidos. Nenhuma mudança desta entrega foi aplicada ao banco oficial.
+- Ainda pendentes: cinco rotinas chamadas pela V1 ausentes nesse banco antigo
+  (transferência, conversão de cashback, confirmação de repasse, liquidação do
+  desconto e conversão de cashback em crédito), revisão de estornos, validação de
+  login/abas por perfil, armazenamento, concorrência e restauração integral.
