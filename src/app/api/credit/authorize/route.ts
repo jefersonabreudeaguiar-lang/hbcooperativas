@@ -15,6 +15,7 @@ import {
 } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
 import { isCooperadoTransferIntentId } from "@/config/cooperadoTransferenciaCredito";
 import { authorizeCooperadoTransferPayment } from "@/lib/supabase/cooperadoTransferenciaCreditoStorage";
+import { isHbOwnedBalanceOperationsReady } from "@/config/hbOwnedBalanceRollout";
 
 /** Autorização HB — RPC + PIN; precisa de folga acima do default serverless em sync pesado. */
 export const maxDuration = 60;
@@ -66,6 +67,9 @@ export async function POST(request: Request) {
   }
 
   if (isCooperadoTransferIntentId(intentId)) {
+    if (!isHbOwnedBalanceOperationsReady()) {
+      return NextResponse.json({ error: "Transferências entre cooperados estão em validação.", code: "HB_OWNED_BALANCE_NOT_READY" }, { status: 503 });
+    }
     const prepareTransfer = await ensureLimitePronto();
     if (!prepareTransfer.ok) {
       return NextResponse.json(

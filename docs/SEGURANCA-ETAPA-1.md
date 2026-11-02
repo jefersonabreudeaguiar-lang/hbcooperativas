@@ -243,3 +243,44 @@ continuarem pendentes.
 - Pendentes: fluxo visual por perfil, perda de resposta/rede em aparelho real,
   pagamento/cancelamento dos créditos derivados, identificação canônica da
   quitação e validação da leitura agregada da taxa HB antes do primeiro repasse.
+
+## Saldo próprio — base de transferência e conversão
+
+- Migração `20261102192056_hb_credit_owned_balance_transfers.sql` aplicada só
+  na homologação. `own_balance_cents` guarda recursos próprios separadamente de
+  limite liberado, teto baseado nas entregas e dívida. Nenhum backfill de fundos
+  foi inferido ou executado em contas existentes.
+- Transferência trava intenção e contas em ordem fixa, valida cooperativa,
+  pagador, destinatário, nonce, status e validade. Usa saldo próprio primeiro;
+  qualquer parcela de crédito exige snapshot válido, estado SYNCED e saldo.
+  Recebedor ganha saldo próprio, sem aumento do limite de entregas.
+- Transações e ledger dos dois lados, composição do débito, confirmação e
+  auditoria são gravados juntos. Repetição conserva comprovante e valores;
+  outro pagador não recebe confirmação da transferência anterior.
+- Sweep converte cashback em saldo próprio sem alterar limite ou dívida. Chave
+  por conta/mês impede repetição e preserva cashback novo após a conversão.
+- `supabase/tests/hb_owned_balance_transfers.sql` passou: recursos próprios e
+  crédito combinados, devolução só com saldo próprio, conservação, destinatário
+  suspenso, conta fora da cooperativa, snapshot STALE, nonce, repetição, colisão
+  tardia de identificador com rollback e conversão sem inflar limites.
+- Leitura da conta expõe saldo próprio em campo separado. Reconciliação passa a
+  incluir somente a parcela de crédito das transferências, excluindo recursos
+  próprios, entrada do recebedor e ajustes/conversões de cashback. A ficha cobra
+  a parcela credit_debited_cents, com fallback histórico para transferências antigas.
+- Corrigido também o corte de quitação: a janela não quita operações posteriores
+  ao pagamento; assinatura ou edição tardia não amplia a data de corte. Data
+  inválida não é substituída por “agora”. IDs explicitamente quitados mantêm prioridade.
+- Consulta agregada somente leitura na produção em 02/11/2026 encontrou zero
+  transferências confirmadas e zero CASHBACK_SWEEP. Essa verificação precisa ser
+  repetida antes do corte para produção; não prova ausência futura de legado.
+- As duas rotinas agora existem no catálogo da homologação, mas **não estão
+  liberadas para uso no aplicativo**. `isHbOwnedBalanceOperationsReady()` permanece
+  false: criação/autorização de transferência e sweep são recusados antes de
+  acessar o banco. Não mudar a trava até concluir compras, estornos e interface.
+- Quinze suítes locais e os seis testes SQL passaram; compilação Next/TypeScript
+  passou em Node 24. Fixtures SQL revertidas. Nenhum movimento financeiro real
+  ou alteração do banco de produção nesta entrega.
+- Pendentes antes de liberar: consumo e devolução de saldo próprio no mercado,
+  saldo total e composição nas telas/caches, reconciliação e reset via API,
+  testes de concorrência real e latência do sweep, scripts antigos de reparo de
+  schema, cancelamentos e Livro Caixa. A existência das rotinas não conclui a etapa.

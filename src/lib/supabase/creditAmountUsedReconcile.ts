@@ -128,7 +128,7 @@ export async function reconcileCooperadoAmountUsedCents(
     .from("hb_credit_transactions")
     .select(PAYMENT_TX_SELECT)
     .eq("cooperative_cnpj", digits)
-    .eq("event_type", "PAYMENT");
+    .in("event_type", ["PAYMENT", "ADJUSTMENT"]);
   txQuery =
     ctxLoad.titularIds.length === 1
       ? txQuery.eq("cooperado_id", ctxLoad.titularIds[0])
@@ -161,7 +161,7 @@ export async function resolveExpectedAmountUsedCentsForCooperado(
     .from("hb_credit_transactions")
     .select(PAYMENT_TX_SELECT)
     .eq("cooperative_cnpj", digits)
-    .eq("event_type", "PAYMENT");
+    .in("event_type", ["PAYMENT", "ADJUSTMENT"]);
   txQuery =
     ctxLoad.titularIds.length === 1
       ? txQuery.eq("cooperado_id", ctxLoad.titularIds[0])
@@ -218,7 +218,7 @@ export async function reconcileCooperadosAmountUsedCentsBatch(
     .from("hb_credit_transactions")
     .select(PAYMENT_TX_SELECT)
     .eq("cooperative_cnpj", digits)
-    .eq("event_type", "PAYMENT");
+    .in("event_type", ["PAYMENT", "ADJUSTMENT"]);
   txQuery =
     txCooperadoFilter.length === 1
       ? txQuery.eq("cooperado_id", txCooperadoFilter[0])

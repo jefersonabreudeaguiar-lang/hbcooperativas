@@ -1,5 +1,6 @@
 import { getMarketReceivableSnapshot } from "@/lib/supabase/hbCreditMarketReceivableSnapshot";
 import { liquidateConfirmedSettlementDiscounts } from "@/lib/supabase/hbCreditDiscountSettlement";
+import { isHbOwnedBalanceOperationsReady } from "@/config/hbOwnedBalanceRollout";
 import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { uploadSettlementComprovante } from "@/lib/supabase/hbCreditSettlementStorage";
@@ -724,10 +725,11 @@ function mapLimiteRow(row: Record<string, unknown>, cashbackDisponivelCents = 0)
     limiteLiberadoCents: limite,
     valorUsadoCents: usado,
     valorDisponivelCents: hbCreditEffectiveDisponivelCents(limite, cap, usado),
-    bloqueado: status === "blocked",
+    bloqueado: status !== "active",
     hasFinancialPin: Boolean(row.pin_hash),
     pinLockedUntil: row.pin_locked_until ? String(row.pin_locked_until) : null,
     cashbackDisponivelCents,
+    saldoProprioDisponivelCents: Number(row.own_balance_cents ?? 0),
     updatedAt: String(row.updated_at),
   };
 }
@@ -5660,6 +5662,9 @@ export async function sweepUnusedCashbackToCredit(
   mesReferencia: string,
   actorUserId: string
 ): Promise<{ ok: boolean; error?: string; totalCents?: number; cooperados?: number }> {
+  if (!isHbOwnedBalanceOperationsReady()) {
+    return { ok: false, error: "A conversão para saldo próprio está em validação. O cashback continua disponível." };
+  }
   const { data, error } = await supabase.rpc("hb_credit_sweep_cashback_to_credit", {
     p_cooperative_cnpj: normalizeCnpj(cnpj),
     p_mes_referencia: mesReferencia,

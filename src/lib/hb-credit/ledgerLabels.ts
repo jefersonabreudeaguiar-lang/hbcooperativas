@@ -12,6 +12,9 @@ const LEDGER_LABELS: Record<string, string> = {
   CASHBACK_USE: "Cashback usado no pagamento",
   CASHBACK_SWEEP: "Cashback convertido em crédito",
   CASHBACK_TO_RECEIVABLE: "Cashback HB Crédito — valor a receber",
+  TRANSFER_OUT: "Transferência enviada",
+  TRANSFER_IN: "Transferência recebida em saldo próprio",
+  OWN_BALANCE_CREDIT: "Entrada em saldo próprio",
 };
 
 export function labelLedgerTipo(tipo: string): string {
@@ -36,7 +39,7 @@ export function formatLedgerEntryLabel(
   return labelLedgerTipo(tipo);
 }
 
-const DEBIT_LEDGER_TIPOS = new Set<string>(["PAYMENT", "CASHBACK_USE", "CASHBACK_SWEEP", "PARTNER_BLOCK"]);
+const DEBIT_LEDGER_TIPOS = new Set<string>(["PAYMENT", "CASHBACK_USE", "CASHBACK_SWEEP", "PARTNER_BLOCK", "TRANSFER_OUT"]);
 
 /** Extrato cooperado: saída negativa, entrada positiva (tipo manda; direction só em LIMIT_ADJUST). */
 export function signedLedgerAmountCentsForExtrato(

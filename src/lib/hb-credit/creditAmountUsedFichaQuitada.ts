@@ -28,9 +28,10 @@ type FichaQuitadaWindow = {
 };
 
 function pagamentoQuitadoAteMs(p: { assinadoEm?: string; updatedAt?: string; pagoEm?: string; createdAt: string }): number {
-  const iso = p.assinadoEm ?? p.updatedAt ?? p.pagoEm ?? p.createdAt;
+  // Assinatura ou edição posterior não amplia o conjunto de operações já pagas.
+  const iso = p.pagoEm ?? p.createdAt;
   const t = Date.parse(iso);
-  return Number.isFinite(t) ? t : Date.now();
+  return Number.isFinite(t) ? t : 0;
 }
 
 /** Meses com pagamento confirmado pelo responsável/cooperado — HB abatido no PIX não entra no “utilizado”. */
@@ -89,17 +90,23 @@ function paymentDebitCents(row: PaymentRowForUsedWithMeta): number {
   return Number.isFinite(debit) && debit > 0 ? Math.round(debit) : 0;
 }
 
+/** Transferência identifica a dívida do pagador; ajustes de cashback não são dívida. */
+export function isHbLoanDebitRow(row: PaymentRowForUsedWithMeta): boolean {
+  return row.event_type === "PAYMENT"
+    || (row.event_type === "ADJUSTMENT" && String(row.id ?? "").startsWith("ctrf_"));
+}
+
 export function isHbPaymentQuitadoNaFicha(
   row: PaymentRowForUsedWithMeta,
   ctx: { explicitTransactionIds: Set<string>; windows: FichaQuitadaWindow[] }
 ): boolean {
-  if (String(row.event_type) !== "PAYMENT" || String(row.status) !== "posted") return false;
+  if (!isHbLoanDebitRow(row) || String(row.status) !== "posted") return false;
   const id = row.id ? String(row.id) : "";
   if (id && ctx.explicitTransactionIds.has(id)) return true;
   const createdMs = row.created_at ? Date.parse(row.created_at) : NaN;
   if (!Number.isFinite(createdMs)) return false;
   for (const w of ctx.windows) {
-    if (createdMs >= w.startMs && createdMs < w.endMs) return true;
+    if (createdMs >= w.startMs && createdMs < w.endMs && createdMs <= w.quitadoAteMs) return true;
   }
   return false;
 }
@@ -113,7 +120,7 @@ export function computeAmountUsedCentsFromPayments(
 ): number {
   let total = 0;
   for (const row of rows) {
-    if (String(row.event_type) !== "PAYMENT" || String(row.status) !== "posted") continue;
+    if (!isHbLoanDebitRow(row) || String(row.status) !== "posted") continue;
     if (fichaQuitada && isHbPaymentQuitadoNaFicha(row, fichaQuitada)) continue;
     total += paymentDebitCents(row);
   }

@@ -128,6 +128,8 @@ export interface ContaCoopLimiteCooperado extends ContaCoopTresValores {
   /** Bloqueio temporário após tentativas incorretas (ISO). */
   pinLockedUntil?: string | null;
   cashbackDisponivelCents?: number;
+  /** Recursos recebidos/conversões; não integram limite das entregas nem dívida. */
+  saldoProprioDisponivelCents?: number;
   updatedAt: string;
 }
 

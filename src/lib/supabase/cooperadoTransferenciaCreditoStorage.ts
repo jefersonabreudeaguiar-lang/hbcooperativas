@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isHbOwnedBalanceOperationsReady } from "@/config/hbOwnedBalanceRollout";
 import {
   COOPERADO_TRANSFER_INTENT_ID_PREFIX,
   isCooperadoTransferIntentId,
@@ -168,6 +169,7 @@ export async function createCooperadoTransferIntent(
     idempotencyKey?: string;
   }
 ): Promise<{ intent: CooperadoTransferIntent; qrPayload: string }> {
+  if (!isHbOwnedBalanceOperationsReady()) throw new Error("Transferências entre cooperados estão em validação.");
   const digits = normalizeCnpj(input.cooperativeCnpj);
   if (digits.length !== 14 || input.amountCents <= 0) {
     throw new Error("Dados inválidos.");
@@ -386,6 +388,7 @@ export async function authorizeCooperadoTransferPayment(
     }
   | { ok: false; error: string; code?: string }
 > {
+  if (!isHbOwnedBalanceOperationsReady()) return { ok: false, error: "Transferências entre cooperados estão em validação." };
   const pinCheck = await verifyFinancialPin(
     supabase,
     input.cooperativeCnpj,
@@ -473,7 +476,7 @@ export async function listTransferenciasUsoComoDescontosFicha(
   const { data: rows, error } = await supabase
     .from("hb_credit_cooperado_transfer_intents")
     .select(
-      "id, receiver_cooperado_id, payer_cooperado_id, amount_cents, description, receipt_code, confirmed_at, created_at, status"
+      "id, receiver_cooperado_id, payer_cooperado_id, amount_cents, credit_debited_cents, description, receipt_code, confirmed_at, created_at, status"
     )
     .eq("cooperative_cnpj", digits)
     .eq("status", "CONFIRMED")
@@ -512,7 +515,7 @@ export async function listTransferenciasUsoComoDescontosFicha(
         nome: receiverNome || "cooperado",
         receiptCode: receipt,
       }),
-      valorReais: Math.round(Number(row.amount_cents) || 0) / 100,
+      valorReais: Math.round(Number(row.credit_debited_cents ?? row.amount_cents) || 0) / 100,
       tipo: "conta_coop",
       createdAt: String(row.confirmed_at ?? row.created_at),
       hbTransactionId: String(row.id),
