@@ -361,6 +361,7 @@ export interface ContaCoopAppRepassePreview {
   aguardandoPagamentosCooperados?: boolean;
   cooperadosPendentes?: number;
   bloqueioMensagem?: string;
+  requerConferenciaFechamento?: boolean;
 }
 
 export interface ContaCoopDiscountAllocation {

@@ -1,4 +1,5 @@
 import { getMarketReceivableSnapshot } from "@/lib/supabase/hbCreditMarketReceivableSnapshot";
+import { liquidateConfirmedSettlementDiscounts } from "@/lib/supabase/hbCreditDiscountSettlement";
 import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { uploadSettlementComprovante } from "@/lib/supabase/hbCreditSettlementStorage";
@@ -4840,13 +4841,6 @@ export async function registerPartnerSettlementPayment(
     },
   });
 
-  await supabase.rpc("hb_credit_liquidate_discount_pool", {
-    p_cooperative_cnpj: normalizeCnpj(params.cnpj),
-    p_mes_referencia: params.mesReferencia,
-    p_settlement_id: settlementId,
-    p_actor_user_id: params.responsavelUserId,
-  });
-
   let comprovanteStoragePath: string | null = null;
   if (params.comprovanteBuffer) {
     const upload = await uploadSettlementComprovante(supabase, {
@@ -4915,12 +4909,18 @@ async function finalizePartnerSettlementPayment(
 ): Promise<{ ok: boolean; error?: string }> {
   const { data: row } = await supabase
     .from("hb_credit_settlements")
-    .select("id, status, partner_id, cooperative_cnpj")
+    .select("id, status, partner_id, cooperative_cnpj, mes_referencia")
     .eq("id", settlementId)
     .maybeSingle();
   if (!row) return { ok: false, error: "Liquidação não encontrada." };
   if (String(row.partner_id) !== partnerId) return { ok: false, error: "Liquidação não pertence a este mercado." };
-  if (String(row.status) === "CONFIRMED") return { ok: true };
+  const confirmDiscounts = () => liquidateConfirmedSettlementDiscounts(supabase, {
+    cnpj: normalizeCnpj(String(row.cooperative_cnpj ?? "")),
+    mesReferencia: String(row.mes_referencia ?? ""),
+    settlementId,
+    actorUserId,
+  });
+  if (String(row.status) === "CONFIRMED") return confirmDiscounts();
   if (String(row.status) !== "AWAITING_PARTNER") {
     return { ok: false, error: "Esta liquidação não pode ser finalizada." };
   }
@@ -4936,10 +4936,11 @@ async function finalizePartnerSettlementPayment(
     .eq("id", settlementId);
   if (updateError) return { ok: false, error: updateError.message };
 
-  await supabase
+  const { error: receivableError } = await supabase
     .from("hb_credit_receivables")
     .update({ status: "SETTLED", updated_at: now })
     .eq("settlement_id", settlementId);
+  if (receivableError) return { ok: false, error: "Não foi possível concluir os recebíveis desta liquidação. Atualize e confira antes de continuar." };
 
   await resetContaCoopCooperadosFromSettlement(supabase, settlementId, actorUserId);
 
@@ -4952,7 +4953,7 @@ async function finalizePartnerSettlementPayment(
     metadata: { partnerId, via: "comprovante" },
   });
 
-  return { ok: true };
+  return confirmDiscounts();
 }
 
 export async function confirmPartnerSettlement(
@@ -4968,6 +4969,8 @@ export async function confirmPartnerSettlement(
     .maybeSingle();
   if (!row) return { ok: false, error: "Liquidação não encontrada." };
   if (String(row.status) === "CONFIRMED") {
+    const discounts = await finalizePartnerSettlementPayment(supabase, settlementId, parceiroId, parceiroId);
+    if (!discounts.ok) return { ok: false, error: discounts.error };
     const { data: partnerRow } = await supabase
       .from("hb_credit_partners")
       .select("name")
@@ -5439,14 +5442,26 @@ export async function getAppRepassePreview(
 ): Promise<ContaCoopAppRepassePreview> {
   const digits = normalizeCnpj(cnpj);
 
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from("hb_credit_app_repasse")
     .select("*")
     .eq("cooperative_cnpj", digits)
     .eq("mes_referencia", mesReferencia)
     .maybeSingle();
+  if (existingError) throw new Error("Não foi possível conferir o repasse deste mês.");
 
   if (existing) {
+    const { count, error } = await supabase.from("hb_credit_discount_allocations")
+      .select("id", { count: "exact", head: true })
+      .eq("cooperative_cnpj", digits).eq("mes_referencia", mesReferencia)
+      .eq("app_pool_status", "LIQUIDATED").is("app_repasse_id", null)
+      .neq("cashback_status", "REVERSED").gt("app_cents", 0);
+    if (error || count === null) throw new Error("Não foi possível conferir descontos posteriores ao repasse.");
+    if (count > 0) return {
+      mesReferencia, amountCents: 0, allocCount: count, alreadyPaid: false,
+      repasse: mapAppRepasseRow(existing), requerConferenciaFechamento: true,
+      bloqueioMensagem: "Há novos descontos após o repasse deste mês. Confira o fechamento antes de confirmar.",
+    };
     return {
       mesReferencia,
       amountCents: 0,
@@ -5456,7 +5471,7 @@ export async function getAppRepassePreview(
     };
   }
 
-  const { data: rows } = await supabase
+  const { data: rows, error: allocationsError } = await supabase
     .from("hb_credit_discount_allocations")
     .select("app_cents")
     .eq("cooperative_cnpj", digits)
@@ -5465,6 +5480,7 @@ export async function getAppRepassePreview(
     .is("app_repasse_id", null)
     .neq("cashback_status", "REVERSED")
     .gt("app_cents", 0);
+  if (allocationsError) throw new Error("Não foi possível conferir os descontos do repasse.");
 
   const amountCents = (rows ?? []).reduce((sum, row) => sum + Number(row.app_cents), 0);
   const allocCount = rows?.length ?? 0;

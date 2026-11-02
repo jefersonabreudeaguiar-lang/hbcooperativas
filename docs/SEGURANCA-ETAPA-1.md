@@ -170,3 +170,36 @@ continuarem pendentes.
   pela interface, tratamento contábil de estorno após liquidação/fechamento e
   alinhamento da apresentação de todos os componentes no extrato. As cinco
   rotinas ainda ausentes continuam pendentes de revisão própria.
+
+## Liquidação de descontos e repasse — homologação
+
+- Duas das cinco rotinas ausentes foram implementadas e aplicadas somente em
+  homologação: `hb_credit_liquidate_discount_pool` e `hb_credit_confirm_app_repasse`.
+  Migrações `20261102180929_hb_credit_discount_settlement_scope.sql` e
+  `20261102181338_hb_credit_discount_require_settled_receivables.sql`.
+- A rotina antiga de descontos abrangia todos os mercados da cooperativa no mês.
+  A nova usa somente vendas do mercado vinculadas à liquidação, com transação
+  válida, recebível SETTLED e liquidação CONFIRMED. Recebíveis incompletos não
+  geram sucesso falso. Chamadas repetidas não duplicam a trilha de liquidação.
+- Repasse usa bloqueio por cooperativa/mês e bloqueia as linhas exatas da composição.
+  Registra somente essas linhas e gera uma origem estável para o Livro Caixa.
+  A repetição retorna o repasse anterior; novos descontos posteriores exigem
+  conferência do fechamento e não são marcados como quitados pelo repasse antigo.
+- `supabase/tests/hb_discount_settlement_scope.sql` passou: três mercados, duas
+  cooperativas, liquidação pendente recusada, recebível incompleto recusado,
+  isolamento, soma correta, repetição, colisão de identificador com rollback,
+  origem estável e desconto posterior preservado como pendência.
+- Aplicativo candidato passa a chamar a liquidação dos descontos após confirmar
+  o pagamento e os recebíveis. Erro da rotina deixa de ser ignorado. Repetição da
+  confirmação tenta reparar somente os descontos, sem repetir a baixa do crédito.
+- Prévia distingue repasse anterior de novos descontos; tela mostra “A conferir”
+  quando necessário. Falhas de consulta não são convertidas em indicação de pago.
+  Contagem usa count exact; totalização anterior à primeira confirmação ainda
+  precisa migrar para uma leitura agregada única para superar o limite de linhas.
+- Duas suítes novas simulam erros de servidor e descontos após o fechamento.
+  As 13 suítes locais passaram, sem credenciais de produção. Teste SQL reverteu
+  as fixtures; consulta posterior confirmou zero alocações de fixture persistidas.
+- Restam três rotinas ausentes: transferência entre cooperados e duas conversões
+  de cashback. Ainda pendentes a homologação visual, concorrência em conexões
+  distintas, sincronização completa com Livro Caixa, recuperação de todas as
+  etapas de liquidação e restauração integral. Não liberar produção nesta fase.

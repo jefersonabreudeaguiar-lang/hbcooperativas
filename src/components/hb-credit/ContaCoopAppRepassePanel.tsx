@@ -72,7 +72,9 @@ export function ContaCoopAppRepassePanel({ cnpj, mesReferencia, resumo, onConfir
       <div className="grid gap-3 sm:grid-cols-3 text-sm">
         <div className="rounded-xl border border-blue-200 bg-white p-3">
           <p className="text-xs text-blue-800">A pagar (fechamento)</p>
-          <p className="mt-1 text-lg font-bold text-blue-900">{formatCentsBRL(valorPendente)}</p>
+          <p className="mt-1 text-lg font-bold text-blue-900">
+            {preview?.requerConferenciaFechamento ? "A conferir" : formatCentsBRL(valorPendente)}
+          </p>
           <p className="text-xs text-gray-500 mt-1">{preview?.allocCount ?? 0} compra(s)</p>
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-3">
@@ -97,6 +99,10 @@ export function ContaCoopAppRepassePanel({ cnpj, mesReferencia, resumo, onConfir
           {preview.bloqueioMensagem ??
             `Aguardando pagamento dos cooperados no ciclo de entregas ${formatMesReferencia(mesReferencia)}.`}
         </AlertBanner>
+      )}
+
+      {preview?.requerConferenciaFechamento && (
+        <AlertBanner variant="warning">{preview.bloqueioMensagem}</AlertBanner>
       )}
 
       {valorPendente > 0 && !preview?.aguardandoPagamentosCooperados && (
