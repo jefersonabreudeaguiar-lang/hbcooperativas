@@ -19,6 +19,7 @@ import {
   solicitarMudancaPixMercado,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
+import type { ContaCoopRecebiveisResumo } from "@/modules/hb-credit/types";
 import type { ContaCoopCompraEstornavel, ContaCoopIntent, ContaCoopParceiro, ContaCoopSettlement, ContaCoopSolicitacaoEstorno } from "@/modules/hb-credit/types";
 import { ContaCoopFiscalNotesMercadoPanel } from "@/components/hb-credit/ContaCoopFiscalNotesMercadoPanel";
 import { MercadoHbCreditNfDispensadaAviso } from "@/components/hb-credit/MercadoHbCreditNfDispensadaAviso";
@@ -107,11 +108,16 @@ function MercadoParceiroContent() {
   const [pixChangeUnlocked, setPixChangeUnlocked] = useState(false);
   const [tab, setTab] = useState<MercadoTab>("inicio");
 
+  const [resumoRecebiveis, setResumoRecebiveis] = useState<ContaCoopRecebiveisResumo | null>(null);
+  const reloadInFlightRef = useRef(false);
   const reload = useCallback(async () => {
+    if (reloadInFlightRef.current) return;
+    reloadInFlightRef.current = true;
     setLoading(true);
     setError("");
     try {
       const data = await fetchMercadoParceiroData();
+      setResumoRecebiveis(data.resumoRecebiveis!);
       setParceiro(data.parceiro ?? null);
       setIntents(data.intents ?? []);
       setRecebiveis(data.recebiveis ?? []);
@@ -139,13 +145,24 @@ function MercadoParceiroContent() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar painel.");
     } finally {
+      reloadInFlightRef.current = false;
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    reload();
+    const initial = window.setTimeout(() => void reload(), 0);
     void import("@/lib/hb-credit/gerarQrDataUrl");
+    const refresh = () => { if (document.visibilityState === "visible") void reload(); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    const timer = window.setInterval(refresh, 60_000);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      window.clearInterval(timer);
+      window.clearTimeout(initial);
+    };
   }, [reload]);
 
   const cobrancaAberta = peekHbCreditMercadoCobrancaDraft();
@@ -351,20 +368,12 @@ function MercadoParceiroContent() {
   };
 
   const resumoMercado = useMemo(() => {
-    const abertoCents = recebiveis
-      .filter((r) => r.status === "aberto")
-      .reduce((sum, r) => sum + r.amountCents, 0);
-    const elegivelCents = recebiveis
-      .filter((r) => r.status === "elegivel")
-      .reduce((sum, r) => sum + r.amountCents, 0);
-    const emLiquidacaoCents = recebiveis
-      .filter((r) => r.status === "em_processamento")
-      .reduce((sum, r) => sum + r.amountCents, 0);
-    const aguardandoAssinaturaCents = settlements
-      .filter((s) => s.status === "aguardando_mercado")
-      .reduce((sum, s) => sum + s.totalCents, 0);
+    const abertoCents = resumoRecebiveis?.abertoCents ?? 0;
+    const elegivelCents = resumoRecebiveis?.elegivelCents ?? 0;
+    const emLiquidacaoCents = resumoRecebiveis?.emProcessamentoCents ?? 0;
+    const aguardandoAssinaturaCents = resumoRecebiveis?.aguardandoConfirmacaoCents ?? 0;
     const aReceberCents = abertoCents + elegivelCents;
-    const totalPendenteCents = aReceberCents + emLiquidacaoCents + aguardandoAssinaturaCents;
+    const totalPendenteCents = resumoRecebiveis?.totalPendenteCents ?? 0;
     const nfPercent =
       aReceberCents > 0 ? Math.min(100, Math.round((elegivelCents / aReceberCents) * 100)) : 0;
 
@@ -377,9 +386,10 @@ function MercadoParceiroContent() {
       totalPendenteCents,
       nfPercent,
     };
-  }, [recebiveis, settlements]);
+  }, [resumoRecebiveis]);
 
   if (loading && !parceiro) return <PageSkeleton />;
+  if (!resumoRecebiveis) return <div className="space-y-4"><AlertBanner variant="error" title="Saldo não consultado">{error || "Não foi possível conferir os recebíveis na nuvem."}</AlertBanner><Button onClick={() => void reload()}>Tentar novamente</Button></div>;
 
   const ativo = parceiro?.status === "ativo";
   const pendente = parceiro?.status === "pendente";
@@ -397,6 +407,7 @@ function MercadoParceiroContent() {
         <p className="text-xs font-semibold uppercase tracking-wider text-green-700">HB Créditos · Mercado</p>
         <h1 className="text-2xl font-bold text-gray-900">{parceiro?.nomeMercado ?? "Mercado parceiro"}</h1>
         <p className="text-sm text-gray-500">Vendas com crédito interno da cooperativa</p>
+        <Button size="sm" variant="secondary" onClick={() => void reload()} disabled={loading}>{loading ? "Atualizando…" : "Atualizar saldos"}</Button>
       </header>
 
       {parceiro && (
@@ -435,7 +446,9 @@ function MercadoParceiroContent() {
           <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 p-6 text-white shadow-lg">
             <p className="text-sm font-medium text-green-100">A receber da cooperativa</p>
             <p className="mt-1 text-4xl font-bold tracking-tight">{formatCentsBRL(resumoMercado.aReceberCents)}</p>
-            <p className="mt-1 text-xs text-green-200">{formatMesReferencia(mesReferencia)} · vendas aguardando repasse</p>
+            <p className="mt-1 text-xs text-green-200">Todos os meses · valor líquido das vendas aguardando repasse</p>
+            <p className="mt-2 text-xs text-green-100">Consultado em {new Date(resumoRecebiveis.consultadoEm).toLocaleString("pt-BR")}{error ? " · Não atualizado: tente novamente" : ""}</p>
+            {resumoRecebiveis.emRevisaoCents > 0 && <p className="mt-2 text-sm">Em revisão: {formatCentsBRL(resumoRecebiveis.emRevisaoCents)}</p>}
             {!isHbCreditMercadoNfDispensada() && (
             <div className="mt-5 space-y-2">
               <div className="flex justify-between text-xs text-green-100">
@@ -1015,7 +1028,8 @@ function MercadoParceiroContent() {
                 <span className="capitalize text-gray-600">{r.status}</span>
               </div>
             ))}
-            {!recebiveis.length && <p className="text-sm text-gray-500">Nenhum recebível ainda.</p>}
+            <p className="text-xs text-gray-500">Últimos 20 recebíveis pendentes. Os totais do início incluem todos os registros e meses.</p>
+            {!recebiveis.length && <p className="text-sm text-gray-500">Nenhum recebível pendente.</p>}
           </Card>
         </div>
       )}

@@ -7,6 +7,7 @@ import type {
   ContaCoopLimiteCooperado,
   ContaCoopLiquidacaoPreview,
   ContaCoopParceiro,
+  ContaCoopRecebiveisResumo,
   ContaCoopPixChangeRequest,
   ContaCoopPinResetRequest,
   ContaCoopCooperadoPinResetRequest,
@@ -163,8 +164,8 @@ export async function fetchCreditLimitesRevision(cnpj: string) {
 export async function fetchCreditParceiros(cnpj: string): Promise<ContaCoopParceiro[]> {
   const res = await secureApiFetch(`/api/credit/parceiros?cnpj=${encodeURIComponent(cnpj)}`);
   const data = await parseJson<{ ok?: boolean; parceiros?: ContaCoopParceiro[] }>(res);
-  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar mercados.");
-  return data.parceiros ?? [];
+  if (!res.ok || !data.ok || !Array.isArray(data.parceiros) || data.parceiros.some(p => !p.recebiveisResumo || p.recebiveisResumo.partnerId !== p.id)) throw new Error(data.error ?? "Não foi possível conferir os saldos dos mercados.");
+  return data.parceiros;
 }
 
 export async function postCreditLimites(body: Record<string, unknown>) {
@@ -717,6 +718,7 @@ export async function fetchMercadoParceiroData() {
     parceiro?: ContaCoopParceiro;
     intents?: ContaCoopIntent[];
     recebiveis?: { id: string; amountCents: number; status: string; createdAt: string }[];
+    resumoRecebiveis?: ContaCoopRecebiveisResumo;
     settlements?: ContaCoopSettlement[];
     hasPin?: boolean;
     pinLocked?: boolean;
@@ -731,7 +733,7 @@ export async function fetchMercadoParceiroData() {
       approvedRequest?: ContaCoopPixChangeRequest | null;
     };
   }>(res);
-  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar mercado.");
+  if (!res.ok || !data.ok || !data.resumoRecebiveis || data.resumoRecebiveis.partnerId !== data.parceiro?.id) throw new Error(data.error ?? "Não foi possível conferir os recebíveis do mercado. Atualize novamente.");
   return data;
 }
 

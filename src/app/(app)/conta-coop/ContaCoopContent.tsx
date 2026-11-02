@@ -268,6 +268,7 @@ function ContaCoopContent() {
     startTransition(() => setTab(next));
   }, []);
   const [loading, setLoading] = useState(true);
+  const [recebiveisConferidos, setRecebiveisConferidos] = useState(false);
   const [dashboardRefreshing, setDashboardRefreshing] = useState(false);
   const [limitesRefreshing, setLimitesRefreshing] = useState(false);
   const [limitesListaAviso, setLimitesListaAviso] = useState("");
@@ -696,11 +697,13 @@ function ContaCoopContent() {
     setLimitesPersistTick((n) => n + 1);
   }, []);
 
-  const loadParceiros = useCallback(async () => {
+  const parceirosRequestRef = useRef(false);
+  const loadParceiros = useCallback(async (background = false) => {
     if (!cnpj || cnpj.length !== 14) return;
-    setParceirosLoading(true);
+    if (parceirosRequestRef.current) return;
+    parceirosRequestRef.current = true;
+    if (!background) setParceirosLoading(true);
     setParceirosError("");
-    setParceirosLoaded(false);
     try {
       const parc = await fetchCreditParceiros(cnpj);
       setParceiros(parc);
@@ -710,6 +713,7 @@ function ContaCoopContent() {
       setParceirosError("Não foi possível carregar os mercados parceiros.");
       setParceirosLoaded(true);
     } finally {
+      parceirosRequestRef.current = false;
       setParceirosLoading(false);
     }
   }, [cnpj]);
@@ -730,12 +734,14 @@ function ContaCoopContent() {
     if (!background) setLoading(true);
     else setDashboardRefreshing(true);
     setError("");
+    setRecebiveisConferidos(false);
     const t0 = contaCoopPerfStart("POST /api/credit/dashboard");
     try {
       const coopId = user?.cooperativaId ?? "";
       const ids = cooperadoIdsAtivosRef.current;
       const dash = await fetchCreditDashboard(cnpj, creditosBaseRef.current);
       setDashboard(dash);
+      setRecebiveisConferidos(Boolean(dash));
       if (dash) gravarHbCreditDashboardPersistido(cnpj, dash);
       setLoading(false);
 
@@ -844,12 +850,20 @@ function ContaCoopContent() {
     void reloadRef.current({ background });
   }, [cnpj, tabActive]);
 
-  const parceirosTabs: Tab[] = ["mercados", "conferir_nf", "liquidar", "estornos"];
   useEffect(() => {
-    if (!tabActive || !cnpj || !parceirosTabs.includes(tab)) return;
-    if (parceirosLoaded && !parceirosLoading) return;
-    void loadParceiros();
-  }, [tab, cnpj, loadParceiros, parceirosLoaded, parceirosLoading]);
+    if (!tabActive || !cnpj || !["mercados", "conferir_nf", "liquidar", "estornos"].includes(tab)) return;
+    const initial = window.setTimeout(() => void loadParceiros(), 0);
+    const refresh = () => { if (document.visibilityState === "visible") void loadParceiros(true); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    const timer = window.setInterval(refresh, 60_000);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      window.clearInterval(timer);
+      window.clearTimeout(initial);
+    };
+  }, [tab, cnpj, loadParceiros, tabActive]);
 
   useEffect(() => {
     if (!tabActive || !cnpj) return;
@@ -1358,9 +1372,9 @@ function ContaCoopContent() {
               />
             </div>
             <StatCard
-              title="A receber mercados (aberto)"
-              value={formatCentsBRL(dashboard.lancamentosMes.recebivelMercadosAbertoCents)}
-              subtitle="Recebíveis em aberto, elegíveis ou em processamento"
+              title="A receber mercados · todos os meses"
+              value={recebiveisConferidos ? formatCentsBRL(dashboard.lancamentosMes.recebivelMercadosAbertoCents) : dashboardRefreshing ? "Consultando nuvem…" : "Saldo não consultado"}
+              subtitle="Líquido em aberto e elegível. Pagamentos em processamento são apresentados separadamente em Mercados."
               variant="default"
             />
           </div>
@@ -1819,7 +1833,7 @@ function ContaCoopContent() {
           ) : (
             <>
           <Card className="border-green-200 bg-green-50/50 !p-4">
-            <h3 className="font-semibold text-gray-900">Desconto por contrato com cada mercado</h3>
+            <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold text-gray-900">Saldos e contratos dos mercados</h3><Button size="sm" variant="secondary" onClick={() => void loadParceiros()} disabled={parceirosLoading}>Atualizar saldos</Button></div>
             <p className="mt-1 text-sm text-gray-600">
               Informe o percentual de desconto acordado com o mercado parceiro. O cooperado paga o valor integral da
               compra; na liquidação o mercado recebe o líquido e a diferença retorna à cooperativa (aba Descontos).
@@ -1834,6 +1848,18 @@ function ContaCoopContent() {
 
             return (
               <Card key={p.id} className="space-y-4 !p-4">
+                {p.recebiveisResumo ? <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+                  <p className="text-xs text-gray-600">A receber pelo mercado · todos os meses · líquido contratual</p>
+                  <p className="text-2xl font-bold text-green-800">{formatCentsBRL(p.recebiveisResumo.aReceberCents)}</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-700">
+                    <p>Em liquidação: {formatCentsBRL(p.recebiveisResumo.emProcessamentoCents)}</p>
+                    <p>Em revisão: {formatCentsBRL(p.recebiveisResumo.emRevisaoCents)}</p>
+                    <p>Já liquidado: {formatCentsBRL(p.recebiveisResumo.liquidadoCents)}</p>
+                    <p>Total pendente: {formatCentsBRL(p.recebiveisResumo.totalPendenteCents)}</p>
+                  </div>
+                  {p.recebiveisResumo.porMes.filter(m => m.aReceberCents > 0).map(m => <p key={m.mesReferencia} className="mt-1 text-xs text-gray-600">{formatMesReferencia(m.mesReferencia)}: {formatCentsBRL(m.aReceberCents)}</p>)}
+                  <p className="mt-2 text-xs text-gray-500">Consultado em {new Date(p.recebiveisResumo.consultadoEm).toLocaleString("pt-BR")}</p>
+                </div> : <p role="alert" className="text-sm text-amber-800">Saldo não consultado. Recarregue os mercados.</p>}
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-semibold text-gray-900">{p.nomeMercado}</p>

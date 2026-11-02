@@ -77,7 +77,23 @@ export interface ContaCoopCooperadoPinResetRequest {
   createdAt: string;
 }
 
+export interface ContaCoopRecebiveisResumo {
+  partnerId: string;
+  abertoCents: number;
+  elegivelCents: number;
+  aReceberCents: number;
+  emProcessamentoCents: number;
+  emRevisaoCents: number;
+  liquidadoCents: number;
+  totalPendenteCents: number;
+  quantidadePendente: number;
+  aguardandoConfirmacaoCents: number;
+  consultadoEm: string;
+  porMes: { mesReferencia: string; aReceberCents: number; emProcessamentoCents: number; emRevisaoCents: number }[];
+}
+
 export interface ContaCoopParceiro {
+  recebiveisResumo?: ContaCoopRecebiveisResumo;
   id: string;
   cooperativaCnpj: string;
   cnpjMercado: string;

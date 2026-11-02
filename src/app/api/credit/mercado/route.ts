@@ -1,3 +1,4 @@
+import { getMarketReceivableSnapshot } from "@/lib/supabase/hbCreditMarketReceivableSnapshot";
 import { NextResponse } from "next/server";
 import {
   acceptPartnerTerms,
@@ -5,7 +6,6 @@ import {
   getParceiroByUserId,
   hasPartnerFinancialPin,
   listIntentsParceiro,
-  listRecebiveisParceiro,
   listSettlementsForPartner,
   partnerNeedsTermsAcceptance,
   requestPartnerFinancialPinReset,
@@ -35,61 +35,66 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Acesso restrito ao mercado." }, { status: 403 });
   }
 
-  const parceiro = gate.ctx.session
-    ? await getParceiroByUserId(gate.ctx.supabase, gate.ctx.session.sub)
-    : null;
+  try {
+    const parceiro = gate.ctx.session
+      ? await getParceiroByUserId(gate.ctx.supabase, gate.ctx.session.sub)
+      : null;
 
-  if (!parceiro) {
-    return NextResponse.json({ error: "Mercado não vinculado." }, { status: 404 });
+    if (!parceiro) {
+      return NextResponse.json({ error: "Mercado não vinculado." }, { status: 404 });
+    }
+
+    if (isHbCreditMercadoNfDispensada()) {
+      await promoverRecebiveisParceiroSemNf(gate.ctx.supabase, parceiro.id);
+    }
+
+    const mesReferencia = getCurrentMesReferencia();
+    const [intents, snapshot, settlementsRaw, hasPin, fiscalPendentes, nomeCooperativa, pixChange, pinResetPending] = await Promise.all([
+      listIntentsParceiro(gate.ctx.supabase, parceiro.id),
+      getMarketReceivableSnapshot(gate.ctx.supabase, parceiro.cooperativaCnpj, parceiro.id),
+      listSettlementsForPartner(gate.ctx.supabase, parceiro.id),
+      hasPartnerFinancialPin(gate.ctx.supabase, parceiro.id),
+      countPartnerFiscalPending(gate.ctx.supabase, parceiro.id, mesReferencia).catch(() => 0),
+      getCooperativaNomeByCnpj(gate.ctx.supabase, parceiro.cooperativaCnpj),
+      getPartnerPixChangeStatus(gate.ctx.supabase, parceiro.id),
+      hasPendingPartnerPinResetRequest(gate.ctx.supabase, parceiro.cooperativaCnpj, parceiro.id),
+    ]);
+    const settlements: ContaCoopSettlement[] = await Promise.all(
+      settlementsRaw.map(async (s) => {
+        if (!s.comprovanteStoragePath) return s;
+        const comprovanteUrl = await getSettlementComprovanteSignedUrl(
+          gate.ctx.supabase,
+          s.comprovanteStoragePath
+        );
+        return { ...s, comprovanteUrl };
+      })
+    );
+
+    const pinLocked = Boolean(
+      parceiro.pinLockedUntil && new Date(parceiro.pinLockedUntil).getTime() > Date.now()
+    );
+    const cooperativaNome = nomeCooperativa ?? "Cooperativa parceira";
+    const needsTermsAcceptance = partnerNeedsTermsAcceptance(parceiro);
+
+    return NextResponse.json({
+      ok: true,
+      parceiro,
+      intents,
+      recebiveis: snapshot.recentReceivables,
+      resumoRecebiveis: snapshot.summaries[0],
+      settlements,
+      hasPin,
+      pinLocked,
+      pinResetPending,
+      fiscalPendentes,
+      mesReferenciaFiscal: mesReferencia,
+      cooperativaNome,
+      needsTermsAcceptance,
+      pixChange,
+    }, { headers: { "Cache-Control": "no-store" } });
+  } catch {
+    return NextResponse.json({ error: "Não foi possível conferir os recebíveis na nuvem. Atualize novamente." }, { status: 503 });
   }
-
-  if (isHbCreditMercadoNfDispensada()) {
-    await promoverRecebiveisParceiroSemNf(gate.ctx.supabase, parceiro.id);
-  }
-
-  const mesReferencia = getCurrentMesReferencia();
-  const [intents, recebiveis, settlementsRaw, hasPin, fiscalPendentes, nomeCooperativa, pixChange, pinResetPending] = await Promise.all([
-    listIntentsParceiro(gate.ctx.supabase, parceiro.id),
-    listRecebiveisParceiro(gate.ctx.supabase, parceiro.id),
-    listSettlementsForPartner(gate.ctx.supabase, parceiro.id),
-    hasPartnerFinancialPin(gate.ctx.supabase, parceiro.id),
-    countPartnerFiscalPending(gate.ctx.supabase, parceiro.id, mesReferencia).catch(() => 0),
-    getCooperativaNomeByCnpj(gate.ctx.supabase, parceiro.cooperativaCnpj),
-    getPartnerPixChangeStatus(gate.ctx.supabase, parceiro.id),
-    hasPendingPartnerPinResetRequest(gate.ctx.supabase, parceiro.cooperativaCnpj, parceiro.id),
-  ]);
-  const settlements: ContaCoopSettlement[] = await Promise.all(
-    settlementsRaw.map(async (s) => {
-      if (!s.comprovanteStoragePath) return s;
-      const comprovanteUrl = await getSettlementComprovanteSignedUrl(
-        gate.ctx.supabase,
-        s.comprovanteStoragePath
-      );
-      return { ...s, comprovanteUrl };
-    })
-  );
-
-  const pinLocked = Boolean(
-    parceiro.pinLockedUntil && new Date(parceiro.pinLockedUntil).getTime() > Date.now()
-  );
-  const cooperativaNome = nomeCooperativa ?? "Cooperativa parceira";
-  const needsTermsAcceptance = partnerNeedsTermsAcceptance(parceiro);
-
-  return NextResponse.json({
-    ok: true,
-    parceiro,
-    intents,
-    recebiveis,
-    settlements,
-    hasPin,
-    pinLocked,
-    pinResetPending,
-    fiscalPendentes,
-    mesReferenciaFiscal: mesReferencia,
-    cooperativaNome,
-    needsTermsAcceptance,
-    pixChange,
-  });
 }
 
 export async function PATCH(request: Request) {

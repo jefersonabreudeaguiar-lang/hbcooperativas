@@ -1,3 +1,4 @@
+import { getMarketReceivableSnapshot } from "@/lib/supabase/hbCreditMarketReceivableSnapshot";
 import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { uploadSettlementComprovante } from "@/lib/supabase/hbCreditSettlementStorage";
@@ -439,7 +440,7 @@ export async function getDashboardResumo(
   const mesReferencia = getCurrentMesReferencia();
   const { start, end } = mesReferenciaRange(mesReferencia);
 
-  const [{ data: txsMes }, { data: recebiveisAbertos }, { data: cashbackRows }] = await Promise.all([
+  const [{ data: txsMes, error: txError }, snapshot, { data: cashbackRows, error: cashbackError }] = await Promise.all([
     supabase
       .from("hb_credit_transactions")
       .select("event_type, amount_cents, discount_cents, net_receivable_cents, credit_debited_cents, status")
@@ -448,17 +449,14 @@ export async function getDashboardResumo(
       .in("event_type", ["PAYMENT", "REFUND"])
       .gte("created_at", start)
       .lt("created_at", end),
-    supabase
-      .from("hb_credit_receivables")
-      .select("amount_cents, net_amount_cents, gross_amount_cents, status")
-      .eq("cooperative_cnpj", digits)
-      .in("status", ["OPEN", "ELIGIBLE", "PROCESSING"]),
+    getMarketReceivableSnapshot(supabase, digits),
     supabase
       .from("hb_credit_cashback_balances")
       .select("available_cents")
       .eq("cooperative_cnpj", digits),
   ]);
 
+  if (txError || cashbackError) throw new Error("Não foi possível atualizar os valores na nuvem.");
   let comprasBrutoCents = 0;
   let comprasQtd = 0;
   let estornosCents = 0;
@@ -484,10 +482,7 @@ export async function getDashboardResumo(
     }
   }
 
-  let recebivelMercadosAbertoCents = 0;
-  for (const r of recebiveisAbertos ?? []) {
-    recebivelMercadosAbertoCents += Number(r.net_amount_cents ?? r.amount_cents);
-  }
+  const recebivelMercadosAbertoCents = snapshot.summaries.reduce((sum, r) => sum + r.aReceberCents, 0);
 
   const cashbackSaldoCooperadosCents = (cashbackRows ?? []).reduce(
     (sum, row) => sum + Number(row.available_cents ?? 0),
@@ -1495,11 +1490,12 @@ export async function registerParceiro(
 
 export async function listParceiros(supabase: SupabaseClient, cnpj: string): Promise<ContaCoopParceiro[]> {
   const digits = normalizeCnpj(cnpj);
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("hb_credit_partners")
     .select("*")
     .eq("cooperative_cnpj", digits)
     .order("created_at", { ascending: false });
+  if (error) throw new Error("Não foi possível consultar os mercados.");
   return (data ?? []).map((r) => mapParceiroRow(r as Record<string, unknown>));
 }
 
@@ -3969,27 +3965,6 @@ export async function refundPayment(
   };
 }
 
-export async function listRecebiveisParceiro(
-  supabase: SupabaseClient,
-  parceiroId: string,
-  limit = 20
-): Promise<{ id: string; amountCents: number; status: string; createdAt: string }[]> {
-  const { data } = await supabase
-    .from("hb_credit_receivables")
-    .select("id, amount_cents, status, created_at")
-    .eq("partner_id", parceiroId)
-    .neq("status", "SETTLED")
-    .order("created_at", { ascending: false })
-    .limit(limit);
-
-  return (data ?? []).map((r) => ({
-    id: String(r.id),
-    amountCents: Number(r.amount_cents),
-    status: receivableStatusFromDb(String(r.status)),
-    createdAt: String(r.created_at),
-  }));
-}
-
 export type PartnerIntentPaymentStatus = {
   status: IntentStatus;
   intentId: string;
@@ -5042,12 +5017,13 @@ export async function listSettlementsForPartner(
   parceiroId: string,
   limit = 12
 ): Promise<ContaCoopSettlement[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("hb_credit_settlements")
     .select("*")
     .eq("partner_id", parceiroId)
     .order("created_at", { ascending: false })
     .limit(limit);
+  if (error) throw new Error("Não foi possível consultar os pagamentos do mercado.");
   return (data ?? []).map((row) => mapSettlementRow(row as Record<string, unknown>));
 }
 

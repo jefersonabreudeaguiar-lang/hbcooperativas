@@ -39,6 +39,7 @@ export function ContaCoopLiquidacaoPanel({
   parceiros,
   cooperadoNome,
 }: ContaCoopLiquidacaoPanelProps) {
+  const previewRequestRef = useRef(0);
   const [partnerId, setPartnerId] = useState("");
   const [mesReferencia, setMesReferencia] = useState(getCurrentMesReferencia());
   const [preview, setPreview] = useState<ContaCoopLiquidacaoPreview | null>(null);
@@ -103,22 +104,25 @@ export function ContaCoopLiquidacaoPanel({
 
   const carregarPreview = useCallback(async () => {
     if (!cnpj || !partnerId || !mesReferencia) return;
+    const requestId = ++previewRequestRef.current;
     setBusy(true);
     setError("");
     setSuccess("");
     try {
       const data = await fetchLiquidacaoPreview(cnpj, partnerId, mesReferencia);
-      setPreview(data);
+      if (requestId === previewRequestRef.current) setPreview(data);
     } catch (e) {
+      if (requestId !== previewRequestRef.current) return;
       setPreview(null);
       setError(e instanceof Error ? e.message : "Erro ao carregar resumo.");
     } finally {
-      setBusy(false);
+      if (requestId === previewRequestRef.current) setBusy(false);
     }
   }, [cnpj, mesReferencia, partnerId]);
 
   useEffect(() => {
-    if (partnerId) void carregarPreview();
+    const timer = window.setTimeout(() => { if (partnerId) void carregarPreview(); }, 0);
+    return () => { window.clearTimeout(timer); previewRequestRef.current += 1; };
   }, [carregarPreview, partnerId]);
 
   const abrirComprovante = () => {
@@ -193,12 +197,19 @@ export function ContaCoopLiquidacaoPanel({
             <select
               className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
               value={partnerId}
-              onChange={(e) => setPartnerId(e.target.value)}
+              onChange={(e) => {
+                previewRequestRef.current += 1;
+                const id = e.target.value;
+                setPartnerId(id);
+                setPreview(null);
+                const primeiroMes = parceiros.find(p => p.id === id)?.recebiveisResumo?.porMes.find(m => m.aReceberCents > 0)?.mesReferencia;
+                setMesReferencia(primeiroMes ?? getCurrentMesReferencia());
+              }}
             >
               <option value="">Selecione</option>
               {parceirosAtivos.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.nomeMercado}
+                  {p.nomeMercado}{p.recebiveisResumo ? ` · ${formatCentsBRL(p.recebiveisResumo.aReceberCents)} a receber` : " · saldo não consultado"}
                 </option>
               ))}
             </select>
@@ -209,7 +220,7 @@ export function ContaCoopLiquidacaoPanel({
               type="month"
               className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
               value={mesReferencia}
-              onChange={(e) => setMesReferencia(e.target.value)}
+              onChange={(e) => { previewRequestRef.current += 1; setPreview(null); setMesReferencia(e.target.value); }}
             />
           </div>
           <div className="flex items-end">

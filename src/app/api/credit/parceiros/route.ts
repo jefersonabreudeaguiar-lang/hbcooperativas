@@ -1,8 +1,8 @@
+import { getMarketReceivableSnapshot } from "@/lib/supabase/hbCreditMarketReceivableSnapshot";
 import { NextResponse } from "next/server";
 import { listParceiros, resetPartnerFinancialPin, setParceiroStatus } from "@/lib/supabase/contaCoopStorage";
 import { requireCreditApi, requireCreditCnpj, requireCreditStaff } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
-import type { ParceiroStatus } from "@/modules/hb-credit/types";
 import { apiParceiroStatus } from "@/modules/hb-credit/infrastructure/mappers/statusMapper";
 
 export async function GET(request: Request) {
@@ -18,8 +18,18 @@ export async function GET(request: Request) {
   const denyStaff = requireCreditStaff(gate.ctx);
   if (denyStaff) return denyStaff;
 
-  const parceiros = await listParceiros(gate.ctx.supabase, cnpj);
-  return NextResponse.json({ ok: true, parceiros });
+  try {
+    const [parceiros, snapshot] = await Promise.all([listParceiros(gate.ctx.supabase, cnpj), getMarketReceivableSnapshot(gate.ctx.supabase, cnpj)]);
+    if (parceiros.length !== snapshot.summaries.length) throw new Error("Cadastro incompleto.");
+    const completos = parceiros.map(p => {
+      const recebiveisResumo = snapshot.summaries.find(s => s.partnerId === p.id);
+      if (!recebiveisResumo) throw new Error("Saldo não consultado.");
+      return { ...p, recebiveisResumo };
+    });
+    return NextResponse.json({ ok: true, parceiros: completos }, { headers: { "Cache-Control": "no-store" } });
+  } catch {
+    return NextResponse.json({ error: "Não foi possível conferir os recebíveis dos mercados na nuvem. Atualize novamente." }, { status: 503 });
+  }
 }
 
 export async function POST(request: Request) {
