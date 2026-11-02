@@ -141,3 +141,32 @@ continuarem pendentes.
   (transferência, conversão de cashback, confirmação de repasse, liquidação do
   desconto e conversão de cashback em crédito), revisão de estornos, validação de
   login/abas por perfil, armazenamento, concorrência e restauração integral.
+
+## Estornos — validação de composição
+
+- O teste `supabase/tests/hb_refund_balances.sql` reproduziu falha na rotina antiga:
+  compra de 1.000 centavos com 200 de cashback debitou 800 de crédito, mas o estorno
+  devolveu 1.000. Um uso anterior de 1.000 caiu incorretamente para 800.
+- Migração `20261102180145_hb_credit_refund_consistent_balances.sql` aplicada
+  somente no banco de homologação. Restaura o crédito efetivamente debitado,
+  devolve o cashback aplicado, reverte o cashback concedido e identifica como
+  revertidas as parcelas de desconto ainda não liquidadas.
+- O estorno bloqueia a venda e a conta antes de verificar repetição. Repetição
+  confirma a operação anterior sem gerar novo crédito; falha de gravação propaga
+  erro e reverte a operação inteira. Nenhum erro é convertido em sucesso parcial.
+- Caso a composição seja incompatível com o saldo atual ou o cashback necessário
+  já tenha sido consumido, retorna erro de conferência antes de alterar saldos.
+  Não há perdão silencioso de diferença nem saldo truncado para zero.
+- Teste passou: compra mista, compra sem cashback aplicado, estorno isolado de
+  venda concluída integralmente com cashback, separação por cooperativa,
+  recebível do mercado, repetição, colisão de identificador ao fim da gravação
+  (rollback de todos os efeitos) e cashback indisponível (recusa sem alterações).
+  Pagamento e consulta de recebíveis também passaram novamente após a mudança.
+- O cenário integralmente com cashback testa o estorno de um estado concluído;
+  não comprova ainda a autorização de uma compra integralmente com cashback.
+- Advisor: zero ERROR/WARN, permanecendo as mesmas nove INFO de tabelas de uso
+  exclusivo do servidor. Não houve alteração de produção ou integração externa.
+- Pendentes para esta área: concorrência em conexões distintas, fluxo de aprovação
+  pela interface, tratamento contábil de estorno após liquidação/fechamento e
+  alinhamento da apresentação de todos os componentes no extrato. As cinco
+  rotinas ainda ausentes continuam pendentes de revisão própria.
