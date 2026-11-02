@@ -12,7 +12,7 @@ export function hbCreditAccountPersistidoEhShellVazio(snap: HbCreditAccountPersi
   const liberado = Math.max(0, acc.limiteLiberadoCents ?? 0);
   const disponivel = Math.max(0, acc.valorDisponivelCents ?? 0);
   const usado = Math.max(0, acc.valorUsadoCents ?? 0);
-  if (liberado > 0 || disponivel > 0 || usado > 0) return false;
+  if (liberado > 0 || disponivel > 0 || usado > 0 || (acc.saldoProprioDisponivelCents ?? 0) > 0) return false;
   return !snap.hasPin;
 }
 

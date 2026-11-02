@@ -23,11 +23,16 @@ export function hbCreditEffectiveDisponivelCents(
 }
 
 /** Débito de crédito HB após aplicar cashback (espelha hb_credit_authorize_payment). */
-export function hbCreditDebitFromGrossCents(grossCents: number, useCashback: boolean, cashbackAvailableCents: number): number {
+export function hbCreditDebitFromGrossCents(grossCents: number, useCashback: boolean, cashbackAvailableCents: number, ownBalanceAvailableCents = 0): number {
   const gross = Math.max(0, Math.round(grossCents));
-  if (!useCashback) return gross;
-  const cb = Math.max(0, Math.round(cashbackAvailableCents));
-  return Math.max(0, gross - Math.min(cb, gross));
+  const cb = useCashback ? Math.max(0, Math.round(cashbackAvailableCents)) : 0;
+  const own = Math.max(0, Math.round(ownBalanceAvailableCents));
+  return Math.max(0, gross - Math.min(cb, gross) - own);
+}
+
+/** Saldo próprio é recurso disponível, sem aumentar o limite de empréstimo. */
+export function hbPaymentAvailableCents(limite: ContaCoopLimiteCooperado): number {
+  return Math.max(0, limite.valorDisponivelCents) + Math.max(0, limite.saldoProprioDisponivelCents ?? 0);
 }
 
 /** Limite alinhado (cap) — cooperado pode pagar este valor com a flag de cashback informada. */
@@ -37,7 +42,7 @@ export function canAffordHbPaymentWithLimite(
   useCashback: boolean
 ): boolean {
   const cashback = limite.cashbackDisponivelCents ?? 0;
-  const creditDebit = hbCreditDebitFromGrossCents(grossCents, useCashback, cashback);
+  const creditDebit = hbCreditDebitFromGrossCents(grossCents, useCashback, cashback, limite.saldoProprioDisponivelCents ?? 0);
   return limite.valorDisponivelCents >= creditDebit;
 }
 

@@ -381,6 +381,9 @@ export type AuthorizeCreditPaymentResult = {
   receiptCode?: string;
   transacaoId?: string;
   disponivelAposCents?: number;
+  saldoProprioAposCents?: number;
+  creditoDebitadoCents?: number;
+  duplicate?: boolean;
   financeiroConfirmado?: boolean;
   projecaoPendente?: boolean;
   projecaoAReceber?: HbAuthorizeProjecaoAReceberResult;

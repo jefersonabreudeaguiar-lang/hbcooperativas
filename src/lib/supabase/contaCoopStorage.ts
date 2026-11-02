@@ -1662,7 +1662,7 @@ export async function getHbCreditAccountRevision(
     updatedAt,
     limitReleasedCents,
     amountUsedCents,
-    revision: `${updatedAt ?? ""}|${limitReleasedCents}|${amountUsedCents}`,
+    revision: `${updatedAt ?? ""}|${limitReleasedCents}|${amountUsedCents}|${Number(found.row.own_balance_cents ?? 0)}`,
   };
 }
 
@@ -2787,6 +2787,8 @@ export async function authorizePayment(
       receiptCode: string;
       disponivelAposCents: number;
       cashbackAppliedCents?: number;
+      saldoProprioAposCents?: number;
+      creditoDebitadoCents?: number;
       duplicate?: boolean;
     }
   | { ok: false; error: string; code?: string }
@@ -2865,6 +2867,8 @@ export async function authorizePayment(
     duplicate?: boolean;
     transacao_id?: string;
     disponivel_apos_centavos?: number;
+    own_balance_available_cents?: number;
+    credit_debited_cents?: number;
   };
   if (!result?.ok) {
     const mapped = mapAuthorizeRpcError(result);
@@ -2912,6 +2916,8 @@ export async function authorizePayment(
     receiptCode: finalReceiptCode,
     disponivelAposCents,
     cashbackAppliedCents: Number((result as { cashback_applied_cents?: number }).cashback_applied_cents ?? 0),
+    saldoProprioAposCents: result.own_balance_available_cents,
+    creditoDebitadoCents: result.credit_debited_cents,
     duplicate: Boolean(result.duplicate),
   };
 }

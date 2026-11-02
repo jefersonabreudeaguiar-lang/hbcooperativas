@@ -15,6 +15,8 @@ const LEDGER_LABELS: Record<string, string> = {
   TRANSFER_OUT: "Transferência enviada",
   TRANSFER_IN: "Transferência recebida em saldo próprio",
   OWN_BALANCE_CREDIT: "Entrada em saldo próprio",
+  OWN_BALANCE_USE: "Saldo próprio usado no pagamento",
+  OWN_BALANCE_REFUND: "Estorno em saldo próprio",
 };
 
 export function labelLedgerTipo(tipo: string): string {
@@ -39,7 +41,7 @@ export function formatLedgerEntryLabel(
   return labelLedgerTipo(tipo);
 }
 
-const DEBIT_LEDGER_TIPOS = new Set<string>(["PAYMENT", "CASHBACK_USE", "CASHBACK_SWEEP", "PARTNER_BLOCK", "TRANSFER_OUT"]);
+const DEBIT_LEDGER_TIPOS = new Set<string>(["PAYMENT", "CASHBACK_USE", "CASHBACK_SWEEP", "PARTNER_BLOCK", "TRANSFER_OUT", "OWN_BALANCE_USE"]);
 
 /** Extrato cooperado: saída negativa, entrada positiva (tipo manda; direction só em LIMIT_ADJUST). */
 export function signedLedgerAmountCentsForExtrato(

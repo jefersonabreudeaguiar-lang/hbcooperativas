@@ -284,3 +284,27 @@ continuarem pendentes.
   saldo total e composição nas telas/caches, reconciliação e reset via API,
   testes de concorrência real e latência do sweep, scripts antigos de reparo de
   schema, cancelamentos e Livro Caixa. A existência das rotinas não conclui a etapa.
+
+### Compras e estornos com saldo próprio — 02/11/2026
+
+- Aplicada somente na homologação a migration `20261102195821_hb_credit_owned_purchase_refund.sql`.
+  Compra usa cashback solicitado, depois saldo próprio e finalmente crédito. A
+  composição fica na transação; débito de empréstimo registra apenas sua parcela.
+  Conta ativa continua obrigatória; snapshot de crédito só é exigido quando há
+  empréstimo. Pagamento integral próprio/cashback não cria movimento de valor zero.
+- Estorno restaura cada origem separadamente, registra retorno próprio no extrato
+  e preserva dívida de outras operações. Os bloqueios e rollback permanecem.
+- Tela da conta e cartão inicial somam recursos próprios ao disponível para pagar;
+  conta detalha saldo próprio e crédito. Pagamento simula a composição e usa o
+  débito informado pelo servidor no cache; repetição não soma dívida novamente.
+  Revisão entre aparelhos inclui saldo próprio e cache não descarta conta que só
+  tenha esse recurso. Extrato diferencia uso e estorno de saldo próprio.
+- Sete testes SQL passaram, incluindo compra mista, integral própria e integral
+  cashback, estorno, repetição, erro parcial e isolamento. Dados fictícios revertidos.
+  Quinze suítes locais passaram após os ajustes finais de cache/cartão, assim
+  como compilação Next/TypeScript em Node 24 e verificação do pacote de persistência.
+  Consulta final confirmou zero contas/transações fictícias remanescentes.
+- Trava continua false: ainda faltam fechamento da integração de transferências,
+  reset/reconciliação, frescor de snapshots do QR, idempotência concorrente da
+  compra, reparos antigos, Livro Caixa e validação autenticada por perfil. Esta
+  etapa não libera uso na produção nem conclui o plano completo.

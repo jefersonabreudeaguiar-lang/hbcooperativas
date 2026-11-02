@@ -7,7 +7,7 @@ import { Wallet } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
-import { normalizeHbPaymentLimiteDisponivel } from "@/modules/hb-credit/engine/paymentAffordability";
+import { hbPaymentAvailableCents, normalizeHbPaymentLimiteDisponivel } from "@/modules/hb-credit/engine/paymentAffordability";
 import {
   lerHbCreditAccountPersistido,
   lerHbCreditAccountPersistidoFlex,
@@ -125,7 +125,7 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
     if (!acc) return null;
     const norm = normalizeHbPaymentLimiteDisponivel(acc);
     return {
-      saldo: norm.valorDisponivelCents,
+      saldo: hbPaymentAvailableCents(norm),
       limite: norm.limiteLiberadoCents,
       usado: Math.max(0, norm.valorUsadoCents ?? 0),
     };

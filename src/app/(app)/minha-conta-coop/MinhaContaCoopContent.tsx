@@ -26,7 +26,7 @@ import {
   storeHbCreditCooperadoReceberDraft,
 } from "@/lib/hb-credit/hbCreditCooperadoReceberDraft";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
-import { normalizeHbPaymentLimiteDisponivel } from "@/modules/hb-credit/engine/paymentAffordability";
+import { hbPaymentAvailableCents, normalizeHbPaymentLimiteDisponivel } from "@/modules/hb-credit/engine/paymentAffordability";
 import { round2 } from "@/utils/calculations";
 import { getData, preloadAppData, updateData, waitForAppDataWarm } from "@/services/dataStore";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
@@ -550,7 +550,7 @@ function MinhaContaCoopContent() {
   }
 
   const saldoHb = account
-    ? normalizeHbPaymentLimiteDisponivel(account).valorDisponivelCents
+    ? hbPaymentAvailableCents(normalizeHbPaymentLimiteDisponivel(account))
     : 0;
   const cashback = account?.cashbackDisponivelCents ?? 0;
   const podeLiberarCashback =
@@ -645,6 +645,12 @@ function MinhaContaCoopContent() {
         <p className="relative mt-1 text-4xl font-bold tracking-tight tabular-nums sm:text-5xl">
           {formatCentsBRL(saldoHb)}
         </p>
+        {(account?.saldoProprioDisponivelCents ?? 0) > 0 && (
+          <p className="relative mt-2 text-sm text-green-100">
+            Saldo próprio: {formatCentsBRL(account?.saldoProprioDisponivelCents ?? 0)}
+            {" · "}Crédito das entregas: {formatCentsBRL(account?.valorDisponivelCents ?? 0)}
+          </p>
+        )}
         {valorAReceberFicha.valor > 0 && (
           <div className="relative mt-4 rounded-2xl border border-white/20 bg-white/10 px-3 py-2.5">
             <p className="text-xs font-medium text-green-100">Valor a receber (ficha)</p>

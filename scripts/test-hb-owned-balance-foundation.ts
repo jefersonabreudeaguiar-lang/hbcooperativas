@@ -6,8 +6,25 @@ import type { OperacionalSyncPayload } from "../src/lib/supabase/cooperativaSync
 import { signedLedgerAmountCentsForExtrato } from "../src/lib/hb-credit/ledgerLabels";
 import { authorizeCooperadoTransferPayment, createCooperadoTransferIntent } from "../src/lib/supabase/cooperadoTransferenciaCreditoStorage";
 import { sweepUnusedCashbackToCredit } from "../src/lib/supabase/contaCoopStorage";
+import { canAffordHbPaymentWithLimite, hbCreditDebitFromGrossCents, hbPaymentAvailableCents } from "../src/modules/hb-credit/engine/paymentAffordability";
+import type { ContaCoopLimiteCooperado } from "../src/modules/hb-credit/types";
+import { hbCreditAccountPersistidoEhShellVazio, type HbCreditAccountPersistido } from "../src/lib/hb-credit/hbCreditAccountPersistencia";
 
 async function main() {
+  const funds = { valorDisponivelCents: 500, saldoProprioDisponivelCents: 300,
+    cashbackDisponivelCents: 200 } as ContaCoopLimiteCooperado;
+  assert.equal(hbPaymentAvailableCents(funds), 800);
+  assert.equal(canAffordHbPaymentWithLimite(funds, 1000, false), false);
+  assert.equal(canAffordHbPaymentWithLimite(funds, 1000, true), true);
+  assert.equal(hbCreditDebitFromGrossCents(1000, true, 200, 300), 500);
+  assert.equal(hbCreditDebitFromGrossCents(1000, false, 200, 2000), 0);
+  assert.equal(hbCreditDebitFromGrossCents(1000, true, 2000, 300), 0);
+  assert.equal(signedLedgerAmountCentsForExtrato("OWN_BALANCE_USE", "debit", 300), -300);
+  assert.equal(signedLedgerAmountCentsForExtrato("OWN_BALANCE_REFUND", "credit", 300), 300);
+  assert.equal(hbCreditAccountPersistidoEhShellVazio({ account: {
+    limiteLiberadoCents: 0, valorDisponivelCents: 0, valorUsadoCents: 0,
+    saldoProprioDisponivelCents: 300,
+  }, hasPin: false } as HbCreditAccountPersistido), false, "Saldo próprio não pode ser descartado como conta vazia");
   const rows = [
     { id: "payment", event_type: "PAYMENT", status: "posted", amount_cents: 100, credit_debited_cents: 100 },
     { id: "ctrf_out", event_type: "ADJUSTMENT", status: "posted", amount_cents: 300, credit_debited_cents: 200 },

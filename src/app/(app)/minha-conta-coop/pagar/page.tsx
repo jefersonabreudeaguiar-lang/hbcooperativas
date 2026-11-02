@@ -40,6 +40,7 @@ import {
   canAffordHbPaymentScanPreview,
   canAffordHbPaymentWithLimite,
   hbCreditDebitFromGrossCents,
+  hbPaymentAvailableCents,
   mergeHbPaymentLimiteForScan,
 } from "@/modules/hb-credit/engine/paymentAffordability";
 import { cn } from "@/utils/format";
@@ -222,7 +223,8 @@ function HbCreditPagarContent() {
   }, [cnpj, draft, hbApiCooperadoId, intent, limite]);
 
   const pagamentoCooperado = intent ? isCooperadoTransferIntentId(intent.id) : false;
-  const saldoDisponivel = limite?.valorDisponivelCents ?? 0;
+  const saldoDisponivel = limite ? hbPaymentAvailableCents(limite) : 0;
+  const saldoProprio = limite?.saldoProprioDisponivelCents ?? 0;
   const cashbackAvail = limite?.cashbackDisponivelCents ?? 0;
   const useCashbackOnPay = useMemo(() => {
     if (!limite || !intent || pagamentoCooperado) return false;
@@ -230,9 +232,11 @@ function HbCreditPagarContent() {
     return canAffordHbPaymentWithLimite(limite, intent.amountCents, true);
   }, [limite, intent, pagamentoCooperado]);
   const debito = intent
-    ? hbCreditDebitFromGrossCents(intent.amountCents, useCashbackOnPay, cashbackAvail)
+    ? hbCreditDebitFromGrossCents(intent.amountCents, useCashbackOnPay, cashbackAvail, saldoProprio)
     : 0;
-  const saldoApos = Math.max(0, saldoDisponivel - debito);
+  const saldoApos = Math.max(0, saldoDisponivel - (intent
+    ? hbCreditDebitFromGrossCents(intent.amountCents, useCashbackOnPay, cashbackAvail)
+    : 0));
 
   const voltar = useCallback(() => {
     clearHbCreditPaymentDraft();
@@ -267,12 +271,14 @@ function HbCreditPagarContent() {
         useCashback: pagamentoCooperado ? false : useCashbackOnPay,
       });
 
-      if (typeof res.disponivelAposCents === "number") {
+      if (!res.duplicate && typeof res.disponivelAposCents === "number" &&
+          (saldoProprio === 0 || typeof res.saldoProprioAposCents === "number")) {
         const nextDisponivel = Math.max(0, res.disponivelAposCents);
         const nextAccount: ContaCoopLimiteCooperado = {
           ...limite,
           valorDisponivelCents: nextDisponivel,
-          valorUsadoCents: Math.min(limite.limiteLiberadoCents, limite.valorUsadoCents + debito),
+          valorUsadoCents: limite.valorUsadoCents + (res.creditoDebitadoCents ?? debito),
+          saldoProprioDisponivelCents: res.saldoProprioAposCents ?? 0,
           cashbackDisponivelCents: useCashbackOnPay
             ? Math.max(0, cashbackAvail - Math.min(cashbackAvail, intent.amountCents))
             : limite.cashbackDisponivelCents,
@@ -285,8 +291,8 @@ function HbCreditPagarContent() {
           pinResetPending: false,
           savedAt: new Date().toISOString(),
         });
-        notifyHbCreditAccountCacheUpdated();
       }
+      notifyHbCreditAccountCacheUpdated();
 
       clearHbCreditPaymentDraft();
       setSuccess({ receiptCode: res.receiptCode ?? "—" });
@@ -303,6 +309,7 @@ function HbCreditPagarContent() {
     contaCoopValorSync?.mesReferencia,
     cooperadoNome,
     debito,
+    saldoProprio,
     draft,
     hbApiCooperadoId,
     hasPin,
