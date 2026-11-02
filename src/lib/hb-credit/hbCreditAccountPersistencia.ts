@@ -25,6 +25,9 @@ export type HbCreditAccountPersistido = {
   savedAt: string;
 };
 
+// A leitura atual não depende da quota do navegador; mantém isolamento por CNPJ/conta.
+const accountMemory = new Map<string, HbCreditAccountPersistido>();
+
 export function hbCreditAccountStorageKey(cnpj: string, cooperadoId: string): string {
   return `hb.coop.hbCreditAccount.v${HB_CREDIT_ACCOUNT_STORAGE_VERSION}:${cnpj}:${cooperadoId}`;
 }
@@ -33,7 +36,10 @@ export function lerHbCreditAccountPersistido(
   cnpj: string,
   cooperadoId: string
 ): HbCreditAccountPersistido | null {
-  if (typeof localStorage === "undefined" || !cnpj || !cooperadoId) return null;
+  if (!cnpj || !cooperadoId) return null;
+  const memory = accountMemory.get(hbCreditAccountStorageKey(cnpj, cooperadoId));
+  if (memory) return hbCreditAccountPersistidoEhShellVazio(memory) ? null : memory;
+  if (typeof localStorage === "undefined") return null;
   try {
     const raw = localStorage.getItem(hbCreditAccountStorageKey(cnpj, cooperadoId));
     if (!raw) return null;
@@ -70,8 +76,8 @@ export function lerHbCreditAccountPersistidoFlex(
   cnpj?: string
 ): HbCreditAccountPersistido | null {
   if (cnpj) {
-    const direct = lerHbCreditAccountPersistido(cnpj, cooperadoId);
-    if (direct) return direct;
+    // Nunca buscar saldo de outro CNPJ quando a cooperativa atual é conhecida.
+    return lerHbCreditAccountPersistido(cnpj, cooperadoId);
   }
   if (typeof localStorage === "undefined") return null;
   const prefix = `hb.coop.hbCreditAccount.v${HB_CREDIT_ACCOUNT_STORAGE_VERSION}:`;
@@ -99,8 +105,17 @@ export function gravarHbCreditAccountPersistido(
   payload: HbCreditAccountPersistido
 ): void {
   if (typeof localStorage === "undefined") return;
+  const key = hbCreditAccountStorageKey(cnpj, cooperadoId);
+  accountMemory.delete(key);
+  accountMemory.set(key, payload);
+  while (accountMemory.size > 32) {
+    const first = accountMemory.keys().next().value;
+    if (!first) break;
+    accountMemory.delete(first);
+  }
   try {
-    localStorage.setItem(hbCreditAccountStorageKey(cnpj, cooperadoId), JSON.stringify(payload));
+    localStorage.setItem(key, JSON.stringify(payload));
+    accountMemory.delete(key);
   } catch {
     /* quota */
   }

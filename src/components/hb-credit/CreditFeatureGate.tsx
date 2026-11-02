@@ -39,7 +39,7 @@ export function CreditFeatureGate({ children }: { children: React.ReactNode }) {
   const canEnterHbArea =
     Boolean(user) && (cooperadoExperience || parceiroExperience || staffHbExperience);
   const cooperadoHbHubOpen =
-    cooperadoExperience && isContaCoopUiPublic() && Boolean(user?.cooperadoId?.trim());
+    cooperadoExperience && isContaCoopUiPublic();
   const staffHbHubOpen = staffHbExperience && isContaCoopUiPublic() && !parceiroExperience;
   const pageAllowed =
     cooperadoHbHubOpen ||

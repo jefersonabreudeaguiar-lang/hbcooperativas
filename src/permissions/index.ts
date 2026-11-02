@@ -452,7 +452,7 @@ export function isHbCreditCooperadoNavEligible(
 ): boolean {
   if (!isContaCoopUiPublic()) return false;
   if (!isCooperadoAppUser(user)) return false;
-  if (!user.cooperadoId?.trim()) return false;
+  // O atalho não depende do cache/vínculo já ter aquecido. APIs validam a identidade.
   return true;
 }
 

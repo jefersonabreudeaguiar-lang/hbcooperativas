@@ -8,11 +8,13 @@ import {
   PWA_REPAIR_SESSION_VERSION,
 } from "@/lib/pwa/clientRelease";
 import { cooperadoMobilePilotInlineSessionHelperJs } from "@/lib/cooperado/cooperadoMobilePilotInlineSession";
+import { isContaCoopUiPublic } from "@/utils/contaCoopUiVisibility";
 const SESSION_KEY = "coopeagriplla_session";
 
 export function buildInlineCooperadoBootShellScript(): string {
   const directKey = PWA_DIRECT_ENTRY_SESSION_KEY;
   const pilotFn = cooperadoMobilePilotInlineSessionHelperJs();
+  const hbEntry = isContaCoopUiPublic() ? '<a href="/minha-conta-coop" style="display:block;margin-top:16px;padding:18px;border:2px solid #a7f3d0;border-radius:16px;background:#ecfdf5;color:#14532d;text-decoration:none;font-weight:700">HB Créditos<span style="display:block;margin-top:4px;font-size:13px;font-weight:400">Abrir saldo e pagamentos</span></a>' : "";
   return `(function(){try{${pilotFn}
 if(typeof document==="undefined")return;
 var el=document.getElementById("hb-coop-boot-shell");
@@ -38,11 +40,13 @@ function paintInicio(s){
     +'<div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px">'
     +'<div style="height:96px;background:#fff;border-radius:12px;border:1px solid #e5e7eb"></div>'
     +'<div style="height:96px;background:#fff;border-radius:12px;border:1px solid #e5e7eb"></div>'
-    +"</div></div>"
+    +"</div>"
+    +${JSON.stringify(hbEntry)}
+    +"</div>"
     +'<div style="position:fixed;bottom:0;left:0;right:0;height:56px;background:#fff;border-top:1px solid #e5e7eb;display:flex;justify-content:space-around;align-items:center;padding:0 8px">'
     +'<span style="font-size:11px;color:#166534;font-weight:600">Início</span>'
     +'<span style="font-size:11px;color:#9ca3af">Entregas</span>'
-    +'<span style="font-size:11px;color:#9ca3af">Ficha</span>'
+    +'<span style="font-size:11px;color:#9ca3af">Preços</span>'
     +'<span style="font-size:11px;color:#9ca3af">Financeiro</span>'
     +"</div>";
   el.style.display="flex";
