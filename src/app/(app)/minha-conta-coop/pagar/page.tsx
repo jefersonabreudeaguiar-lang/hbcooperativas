@@ -105,7 +105,7 @@ function HbCreditPagarContent() {
   }, [cnpj, cooperadoId, cooperadoNome, data, user]);
 
   useEffect(() => {
-    if (!cnpj || !hbApiCooperadoId) return;
+    if (!cnpj || !hbApiCooperadoId || success) return;
 
     const ready = peekHbCreditPaymentDraft();
     if (ready) {
@@ -157,7 +157,7 @@ function HbCreditPagarContent() {
     return () => {
       cancelled = true;
     };
-  }, [cnpj, hbApiCooperadoId, cooperadoId, user?.cooperadoId, router]);
+  }, [cnpj, hbApiCooperadoId, cooperadoId, user?.cooperadoId, router, success]);
 
   useEffect(() => {
     if (!loadingQr || draft) return;
@@ -271,6 +271,9 @@ function HbCreditPagarContent() {
         useCashback: pagamentoCooperado ? false : useCashbackOnPay,
       });
 
+      setSuccess({ receiptCode: res.receiptCode ?? res.transacaoId ?? intent.id });
+      setPayPin("");
+      try {
       if (!res.duplicate && typeof res.disponivelAposCents === "number" &&
           (saldoProprio === 0 || typeof res.saldoProprioAposCents === "number")) {
         const nextDisponivel = Math.max(0, res.disponivelAposCents);
@@ -295,7 +298,9 @@ function HbCreditPagarContent() {
       notifyHbCreditAccountCacheUpdated();
 
       clearHbCreditPaymentDraft();
-      setSuccess({ receiptCode: res.receiptCode ?? "—" });
+      } catch {
+        // O pagamento já foi confirmado; a próxima consulta renovará o cache.
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível concluir o pagamento.");
     } finally {
@@ -431,6 +436,18 @@ function HbCreditPagarContent() {
           <p className="mt-3 text-xs text-gray-500">O mercado já foi avisado na hora.</p>
         </div>
         <div className="p-6 pb-10">
+          <Button variant="secondary" className="mb-3 w-full" onClick={async () => {
+            const text = ["HB Créditos — Comprovante", "Pagamento confirmado", `Valor: ${formatCentsBRL(intent.amountCents)}`, `Recebedor: ${draft.parceiroNome}`, `Cooperado: ${cooperadoNome}`, `Comprovante: ${success.receiptCode}`].join("\n");
+            try {
+              if (navigator.share) await navigator.share({ title: "Comprovante HB Créditos", text });
+              else {
+                await navigator.clipboard.writeText(text);
+                window.alert("Comprovante copiado. Cole na conversa para compartilhar.");
+              }
+            } catch (e) {
+              if (!(e instanceof DOMException && e.name === "AbortError")) window.alert("Não foi possível compartilhar. Tente novamente.");
+            }
+          }}>Compartilhar comprovante</Button>
           <Button className={hbCooperadoPrimaryBtn} onClick={() => router.replace("/minha-conta-coop")}>
             Concluir
           </Button>
