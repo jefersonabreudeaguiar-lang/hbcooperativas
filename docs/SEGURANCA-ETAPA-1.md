@@ -533,3 +533,42 @@ continuarem pendentes.
   A futura transação deve cobrir o lote inteiro, sem confirmação parcial, e ser
   validada com sobreposição real. Sincronização JSON concorrente também permanece
   uma etapa separada. Não declarar concluída a proteção global por esta correção.
+
+### Aprovação de limites em uma transação — 03/11/2026 (Fortaleza)
+
+- Migration criada pela CLI e registrada na homologação como
+  `20261103201749_hb_credit_atomic_limit_batch.sql` (arquivo alinhado à versão
+  devolvida pelo histórico do banco). RPC invoker, sem execução para PUBLIC,
+  anon ou authenticated; somente service_role. Nenhuma migration em produção.
+- As quatro ações HTTP do responsável (salvar percentual/teto, alterar teto,
+  limite individual e lote) passam por uma RPC. O servidor busca a base de toda
+  a cooperativa na nuvem, deduplica titular antigo/atual e não substitui zero por
+  valores enviados pelo cliente. Outros cadastros da seleção são recusados.
+- A RPC serializa comandos da mesma cooperativa, bloqueia contas em ordem fixa,
+  relê o usado atual, valida o lote inteiro e grava teto, percentual, limites,
+  snapshots, estado/versão e auditoria na mesma transação. Preserva PIN, usado,
+  saldo próprio e bloqueio. Não retorna hash do PIN. Alterar só o teto/valor fixo
+  preserva o percentual coletivo existente.
+- Testes SQL: aprovação, individual, lote fixo, teto isolado, seleção repetida,
+  uso maior que limite, conta suspensa, soma de 1501 contas fora da seleção,
+  falha tardia na auditoria com reversão de teto e contas, permissões da RPC.
+  Ensaio revertido e zero contas/teto/auditoria/trigger fictícios remanescentes.
+- Concorrência real no SQL Editor: conexões 66497/66498, inícios
+  20:22:20.493094/20:22:20.514234 UTC e fins
+  20:22:23.503631/20:22:23.507775 UTC. A primeira gravação fictícia de 700
+  centavos passou; a segunda aguardou e foi recusada com total de 1400 para teto
+  700. Duas contas e teto fictícios removidos com conferência; dois eventos de
+  auditoria preservados. Não houve movimento de dinheiro ou compra real.
+- Testes de serviço/API cobrem uma RPC por comando, cooperativa inteira, alias
+  sem duplicação, zero real, falha de nuvem/transporte e barreiras de perfil/CNPJ.
+  Em falha de transporte, a mensagem orienta conferir o resultado; não afirma
+  falsamente que a operação não ocorreu. Nenhum fallback para reparos legados.
+- Corrigida diferença de centavo entre JS e SQL: 70% de 45 centavos era 31 por
+  erro binário; agora é 32, com divisão inteira para percentuais de duas casas.
+  Incluídos testes de meios centavos e inteiros grandes. Contratos GET/mensagens
+  e autoridade de limite também passaram; build Next/TypeScript aprovado.
+- Escopo concluído: comandos manuais da aba Limites. A base financeira pode
+  mudar fora dessa transação (JSON operacional e notas). Sync automático e
+  reset/reconciliação ainda precisam da revisão conjunta de versões/fontes; a
+  RPC não substitui proteção concorrente do operacional nem aceite das telas.
+  Transferências/sweep continuam bloqueados pela trava de rollout existente.

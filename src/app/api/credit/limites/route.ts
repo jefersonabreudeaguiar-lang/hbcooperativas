@@ -1,3 +1,4 @@
+import { saveHbCreditLimitsAtomic, type AtomicLimitOptions } from "@/lib/supabase/hbCreditAtomicLimits";
 import { NextResponse } from "next/server";
 import {
   getHbCreditLimitesRevision,
@@ -7,12 +8,7 @@ import {
   previewLimiteColetivoPercentual,
   resetCooperadoFinancialPin,
   setCooperadoBloqueado,
-  setLimiteColetivo,
-  setLimiteColetivoPercentual,
-  setLimiteCooperado,
-  setTetoGlobalPercent,
   resolveCreditosBaseForLiberacaoColetiva,
-  listLimitesCooperados,
 } from "@/lib/supabase/contaCoopStorage";
 import { requireCreditApi, requireCreditCnpj, requireCreditStaff } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
@@ -89,6 +85,16 @@ export async function POST(request: Request) {
     if (denyStaff) return denyStaff;
 
     const actorId = gate.ctx.session?.sub ?? "system";
+    const saveAtomic = async (options: AtomicLimitOptions) => {
+      const result = await saveHbCreditLimitsAtomic(gate.ctx.supabase, cnpj, actorId, options);
+      if (!result.ok) return NextResponse.json({ ok: false, error: result.error, code: result.code },
+        { status: result.code === "OPERACIONAL_UNAVAILABLE" ? 503 : 400 });
+      return NextResponse.json({ ok: true, updated: result.updated,
+        creditosBaseAuthoritativeCents: result.creditosBaseCents,
+        ...(action === "set_individual" ? { limite: result.limites[0] } : {}),
+      });
+    };
+
     const creditosValidation = validateCreditosBaseCents(body?.creditosBaseCents ?? {});
     if (!creditosValidation.ok) {
       return NextResponse.json({ error: creditosValidation.error, code: creditosValidation.code }, { status: 400 });
@@ -132,58 +138,12 @@ export async function POST(request: Request) {
     };
 
     if (action === "salvar_liberacao_percentual") {
-      const cooperadoIds = (body?.cooperadoIds ?? []) as string[];
-      const percentual = Number(body?.percentual);
-      const tetoPercent = Number(body?.tetoPercentual ?? body?.tetoPercent ?? percentual);
-      if (!Number.isFinite(percentual) || percentual < 0 || percentual > 100) {
-        return NextResponse.json({ error: "Percentual inválido." }, { status: 400 });
-      }
-      const basesLiberacao = await basesOrErrorResponse(cooperadoIds);
-      if ("errorResponse" in basesLiberacao) return basesLiberacao.errorResponse;
-      const creditosBaseCents = basesLiberacao.creditosBaseCents;
-      const tetoResult = await setTetoGlobalPercent(
-        gate.ctx.supabase,
-        cnpj,
-        tetoPercent,
-        creditosBaseCents,
-        actorId
-      );
-      if (!tetoResult.ok) return NextResponse.json({ error: tetoResult.error }, { status: 400 });
-      const result = await setLimiteColetivoPercentual(
-        gate.ctx.supabase,
-        cnpj,
-        cooperadoIds,
-        percentual,
-        creditosBaseCents,
-        actorId
-      );
-      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-      return NextResponse.json({
-        ok: true,
-        updated: result.updated,
-        creditosBaseAuthoritativeCents: creditosBaseCents,
-      });
-    }
+      return await saveAtomic({ cooperadoIds: body?.cooperadoIds ?? [], percentual: Number(body?.percentual),
+        tetoPercentual: Number(body?.tetoPercentual ?? body?.tetoPercent ?? body?.percentual) });
+  }
 
     if (action === "set_teto") {
-    const tetoPercent = Number(body?.tetoPercentual ?? body?.tetoPercent ?? 0);
-    const idsTeto = Object.keys(clientCreditosBaseCents);
-    const cooperadoIdsTeto =
-      idsTeto.length > 0
-        ? idsTeto
-        : (await listLimitesCooperados(gate.ctx.supabase, cnpj)).map((l) => l.cooperadoId);
-    const basesTeto = await basesOrErrorResponse(cooperadoIdsTeto);
-    if ("errorResponse" in basesTeto) return basesTeto.errorResponse;
-    const creditosBaseCents = basesTeto.creditosBaseCents;
-    const result = await setTetoGlobalPercent(
-      gate.ctx.supabase,
-      cnpj,
-      tetoPercent,
-      creditosBaseCents,
-      actorId
-    );
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-    return NextResponse.json({ ok: true });
+    return await saveAtomic({ cooperadoIds: [], tetoPercentual: Number(body?.tetoPercentual ?? body?.tetoPercent ?? 0), preservarPercentual: true });
   }
 
   if (action === "preview_individual") {
@@ -203,56 +163,17 @@ export async function POST(request: Request) {
   }
 
   if (action === "set_individual") {
-    const cooperadoId = String(body?.cooperadoId ?? "");
-    const novoCents = Number(body?.novoLimiteCentavos ?? reaisToCents(Number(body?.novoLimiteReais ?? 0)));
-    const basesIndividual = await basesOrErrorResponse([cooperadoId]);
-    if ("errorResponse" in basesIndividual) return basesIndividual.errorResponse;
-    const creditosBaseCents = basesIndividual.creditosBaseCents;
-    const result = await setLimiteCooperado(
-      gate.ctx.supabase,
-      cnpj,
-      cooperadoId,
-      novoCents,
-      actorId,
-      creditosBaseCents
-    );
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-    return NextResponse.json({ ok: true, limite: result.limite });
+    return await saveAtomic({ cooperadoIds: [String(body?.cooperadoId ?? "")],
+      valorFixoCents: Number(body?.novoLimiteCentavos ?? reaisToCents(Number(body?.novoLimiteReais ?? 0))), preservarPercentual: true });
   }
 
   if (action === "set_coletivo") {
-    const cooperadoIds = (body?.cooperadoIds ?? []) as string[];
-    const basesColetivo = await basesOrErrorResponse(cooperadoIds);
-    if ("errorResponse" in basesColetivo) return basesColetivo.errorResponse;
-    const creditosBaseCents = basesColetivo.creditosBaseCents;
     const percentual = Number(body?.percentual);
-    if (Number.isFinite(percentual)) {
-      const result = await setLimiteColetivoPercentual(
-        gate.ctx.supabase,
-        cnpj,
-        cooperadoIds,
-        percentual,
-        creditosBaseCents,
-        actorId
-      );
-      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-      return NextResponse.json({
-        ok: true,
-        updated: result.updated,
-        creditosBaseAuthoritativeCents: creditosBaseCents,
-      });
-    }
-    const valorCents = Number(body?.valorCentavos ?? reaisToCents(Number(body?.valorReais ?? 0)));
-    const result = await setLimiteColetivo(
-      gate.ctx.supabase,
-      cnpj,
-      cooperadoIds,
-      valorCents,
-      actorId,
-      creditosBaseCents
-    );
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-    return NextResponse.json({ ok: true, updated: result.updated });
+    return await saveAtomic({ cooperadoIds: body?.cooperadoIds ?? [],
+      ...(Number.isFinite(percentual) ? { percentual } : {
+        valorFixoCents: Number(body?.valorCentavos ?? reaisToCents(Number(body?.valorReais ?? 0))), preservarPercentual: true,
+      }),
+    });
   }
 
   if (action === "preview_coletivo") {
