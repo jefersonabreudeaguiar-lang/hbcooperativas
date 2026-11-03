@@ -572,3 +572,18 @@ continuarem pendentes.
   reset/reconciliação ainda precisam da revisão conjunta de versões/fontes; a
   RPC não substitui proteção concorrente do operacional nem aceite das telas.
   Transferências/sweep continuam bloqueados pela trava de rollout existente.
+
+### Sincronização — leitura indisponível não representa arquivo vazio (03/11)
+
+- Leitura de contratos, operacional e avisos de lançamento agora distingue 404
+  explícito de falha de rede/permissão, resposta incompleta ou JSON inválido.
+  Estas falhas interrompem o fluxo em vez de fornecer uma base vazia ao escritor.
+- Erros de listagem, criação e atualização do bucket também são propagados.
+- Regressão `scripts/test-sync-storage-read-failure.mjs`: falhou antes da correção
+  por ausência de rejeição; passou depois, incluindo nenhuma gravação após leitura
+  inválida, arquivo realmente ausente e leitura válida. TypeScript sem erros.
+- Compilação local encontrou panic do subprocesso CSS do Turbopack (antes de
+  concluir). Conferir a compilação na Vercel antes de considerar esta versão pronta.
+- Não resolve concorrência entre dois snapshots válidos. A gravação do JSON
+  operacional ainda necessita confirmação atômica de versão e tratamento de
+  conflito entre aparelhos. Nenhuma migração ou alteração de produção nesta etapa.

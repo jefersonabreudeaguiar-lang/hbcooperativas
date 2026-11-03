@@ -84,15 +84,18 @@ export const COOPERATIVA_SYNC_FILE_SIZE_LIMIT = 50 * 1024 * 1024;
 
 async function ensureBucket(supabase: SupabaseClient): Promise<void> {
   const limit = COOPERATIVA_SYNC_FILE_SIZE_LIMIT;
-  const { data: buckets } = await supabase.storage.listBuckets();
+  const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+  if (listError || !buckets) throw new Error("Não foi possível conferir o armazenamento da nuvem. Tente novamente.");
   const existing = buckets?.find((b) => b.name === BUCKET);
   if (!existing) {
-    await supabase.storage.createBucket(BUCKET, { public: false, fileSizeLimit: limit });
+    const { error } = await supabase.storage.createBucket(BUCKET, { public: false, fileSizeLimit: limit });
+    if (error) throw new Error("Não foi possível preparar o armazenamento da nuvem. Tente novamente.");
     return;
   }
   const currentLimit = existing.file_size_limit ?? 0;
   if (currentLimit < limit) {
-    await supabase.storage.updateBucket(BUCKET, { public: false, fileSizeLimit: limit });
+    const { error } = await supabase.storage.updateBucket(BUCKET, { public: false, fileSizeLimit: limit });
+    if (error) throw new Error("Não foi possível conferir a capacidade do armazenamento da nuvem. Tente novamente.");
   }
 }
 
@@ -129,11 +132,19 @@ async function uploadJson(
 async function fetchJson<T>(supabase: SupabaseClient, cnpj: string, file: string): Promise<T | null> {
   await ensureBucket(supabase);
   const { data: blob, error } = await supabase.storage.from(BUCKET).download(path(cnpj, file));
-  if (error || !blob) return null;
+  // Ausência é diferente de indisponibilidade: nunca iniciar um snapshot vazio
+  // quando a leitura falhou por rede, permissão ou resposta inválida.
+  if (error) {
+    if (String(error.statusCode) === "404") return null;
+    throw new Error("Não foi possível ler os dados da nuvem. Nenhuma substituição foi realizada. Tente novamente.");
+  }
+  if (!blob) throw new Error("A nuvem retornou uma leitura incompleta. Tente novamente.");
   try {
-    return JSON.parse(await blob.text()) as T;
+    const parsed: unknown = JSON.parse(await blob.text());
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Invalid snapshot");
+    return parsed as T;
   } catch {
-    return null;
+    throw new Error("Não foi possível validar os dados salvos na nuvem. A sincronização foi interrompida para preservá-los.");
   }
 }
 
