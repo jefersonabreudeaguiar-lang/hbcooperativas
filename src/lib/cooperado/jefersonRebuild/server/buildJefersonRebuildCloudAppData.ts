@@ -46,7 +46,7 @@ async function buildOnce(
   };
 
   if (operacional) {
-    data = mergeOperacionalIntoData(data, operacional, cnpj);
+    data = mergeOperacionalIntoData(data, operacional, coop.id, cloudCooperados);
   }
 
   return { data, cooperativaId: coop.id };

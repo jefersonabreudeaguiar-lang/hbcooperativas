@@ -436,3 +436,33 @@ continuarem pendentes.
 - Vinte suítes locais, compilação Next/TypeScript e conferência do pacote de
   persistência aprovadas para este candidato.
   MFA efetivo permanece fora da proteção disponível e deve constar no parecer.
+
+### Retomada e escopo financeiro — 03/11/2026 (Fortaleza)
+
+- Produção oficial avançou isoladamente para 791, commit
+  `a1f0557db1fc7b5ef0507685b0261d8cb3d8fbbd`, na branch
+  `codex/hb-comprovante-producao`, deployment `dpl_GtG6wKeukv3F8h99BjtNvFK89W3G`.
+  Apenas confirmação/comprovante/compartilhamento da compra foram autorizados.
+  Não promover o candidato completo sem o OK final do usuário.
+- Limpeza do ensaio `hb_fixture_browser_concurrency_1793665286675` concluída
+  somente na homologação: transação com verificação de escopo removeu três contas,
+  três compras, quatro cobranças e parceiro fictício, mais seus recebíveis,
+  lançamentos e chaves de repetição. Consulta posterior retornou zero nessas
+  sete coleções. Três registros de auditoria foram preservados intencionalmente.
+- Testes locais passaram para saldo próprio/trava, ciclo de repasses com 1501
+  participantes, permanência do Livro Caixa após atualização, pagamentos PIX,
+  composição completa do pagamento e exportação contábil. Isso não substitui
+  aceite autenticado no celular ou restauração real.
+- Reproduzido erro no montador servidor da leitura do cooperado: CNPJ era usado
+  como `cooperativaId` na junção do operacional. Pagamentos eram associados ao
+  CNPJ em vez do UUID do cadastro, podendo ficar fora do resumo financeiro.
+  Corrigido o chamador para usar `coop.id` e passar os cadastros da nuvem.
+  Teste executa o montador com transporte fictício e a junção real: falhou antes,
+  passou depois para início e leitura completa, preservando pagamento e débito
+  já acertado. Nenhum dado financeiro foi regravado por essa correção.
+- Backup físico de 03/11/2026 10:18:18 UTC confirmado no painel. Fluxo
+  "Restore to new project" preparado com nome autorizado e mesmo custo de
+  US$ 9,68/mês. Usuário informou início, mas o projeto temporário ainda não
+  apareceu no painel nem no conector. Não há ID novo confirmado; não declarar
+  restauração concluída nem criar cópias extras para contornar essa incerteza.
+  Nenhuma restauração sobre o banco oficial foi solicitada.
