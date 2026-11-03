@@ -2392,6 +2392,47 @@ function getResumoSomenteFichasComplementares(fichas: FichaCorrida[]): {
   };
 }
 
+function linhasAvulsosPendentesResumo(
+  data: AppData,
+  cooperadoCanonico: string,
+  mesReferencia: string,
+  coopIdResolved?: string
+): FichaCorridaDesconto[] {
+  const descontosExtras: FichaCorridaDesconto[] = [];
+  const mesesFichaEmAbertoAvulso = [
+    ...new Set(
+      (data.fichaCorrida ?? [])
+        .filter((f) => fichaPertenceCooperado(data, f, cooperadoCanonico, coopIdResolved))
+        .map((f) => f.mesReferencia)
+    ),
+  ].filter((mes) => mes && listarFichasEmAbertoPagamento(data, cooperadoCanonico, mes, coopIdResolved).length > 0);
+  for (const avulso of valoresAvulsosPendentesParaMesPagamento(
+    data,
+    cooperadoCanonico,
+    mesReferencia,
+    mesesFichaEmAbertoAvulso,
+    coopIdResolved
+  )) {
+    if (avulso.valor <= 0) continue;
+    if (avulso.natureza === "debito") {
+      descontosExtras.push({
+        tipo: "manual",
+        motivo: avulso.motivo.trim() || "Débito avulso",
+        valor: avulso.valor,
+        origem: "debito_avulso", referenciaId: avulso.id, dataLancamento: avulso.dataLancamento,
+      });
+    } else {
+      descontosExtras.push({
+        tipo: "credito_avulso",
+        motivo: avulso.motivo.trim() || "Valor avulso a receber",
+        valor: avulso.valor,
+        origem: "credito_avulso", referenciaId: avulso.id, dataLancamento: avulso.dataLancamento,
+      });
+    }
+  }
+  return descontosExtras;
+}
+
 export function getResumoPagamentoCooperado(
   data: AppData,
   cooperadoId: string,
@@ -2466,37 +2507,7 @@ export function getResumoPagamentoCooperado(
       valor: d.valorDescontado,
     });
   }
-  const mesesFichaEmAbertoAvulso = [
-    ...new Set(
-      (data.fichaCorrida ?? [])
-        .filter((f) => fichaPertenceCooperado(data, f, cooperadoCanonico, coopIdResolved))
-        .map((f) => f.mesReferencia)
-    ),
-  ].filter((mes) => mes && listarFichasEmAbertoPagamento(data, cooperadoCanonico, mes, coopIdResolved).length > 0);
-  for (const avulso of valoresAvulsosPendentesParaMesPagamento(
-    data,
-    cooperadoCanonico,
-    mesReferencia,
-    mesesFichaEmAbertoAvulso,
-    coopIdResolved
-  )) {
-    if (avulso.valor <= 0) continue;
-    if (avulso.natureza === "debito") {
-      descontosExtras.push({
-        tipo: "manual",
-        motivo: avulso.motivo.trim() || "Débito avulso",
-        valor: avulso.valor,
-        origem: "debito_avulso", referenciaId: avulso.id, dataLancamento: avulso.dataLancamento,
-      });
-    } else {
-      descontosExtras.push({
-        tipo: "credito_avulso",
-        motivo: avulso.motivo.trim() || "Valor avulso a receber",
-        valor: avulso.valor,
-        origem: "credito_avulso", referenciaId: avulso.id, dataLancamento: avulso.dataLancamento,
-      });
-    }
-  }
+  descontosExtras.push(...linhasAvulsosPendentesResumo(data, cooperadoCanonico, mesReferencia, coopIdResolved));
   for (const line of descontosContaCoopLinhasExibicao(coopMes)) {
     descontosExtras.push(line);
   }
@@ -2533,6 +2544,27 @@ export function valorLiquidoFromResumoPartes(
 }
 
 /** Valor líquido para relatórios e pagamento — inclui abatimento HB Créditos (mesma base da ficha). */
+function getResumoComplementaresComAvulsos(
+  fichas: FichaCorrida[],
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): ResumoPagamentoCooperado {
+  const base = getResumoSomenteFichasComplementares(fichas);
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  const vistos = new Set<string>();
+  const descontosExtras = linhasAvulsosPendentesResumo(data, canonico, mesReferencia, coopId)
+    .filter((d) => {
+      if (d.origem !== "debito_avulso" && d.origem !== "credito_avulso") return false;
+      if (!d.referenciaId || vistos.has(d.referenciaId)) return false;
+      vistos.add(d.referenciaId);
+      return true;
+    });
+  return { ...base, descontosExtras, valorLiquido: valorLiquidoFromResumoPartes(base.valorEntregas, descontosExtras) };
+}
+
 export function getResumoValorAPagarRelatorio(
   data: AppData,
   cooperadoId: string,
@@ -2551,7 +2583,7 @@ export function getResumoValorAPagarRelatorio(
     if (complementares.length > 0) {
       const pendentes = listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId);
       if (complementares.length === pendentes.length) {
-        const base = getResumoSomenteFichasComplementares(complementares);
+        const base = getResumoComplementaresComAvulsos(complementares, data, cooperadoId, mesReferencia, coopId);
         return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
       }
     }
@@ -2573,7 +2605,7 @@ export function getResumoValorAPagarRelatorio(
     if (descobertas.length === 0) {
       return { ...resumoFromPagamento(confirmados[0]), valorLiquido: 0 };
     }
-    const base = getResumoSomenteFichasComplementares(descobertas);
+    const base = getResumoComplementaresComAvulsos(descobertas, data, cooperadoId, mesReferencia, coopId);
     return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
   }
   const live = getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId);
@@ -2594,7 +2626,7 @@ export function resumoComplementaresPosPagamento(
     coopId
   );
   if (!descobertas.length) return null;
-  const base = getResumoSomenteFichasComplementares(descobertas);
+  const base = getResumoComplementaresComAvulsos(descobertas, data, cooperadoId, mesReferencia, coopId);
   return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
 }
 

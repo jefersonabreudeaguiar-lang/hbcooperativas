@@ -29,6 +29,7 @@ function avulsoPertenceCooperado(
   cooperativaId?: string
 ): boolean {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  if (coopId && avulso.cooperativaId && avulso.cooperativaId !== coopId) return false;
   const alvo = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
   const dono = resolverCooperadoIdCanonico(data, avulso.cooperadoId, coopId ?? avulso.cooperativaId);
   return avulso.cooperadoId === cooperadoId || avulso.cooperadoId === alvo || dono === alvo;
@@ -50,9 +51,27 @@ export function valoresAvulsosPendentesMes(
   mesReferencia: string,
   cooperativaId?: string
 ): ValorAvulsoReceber[] {
-  return valoresAvulsosDoCooperado(data, cooperadoId, cooperativaId).filter(
-    (v) => v.mesReferencia === mesReferencia && v.status === "pendente"
-  );
+  return valoresAvulsosPendentesDoCooperado(data, cooperadoId, cooperativaId)
+    .filter((v) => v.mesReferencia === mesReferencia);
+}
+
+function valoresAvulsosPendentesDoCooperado(data: AppData, cooperadoId: string, cooperativaId?: string): ValorAvulsoReceber[] {
+  const registrados = referenciasAvulsosEmPagamento(data, cooperadoId, cooperativaId);
+  return valoresAvulsosDoCooperado(data, cooperadoId, cooperativaId)
+    .filter((v) => v.status === "pendente" && !registrados.has(v.id));
+}
+
+/** Um PIX já registrado prevalece sobre um status pendente antigo do mesmo avulso. */
+function referenciasAvulsosEmPagamento(data: AppData, cooperadoId: string, cooperativaId?: string): Set<string> {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  return new Set((data.pagamentosCooperado ?? [])
+    .filter((p) => p.cooperativaId === coopId &&
+      (p.status === "confirmado" || p.status === "aguardando_confirmacao") &&
+      resolverCooperadoIdCanonico(data, p.cooperadoId, coopId) === canonico)
+    .flatMap((p) => p.descontosExtras ?? [])
+    .filter((d) => d.origem === "debito_avulso" || d.origem === "credito_avulso")
+    .map((d) => d.referenciaId).filter((id): id is string => Boolean(id)));
 }
 
 /** No Pagar, o débito entra no mês da ficha em aberto — não no mês do calendário. */
@@ -102,8 +121,8 @@ export function valoresAvulsosPendentesParaMesPagamento(
     : undefined;
   if (!alvo || mesReferencia !== alvo) return doMes;
   const ja = new Set(doMes.map((v) => v.id));
-  const orfaos = valoresAvulsosDoCooperado(data, cooperadoId, cooperativaId).filter(
-    (v) => v.status === "pendente" && !ja.has(v.id) && !mesesFichaEmAberto.includes(v.mesReferencia)
+  const orfaos = valoresAvulsosPendentesDoCooperado(data, cooperadoId, cooperativaId).filter(
+    (v) => !ja.has(v.id) && !mesesFichaEmAberto.includes(v.mesReferencia)
   );
   return orfaos.length ? [...doMes, ...orfaos] : doMes;
 }
@@ -126,7 +145,7 @@ export function totalValoresAvulsosPendentes(
   mesReferencia?: string,
   cooperativaId?: string
 ): number {
-  const lista = valoresAvulsosDoCooperado(data, cooperadoId, cooperativaId).filter((v) => v.status === "pendente");
+  const lista = valoresAvulsosPendentesDoCooperado(data, cooperadoId, cooperativaId);
   const filtrada = mesReferencia ? lista.filter((v) => v.mesReferencia === mesReferencia) : lista;
   return round2(
     filtrada
@@ -163,7 +182,7 @@ export function totalDebitosAvulsosPendentes(
   mesReferencia?: string,
   cooperativaId?: string
 ): number {
-  const lista = valoresAvulsosDoCooperado(data, cooperadoId, cooperativaId).filter((v) => v.status === "pendente");
+  const lista = valoresAvulsosPendentesDoCooperado(data, cooperadoId, cooperativaId);
   const filtrada = mesReferencia ? lista.filter((v) => v.mesReferencia === mesReferencia) : lista;
   return round2(
     filtrada

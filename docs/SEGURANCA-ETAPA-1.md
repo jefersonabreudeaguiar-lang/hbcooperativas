@@ -489,3 +489,24 @@ continuarem pendentes.
   POSTs sem acesso a banco e cadastro de parceiro configurado aceito.
 - Nenhuma migration, configuração ou dado real foi alterado por essa retirada.
   A publicação completa oficial permanece dependente do OK final do usuário.
+
+### Avulsos em entregas complementares — 03/11/2026 (Fortaleza)
+
+- Reproduzido com dados fictícios: após PIX confirmado, entrega complementar de
+  R$ 300 ignorava débito de R$ 50 e crédito de R$ 20, exibindo R$ 300 em vez de
+  R$ 270. Resumo complementar agora usa a mesma montagem de linhas avulsas da
+  ficha normal, sem cobrar outra mensalidade ou recalcular toda a ficha.
+- Referência explícita do avulso em um PIX confirmado ou aguardando confirmação
+  exclui esse lançamento dos pendentes, mesmo se um aparelho mantiver status
+  antigo. A leitura não marca dados pagos nem altera valores gravados. Sem
+  referência explícita, não se deduz quitação por nome, data ou valor parecido.
+- Seletores e totais compartilham essa regra. O vínculo dos avulsos agora exige
+  a cooperativa correta; pagamento de outra cooperativa não quita lançamento local.
+- Regressões: cooperado e responsável em R$ 270; débitos/créditos uma única vez;
+  débito já acertado preservado; referência em PIX anterior não cobrada novamente;
+  PIX aguardando assinatura; totais separados; ausência de alteração dos dados;
+  avulso do mês atual no último mês com entrega em aberto; isolamento entre
+  cooperativas. Passaram também testes existentes de avulsos/cota e paridade
+  Em aberto/Pagar e dos totais do responsável.
+- Não cobre ainda aceite autenticado de todas as telas nem os demais cenários
+  contábeis do plano. Nenhuma alteração de dados/migration na produção.
