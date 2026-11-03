@@ -466,3 +466,26 @@ continuarem pendentes.
   apareceu no painel nem no conector. Não há ID novo confirmado; não declarar
   restauração concluída nem criar cópias extras para contornar essa incerteza.
   Nenhuma restauração sobre o banco oficial foi solicitada.
+
+### Reparos legados e restauração adiada — 03/11/2026 (Fortaleza)
+
+- Usuário decidiu adiar o teste físico de restauração. A janela final de criação
+  foi cancelada, sem submissão pelo agente. O ensaio segue pendente para o parecer
+  de recuperação; isso não interrompe as demais etapas da homologação.
+- A correção de escopo financeiro foi publicada na homologação no commit
+  `5435aaff0380904582c4931e95a0639809b40708`, deployment
+  `dpl_7k3okBLT2AqwBWweBrcRbcUxmTve`, READY e identidade HTTP conferida.
+- Aposentados quatro caminhos legados que podiam reaplicar SQL antigo de
+  transferência, estorno, aprovação de estorno e cadastro de parceiros com fallback
+  para schema financeiro completo. Helpers recusam antes de ler credenciais ou
+  abrir conexão; os quatro POSTs administrativos mantêm 401 sem autorização e
+  devolvem 410 quando autorizados. GETs de diagnóstico permanecem disponíveis.
+- Cadastro de parceiros já configurado continua aceito. Cadastro incompleto
+  exige migrations atuais revisadas, sem tentativa de alterar schema durante o
+  uso do app. A mensagem de erro de estorno também deixou de recomendar a
+  migration antiga que substitui regras novas.
+- Regressão com transporte simulado verificou que a implementação anterior
+  tentava abrir conexão. Após a mudança, zero conexões para os quatro helpers,
+  POSTs sem acesso a banco e cadastro de parceiro configurado aceito.
+- Nenhuma migration, configuração ou dado real foi alterado por essa retirada.
+  A publicação completa oficial permanece dependente do OK final do usuário.

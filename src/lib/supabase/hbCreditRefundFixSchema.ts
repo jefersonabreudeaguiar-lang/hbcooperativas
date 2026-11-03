@@ -3,11 +3,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const MIGRATION_SQL = readFileSync(
-  resolve(process.cwd(), "supabase/migrations/20260916200000_hb_credit_amount_used_reconcile.sql"),
-  "utf8"
-);
-
 function loadEnvFile(path: string) {
   try {
     const { existsSync } = require("node:fs") as typeof import("node:fs");
@@ -119,60 +114,14 @@ export async function checkHbCreditRefundFixSchema(_supabase: SupabaseClient): P
   };
 }
 
-export async function applyHbCreditRefundFixSchemaSql(): Promise<{
-  ok: boolean;
-  applied?: boolean;
-  error?: string;
-}> {
-  loadEnvFile(resolve(process.cwd(), ".env.local"));
-  loadEnvFile(resolve(process.cwd(), ".env"));
-
-  const databaseUrl = process.env.DATABASE_URL?.trim();
-  if (databaseUrl) {
-    const client = await connectPg(databaseUrl);
-    if (client) {
-      try {
-        await client.query(MIGRATION_SQL);
-        return { ok: true, applied: true };
-      } catch (e) {
-        return { ok: false, error: e instanceof Error ? e.message : String(e) };
-      } finally {
-        await client.end().catch(() => {});
-      }
-    }
-  }
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  const dbPassword = process.env.SUPABASE_DB_PASSWORD?.trim() ?? "";
-  const projectRef =
-    process.env.SUPABASE_PROJECT_REF?.trim() || supabaseUrl.replace(/^https:\/\//, "").split(".")[0];
-
-  if (!projectRef || !dbPassword) {
-    return {
-      ok: false,
-      error: "Configure DATABASE_URL ou SUPABASE_PROJECT_REF + SUPABASE_DB_PASSWORD.",
-    };
-  }
-
-  for (const conn of buildConnectionCandidates(projectRef, dbPassword)) {
-    const client = await connectPg(conn);
-    if (!client) continue;
-    try {
-      await client.query(MIGRATION_SQL);
-      return { ok: true, applied: true };
-    } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : String(e) };
-    } finally {
-      await client.end().catch(() => {});
-    }
-  }
-
-  return { ok: false, error: "Não foi possível conectar ao Postgres do Supabase." };
+/** A versão antiga substitui a composição atual do estorno; nunca reaplicar. */
+export async function applyHbCreditRefundFixSchemaSql(): Promise<{ ok: false; error: string }> {
+  return { ok: false, error: "Reparo legado desativado. Aplique somente as migrations atuais revisadas pelo processo de lançamento." };
 }
 
 export function humanizeCreditRefundError(message: string): string {
   if (/payment_intent_id.*already exists|23505|hb_credit_transactions_payment_intent_id_key/i.test(message)) {
-    return "Estorno bloqueado: correção do banco ainda não aplicada. Execute a migration 20260916200000_hb_credit_amount_used_reconcile.sql no Supabase SQL Editor.";
+    return "Estorno bloqueado por inconsistência no banco. Solicite à administração a conferência das migrations atuais antes de tentar novamente.";
   }
   return message;
 }

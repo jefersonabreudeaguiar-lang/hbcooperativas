@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getAuthSecret } from "@/lib/security/env";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import {
-  applyHbCreditCooperadoTransferSchemaSql,
   checkHbCreditCooperadoTransferSchema,
 } from "@/lib/supabase/hbCreditCooperadoTransferSchema";
 
@@ -17,35 +16,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
   }
 
-  if (!isSupabaseConfigured()) {
-    return NextResponse.json({ error: "Supabase não configurado." }, { status: 503 });
-  }
-
-  const supabase = getSupabaseAdmin()!;
-  const before = await checkHbCreditCooperadoTransferSchema(supabase);
-  if (before.ok) {
-    return NextResponse.json({ ok: true, alreadyApplied: true, schema: before });
-  }
-
-  const applied = await applyHbCreditCooperadoTransferSchemaSql();
-  if (!applied.ok) {
-    return NextResponse.json(
-      {
-        error: applied.error,
-        hint: "Configure DATABASE_URL na Vercel ou execute o SQL no Supabase SQL Editor.",
-        schemaBefore: before,
-      },
-      { status: 503 }
-    );
-  }
-
-  const after = await checkHbCreditCooperadoTransferSchema(supabase);
-  return NextResponse.json({
-    ok: after.ok,
-    alreadyApplied: false,
-    applied: applied.applied,
-    schema: after,
-  });
+  return NextResponse.json({ error: "Reparo legado desativado. Utilize o processo de migrations revisadas do lançamento." }, { status: 410 });
 }
 
 export async function GET(request: Request) {

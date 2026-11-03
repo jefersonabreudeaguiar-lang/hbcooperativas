@@ -1,7 +1,4 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { runPgSql } from "@/lib/supabase/pgSqlRunner";
 
 export function isHbCreditPartnersTableMissing(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
@@ -42,36 +39,14 @@ export async function ensureHbCreditPartnersSchema(
     return { ok: true };
   }
 
-  const applied = await applyHbCreditPartnersSchemaSql();
-  if (!applied.ok) {
-    return {
-      ok: false,
-      error: "Tabela de mercados parceiros (HB Créditos) não configurada na nuvem.",
-      hint:
-        "No Supabase SQL Editor, execute supabase/migrations/APPLY_HB_CREDIT_COMPLETO.sql (ou peça ao admin para rodar POST /api/admin/apply-hb-credit-partners-schema com x-setup-secret).",
-    };
-  }
-
-  const after = await checkHbCreditPartnersSchema(supabase);
-  if (after.partnersTableOk && after.appUserIdColumnOk && after.appUsersParceiroIdOk) {
-    return { ok: true };
-  }
-
   return {
     ok: false,
-    error: "Schema de mercados parceiros ainda incompleto após tentativa de reparo.",
-    hint: "Execute APPLY_HB_CREDIT_COMPLETO.sql manualmente no Supabase.",
+    error: "Cadastro de mercados parceiros incompleto na nuvem.",
+    hint: "Solicite à administração a conferência das migrations atuais pelo processo de lançamento.",
   };
 }
 
-export async function applyHbCreditPartnersSchemaSql(): Promise<{ ok: true } | { ok: false; error: string }> {
-  const partnersPath = resolve(process.cwd(), "supabase/migrations/APPLY_HB_CREDIT_PARTNERS.sql");
-  const completoPath = resolve(process.cwd(), "supabase/migrations/APPLY_HB_CREDIT_COMPLETO.sql");
-
-  let sql = readFileSync(partnersPath, "utf8").trim();
-  if (sql.length < 40) {
-    sql = readFileSync(completoPath, "utf8");
-  }
-
-  return runPgSql(sql);
+/** O fallback completo antigo substitui rotinas financeiras atuais. */
+export async function applyHbCreditPartnersSchemaSql(): Promise<{ ok: false; error: string }> {
+  return { ok: false, error: "Reparo legado desativado. Aplique somente as migrations atuais revisadas pelo processo de lançamento." };
 }
