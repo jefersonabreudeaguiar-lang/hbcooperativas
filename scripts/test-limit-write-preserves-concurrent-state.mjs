@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
+import { createClient } from '@supabase/supabase-js';
 const exports = {};
 const source = fs.readFileSync('src/lib/supabase/contaCoopStorage.ts','utf8');
 const mocks = {
@@ -51,4 +52,24 @@ for(const kind of ['manual','sync']) for(const legacy of [false,true]) {
   const unavailable=fixture({readError:true}); assert.equal((await run(unavailable)).ok,false);
   assert.equal(unavailable.payloads.length,0,'Leitura indisponível não autoriza gravação');
 }
-console.log('PASS: limite manual/sync e fallback preservam compra, bloqueio, PIN e saldo próprio; conta nova usa defaults; erro de leitura impede gravação.');
+let sdkRow={id:'account',cooperative_cnpj:'99999999999999',cooperado_id:'member',limit_released_cents:1000,amount_used_cents:200,status:'active'};
+const sdk = createClient('https://limit-fixture.supabase.co','fixture-not-a-secret',{
+  auth:{persistSession:false,autoRefreshToken:false},
+  global:{fetch:async(input,init)=>{
+    const url=new URL(String(input)); assert.equal(url.origin,'https://limit-fixture.supabase.co');
+    if(url.pathname.endsWith('/hb_credit_audit_log')) return new Response(null,{status:201});
+    assert.ok(url.pathname.endsWith('/hb_credit_accounts'));
+    const reply=value=>new Response(JSON.stringify(value),{status:200,headers:{'content-type':'application/json'}});
+    if((init?.method??'GET')==='GET'){
+      const before={...sdkRow}; sdkRow.amount_used_cents=700;sdkRow.status='blocked'; return reply([before]);
+    }
+    assert.equal(init.method,'POST');
+    const headers=new Headers(init.headers);assert.match(headers.get('prefer'),/missing=default/);
+    const payload=JSON.parse(String(init.body));
+    assert.equal('amount_used_cents' in payload,false);assert.equal('status' in payload,false);
+    sdkRow={...sdkRow,...payload};return reply(sdkRow);
+  }},
+});
+const sdkResult=await exports.manualWrite(sdk,'99999999999999','member',1500,'fixture-actor',{novo:{limiteLiberadoCents:1500}});
+assert.equal(sdkResult.ok,true);assert.equal(sdkResult.limite.valorUsadoCents,700);assert.equal(sdkResult.limite.bloqueado,true);
+console.log('PASS: limite manual/sync e fallback preservam compra, bloqueio, PIN e saldo próprio; conta nova usa defaults; erro de leitura impede gravação; SDK real envia somente os campos permitidos.');
