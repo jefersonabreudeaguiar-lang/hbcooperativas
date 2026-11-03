@@ -1,10 +1,15 @@
 /**
- * Backup completo da nuvem Supabase (tabelas + storage) em backups/<timestamp>/.
+ * Exportação diagnóstica legada. Não é cópia completa nem permite restauração.
  */
 import { createClient } from "@supabase/supabase-js";
 import ws from "ws";
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve, join } from "node:path";
+
+if (!process.argv.includes("--diagnostic-export")) {
+  console.error("Este exportador legado não produz backup restaurável: paginação, arquivos binários e hashes de acesso não são preservados. Use backup físico do banco e backup:storage:encrypted. Para diagnóstico parcial, informe --diagnostic-export explicitamente.");
+  process.exit(1);
+}
 
 function loadEnvFile(path) {
   if (!existsSync(path)) return;
@@ -184,7 +189,9 @@ for (const bucket of BUCKETS) {
 const manifest = {
   createdAt: new Date().toISOString(),
   supabaseUrl: url,
-  purpose: "backup-completo-hb-cooperativas",
+  purpose: "exportacao-diagnostica-parcial-nao-restauravel",
+  complete: false,
+  restoreVerified: false,
   cnpjs: [...cnpjSet].sort(),
   tables: tableResults,
   storageFiles: storageStats,
@@ -192,5 +199,5 @@ const manifest = {
 
 writeJson(backupRoot, "manifest.json", manifest);
 
-console.log("Backup concluído:");
+console.log("Exportação parcial concluída — não usar como garantia de restauração:");
 console.log(JSON.stringify(manifest, null, 2));

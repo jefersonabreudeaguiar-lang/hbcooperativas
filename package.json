@@ -20,6 +20,8 @@
     "wipe:cooperados-teste": "node scripts/wipe-cooperado-test-data.mjs",
     "wipe:platform": "node scripts/wipe-platform-completo.mjs",
     "backup:cloud": "node scripts/backup-cloud.mjs",
+    "backup:storage:encrypted": "node scripts/backup-storage-encrypted.mjs",
+    "backup:storage:verify": "node scripts/verify-storage-archive.mjs",
     "backup:cooperado-slice": "node scripts/backup-cooperado-dados-slice.mjs",
     "restore:cooperado-backup-code": "node scripts/restore-cooperado-code-from-backup-tag.mjs",
     "test:sync-flows": "npx tsx scripts/simulate-sync-flows.ts",

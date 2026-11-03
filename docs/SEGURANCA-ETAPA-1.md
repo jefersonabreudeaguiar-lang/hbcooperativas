@@ -374,3 +374,65 @@ continuarem pendentes.
 - Instrução vigente do usuário: seguir todas as etapas sem novos pedidos de
   continuação, publicar os blocos validados na homologação e apresentar evidências
   e riscos ao fim. **Qualquer publicação no aplicativo oficial aguarda OK explícito.**
+
+### Cópias de segurança e concorrência real — 02/11/2026 (Fortaleza)
+
+- Painel acessado com sucesso no navegador integrado. Backups físicos diários
+  confirmados, incluindo 02/11/2026 10:21:38 UTC; PITR não está ativado. O painel
+  confirma que esses backups não incluem os objetos do Storage.
+- Usuário autorizou projeto temporário de restauração e sua exclusão, com custo
+  informado de US$ 9,68/mês. Nome preparado: `hbcooperativas-restore-check-20261102`.
+  A tela exigiu senha nova, etapa entregue ao usuário conforme política do navegador.
+  Usuário informou início, mas o projeto não apareceu na lista nem no seletor,
+  mesmo após atualização. Não afirmar que a restauração ocorreu; não criar cópias
+  adicionais ou apagar projetos existentes para contornar essa incerteza.
+- Criado exportador de Storage separado: inventário paginado até página vazia,
+  leitura em quatro lotes, binários sem conversão UTF-8, tamanho e SHA-256, AES-256-GCM
+  autenticado por objeto, inventário antes/depois e verificação de todos os bytes.
+  Requisições têm timeout. Falha ou mudança durante a cópia não gera sucesso.
+- Cópia real concluída: 1512 arquivos, 84820003 bytes, cinco buckets. Verificada
+  em outro processo, inclusive recuperação da chave protegida pelo DPAPI. Preservada
+  fora do worktree em `backups/ifptyzikekrswippzmsf/storage-2026-11-03T00-09-57-997Z-6b185c04`
+  na raiz do projeto. Conteúdo e manifesto cifrados; nenhum segredo foi impresso.
+  Chave recuperável somente por este usuário Windows nesta máquina. Não é backup
+  portátil nem comprovação de restauração em outro servidor; essa limitação permanece.
+- `backup:cloud` legado agora recusa uso como backup restaurável por padrão.
+  Exportação diagnóstica exige `--diagnostic-export` e marca `complete:false`.
+  Não depende dele a recuperação do banco. Novos comandos são `backup:storage:encrypted`
+  e `backup:storage:verify`, sempre com destino explícito e sem alterar a nuvem.
+- Dezenove suítes locais aprovadas, incluindo 1101 imagens com paginação reduzida
+  pelo servidor, adulteração, chave errada, inventário alterado e falha de download.
+- Concorrência real comprovada com duas abas do SQL Editor da homologação,
+  conexões diferentes e intervalo sobreposto de aproximadamente 15 segundos:
+  mesma chave retornou transação original; chaves diferentes no mesmo QR recusaram
+  a segunda cobrança; QRs distintos na mesma conta não excederam o disponível.
+  Primeiro par: backends 4173810/4173811, inícios 00:22:44.983/00:22:45.131 UTC,
+  fim 00:23:00.081/00:23:00.102 UTC em 03/11. Segundo: 4173841/4173842,
+  00:24:22.957/00:24:23.042 até 00:24:37.972/00:24:37.974. Terceiro:
+  4173861/4173862, 00:25:26.459/00:25:26.835 até 00:25:41.479/00:25:41.483.
+- Fixture persistida para esse ensaio: prefixo `hb_fixture_browser_concurrency_1793665286675`,
+  CNPJ reservado `99999999999999`. Limpeza via conector expirou duas vezes na
+  confirmação. **Ainda precisa remover somente essa fixture e verificar zero
+  remanescente**; não declarar limpeza concluída. Não repetir testes que reservam
+  esse mesmo CNPJ antes disso.
+- Achado para a próxima revisão de acesso: `authRoutes.ts` emite `mfaVerified:true`
+  sem desafio, enquanto `/api/auth/mfa` está inativa. Avaliar/fixar o contrato do
+  modo `HB_STAFF_MFA_REQUIRED` antes de qualquer alegação de proteção por MFA.
+- Permanecem: restauração física real e cleanup do temporário, cópia portátil,
+  perfis autenticados/abas/celular, estornos e encerramento contábil, concorrência
+  de limites e sincronização, integração final de saldo próprio e reparos antigos.
+- Em seguida, a navegação do Supabase no IAB passou a falhar com
+  `ERR_NAME_NOT_RESOLVED`. Uma tentativa pelo endereço HTTPS oficial também
+  falhou; não houve alteração de DNS/firewall nem tentativa de contornar a política.
+
+### Informação de MFA na sessão — 02/11/2026 (Fortaleza)
+
+- Teste com JWT assinado real e usuário fictício reproduziu `mfaVerified:true`
+  sem desafio de autenticação. Corrigido para false no emissor comum de sessões.
+  Nenhuma exigência de MFA foi ativada, desativada ou contornada; a feature já
+  permanecia desligada em `staffAccessPolicy.ts` e a rota continua indisponível.
+- Seis perfis verificam emissão de sessão, papel preservado e cookie HttpOnly;
+  isso não substitui teste autenticado da interface de todas as abas.
+- Vinte suítes locais, compilação Next/TypeScript e conferência do pacote de
+  persistência aprovadas para este candidato.
+  MFA efetivo permanece fora da proteção disponível e deve constar no parecer.

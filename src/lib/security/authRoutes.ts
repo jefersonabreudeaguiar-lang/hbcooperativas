@@ -30,7 +30,8 @@ export async function tokenResponseForUser(user: AppUserRow): Promise<NextRespon
   const token = await signAccessToken({
     ...appUserRowToSessionTokenInput(user),
     role,
-    mfaVerified: true,
+    // Este fluxo verifica senha, não um desafio de segunda etapa.
+    mfaVerified: false,
   });
   const enforced = isApiSecurityEnforced();
   const authUser = appUserRowToAuthUser(user);

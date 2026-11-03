@@ -12,7 +12,7 @@ export interface SessionClaims extends JWTPayload {
   cooperativaId?: string;
   cooperadoId?: string;
   cooperativaCnpj?: string;
-  /** Verificado quando HB_STAFF_MFA_REQUIRED=true */
+  /** Só pode ser true após um desafio de segunda etapa verificado. */
   mfaVerified?: boolean;
   /** Conta com TOTP ativo */
   totpEnabled?: boolean;
