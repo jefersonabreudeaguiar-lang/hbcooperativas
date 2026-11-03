@@ -270,7 +270,7 @@ function HbCreditPagarContent() {
       setSuccess({ receiptCode: res.receiptCode ?? res.transacaoId ?? intent.id });
       setPayPin("");
       try {
-      if (!res.duplicate && typeof res.disponivelAposCents === "number") {
+      if (typeof res.disponivelAposCents === "number") {
         const nextDisponivel = Math.max(0, res.disponivelAposCents);
         const nextAccount: ContaCoopLimiteCooperado = {
           ...limite,
