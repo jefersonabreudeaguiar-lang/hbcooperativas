@@ -510,3 +510,26 @@ continuarem pendentes.
   Em aberto/Pagar e dos totais do responsável.
 - Não cobre ainda aceite autenticado de todas as telas nem os demais cenários
   contábeis do plano. Nenhuma alteração de dados/migration na produção.
+
+### Limite sem sobrescrever compra/bloqueio — 03/11/2026 (Fortaleza)
+
+- Reproduzido no serviço com transporte simulado: entre ler a conta e gravar o
+  limite, uma compra elevava o usado de 200 para 700 centavos e a conta era
+  bloqueada. A gravação reenviava usado=200 e status=active, desfazendo ambos.
+- Escrita manual e sync autoritativo agora enviam somente campos de limite e
+  seus metadados. Usado, status, PIN e saldo próprio não fazem parte do payload,
+  inclusive no fallback legado. `defaultToNull:false` mantém defaults na criação.
+  Erro na leitura prévia recusa a gravação em vez de presumir uma conta inexistente.
+- Teste cobre escrita manual/sync, fallback, compra e bloqueio intercalados,
+  criação e falha de leitura. Teste SQL na homologação confirmou conservação na
+  gravação parcial e defaults de conta nova; ROLLBACK e contagem final zero.
+- Passaram também autoridade de limite (seis cenários/visibilidade), base zero
+  (cinco cenários) e o modelo de recusa de estado STALE. Dois imports desse modelo
+  estavam quebrados após o arquivamento e foram corrigidos. Os casos SKIP de
+  estorno STALE e recuperação via cron continuam SKIP; modelo serial não é
+  evidência adicional de concorrência real.
+- Isso não resolve ainda a atomicidade do teto global/lote coletivo: prévia,
+  teto, limites individuais e percentual coletivo ainda usam chamadas separadas.
+  A futura transação deve cobrir o lote inteiro, sem confirmação parcial, e ser
+  validada com sobreposição real. Sincronização JSON concorrente também permanece
+  uma etapa separada. Não declarar concluída a proteção global por esta correção.

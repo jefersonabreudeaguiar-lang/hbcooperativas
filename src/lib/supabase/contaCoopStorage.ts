@@ -836,12 +836,14 @@ async function writeLimiteCooperadoCents(
   auditAction: "LIMIT_CHANGED" | "LIMIT_COLLECTIVE" = "LIMIT_CHANGED"
 ): Promise<{ ok: true; limite: ContaCoopLimiteCooperado } | { ok: false; error: string }> {
   const digits = normalizeCnpj(cnpj);
-  const { data: existing } = await supabase
+  const { data: existing, error: readError } = await supabase
     .from("hb_credit_accounts")
     .select("*")
     .eq("cooperative_cnpj", digits)
     .eq("cooperado_id", cooperadoId)
     .maybeSingle();
+
+  if (readError) return { ok: false, error: "Não foi possível consultar a conta HB antes de alterar o limite." };
 
   if (existing?.status === "suspended") {
     return { ok: false, error: "Conta HB suspensa. Use o cadastro atual do cooperado." };
@@ -858,15 +860,13 @@ async function writeLimiteCooperadoCents(
     cooperado_id: cooperadoId,
     limit_released_cents: novoLimiteCents,
     financial_limit_cap_cents: novoLimiteCents,
-    amount_used_cents: usado,
-    status: existing?.status ?? "active",
     updated_at: now,
     updated_by: actorUserId,
   };
 
   let { data, error } = await supabase
     .from("hb_credit_accounts")
-    .upsert(upsertPayload, { onConflict: "cooperative_cnpj,cooperado_id" })
+    .upsert(upsertPayload, { onConflict: "cooperative_cnpj,cooperado_id", defaultToNull: false })
     .select()
     .single();
 
@@ -874,7 +874,7 @@ async function writeLimiteCooperadoCents(
     const { financial_limit_cap_cents: _c, ...legacyPayload } = upsertPayload;
     ({ data, error } = await supabase
       .from("hb_credit_accounts")
-      .upsert(legacyPayload, { onConflict: "cooperative_cnpj,cooperado_id" })
+      .upsert(legacyPayload, { onConflict: "cooperative_cnpj,cooperado_id", defaultToNull: false })
       .select()
       .single());
   }
@@ -918,12 +918,14 @@ async function writeLimiteCooperadoAuthoritativeSync(
   const baseSnapshot = Math.max(0, Math.round(opts.baseSnapshotCents));
   const ceilingSnapshot = Math.max(0, Math.round(opts.ceilingSnapshotCents));
 
-  const { data: existing } = await supabase
+  const { data: existing, error: readError } = await supabase
     .from("hb_credit_accounts")
     .select("*")
     .eq("cooperative_cnpj", digits)
     .eq("cooperado_id", cooperadoId)
     .maybeSingle();
+
+  if (readError) return { ok: false, error: "Não foi possível consultar a conta HB antes de alterar o limite." };
 
   if (existing?.status === "suspended") {
     return { ok: false, error: "Conta HB suspensa. Use o cadastro atual do cooperado." };
@@ -942,15 +944,13 @@ async function writeLimiteCooperadoAuthoritativeSync(
     financial_limit_cap_cents: novoLimiteCents,
     financial_limit_base_cents: baseSnapshot,
     financial_limit_ceiling_cents: ceilingSnapshot,
-    amount_used_cents: usado,
-    status: existing?.status ?? "active",
     updated_at: now,
     updated_by: opts.actorUserId,
   };
 
   let { data, error } = await supabase
     .from("hb_credit_accounts")
-    .upsert(upsertPayload, { onConflict: "cooperative_cnpj,cooperado_id" })
+    .upsert(upsertPayload, { onConflict: "cooperative_cnpj,cooperado_id", defaultToNull: false })
     .select()
     .single();
 
@@ -963,7 +963,7 @@ async function writeLimiteCooperadoAuthoritativeSync(
     } = upsertPayload;
     ({ data, error } = await supabase
       .from("hb_credit_accounts")
-      .upsert(legacyPayload, { onConflict: "cooperative_cnpj,cooperado_id" })
+      .upsert(legacyPayload, { onConflict: "cooperative_cnpj,cooperado_id", defaultToNull: false })
       .select()
       .single());
   }

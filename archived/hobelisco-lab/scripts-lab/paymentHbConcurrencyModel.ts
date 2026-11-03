@@ -10,11 +10,11 @@
  * - base=0 com amount_used>0: limite aperta para max(amount_used) (syncLimiteCooperadoFromCreditoBase).
  */
 
-import { calcLimiteFromPercentual } from "../../src/modules/hb-credit/engine/creditBaseFromFicha.ts";
+import { calcLimiteFromPercentual } from "../../../src/modules/hb-credit/engine/creditBaseFromFicha.ts";
 import {
   HB_CREDIT_STATE_STALE_CODE,
   type HbFinancialLimitSyncState,
-} from "../../src/modules/hb-credit/engine/hbCreditLimitSyncState.ts";
+} from "../../../src/modules/hb-credit/engine/hbCreditLimitSyncState.ts";
 
 export type HbAccountState = {
   limitReleasedCents: number;
