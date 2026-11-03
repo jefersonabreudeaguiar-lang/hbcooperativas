@@ -502,6 +502,11 @@ export async function authorizeCreditPayment(input: {
 
   if (!res || !res.ok || !data.ok) throw new Error(data.error ?? "Pagamento recusado.");
 
+  let syncContaCoop: AuthorizeCreditPaymentResult["syncContaCoop"] = "pending";
+  let syncContaCoopError: string | undefined;
+  // A autorização já foi confirmada: falhas locais não recusam a compra.
+  const projectConfirmedPayment = async () => {
+  try {
   notifyHbCreditLimiteSynced({ immediate: true });
 
   const isCooperadoTransfer =
@@ -511,9 +516,6 @@ export async function authorizeCreditPayment(input: {
   const coopId =
     input.cooperativaId ??
     local.cooperados.find((c) => c.id === input.cooperadoId)?.cooperativaId;
-
-  let syncContaCoop: AuthorizeCreditPaymentResult["syncContaCoop"];
-  let syncContaCoopError: string | undefined;
 
   if (coopId && input.cnpj) {
     syncContaCoop = "pending";
@@ -573,6 +575,14 @@ export async function authorizeCreditPayment(input: {
     syncContaCoop = "pending";
     syncContaCoopError = "refresh_not_executed_missing_cooperativa_or_cnpj";
   }
+
+  } catch {
+    syncContaCoop = "pending";
+    syncContaCoopError = "post_authorization_local_sync_failed";
+  }
+  };
+  // A confirmação não espera uma rede lenta para atualizar a ficha.
+  await Promise.race([projectConfirmedPayment(), sleepMs(1200)]);
 
   return {
     ...data,
