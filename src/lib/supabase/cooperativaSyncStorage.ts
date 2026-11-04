@@ -188,7 +188,7 @@ export type UploadOperacionalSyncOptions = {
 };
 
 export type UploadOperacionalSyncResult =
-  | { ok: true; blockedDowngrades: PagamentoDowngradeBloqueado[] }
+  | { ok: true; blockedDowngrades: PagamentoDowngradeBloqueado[]; revision?: string }
   | { ok: false; error: string; code?: "OPERACIONAL_CONFLICT" | "OPERACIONAL_BASE_REQUIRED" };
 
 export async function uploadOperacionalSync(
@@ -254,7 +254,7 @@ export async function uploadOperacionalSync(
       return { ok: false, code: "OPERACIONAL_CONFLICT", error: "Os dados da nuvem mudaram durante a gravação. Atualize antes de tentar novamente." };
     }
     if (typeof data !== "string") return { ok: false, error: "A nuvem não confirmou a versão gravada." };
-    return { ok: true, blockedDowngrades };
+    return { ok: true, blockedDowngrades, revision: data };
   }
   const uploaded = await uploadJson(supabase, cnpj, "operacional.json", toUpload);
   if (!uploaded.ok) return uploaded;

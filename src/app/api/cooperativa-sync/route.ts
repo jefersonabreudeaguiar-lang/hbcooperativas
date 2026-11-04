@@ -271,7 +271,7 @@ export async function POST(request: Request) {
         summary: "Sync operacional publicado na nuvem (API).",
       });
     }
-    return NextResponse.json({ success: true, section }, { status: 201 });
+    return NextResponse.json({ success: true, section, operacionalRevision: uploaded.revision }, { status: 201 });
   }
 
   return NextResponse.json({ error: "Seção desconhecida." }, { status: 400 });

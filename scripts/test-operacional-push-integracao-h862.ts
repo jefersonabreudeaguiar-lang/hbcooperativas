@@ -14,11 +14,12 @@ import {
   setOperacionalPushSingleFlightEnabledForTests,
 } from "../src/services/operacionalPushSingleFlight.ts";
 import { setSecureApiFetchTestOverrideForTests } from "../src/lib/security/clientSession.ts";
-import { saveDataSafe } from "../src/services/dataStore.ts";
+import { getData, saveDataSafe } from "../src/services/dataStore.ts";
 import {
   pushOperacionalToCloud,
   clearOperacionalPushFingerprint,
   setPushOperacionalInternalTestEnterHookForTests,
+  syncOperacionalFromCloud,
 } from "../src/services/cooperativaSyncCloudService.ts";
 
 const CNPJ_A = "62351750000165";
@@ -33,6 +34,8 @@ let operacionalGetPayload: Record<string, unknown> | null = null;
 let operacionalPostDelayMs = 0;
 let operacionalPostShouldThrow: string | null = null;
 let operacionalPostCount = 0;
+let operacionalRevision: string | undefined;
+let rejectVersionedPost = false;
 
 function parseBody(init?: RequestInit): Record<string, unknown> | null {
   if (!init?.body || typeof init.body !== "string") return null;
@@ -64,6 +67,7 @@ async function mockSecureApiFetch(input: RequestInfo | URL, init?: RequestInit):
     return new Response(
       JSON.stringify({
         configured: true,
+        operacionalRevision,
         operacional: operacionalGetPayload ?? {
           updatedAt: "2026-01-01T00:00:00.000Z",
           arquivosMensais: [],
@@ -89,6 +93,13 @@ async function mockSecureApiFetch(input: RequestInfo | URL, init?: RequestInit):
         throw new Error(err);
       }
       if (operacionalPostDelayMs > 0) await delay(operacionalPostDelayMs);
+      if (operacionalRevision) {
+        assert.equal(body?.operacionalRevision, operacionalRevision);
+        if (rejectVersionedPost) return new Response(JSON.stringify({ error: "Conflito de versão" }), { status: 409 });
+        operacionalGetPayload = body?.payload as Record<string, unknown>;
+        operacionalRevision = "revision-confirmed";
+        return new Response(JSON.stringify({ operacionalRevision }), { status: 201 });
+      }
       return new Response(JSON.stringify({ ok: true }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -127,6 +138,7 @@ function ensureBrowserLikeEnvForDataStore(): void {
     },
     addEventListener: () => {},
     removeEventListener: () => {},
+    matchMedia: () => ({ matches: false }),
   } as unknown as Window;
   (globalThis as typeof globalThis & { localStorage: Storage }).localStorage = g.window.localStorage;
 }
@@ -489,6 +501,21 @@ async function main() {
   await testForceOperacionalPush();
   await testSkipOperationalResetPush();
   console.log("\n11/11 testes OK (H8.9.62 integração single-flight).");
+  resetHarness();
+  operacionalRevision = "revision-original";
+  saveDataSafe(appData(CNPJ_A, COOP_A, []));
+  assert.equal((await syncOperacionalFromCloud(CNPJ_A)).ok, true);
+  const before = getData();
+  const desconto = before.config.descontoPadraoCooperativa + 1;
+  saveDataSafe({ ...before, config: { ...before.config, descontoPadraoCooperativa: desconto } });
+  assert.equal((await syncOperacionalFromCloud(CNPJ_A)).code, "pending_local_changes");
+  rejectVersionedPost = true;
+  await assert.rejects(pushOperacionalToCloud(CNPJ_A, undefined, COOP_A, { throwOnError: true }), /Conflito/);
+  assert.equal(getData().config.descontoPadraoCooperativa, desconto);
+  rejectVersionedPost = false;
+  await pushOperacionalToCloud(CNPJ_A, undefined, COOP_A, { throwOnError: true });
+  assert.equal(operacionalRevision, "revision-confirmed");
+  console.log("PASS — conflito mantém a edição local e o retry usa a revisão consultada.");
 }
 
 main().catch((e) => {

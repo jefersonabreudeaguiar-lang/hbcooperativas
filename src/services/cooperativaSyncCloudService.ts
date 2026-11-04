@@ -31,6 +31,7 @@ import { mergeLivroCaixaOrigensCadastroFromCloud } from "@/lib/livro-caixa/livro
 import { preservarLivroCaixaDePagamentosConfirmados } from "@/services/livroCaixaPagamentoGuard";
 import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
 import { isConferenciaOperacionalPushScopeActive } from "@/services/conferenciaOperacionalPushScope";
+import { rebaseOperacionalSnapshot } from "@/services/operacionalSnapshotRebase";
 import type { SyncTier } from "@/lib/performance/syncTier";
 import { resolveSyncTierPlan84 } from "@/lib/performance/syncPlan84";
 import { syncNotasPedidoFromCloudStaffCoalesced } from "@/lib/performance/staffNotasPullCoordinator";
@@ -78,6 +79,12 @@ type WithUpdatedAt = { id: string; updatedAt?: string; createdAt?: string };
 
 /** Evita POST operacional repetido na mesma sessão quando o payload não mudou. */
 const lastOperacionalPushFingerprint = new Map<string, string>();
+const appliedOperacionalBase = new Map<string, {
+  revision: string | null;
+  local: OperacionalSyncPayload;
+  cloud: OperacionalSyncPayload;
+}>();
+const versionedRowCollections = new Set(["livroCaixa", "valoresAvulsosReceber", "comunicados"]);
 
 /** Somente testes H8.9.62 / H8.9.88 — detectar chamada à API pública de push. */
 let pushOperacionalPublicTestEnterHook: (() => void) | null = null;
@@ -129,6 +136,10 @@ function finalizeOperacionalPullLocalState(
   operacional?: OperacionalSyncPayload | null,
   cnpj?: string
 ): AppData {
+  const applied = cnpj ? appliedOperacionalBase.get(normalizeCnpj(cnpj)) : undefined;
+  const cid = applied && cnpj ? resolveCoopId(data, cnpj) : undefined;
+  if (cid && applied && fingerprintOperacionalPayload(buildOperacionalPayload(data, cid)) !==
+      fingerprintOperacionalPayload(applied.local)) return data;
   const base = posProcessarFinanceiroLocal(data, cnpj);
   if (!temPagamentoCooperadoParaLivroCaixa(base)) {
     return preservarStaffGestaoContraWipe(data, base);
@@ -1949,6 +1960,7 @@ export function mergeOperacionalIntoData(
 async function fetchSyncBundle(cnpj: string): Promise<{
   contratos: ContratosSyncPayload | null;
   operacional: OperacionalSyncPayload | null;
+  operacionalRevision?: string | null;
 } | null> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return null;
@@ -1962,6 +1974,9 @@ async function fetchSyncBundle(cnpj: string): Promise<{
     return {
       contratos: json.contratos ?? null,
       operacional,
+      operacionalRevision: typeof json.operacionalRevision === "string" || json.operacionalRevision === null
+        ? json.operacionalRevision
+        : undefined,
     };
   } catch {
     return null;
@@ -2053,6 +2068,46 @@ function relreadDataForOperacionalPush(authoritative: boolean | undefined): AppD
   return authoritative ? getDataOperationalTruth() : getData();
 }
 
+async function pushVersionedOperacional(
+  digits: string,
+  cid: string,
+  current: OperacionalSyncPayload,
+  revision: string | null
+): Promise<void> {
+  const base = appliedOperacionalBase.get(digits);
+  if (!base) throw new Error("Abra os dados atualizados antes de salvar neste aparelho.");
+  const local = buildOperacionalPayload(getDataOperationalTruth(), cid);
+  if (fingerprintOperacionalPayload(local) === fingerprintOperacionalPayload(base.local)) return;
+  // The local serializer emits the application's reset constant. Only a
+  // cloud revision can establish the operational reset boundary.
+  const operationalResetVersion = base.cloud.operationalResetVersion;
+  const localDelta = rebaseOperacionalSnapshot(
+    { ...base.local, operationalResetVersion },
+    { ...local, operationalResetVersion },
+    { ...base.cloud },
+    versionedRowCollections
+  );
+  const rebased = localDelta.ok
+    ? rebaseOperacionalSnapshot({ ...base.cloud }, localDelta.snapshot, { ...current }, versionedRowCollections)
+    : localDelta;
+  if (!rebased.ok) throw new Error("O lançamento ficou neste aparelho porque os mesmos dados mudaram na nuvem.");
+  const payload = { ...rebased.snapshot, updatedAt: new Date().toISOString() };
+  const res = await secureApiFetch("/api/cooperativa-sync", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cnpj: digits, section: "operacional", payload, operacionalRevision: revision }),
+  });
+  const response = await res.json().catch(() => null);
+  if (!res.ok || typeof response?.operacionalRevision !== "string") {
+    throw new Error(response?.error ?? "Não foi possível confirmar o lançamento na nuvem.");
+  }
+  if (appliedOperacionalBase.get(digits) === base) {
+    // Refresh from the actual server result before permitting another write.
+    appliedOperacionalBase.set(digits, { ...base, local, revision: response.operacionalRevision });
+    await syncOperacionalFromCloud(digits);
+  }
+}
+
 /** Corpo operacional (POST, dedupe, merge). Não chama a API pública nem `enqueueOperacionalPush`. */
 export async function pushOperacionalToCloudInternal(
   cnpj: string,
@@ -2071,11 +2126,19 @@ export async function pushOperacionalToCloudInternal(
 
   await pushOperacionalInternalTestEnterHook?.({ cnpj: digits });
 
+  let bundle = await fetchSyncBundle(digits);
+  if (bundle?.operacionalRevision !== undefined) {
+    const cid = coopId ?? resolveCoopId(getDataOperationalTruth(), digits);
+    if (!cid || !bundle.operacional) throw new Error("Dados operacionais indisponíveis para gravação.");
+    await pushVersionedOperacional(digits, cid, bundle.operacional, bundle.operacionalRevision);
+    return;
+  }
+  if (appliedOperacionalBase.has(digits)) throw new Error("Não foi possível consultar a revisão operacional.");
+
   if (!options?.skipOperationalResetPush && needsOperationalResetCloudPush()) {
     await pushOperationalResetToCloud(digits, coopId);
+    bundle = await fetchSyncBundle(digits);
   }
-
-  let bundle: Awaited<ReturnType<typeof fetchSyncBundle>> | null = await fetchSyncBundle(digits);
   if (cloudOperacionalRestoreAtivo(bundle?.operacional) && !options?.forceOperacionalPush) {
     if (options?.throwOnError) throw new Error("Atualização dos dados em andamento. Tente salvar a cota novamente em instantes.");
     return;
@@ -2346,6 +2409,7 @@ export async function publicarCatalogoContratos(cnpj: string, data?: AppData, co
 }
 
 export type CooperadoOperacionalPullCode =
+  | "pending_local_changes"
   | "ok"
   | "invalid_cnpj"
   | "fetch_failed"
@@ -2407,6 +2471,20 @@ export async function syncOperacionalFromCloud(
     return { ok: false, code: "no_coop_id", pagamentosCoopCount: 0 };
   }
 
+  const baseBeforePull = appliedOperacionalBase.get(digits);
+  const localBeforePull = bundle.operacionalRevision !== undefined
+    ? fingerprintOperacionalPayload(buildOperacionalPayload(current, coopId))
+    : undefined;
+  const hasLocalChanges = () => {
+    const base = appliedOperacionalBase.get(digits);
+    const localNow = fingerprintOperacionalPayload(buildOperacionalPayload(getDataOperationalTruth(), coopId));
+    return base !== baseBeforePull || localNow !== localBeforePull ||
+      (base !== undefined && localNow !== fingerprintOperacionalPayload(base.local));
+  };
+  if (bundle.operacionalRevision !== undefined && hasLocalChanges()) {
+    return { ok: false, code: "pending_local_changes", pagamentosCoopCount: countPagamentosCooperativa(current, coopId) };
+  }
+
   const pullSeguro = avaliarFullResetOperacionalPullSeguro(
     current,
     bundle.operacional,
@@ -2460,6 +2538,9 @@ export async function syncOperacionalFromCloud(
   }
 
   const cloudCooperados = (await fetchCooperadosFromCloud(cnpj)).cooperados;
+  if (bundle.operacionalRevision !== undefined && hasLocalChanges()) {
+    return { ok: false, code: "pending_local_changes", pagamentosCoopCount: countPagamentosCooperativa(getData(), coopId) };
+  }
   const pullPagamentos = prepararOperacionalPullPagamentosMonotonicos(
     pagamentosBaseline,
     bundle.operacional,
@@ -2489,7 +2570,15 @@ export async function syncOperacionalFromCloud(
   const protegido = staffGestaoPerfilReaplicarAbaLastGoodPermitido()
     ? reaplicarAbaLastGoodSeRegrediu(merged, coopId, "pagar")
     : merged;
-  saveDataSafe(protegido);
+  const saved = saveDataSafe(protegido);
+  if (bundle.operacionalRevision !== undefined) {
+    if (!saved.ok) return { ok: false, code: "fetch_failed", pagamentosCoopCount: 0 };
+    appliedOperacionalBase.set(digits, {
+      revision: bundle.operacionalRevision,
+      local: buildOperacionalPayload(getDataOperationalTruth(), coopId),
+      cloud: bundle.operacional,
+    });
+  }
   const after = getData();
   if (detectCooperadoPagamentosNaoMaterializados(coopId, bundle.operacional, after)) {
     console.warn("[COOP_FIN_SYNC] pagamentos da nuvem não materializados no AppData após merge", {
