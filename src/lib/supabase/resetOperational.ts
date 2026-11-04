@@ -62,7 +62,7 @@ export async function resetOperacionalSyncForCnpj(
     config: existing?.config ?? { descontoPadraoCooperativa: 5 },
   };
 
-  return uploadOperacionalSync(supabase, digits, payload);
+  return uploadOperacionalSync(supabase, digits, payload, { versionedBase: existing });
 }
 
 export interface ResetOperationalCloudResult {

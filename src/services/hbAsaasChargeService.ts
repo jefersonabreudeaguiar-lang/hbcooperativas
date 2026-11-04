@@ -936,9 +936,12 @@ async function appendRepasseLivroCaixaCloud(
     updatedAt: paidAt,
   };
 
-  payload.livroCaixa = [...livro, entry];
-  payload.updatedAt = new Date().toISOString();
-  await uploadOperacionalSync(supabase, cnpj, payload);
+  const result = await uploadOperacionalSync(supabase, cnpj, {
+    ...payload,
+    livroCaixa: [...livro, entry],
+    updatedAt: new Date().toISOString(),
+  }, { versionedBase: existing });
+  if (!result.ok && result.code) throw new Error(result.error);
 }
 
 function asaasPaymentSettled(status: string | undefined | null): boolean {

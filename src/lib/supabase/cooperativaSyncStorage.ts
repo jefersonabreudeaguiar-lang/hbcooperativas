@@ -34,6 +34,19 @@ import type {
 
 const BUCKET = "hb-cooperativa-sync";
 
+// The revision belongs to the server-read object, never to incoming JSON.
+const operacionalRevisions = new WeakMap<OperacionalSyncPayload, { cnpj: string; revision: string | null }>();
+
+export function isVersionedOperacionalSyncEnabled(): boolean {
+  return process.env.HB_HOMOLOGATION_ONLY === "true" && process.env.HB_OPERACIONAL_VERSIONED_SYNC === "true";
+}
+
+export function getOperacionalReadRevision(cnpj: string, payload: OperacionalSyncPayload | null): string | null | undefined {
+  if (payload === null) return null;
+  const read = operacionalRevisions.get(payload);
+  return read?.cnpj === cnpj ? read.revision : undefined;
+}
+
 export interface ContratosSyncPayload {
   updatedAt: string;
   instituicoes: Instituicao[];
@@ -166,6 +179,8 @@ export async function fetchContratosSync(
 export type UploadOperacionalSyncOptions = {
   /** Evita segundo download quando o caller já leu operacional.json. */
   existingOperacional?: OperacionalSyncPayload | null;
+  /** Baseline used by specialized writers to construct the mutation. */
+  versionedBase?: OperacionalSyncPayload | null;
   /** Uso interno / break-glass futuro — não usar no fluxo normal. */
   skipPagamentoConfirmadoProtection?: boolean;
   /** Somente reset administrativo explícito da cota. */
@@ -174,7 +189,7 @@ export type UploadOperacionalSyncOptions = {
 
 export type UploadOperacionalSyncResult =
   | { ok: true; blockedDowngrades: PagamentoDowngradeBloqueado[] }
-  | { ok: false; error: string };
+  | { ok: false; error: string; code?: "OPERACIONAL_CONFLICT" | "OPERACIONAL_BASE_REQUIRED" };
 
 export async function uploadOperacionalSync(
   supabase: SupabaseClient,
@@ -182,11 +197,21 @@ export async function uploadOperacionalSync(
   payload: OperacionalSyncPayload,
   options?: UploadOperacionalSyncOptions
 ): Promise<UploadOperacionalSyncResult> {
+  const versioned = isVersionedOperacionalSyncEnabled();
+  const base = options?.versionedBase !== undefined ? options.versionedBase : options?.existingOperacional;
+  const expected = base === undefined
+    ? undefined
+    : getOperacionalReadRevision(cnpj, base);
+  if (versioned && expected === undefined) {
+    return { ok: false, code: "OPERACIONAL_BASE_REQUIRED", error: "Atualize os dados da nuvem antes de salvar." };
+  }
   let toUpload = payload;
   let blockedDowngrades: PagamentoDowngradeBloqueado[] = [];
 
   const existing =
-    options?.existingOperacional !== undefined
+    versioned && base !== undefined
+      ? base
+      : options?.existingOperacional !== undefined
       ? options.existingOperacional
       : await fetchOperacionalSync(supabase, cnpj);
 
@@ -218,6 +243,19 @@ export async function uploadOperacionalSync(
   }
   // A cópia do aparelho não pode apagar cashback ou repasse confirmado no banco.
   toUpload = (await projectOperationalFinancialRecords(supabase, cnpj, toUpload, existing))!;
+  if (versioned) {
+    const { data, error } = await supabase.rpc("hb_operacional_compare_and_save", {
+      p_cnpj: cnpj,
+      p_expected_revision: expected,
+      p_payload: toUpload,
+    });
+    if (error) return { ok: false, error: "Não foi possível confirmar a gravação na nuvem. Confira o resultado antes de tentar novamente." };
+    if (data === null) {
+      return { ok: false, code: "OPERACIONAL_CONFLICT", error: "Os dados da nuvem mudaram durante a gravação. Atualize antes de tentar novamente." };
+    }
+    if (typeof data !== "string") return { ok: false, error: "A nuvem não confirmou a versão gravada." };
+    return { ok: true, blockedDowngrades };
+  }
   const uploaded = await uploadJson(supabase, cnpj, "operacional.json", toUpload);
   if (!uploaded.ok) return uploaded;
   return { ok: true, blockedDowngrades };
@@ -227,8 +265,17 @@ export async function fetchOperacionalSync(
   supabase: SupabaseClient,
   cnpj: string
 ): Promise<OperacionalSyncPayload | null> {
-  const payload = await fetchJson<OperacionalSyncPayload>(supabase, cnpj, "operacional.json");
-  return projectOperationalFinancialRecords(supabase, cnpj, payload);
+  const versioned = isVersionedOperacionalSyncEnabled();
+  const row = versioned
+    ? await supabase.from("hb_operacional_snapshots").select("revision,payload").eq("cooperativa_cnpj", cnpj).maybeSingle()
+    : null;
+  if (row?.error) throw new Error("Não foi possível consultar a versão dos dados na nuvem.");
+  const payload = row?.data
+    ? row.data.payload as OperacionalSyncPayload
+    : await fetchJson<OperacionalSyncPayload>(supabase, cnpj, "operacional.json");
+  const projected = await projectOperationalFinancialRecords(supabase, cnpj, payload);
+  if (versioned && projected) operacionalRevisions.set(projected, { cnpj, revision: row?.data?.revision ?? null });
+  return projected;
 }
 
 /** Tombstone + ficha na nuvem quando a entrega foi apagada via API (não depende só do push do staff). */

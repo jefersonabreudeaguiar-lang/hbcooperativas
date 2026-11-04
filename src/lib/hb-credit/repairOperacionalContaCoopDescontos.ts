@@ -267,7 +267,7 @@ async function patchOperacionalDescontos(
     updatedAt: hbSyncedAt,
     arquivosMensais: arquivos,
   };
-  const up = await uploadOperacionalSync(supabase, digits, next);
+  const up = await uploadOperacionalSync(supabase, digits, next, { versionedBase: op });
   if (!up.ok) {
     throw new Error(up.error || "upload_operacional_failed");
   }

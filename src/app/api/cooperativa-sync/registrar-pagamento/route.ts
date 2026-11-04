@@ -87,7 +87,7 @@ export async function POST(request: Request) {
     ...aplicarRegistroPagamentoResponsavelNoOperacional(operacional, patch),
     operationalResetVersion: OPERATIONAL_RESET_VERSION,
   };
-  const uploaded = await uploadOperacionalSync(supabase, cnpj, next);
+  const uploaded = await uploadOperacionalSync(supabase, cnpj, next, { versionedBase: operacional });
   if (!uploaded.ok) {
     return NextResponse.json({ error: uploaded.error }, { status: 500 });
   }

@@ -73,7 +73,7 @@ export async function POST(request: Request) {
         ...aplicarPagamentoConfirmadoNoOperacional(operacional, comAssinatura),
         operationalResetVersion: OPERATIONAL_RESET_VERSION,
       };
-      const uploaded = await uploadOperacionalSync(supabase, cnpj, next);
+      const uploaded = await uploadOperacionalSync(supabase, cnpj, next, { versionedBase: operacional });
       if (!uploaded.ok) {
         return NextResponse.json({ error: uploaded.error }, { status: 500 });
       }
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
       ...aplicarPagamentoConfirmadoNoOperacional(operacional, pagamento),
       operationalResetVersion: OPERATIONAL_RESET_VERSION,
     };
-    const uploaded = await uploadOperacionalSync(supabase, cnpj, next);
+    const uploaded = await uploadOperacionalSync(supabase, cnpj, next, { versionedBase: operacional });
     if (!uploaded.ok) {
       return NextResponse.json({ error: uploaded.error }, { status: 500 });
     }

@@ -7,6 +7,8 @@ import { logServerMutationAudit } from "@/lib/security/serverAudit";
 import {
   fetchContratosSync,
   fetchOperacionalSync,
+  getOperacionalReadRevision,
+  isVersionedOperacionalSyncEnabled,
   uploadContratosSync,
   uploadOperacionalSync,
   type ContratosSyncPayload,
@@ -86,7 +88,10 @@ export async function GET(request: Request) {
       : sanitizarOperacionalSyncPayload(operacionalRaw, reconciliarFichaFromNotasConferidas)
     : null;
 
-  return NextResponse.json({ configured: true, contratos, operacional });
+  const operacionalRevision = isVersionedOperacionalSyncEnabled()
+    ? getOperacionalReadRevision(cnpj, operacionalRaw)
+    : undefined;
+  return NextResponse.json({ configured: true, contratos, operacional, operacionalRevision });
 }
 
 export async function POST(request: Request) {
@@ -138,6 +143,21 @@ export async function POST(request: Request) {
   if (section === "operacional") {
     const existing = await fetchOperacionalSync(supabase, cnpj);
     const raw = body.payload as OperacionalSyncPayload;
+    if (isVersionedOperacionalSyncEnabled()) {
+      const revision = getOperacionalReadRevision(cnpj, existing);
+      if (revision === undefined || body.operacionalRevision !== revision) {
+        return NextResponse.json(
+          { code: "OPERACIONAL_CONFLICT", error: "Os dados na nuvem mudaram. Atualize antes de salvar." },
+          { status: 409 }
+        );
+      }
+      if (raw.fullReset || raw.wipeNotas) {
+        return NextResponse.json(
+          { code: "OPERACIONAL_RESET_BLOCKED", error: "A limpeza operacional está indisponível nesta versão de teste." },
+          { status: 409 }
+        );
+      }
+    }
     if (existing?.fullReset === true) {
       const prevVer = existing.operationalResetVersion ?? 0;
       const nextVer = raw.operationalResetVersion ?? 0;
@@ -239,8 +259,8 @@ export async function POST(request: Request) {
     });
     if (!uploaded.ok) {
       return NextResponse.json(
-        { error: uploaded.error, code: "OPERACIONAL_UPLOAD_FAILED" },
-        { status: 500 }
+        { error: uploaded.error, code: uploaded.code ?? "OPERACIONAL_UPLOAD_FAILED" },
+        { status: uploaded.code ? 409 : 500 }
       );
     }
     if (guard.session) {

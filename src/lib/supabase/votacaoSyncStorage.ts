@@ -43,5 +43,5 @@ export async function appendVotacaoVotoToOperacional(
     votacaoVotos: [...votosAtualizados, voto],
   };
 
-  return uploadOperacionalSync(supabase, cnpj, next);
+  return uploadOperacionalSync(supabase, cnpj, next, { versionedBase: current });
 }
