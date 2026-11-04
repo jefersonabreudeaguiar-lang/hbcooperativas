@@ -116,3 +116,20 @@ O ensaio de restauração integral permanece adiado conforme combinado.
   autenticado. As três contas fictícias permanecem desativadas. A validação
   das telas de cooperado e mercado, a corrida no app e o ensaio de retorno
   da 793 seguem pendentes.
+
+## Congelamento antes do retorno
+
+A migração `20261104225255_hb_operacional_freeze_for_rollback.sql` foi aplicada
+apenas em homologação. A rotina trava a revisão indicada pelo operador. Uma
+revisão antiga não consegue congelar uma mais nova. Depois do congelamento,
+uma gravação concorrente é recusada, mesmo que use a revisão correta.
+
+O teste no banco congelou uma revisão que continha um lançamento e um
+pagamento confirmado, tentou gravar novamente e confirmou que ambos
+permaneceram na cópia congelada. A transação foi revertida.
+
+Para ensaiar o retorno, isolar todos os escritores, inclusive deploys antigos
+que ainda podem escrever no Storage. Congelar a última revisão, guardar uma
+cópia do arquivo legado e publicar a revisão congelada no caminho legado
+`{cnpj}/operacional.json`. Relê-lo e comparar o conteúdo antes de liberar a
+793. Esta etapa ainda precisa ser exercitada com uma cooperativa fictícia.
