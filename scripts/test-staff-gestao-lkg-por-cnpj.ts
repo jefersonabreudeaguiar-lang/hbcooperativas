@@ -51,7 +51,7 @@ const guard = readFileSync(
 assert.match(guard, /STAFF_GESTAO_LKG_SESSION_KEY}:\$\{cnpj\}/);
 assert.match(guard, /migrateLegacyLastGoodIfMatches/);
 assert.match(guard, /adoptLegacyLastGoodFromStore/);
-assert.match(guard, /localStorage\.setItem\(key, json\)/);
+assert.match(guard, /localStorage\.setItem\(key, compact\)/);
 assert.match(guard, /localStorage\.getItem\(key\)/);
 
 console.log("ok: lastro do responsável isolado por CNPJ");
