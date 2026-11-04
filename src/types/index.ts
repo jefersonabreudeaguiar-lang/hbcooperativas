@@ -943,6 +943,8 @@ export interface FechamentoSnapshot {
 }
 
 export interface AppData {
+  /** Local only. Identifies the revision stored alongside this operational copy. */
+  operacionalCheckpoint?: { scope: string; id: string };
   cooperativas: Cooperativa[];
   users: User[];
   cooperados: Cooperado[];

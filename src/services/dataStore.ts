@@ -532,6 +532,8 @@ function persistDataToStorage(
   const candidates = buildPersistCandidates(data);
 
   for (let i = 0; i < candidates.length; i++) {
+    // A compacted copy cannot claim the same operational baseline.
+    if (i > 0 && data.operacionalCheckpoint) break;
     const candidate = candidates[i];
     try {
       const serialized = JSON.stringify(candidate);

@@ -30,14 +30,8 @@ function openCheckpointDb(): Promise<IDBDatabase> {
   });
 }
 
-function key(scope: string): string {
-  return `hb.operacional.checkpoint.v1:${scope}`;
-}
-
-export async function loadOperacionalCheckpoint(scope: string): Promise<OperacionalCheckpoint | null> {
+export async function loadOperacionalCheckpoint(scope: string, id: string): Promise<OperacionalCheckpoint | null> {
   if (testStorage) return testStorage.load(scope);
-  const id = sessionStorage.getItem(key(scope));
-  if (!id) return null;
   const db = await openCheckpointDb();
   try {
     const row = await new Promise<StoredCheckpoint | undefined>((resolve, reject) => {
@@ -54,10 +48,13 @@ export async function loadOperacionalCheckpoint(scope: string): Promise<Operacio
   }
 }
 
-export async function persistOperacionalCheckpoint(scope: string, base: OperacionalCheckpoint): Promise<void> {
-  if (testStorage) return testStorage.save(scope, base);
-  const db = await openCheckpointDb();
+export async function persistOperacionalCheckpoint(scope: string, base: OperacionalCheckpoint): Promise<string> {
   const id = crypto.randomUUID();
+  if (testStorage) {
+    await testStorage.save(scope, base);
+    return id;
+  }
+  const db = await openCheckpointDb();
   try {
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE, "readwrite");
@@ -73,8 +70,7 @@ export async function persistOperacionalCheckpoint(scope: string, base: Operacio
         cursor.continue();
       };
     });
-    // Duplicated tabs can retain their original immutable checkpoint.
-    sessionStorage.setItem(key(scope), id);
+    return id;
   } finally {
     db.close();
   }

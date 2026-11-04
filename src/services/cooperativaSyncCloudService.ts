@@ -10,7 +10,7 @@ import { staffGestaoPerfilReaplicarAbaLastGoodPermitido } from "@/lib/staff/staf
 import { secureApiFetch } from "@/lib/security/clientSession";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
 import { registrarCatalogoCloudLeitura } from "@/lib/staff/staffCatalogoCloudLeitura";
-import { getData, getDataOperationalTruth, saveDataSafe, runWithBatchedSaveAsync } from "@/services/dataStore";
+import { getData, getDataOperationalTruth, saveDataSafe, runWithBatchedSaveAsync, waitForAppDataWarm } from "@/services/dataStore";
 import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
@@ -82,28 +82,43 @@ type WithUpdatedAt = { id: string; updatedAt?: string; createdAt?: string };
 const lastOperacionalPushFingerprint = new Map<string, string>();
 const appliedOperacionalBase = new Map<string, OperacionalCheckpoint>();
 const operacionalCheckpointScope = new Map<string, string>();
+const loadedOperacionalCheckpointId = new Map<string, string>();
 
 async function hydrateOperacionalBase(digits: string, userId?: string): Promise<void> {
   if (!userId) throw new Error("A sessão não confirmou a referência do lançamento.");
   const scope = `${digits}:${userId}`;
-  if (operacionalCheckpointScope.get(digits) === scope) return;
-  const stored = await loadOperacionalCheckpoint(scope);
+  if (!await waitForAppDataWarm()) throw new Error("Aguarde a leitura dos dados deste aparelho.");
+  const marker = getDataOperationalTruth().operacionalCheckpoint;
+  if (marker && marker.scope !== scope) throw new Error("Os dados locais pertencem a outra sessão de edição.");
+  if (operacionalCheckpointScope.get(digits) === scope && loadedOperacionalCheckpointId.get(digits) === marker?.id) return;
+  const stored = marker ? await loadOperacionalCheckpoint(scope, marker.id) : null;
+  if (marker && !stored) throw new Error("A referência deste lançamento não está disponível.");
+  if (getDataOperationalTruth().operacionalCheckpoint !== marker) {
+    throw new Error("A referência local mudou durante a leitura.");
+  }
   if (stored) appliedOperacionalBase.set(digits, stored);
   else appliedOperacionalBase.delete(digits);
   operacionalCheckpointScope.set(digits, scope);
+  if (marker) loadedOperacionalCheckpointId.set(digits, marker.id);
+  else loadedOperacionalCheckpointId.delete(digits);
 }
 
-async function saveOperacionalBase(digits: string, base: OperacionalCheckpoint): Promise<void> {
+async function saveOperacionalBase(
+  digits: string,
+  base: OperacionalCheckpoint,
+  next?: AppData,
+  stillCurrent: () => boolean = () => true
+): Promise<void> {
   const scope = operacionalCheckpointScope.get(digits);
   if (!scope) throw new Error("A sessão mudou antes de guardar a referência do lançamento.");
-  const previous = appliedOperacionalBase.get(digits);
-  if (previous?.revision === base.revision &&
-      fingerprintOperacionalPayload(previous.local) === fingerprintOperacionalPayload(base.local) &&
-      fingerprintOperacionalPayload(previous.cloud) === fingerprintOperacionalPayload(base.cloud)) return;
-  await persistOperacionalCheckpoint(scope, base);
-  if (operacionalCheckpointScope.get(digits) !== scope) {
-    throw new Error("A sessão mudou durante a gravação da referência.");
+  const before = getDataOperationalTruth();
+  const id = await persistOperacionalCheckpoint(scope, base);
+  if (!stillCurrent() || getDataOperationalTruth() !== before || operacionalCheckpointScope.get(digits) !== scope) {
+    throw new Error("Os dados locais mudaram durante a gravação da referência.");
   }
+  const saved = saveDataSafe({ ...(next ?? before), operacionalCheckpoint: { scope, id } });
+  if (!saved.ok) throw new Error(saved.error);
+  loadedOperacionalCheckpointId.set(digits, id);
   appliedOperacionalBase.set(digits, base);
 }
 const versionedRowCollections = new Set(["livroCaixa", "valoresAvulsosReceber", "comunicados"]);
@@ -2598,14 +2613,14 @@ export async function syncOperacionalFromCloud(
   const protegido = staffGestaoPerfilReaplicarAbaLastGoodPermitido()
     ? reaplicarAbaLastGoodSeRegrediu(merged, coopId, "pagar")
     : merged;
-  const saved = saveDataSafe(protegido);
   if (bundle.operacionalRevision !== undefined) {
-    if (!saved.ok) return { ok: false, code: "fetch_failed", pagamentosCoopCount: 0 };
     await saveOperacionalBase(digits, {
       revision: bundle.operacionalRevision,
-      local: buildOperacionalPayload(getDataOperationalTruth(), coopId),
+      local: buildOperacionalPayload(protegido, coopId),
       cloud: bundle.operacional,
-    });
+    }, protegido, () => pullLease.isCurrent());
+  } else {
+    saveDataSafe(protegido);
   }
   const after = getData();
   if (detectCooperadoPagamentosNaoMaterializados(coopId, bundle.operacional, after)) {
