@@ -1,5 +1,11 @@
 # HB Cooperativas V1 — pacote em validação
 
+Referência atual de retorno em produção: build 793, commit
+`4a02a515d0912c9b1a03c2e4e38baeaf7b6ba593`, deployment
+`dpl_VHAHn2RmScBGP1wwbxf7nWjSWu8D`. O build 793 é o 792 com a melhoria
+isolada da conferência, sem migrações. As referências ao 792 abaixo
+descrevem a base em que a comparação de chamadas foi feita.
+
 Homologação verificada em 04/11/2026. Commit
 `b3a0f814fdc295ea97ce5b0b81f6b2e91a2dc822`, deployment
 `dpl_6Xwssfx8rweeGLaFxJa4YqUQ431Z`. O domínio oficial respondeu com build 792,
@@ -96,3 +102,17 @@ O ensaio de restauração integral permanece adiado conforme combinado.
   A gravação versionada está desabilitada. Os testes autenticados de mercado,
   saldo do cooperado e duas sessões concorrentes continuam sendo condições
   para solicitar o OK de produção.
+
+## Revalidação após a publicação isolada da 793
+
+- A autorização com dez parâmetros usada pela 793, estorno, repetição
+  idempotente, privilégios de execução, limites e revisão operacional
+  passaram nas transações revertidas de homologação. Isso valida o contrato
+  SQL da versão anterior, sem simular o retorno de tráfego do app.
+- A gravação versionada exige agora o CNPJ explícito da cooperativa de
+  teste. O ponto central também bloqueia reset ou limpeza de notas no modo
+  versionado. Os testes cobriram o isolamento e a recusa.
+- A sessão de navegador voltou a perder o controle antes do formulário
+  autenticado. As três contas fictícias permanecem desativadas. A validação
+  das telas de cooperado e mercado, a corrida no app e o ensaio de retorno
+  da 793 seguem pendentes.

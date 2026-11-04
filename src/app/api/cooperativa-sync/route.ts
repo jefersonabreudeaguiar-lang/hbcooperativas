@@ -88,7 +88,7 @@ export async function GET(request: Request) {
       : sanitizarOperacionalSyncPayload(operacionalRaw, reconciliarFichaFromNotasConferidas)
     : null;
 
-  const operacionalRevision = isVersionedOperacionalSyncEnabled()
+  const operacionalRevision = isVersionedOperacionalSyncEnabled(cnpj)
     ? getOperacionalReadRevision(cnpj, operacionalRaw)
     : undefined;
   return NextResponse.json({
@@ -146,7 +146,7 @@ export async function POST(request: Request) {
   if (section === "operacional") {
     const existing = await fetchOperacionalSync(supabase, cnpj);
     const raw = body.payload as OperacionalSyncPayload;
-    if (isVersionedOperacionalSyncEnabled()) {
+    if (isVersionedOperacionalSyncEnabled(cnpj)) {
       const revision = getOperacionalReadRevision(cnpj, existing);
       if (revision === undefined || body.operacionalRevision !== revision) {
         return NextResponse.json(

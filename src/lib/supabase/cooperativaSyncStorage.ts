@@ -37,8 +37,11 @@ const BUCKET = "hb-cooperativa-sync";
 // The revision belongs to the server-read object, never to incoming JSON.
 const operacionalRevisions = new WeakMap<OperacionalSyncPayload, { cnpj: string; revision: string | null }>();
 
-export function isVersionedOperacionalSyncEnabled(): boolean {
-  return process.env.HB_HOMOLOGATION_ONLY === "true" && process.env.HB_OPERACIONAL_VERSIONED_SYNC === "true";
+export function isVersionedOperacionalSyncEnabled(cnpj: string): boolean {
+  return /^\d{14}$/.test(cnpj) &&
+    process.env.HB_HOMOLOGATION_ONLY === "true" &&
+    process.env.HB_OPERACIONAL_VERSIONED_SYNC === "true" &&
+    process.env.HB_OPERACIONAL_VERSIONED_SYNC_CNPJ === cnpj;
 }
 
 export function getOperacionalReadRevision(cnpj: string, payload: OperacionalSyncPayload | null): string | null | undefined {
@@ -189,7 +192,7 @@ export type UploadOperacionalSyncOptions = {
 
 export type UploadOperacionalSyncResult =
   | { ok: true; blockedDowngrades: PagamentoDowngradeBloqueado[]; revision?: string }
-  | { ok: false; error: string; code?: "OPERACIONAL_CONFLICT" | "OPERACIONAL_BASE_REQUIRED" };
+  | { ok: false; error: string; code?: "OPERACIONAL_CONFLICT" | "OPERACIONAL_BASE_REQUIRED" | "OPERACIONAL_RESET_BLOCKED" };
 
 export async function uploadOperacionalSync(
   supabase: SupabaseClient,
@@ -197,7 +200,10 @@ export async function uploadOperacionalSync(
   payload: OperacionalSyncPayload,
   options?: UploadOperacionalSyncOptions
 ): Promise<UploadOperacionalSyncResult> {
-  const versioned = isVersionedOperacionalSyncEnabled();
+  const versioned = isVersionedOperacionalSyncEnabled(cnpj);
+  if (versioned && (payload.fullReset || payload.wipeNotas)) {
+    return { ok: false, code: "OPERACIONAL_RESET_BLOCKED", error: "A limpeza operacional está indisponível nesta versão de teste." };
+  }
   const base = options?.versionedBase !== undefined ? options.versionedBase : options?.existingOperacional;
   const expected = base === undefined
     ? undefined
@@ -265,7 +271,7 @@ export async function fetchOperacionalSync(
   supabase: SupabaseClient,
   cnpj: string
 ): Promise<OperacionalSyncPayload | null> {
-  const versioned = isVersionedOperacionalSyncEnabled();
+  const versioned = isVersionedOperacionalSyncEnabled(cnpj);
   const row = versioned
     ? await supabase.from("hb_operacional_snapshots").select("revision,payload").eq("cooperativa_cnpj", cnpj).maybeSingle()
     : null;

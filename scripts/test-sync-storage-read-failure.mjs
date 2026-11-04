@@ -38,6 +38,10 @@ console.log('PASS: leitura indisponível/corrompida bloqueia gravação; somente
 
 env.HB_HOMOLOGATION_ONLY = env.HB_OPERACIONAL_VERSIONED_SYNC = 'true';
 const cnpj = '12345678901234';
+assert.equal(exports.isVersionedOperacionalSyncEnabled(cnpj), false, 'Exige CNPJ explícito para o teste');
+env.HB_OPERACIONAL_VERSIONED_SYNC_CNPJ = cnpj;
+assert.equal(exports.isVersionedOperacionalSyncEnabled(cnpj), true);
+assert.equal(exports.isVersionedOperacionalSyncEnabled('12345678901235'), false);
 let row = {revision:'00000000-0000-4000-8000-000000000001', payload};
 const versioned = {
   from: () => ({select: () => ({eq: () => ({maybeSingle: async () => ({data:row,error:null})})})}),
@@ -51,6 +55,7 @@ const versioned = {
 const first = await exports.fetchOperacionalSync(versioned, cnpj);
 const second = await exports.fetchOperacionalSync(versioned, cnpj);
 const options = {skipPagamentoConfirmadoProtection:true,skipCotaProtection:true};
+assert.equal((await exports.uploadOperacionalSync(versioned, cnpj, {...payload, wipeNotas:true}, {...options,versionedBase:first})).code, 'OPERACIONAL_RESET_BLOCKED');
 assert.equal((await exports.uploadOperacionalSync(versioned, cnpj, {...payload, winner:1}, {...options,versionedBase:first})).ok, true);
 assert.equal((await exports.uploadOperacionalSync(versioned, cnpj, {...payload, winner:2}, {...options,versionedBase:second})).code, 'OPERACIONAL_CONFLICT');
 assert.equal((await exports.uploadOperacionalSync(versioned, cnpj, payload, {...options,versionedBase:{...second}})).code, 'OPERACIONAL_BASE_REQUIRED');
