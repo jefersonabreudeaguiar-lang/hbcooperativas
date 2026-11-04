@@ -84,6 +84,12 @@ const appliedOperacionalBase = new Map<string, OperacionalCheckpoint>();
 const operacionalCheckpointScope = new Map<string, string>();
 const loadedOperacionalCheckpointId = new Map<string, string>();
 
+export function resetOperacionalCheckpointMemoryForTests(): void {
+  appliedOperacionalBase.clear();
+  operacionalCheckpointScope.clear();
+  loadedOperacionalCheckpointId.clear();
+}
+
 async function hydrateOperacionalBase(digits: string, userId?: string): Promise<void> {
   if (!userId) throw new Error("A sessão não confirmou a referência do lançamento.");
   const scope = `${digits}:${userId}`;

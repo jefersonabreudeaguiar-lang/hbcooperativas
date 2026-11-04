@@ -21,6 +21,7 @@ import {
   clearOperacionalPushFingerprint,
   setPushOperacionalInternalTestEnterHookForTests,
   syncOperacionalFromCloud,
+  resetOperacionalCheckpointMemoryForTests,
 } from "../src/services/cooperativaSyncCloudService.ts";
 
 const CNPJ_A = "62351750000165";
@@ -519,6 +520,9 @@ async function main() {
   rejectVersionedPost = true;
   await assert.rejects(pushOperacionalToCloud(CNPJ_A, undefined, COOP_A, { throwOnError: true }), /Conflito/);
   assert.equal(getData().config.descontoPadraoCooperativa, desconto);
+  resetOperacionalCheckpointMemoryForTests();
+  assert.equal((await syncOperacionalFromCloud(CNPJ_A)).code, "pending_local_changes");
+  assert.equal(getData().config.descontoPadraoCooperativa, desconto, "recarga recupera a base sem apagar a edição pendente");
   rejectVersionedPost = false;
   await pushOperacionalToCloud(CNPJ_A, undefined, COOP_A, { throwOnError: true });
   assert.equal(operacionalRevision, "revision-confirmed");

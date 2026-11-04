@@ -57,3 +57,42 @@ banco em estado compatível. Se uma migração substituir funções ou alterar
 permissões usadas pelo 792, é necessário preparar a reversão específica do
 schema. Reaplicar um backup integral poderia perder lançamentos posteriores.
 O ensaio de restauração integral permanece adiado conforme combinado.
+
+## Compatibilidade do retorno ao 792
+
+- O código do 792 chama a autorização de pagamento com dez parâmetros, incluindo
+  `p_cashback_applied_cents`. Essa assinatura existe nos dois bancos e aceita a
+  execução pelo servidor. A migração de limpeza remove somente a assinatura de
+  nove parâmetros. Isso confirma o encaixe da chamada do 792, mas a execução da
+  operação pelo 792 com o esquema novo ainda precisa ser testada.
+- Oito assinaturas de compra, estorno, repasse, liquidação, transferência,
+  cashback e recebíveis em homologação mantêm execução para `service_role`.
+  Sete assinaturas no oficial, contando a variante de nove parâmetros, ainda
+  concedem execução aos perfis públicos. A consulta verificou permissões no
+  catálogo do banco. Nenhuma chamada pública de escrita foi executada.
+- Separar a mudança em três blocos. Primeiro, revisar tabelas, índices, colunas e
+  privilégios. Depois, instalar as rotinas financeiras na ordem dos arquivos,
+  exercitando o 792 no esquema resultante. Por fim, compilar e validar a nova
+  aplicação. A ativação da gravação versionada exige um ensaio separado de
+  retorno, pois o 792 lê o arquivo operacional legado.
+- Se houver necessidade de reverter uma rotina, preservar as permissões
+  exclusivas do servidor e os registros financeiros feitos depois da publicação.
+  O plano ainda depende de um ensaio autenticado para validar esse caminho.
+
+## Retomada dos testes
+
+- Na homologação, a conta fictícia de responsável abriu Conferir entregas,
+  Em aberto (3 cooperados, R$ 380,00 no cenário de teste) e Livro Caixa.
+  O login do cooperado chegou ao painel. A inspeção do saldo e a interface do
+  mercado ficaram pendentes devido à perda do controle do navegador.
+- O teste automatizado de retomada descarta a referência em memória após uma
+  recusa da nuvem e recupera a referência ligada à cópia local. A edição continua
+  pendente e o reenvio conclui. A persistência do navegador foi simulada.
+- Passaram no banco de homologação os testes de recebíveis por mercado,
+  conversão de cashback e repasse. As transações de teste foram revertidas.
+  Também passaram 39 invariantes sintéticas de alinhamento, a paridade entre
+  Em aberto e Pagar e o teste de carregamento de fotos.
+- As três contas fictícias foram desativadas. A candidata permanece em validação.
+  A gravação versionada está desabilitada. Os testes autenticados de mercado,
+  saldo do cooperado e duas sessões concorrentes continuam sendo condições
+  para solicitar o OK de produção.
