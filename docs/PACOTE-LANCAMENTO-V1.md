@@ -1,10 +1,17 @@
 # HB Cooperativas V1 — pacote em validação
 
-Referência atual de retorno em produção: build 793, commit
-`4a02a515d0912c9b1a03c2e4e38baeaf7b6ba593`, deployment
-`dpl_VHAHn2RmScBGP1wwbxf7nWjSWu8D`. O build 793 é o 792 com a melhoria
-isolada da conferência, sem migrações. As referências ao 792 abaixo
-descrevem a base em que a comparação de chamadas foi feita.
+Referência atual de retorno em produção: build 794, commit
+`252b7fa4512c105358613c5b7bb4160009249893`, deployment
+`dpl_FdoEZyKoaUjgXm61AQYK6eaeJNyc`. A 793 publicou a melhoria de
+conferência. A 794 acrescentou a recusa de sincronização com leitura
+indisponível e o aviso de reenvio após falha de gravação. Ambas foram
+publicações isoladas, sem migrações. As referências ao 792 e à 793 abaixo
+descrevem a base em que as verificações anteriores foram feitas.
+
+O commit `b36aaf83a867d8b4d1cc680660732d67bade8e2d` incorpora a resposta
+recuperável da API e o aviso de falha da 794 no pacote completo. A
+verificação de tipos, o teste de recusa e retomada da API e os testes do
+fluxo versionado passaram nessa revisão.
 
 Homologação verificada em 04/11/2026. Commit
 `b3a0f814fdc295ea97ce5b0b81f6b2e91a2dc822`, deployment
