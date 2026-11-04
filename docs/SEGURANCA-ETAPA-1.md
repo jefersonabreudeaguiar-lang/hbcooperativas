@@ -587,3 +587,15 @@ continuarem pendentes.
 - Não resolve concorrência entre dois snapshots válidos. A gravação do JSON
   operacional ainda necessita confirmação atômica de versão e tratamento de
   conflito entre aparelhos. Nenhuma migração ou alteração de produção nesta etapa.
+
+### Folha de outubro no painel Em aberto (04/11)
+
+- Releitura somente leitura do banco oficial: 16 registros consolidados intactos.
+  O painel oficial omitiria oito registros (R$ 24.293,23), pois o recorte de PIX
+  considerava quitado o mês com entrega sem data única mesmo quando a ficha do
+  consolidado estava fora do escopo do pagamento.
+- A correção limita a exceção ao lote conciliado de outubro. Ficha realmente
+  coberta pelo PIX continua fora da lista; nenhum saldo ou pagamento foi regravado.
+- Simulação com os dados atuais: os 16 registros aparecem no painel corrigido.
+  Teste de regressão confirma que PIX anterior não esconde o consolidado e que
+  pagamento referenciando o consolidado o remove. Sem publicação em produção.
