@@ -140,3 +140,16 @@ que ainda podem escrever no Storage. Congelar a última revisão, guardar uma
 cópia do arquivo legado e publicar a revisão congelada no caminho legado
 `{cnpj}/operacional.json`. Relê-lo e comparar o conteúdo antes de liberar a
 793. Esta etapa ainda precisa ser exercitada com uma cooperativa fictícia.
+
+O script `scripts/bridge-operacional-rollback.mjs` prepara o ensaio para o
+CNPJ reservado `99999999999996` no Supabase de homologação. Recebe a revisão
+congelada e, por padrão, só compara as assinaturas digitais do arquivo de
+destino e do conteúdo preparado. Com a assinatura esperada do arquivo legado,
+publica a cópia e confirma o conteúdo por releitura. A assinatura esperada
+não substitui a pausa dos escritores, pois o Storage legado não oferece
+gravação condicional nesse fluxo.
+
+O teste local simulou o Storage e confirmou a preservação da ficha de caixa e
+do pagamento no arquivo legado, a recusa de destino alterado e a detecção de
+divergência após upload. O ensaio real de Storage e a leitura pela 794 ainda
+estão pendentes.
