@@ -39,7 +39,7 @@ commit `7e366321606fd7d4e1f8dfbbca239fa2a27102de`, deployment
 3. Fechar a sequência de migrações com conferência de pré-requisitos e
    compatibilidade com a versão 792. O banco oficial não tem a tabela de
    histórico consultada no ambiente de teste. A comparação de funções mostrou
-   7 assinaturas ausentes, 12 definições diferentes e 1 igual entre as
+   6 assinaturas ausentes, 13 definições diferentes e 1 igual entre as
    20 funções inspecionadas em homologação. Usar objetos, assinaturas e
    privilégios reais como referência para o plano de produção.
 
