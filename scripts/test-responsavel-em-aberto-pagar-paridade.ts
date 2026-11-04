@@ -96,6 +96,32 @@ const nota = {
 
 const data: AppData = { ...emptyData(), fichaCorrida: [ficha], notasPedido: [nota] };
 
+{
+  const lote = "hb_reconc_out2026_98d4ceb9e37c_v1_fixture";
+  const anterior = {
+    id: "pix-anterior", cooperadoId: "c-1", cooperativaId: COOP,
+    mesReferencia: MES, status: "confirmado", valorBruto: 44, valorLiquido: 40,
+    descontoCooperativa: 4, descontosExtras: [], fichaIds: ["f-antiga"],
+    notaPedidoIds: ["n-antiga"], pagoEm: "2026-10-20T00:00:00Z", createdAt: "2026-10-20T00:00:00Z",
+  } as AppData["pagamentosCooperado"][number];
+  const folha: AppData = {
+    ...emptyData(),
+    notasPedido: [{...nota, id: lote, dataEntrega: undefined, dataConferencia: "2026-11-02T00:00:00Z", createdAt: "2026-11-02T00:00:00Z"}],
+    fichaCorrida: [{...ficha, notaPedidoId: lote, createdAt: "2026-11-02T00:00:00Z", dataLancamento: "2026-11-02T00:00:00Z"}],
+    pagamentosCooperado: [anterior],
+  };
+  resetResponsavelPainelIndexCache();
+  assert.equal(getRelatorioLancamentosEmAbertoResponsavel(folha, COOP)[0]?.total, 100,
+    "PIX de outros registros não quita a folha consolidada sem data de entrega única");
+  resetResponsavelPainelIndexCache();
+  const quitada: AppData = {...folha, pagamentosCooperado: [...folha.pagamentosCooperado, {
+    ...anterior, id: "pix-da-folha", fichaIds: [ficha.id], notaPedidoIds: [lote],
+    valorLiquido: 100, pagoEm: "2026-11-04T00:00:00Z", createdAt: "2026-11-04T00:00:00Z",
+  }]};
+  assert.equal(getRelatorioLancamentosEmAbertoResponsavel(quitada, COOP).length, 0,
+    "PIX que referencia a folha remove o saldo do painel");
+}
+
 resetResponsavelPainelIndexCache();
 const linhas = getRelatorioLancamentosEmAbertoResponsavel(data, COOP);
 assert.equal(linhas.length, 1);

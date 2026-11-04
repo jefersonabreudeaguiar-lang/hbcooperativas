@@ -698,7 +698,7 @@ function linhaEmAbertoSoFichaSemPix(
   };
 }
 
-/** Mês com PIX confirmado sai do Em aberto, salvo entrega com data depois do pagamento. */
+/** Preserva o filtro histórico de PIX, exceto para o consolidado conciliado. */
 function mesPagoDeveSairDoEmAberto(
   data: AppData,
   cooperadoId: string,
@@ -712,9 +712,12 @@ function mesPagoDeveSairDoEmAberto(
     0
   );
   const leftover = listarFichasEmAbertoPagamento(data, cooperadoId, mes, coopId);
-  if (!leftover.length) return true;
   return leftover.every((f) => {
     const nota = data.notasPedido.find((n) => n.id === f.notaPedidoId);
+    // O lote único já excluiu os pagamentos anteriores da folha. A data de
+    // entrega foi preservada por item e não prova a quitação do consolidado.
+    // PIX que inclua este registro é excluído pela função acima normalmente.
+    if (mes === "2026-10" && nota?.id.startsWith("hb_reconc_out2026_98d4ceb9e37c_v1_") && nota.status === "conferida") return false;
     if (!nota?.dataEntrega) return true;
     const raw =
       nota.dataEntrega.length === 10 ? `${nota.dataEntrega}T00:00:00.000Z` : nota.dataEntrega;
