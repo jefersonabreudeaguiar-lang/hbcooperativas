@@ -1,6 +1,6 @@
 {
   "installCommand": "npm ci",
-  "buildCommand": "npm run build",
+  "buildCommand": "node scripts/rehearse-homolog-operacional-rollback.mjs && npm run build",
   "env": {
     "APP_ENV": "production",
     "BIC_ENVIRONMENT": "PRODUCTION",
