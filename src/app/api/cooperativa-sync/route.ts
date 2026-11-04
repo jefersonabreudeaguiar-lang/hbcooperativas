@@ -6,6 +6,7 @@ import { guardCooperativaApi } from "@/lib/security/apiGuard";
 import { logServerMutationAudit } from "@/lib/security/serverAudit";
 import {
   fetchContratosSync,
+  CooperativaSyncStorageUnavailable,
   fetchOperacionalSync,
   getOperacionalReadRevision,
   isVersionedOperacionalSyncEnabled,
@@ -37,7 +38,7 @@ export const revalidate = 0;
 /** POST operacional: guard HB + upload podem levar dezenas de segundos em cooperativas grandes. */
 export const maxDuration = 120;
 
-export async function GET(request: Request) {
+async function readSync(request: Request) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ configured: false, contratos: null, operacional: null });
   }
@@ -97,7 +98,7 @@ export async function GET(request: Request) {
   });
 }
 
-export async function POST(request: Request) {
+async function writeSync(request: Request) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ error: "Nuvem não configurada.", configured: false }, { status: 503 });
   }
@@ -278,4 +279,21 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ error: "Seção desconhecida." }, { status: 400 });
+}
+
+async function withStorageErrorResponse(run: () => Promise<Response>): Promise<Response> {
+  try {
+    return await run();
+  } catch (error) {
+    if (!(error instanceof CooperativaSyncStorageUnavailable)) throw error;
+    return NextResponse.json({ error: error.message, code: "SYNC_STORAGE_UNAVAILABLE" }, { status: 503 });
+  }
+}
+
+export function GET(request: Request) {
+  return withStorageErrorResponse(() => readSync(request));
+}
+
+export function POST(request: Request) {
+  return withStorageErrorResponse(() => writeSync(request));
 }

@@ -61,3 +61,31 @@ assert.equal((await exports.uploadOperacionalSync(versioned, cnpj, {...payload, 
 assert.equal((await exports.uploadOperacionalSync(versioned, cnpj, payload, {...options,versionedBase:{...second}})).code, 'OPERACIONAL_BASE_REQUIRED');
 assert.equal(row.payload.winner, 1);
 console.log('PASS: gravação versionada exige a leitura original e recusa revisão antiga.');
+
+env.HB_OPERACIONAL_VERSIONED_SYNC = undefined;
+let activeClient = client({data:null,error:{statusCode:503,message:'unavailable'}});
+const route = {};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/app/api/cooperativa-sync/route.ts', 'utf8'), {
+  compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
+}).outputText, {exports:route, URL, require: name => {
+  if (name === 'next/server') return {NextResponse:Response};
+  if (name.endsWith('/cooperativaSyncStorage')) return exports;
+  if (name.endsWith('/admin')) return {getSupabaseAdmin:() => activeClient,isSupabaseConfigured:() => true};
+  if (name.endsWith('/apiGuard')) return {guardCooperativaApi:async () => ({ok:true,session:null})};
+  if (name.endsWith('/cooperativa')) return {normalizeCnpj:value => value};
+  if (name.endsWith('/contratosPublicacaoGuard')) return {publicacaoContratosApagariaItens:() => false};
+  return new Proxy({}, {get: () => () => {throw Error(`Unexpected dependency execution: ${name}`);}});
+}});
+const url = 'https://fixture.invalid/api/cooperativa-sync?cnpj=12345678901234&section=contratos';
+const request = section => new Request(url, {method:'POST',body:JSON.stringify({
+  cnpj:'12345678901234',section,payload:{updatedAt:'2026-11-04T00:00:00Z',instituicoes:[],produtosInstituicao:[]}
+})});
+for (const res of [await route.GET(new Request(url)), await route.POST(request('contratos')), await route.POST(request('operacional'))]) {
+  assert.equal(res.status,503);
+  assert.equal((await res.json()).code,'SYNC_STORAGE_UNAVAILABLE');
+}
+assert.equal(writes,0);
+activeClient = client({data:{text:async () => JSON.stringify(payload)},error:null});
+assert.equal((await route.POST(request('contratos'))).status,201);
+assert.equal(writes,1);
+console.log('PASS: API devolve erro recuperável, preserva dados e permite nova tentativa após recuperação.');

@@ -33,6 +33,7 @@ import type {
 } from "@/types";
 
 const BUCKET = "hb-cooperativa-sync";
+export class CooperativaSyncStorageUnavailable extends Error {}
 
 // The revision belongs to the server-read object, never to incoming JSON.
 const operacionalRevisions = new WeakMap<OperacionalSyncPayload, { cnpj: string; revision: string | null }>();
@@ -101,17 +102,17 @@ export const COOPERATIVA_SYNC_FILE_SIZE_LIMIT = 50 * 1024 * 1024;
 async function ensureBucket(supabase: SupabaseClient): Promise<void> {
   const limit = COOPERATIVA_SYNC_FILE_SIZE_LIMIT;
   const { data: buckets, error: listError } = await supabase.storage.listBuckets();
-  if (listError || !buckets) throw new Error("Não foi possível conferir o armazenamento da nuvem. Tente novamente.");
+  if (listError || !buckets) throw new CooperativaSyncStorageUnavailable("Não foi possível conferir o armazenamento da nuvem. Tente novamente.");
   const existing = buckets?.find((b) => b.name === BUCKET);
   if (!existing) {
     const { error } = await supabase.storage.createBucket(BUCKET, { public: false, fileSizeLimit: limit });
-    if (error) throw new Error("Não foi possível preparar o armazenamento da nuvem. Tente novamente.");
+    if (error) throw new CooperativaSyncStorageUnavailable("Não foi possível preparar o armazenamento da nuvem. Tente novamente.");
     return;
   }
   const currentLimit = existing.file_size_limit ?? 0;
   if (currentLimit < limit) {
     const { error } = await supabase.storage.updateBucket(BUCKET, { public: false, fileSizeLimit: limit });
-    if (error) throw new Error("Não foi possível conferir a capacidade do armazenamento da nuvem. Tente novamente.");
+    if (error) throw new CooperativaSyncStorageUnavailable("Não foi possível conferir a capacidade do armazenamento da nuvem. Tente novamente.");
   }
 }
 
@@ -152,15 +153,15 @@ async function fetchJson<T>(supabase: SupabaseClient, cnpj: string, file: string
   // quando a leitura falhou por rede, permissão ou resposta inválida.
   if (error) {
     if (String(error.statusCode) === "404") return null;
-    throw new Error("Não foi possível ler os dados da nuvem. Nenhuma substituição foi realizada. Tente novamente.");
+    throw new CooperativaSyncStorageUnavailable("Não foi possível ler os dados da nuvem. Tente novamente.");
   }
-  if (!blob) throw new Error("A nuvem retornou uma leitura incompleta. Tente novamente.");
+  if (!blob) throw new CooperativaSyncStorageUnavailable("A nuvem retornou uma leitura incompleta. Tente novamente.");
   try {
     const parsed: unknown = JSON.parse(await blob.text());
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Invalid snapshot");
     return parsed as T;
   } catch {
-    throw new Error("Não foi possível validar os dados salvos na nuvem. A sincronização foi interrompida para preservá-los.");
+    throw new CooperativaSyncStorageUnavailable("Não foi possível validar os dados salvos na nuvem. Tente novamente.");
   }
 }
 
@@ -275,7 +276,7 @@ export async function fetchOperacionalSync(
   const row = versioned
     ? await supabase.from("hb_operacional_snapshots").select("revision,payload").eq("cooperativa_cnpj", cnpj).maybeSingle()
     : null;
-  if (row?.error) throw new Error("Não foi possível consultar a versão dos dados na nuvem.");
+  if (row?.error) throw new CooperativaSyncStorageUnavailable("Não foi possível consultar a versão dos dados na nuvem.");
   const payload = row?.data
     ? row.data.payload as OperacionalSyncPayload
     : await fetchJson<OperacionalSyncPayload>(supabase, cnpj, "operacional.json");
