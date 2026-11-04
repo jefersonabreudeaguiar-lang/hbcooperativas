@@ -1346,6 +1346,7 @@ export default function NotasPedidoStaffMain() {
       setConferirErrors({});
       setConferenciaFotoErro("");
       const emCache = conferenciaFotoJaEmCache(selectedNota.id, clamped);
+      if (!emCache) setConferenciaFotoAtualUrl(null);
       setConferenciaFotoCarregando(!emCache);
       setConferenciaFotoIdx(clamped);
       setLancamentoSequencia(null);
@@ -3303,6 +3304,8 @@ export default function NotasPedidoStaffMain() {
     setConferenciaFotoErro("");
     const mesmaNota = notaAnteriorId === nota.id;
     if (!mesmaNota) {
+      // Uma leitura da nota anterior pode terminar durante a troca.
+      conferenciaFotoLoadGenRef.current += 1;
       setConferenciaFotoIdx(0);
       resetConferenciaPorFoto();
       setConferenciaFotoAtualUrl(null);
@@ -3313,6 +3316,16 @@ export default function NotasPedidoStaffMain() {
       notaComFoto = d.notasPedido.find((n) => n.id === nota.id) ?? nota;
     }
     const totalFotos = contarFotosEnviadasNota(notaComFoto);
+    if (!mesmaNota && totalFotos === 1) {
+      const cnpj = notaComFoto.cooperativaCnpj ?? (d && coopId ? getCooperativaCnpj(d, coopId) : undefined);
+      const emCache = cnpj ? getConferenciaFotoBlobCachedIfLoaded(cnpj, nota.id, 0) : undefined;
+      const inline = resolveFotoInlineConferenciaNota(notaComFoto, 0);
+      const pronta = emCache ?? (inline && !isFotoInlineMiniaturaFallback(notaComFoto, 0, inline) ? inline : null);
+      if (pronta) {
+        setConferenciaFotoAtualUrl(pronta);
+        setConferenciaFotoCarregando(false);
+      }
+    }
     setSelectedNota(
       nota.status === "aguardando_conferencia"
         ? {
@@ -3428,7 +3441,10 @@ export default function NotasPedidoStaffMain() {
     const ids = filaConferenciaRef.current?.ordem ?? [];
     const pos = ids.indexOf(selectedNota.id);
     const proximas = pos >= 0 ? ids.slice(pos + 1) : [];
-    const proxima = proximas.map((id) => pendentes.find((n) => n.id === id)).find(Boolean)
+    const porId = new Map(pendentes.map((n) => [n.id, n]));
+    const chaveAtual = getChaveGrupoConferencia(selectedNota, data, coopId);
+    const proxima = proximas.map((id) => porId.get(id)).find(Boolean)
+      ?? pendentes.find((n) => n.id !== selectedNota.id && getChaveGrupoConferencia(n, data, coopId) === chaveAtual)
       ?? pendentes.find((n) => n.id !== selectedNota.id);
     if (!proxima || !notaTemFotoArmazenadaNaNuvem(proxima)) return;
     const cnpj = getCooperativaCnpj(data, coopId) ?? proxima.cooperativaCnpj;
