@@ -15,6 +15,7 @@ import {
 } from "../src/services/operacionalPushSingleFlight.ts";
 import { setSecureApiFetchTestOverrideForTests } from "../src/lib/security/clientSession.ts";
 import { getData, saveDataSafe } from "../src/services/dataStore.ts";
+import { setOperacionalCheckpointStorageForTests, type OperacionalCheckpoint } from "../src/services/operacionalCheckpoint.ts";
 import {
   pushOperacionalToCloud,
   clearOperacionalPushFingerprint,
@@ -68,6 +69,7 @@ async function mockSecureApiFetch(input: RequestInfo | URL, init?: RequestInit):
       JSON.stringify({
         configured: true,
         operacionalRevision,
+        operacionalScope: operacionalRevision ? "fixture-user" : undefined,
         operacional: operacionalGetPayload ?? {
           updatedAt: "2026-01-01T00:00:00.000Z",
           arquivosMensais: [],
@@ -503,6 +505,11 @@ async function main() {
   console.log("\n11/11 testes OK (H8.9.62 integração single-flight).");
   resetHarness();
   operacionalRevision = "revision-original";
+  const checkpoints = new Map<string, OperacionalCheckpoint>();
+  setOperacionalCheckpointStorageForTests({
+    load: async (scope) => checkpoints.get(scope) ?? null,
+    save: async (scope, base) => { checkpoints.set(scope, structuredClone(base)); },
+  });
   saveDataSafe(appData(CNPJ_A, COOP_A, []));
   assert.equal((await syncOperacionalFromCloud(CNPJ_A)).ok, true);
   const before = getData();
@@ -515,6 +522,7 @@ async function main() {
   rejectVersionedPost = false;
   await pushOperacionalToCloud(CNPJ_A, undefined, COOP_A, { throwOnError: true });
   assert.equal(operacionalRevision, "revision-confirmed");
+  assert.equal(checkpoints.get(`${CNPJ_A}:fixture-user`)?.revision, "revision-confirmed");
   console.log("PASS — conflito mantém a edição local e o retry usa a revisão consultada.");
 }
 

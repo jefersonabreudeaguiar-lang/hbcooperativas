@@ -32,6 +32,7 @@ import { preservarLivroCaixaDePagamentosConfirmados } from "@/services/livroCaix
 import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
 import { isConferenciaOperacionalPushScopeActive } from "@/services/conferenciaOperacionalPushScope";
 import { rebaseOperacionalSnapshot } from "@/services/operacionalSnapshotRebase";
+import { loadOperacionalCheckpoint, persistOperacionalCheckpoint, type OperacionalCheckpoint } from "@/services/operacionalCheckpoint";
 import type { SyncTier } from "@/lib/performance/syncTier";
 import { resolveSyncTierPlan84 } from "@/lib/performance/syncPlan84";
 import { syncNotasPedidoFromCloudStaffCoalesced } from "@/lib/performance/staffNotasPullCoordinator";
@@ -79,11 +80,32 @@ type WithUpdatedAt = { id: string; updatedAt?: string; createdAt?: string };
 
 /** Evita POST operacional repetido na mesma sessão quando o payload não mudou. */
 const lastOperacionalPushFingerprint = new Map<string, string>();
-const appliedOperacionalBase = new Map<string, {
-  revision: string | null;
-  local: OperacionalSyncPayload;
-  cloud: OperacionalSyncPayload;
-}>();
+const appliedOperacionalBase = new Map<string, OperacionalCheckpoint>();
+const operacionalCheckpointScope = new Map<string, string>();
+
+async function hydrateOperacionalBase(digits: string, userId?: string): Promise<void> {
+  if (!userId) throw new Error("A sessão não confirmou a referência do lançamento.");
+  const scope = `${digits}:${userId}`;
+  if (operacionalCheckpointScope.get(digits) === scope) return;
+  const stored = await loadOperacionalCheckpoint(scope);
+  if (stored) appliedOperacionalBase.set(digits, stored);
+  else appliedOperacionalBase.delete(digits);
+  operacionalCheckpointScope.set(digits, scope);
+}
+
+async function saveOperacionalBase(digits: string, base: OperacionalCheckpoint): Promise<void> {
+  const scope = operacionalCheckpointScope.get(digits);
+  if (!scope) throw new Error("A sessão mudou antes de guardar a referência do lançamento.");
+  const previous = appliedOperacionalBase.get(digits);
+  if (previous?.revision === base.revision &&
+      fingerprintOperacionalPayload(previous.local) === fingerprintOperacionalPayload(base.local) &&
+      fingerprintOperacionalPayload(previous.cloud) === fingerprintOperacionalPayload(base.cloud)) return;
+  await persistOperacionalCheckpoint(scope, base);
+  if (operacionalCheckpointScope.get(digits) !== scope) {
+    throw new Error("A sessão mudou durante a gravação da referência.");
+  }
+  appliedOperacionalBase.set(digits, base);
+}
 const versionedRowCollections = new Set(["livroCaixa", "valoresAvulsosReceber", "comunicados"]);
 
 /** Somente testes H8.9.62 / H8.9.88 — detectar chamada à API pública de push. */
@@ -1961,6 +1983,7 @@ async function fetchSyncBundle(cnpj: string): Promise<{
   contratos: ContratosSyncPayload | null;
   operacional: OperacionalSyncPayload | null;
   operacionalRevision?: string | null;
+  operacionalScope?: string;
 } | null> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return null;
@@ -1977,6 +2000,7 @@ async function fetchSyncBundle(cnpj: string): Promise<{
       operacionalRevision: typeof json.operacionalRevision === "string" || json.operacionalRevision === null
         ? json.operacionalRevision
         : undefined,
+      operacionalScope: typeof json.operacionalScope === "string" ? json.operacionalScope : undefined,
     };
   } catch {
     return null;
@@ -2103,7 +2127,7 @@ async function pushVersionedOperacional(
   }
   if (appliedOperacionalBase.get(digits) === base) {
     // Refresh from the actual server result before permitting another write.
-    appliedOperacionalBase.set(digits, { ...base, local, revision: response.operacionalRevision });
+    await saveOperacionalBase(digits, { ...base, local, revision: response.operacionalRevision });
     await syncOperacionalFromCloud(digits);
   }
 }
@@ -2128,6 +2152,7 @@ export async function pushOperacionalToCloudInternal(
 
   let bundle = await fetchSyncBundle(digits);
   if (bundle?.operacionalRevision !== undefined) {
+    await hydrateOperacionalBase(digits, bundle.operacionalScope);
     const cid = coopId ?? resolveCoopId(getDataOperationalTruth(), digits);
     if (!cid || !bundle.operacional) throw new Error("Dados operacionais indisponíveis para gravação.");
     await pushVersionedOperacional(digits, cid, bundle.operacional, bundle.operacionalRevision);
@@ -2465,6 +2490,9 @@ export async function syncOperacionalFromCloud(
   if (!bundle.operacional) {
     return { ok: false, code: "no_operacional", pagamentosCoopCount: 0 };
   }
+  if (bundle.operacionalRevision !== undefined) {
+    await hydrateOperacionalBase(digits, bundle.operacionalScope);
+  }
   let current = getData();
   const coopId = resolveCoopId(current, digits);
   if (!coopId) {
@@ -2573,7 +2601,7 @@ export async function syncOperacionalFromCloud(
   const saved = saveDataSafe(protegido);
   if (bundle.operacionalRevision !== undefined) {
     if (!saved.ok) return { ok: false, code: "fetch_failed", pagamentosCoopCount: 0 };
-    appliedOperacionalBase.set(digits, {
+    await saveOperacionalBase(digits, {
       revision: bundle.operacionalRevision,
       local: buildOperacionalPayload(getDataOperationalTruth(), coopId),
       cloud: bundle.operacional,

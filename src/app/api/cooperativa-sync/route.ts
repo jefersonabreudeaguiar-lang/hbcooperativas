@@ -91,7 +91,10 @@ export async function GET(request: Request) {
   const operacionalRevision = isVersionedOperacionalSyncEnabled()
     ? getOperacionalReadRevision(cnpj, operacionalRaw)
     : undefined;
-  return NextResponse.json({ configured: true, contratos, operacional, operacionalRevision });
+  return NextResponse.json({
+    configured: true, contratos, operacional, operacionalRevision,
+    operacionalScope: operacionalRevision !== undefined ? guard.session?.sub : undefined,
+  });
 }
 
 export async function POST(request: Request) {
