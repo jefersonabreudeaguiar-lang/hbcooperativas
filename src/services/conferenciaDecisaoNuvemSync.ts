@@ -128,7 +128,10 @@ async function executarPushOperacionalAposPatch(
     if (!cnpj) {
       throw new Error("CNPJ da cooperativa não encontrado para sincronizar a ficha na nuvem.");
     }
-    await pushOperacionalToCloud(cnpj, getData(), coopId, operacionalPush);
+    await pushOperacionalToCloud(cnpj, getData(), coopId, {
+      ...operacionalPush,
+      throwOnError: true,
+    });
   });
 }
 
