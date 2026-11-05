@@ -1,7 +1,7 @@
 {
   "ignoreCommand": "node scripts/ignore-unsafe-conferencia-preview.mjs",
   "installCommand": "npm ci",
-  "buildCommand": "npm run build",
+  "buildCommand": "npm exec --yes --package=tsx@4.23.15 -- tsx scripts/rehearse-794-reader.mts && npm run build",
   "env": {
     "APP_ENV": "production",
     "BIC_ENVIRONMENT": "PRODUCTION",
