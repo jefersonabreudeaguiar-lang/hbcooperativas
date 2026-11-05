@@ -1,6 +1,6 @@
 {
   "installCommand": "npm ci",
-  "buildCommand": "npm run build",
+  "buildCommand": "node node_modules/tsx/dist/cli.mjs scripts/rehearse-homolog-operacional-sessions.mts && npm run build",
   "env": {
     "APP_ENV": "production",
     "BIC_ENVIRONMENT": "PRODUCTION",
