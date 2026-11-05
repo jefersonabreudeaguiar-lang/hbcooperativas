@@ -164,3 +164,20 @@ banco de homologação. As duas leram a mesma revisão. Uma gravação retornou
 201 e a outra 409. O reenvio, após releitura, preservou os dois lançamentos.
 A revisão de teste foi removida. A recarga com edição pendente está coberta
 por teste simulado e ainda precisa de validação no navegador.
+
+## Rodada final de validação do servidor
+
+- O ensaio `dpl_3evMbig1HYnXJviodNTkAFHwenmL` executou o leitor exato da
+  794 contra a cópia restaurada no Storage de homologação. Leu o pagamento
+  confirmado e o lançamento de caixa. A revisão e o arquivo fictícios
+  foram removidos. O ensaio não redirecionou tráfego de produção.
+- O ensaio autenticado de saldo encontrou R$ 0,00 no Início e R$ 100,00 no
+  Financeiro no cenário fictício. O card passou a usar a leitura financeira
+  compartilhada, com as notas do cooperado. O ensaio
+  `dpl_3BMYo6xGgBSTjdUu8ys6XqJctm8r` confirmou a paridade após o ajuste.
+- No banco de homologação, a repetição da compra fictícia devolveu o mesmo
+  código de comprovante sem duplicar o débito. O teste do cliente confirmou
+  a preservação da confirmação diante de falha local e a recusa do PIN errado.
+- Restam a compra e o comprovante na interface, a recarga real do navegador
+  após um conflito e a passagem pelo pacote de migrações com o app de retorno.
+  A sincronização versionada segue desativada na candidata.
