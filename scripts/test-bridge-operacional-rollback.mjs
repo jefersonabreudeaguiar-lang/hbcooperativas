@@ -26,6 +26,7 @@ const client = {
     } }) };
   },
   storage: { from: () => ({
+    list: async () => ({ data: legacy === null ? [] : [{ name: "operacional.json" }] }),
     download: async () => legacy === null
       ? { error: { statusCode: "404" } }
       : { data: new Blob([legacy]) },

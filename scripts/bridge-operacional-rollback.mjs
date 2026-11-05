@@ -8,8 +8,11 @@ const MAX_BYTES = 50 * 1024 * 1024;
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 async function readLegacy(bucket, path) {
-  const { data, error } = await bucket.download(path);
-  if (error && String(error.statusCode) === "404") return "absent";
+  const name = "operacional.json";
+  const listed = await bucket.list(TEST_CNPJ, { search: name });
+  if (listed.error || !listed.data) throw new Error("Não foi possível verificar o inventário do Storage.");
+  if (!listed.data.some((entry) => entry.name === name)) return "absent";
+  const { data, error } = await bucket.download(path, {}, { cache: "no-store" });
   if (error || !data) throw new Error("Não foi possível verificar o arquivo operacional legado.");
   return hash(Buffer.from(await data.arrayBuffer()));
 }
@@ -39,6 +42,7 @@ export async function bridgeFrozenOperacional(supabase, revision, expectedLegacy
   if (beforeHash !== targetHash) {
     const write = await bucket.upload(path, bytes, {
       contentType: "application/json",
+      cacheControl: "0",
       upsert: beforeHash !== "absent",
     });
     if (write.error) throw new Error("A cópia para o arquivo legado falhou. Confira o destino.");
