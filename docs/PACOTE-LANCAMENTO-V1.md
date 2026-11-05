@@ -149,7 +149,18 @@ publica a cópia e confirma o conteúdo por releitura. A assinatura esperada
 não substitui a pausa dos escritores, pois o Storage legado não oferece
 gravação condicional nesse fluxo.
 
-O teste local simulou o Storage e confirmou a preservação da ficha de caixa e
-do pagamento no arquivo legado, a recusa de destino alterado e a detecção de
-divergência após upload. O ensaio real de Storage e a leitura pela 794 ainda
-estão pendentes.
+O teste local simulou destino alterado e divergência após upload. O ensaio
+real no deployment de teste `dpl_FPdti5ZynteYDRoRvqSASMwt9gMP` publicou a
+revisão congelada no Storage, confirmou os bytes, releu o pagamento e o
+lançamento de caixa no formato legado e removeu a cópia. A consulta ao
+inventário confirmou zero arquivos restantes e a revisão fictícia também
+foi removida. O primeiro ensaio revelou cache após a remoção. A checagem de
+existência agora usa o inventário. Ainda falta abrir a 794 sobre a cópia
+restaurada para comprovar o retorno pela interface.
+
+O deployment de ensaio `dpl_HZntLbRGKnwc6cDEZer4JRqqzcUt` executou a rota real
+de sincronização com duas sessões fictícias autenticadas, CNPJ reservado e
+banco de homologação. As duas leram a mesma revisão. Uma gravação retornou
+201 e a outra 409. O reenvio, após releitura, preservou os dois lançamentos.
+A revisão de teste foi removida. A recarga com edição pendente está coberta
+por teste simulado e ainda precisa de validação no navegador.
