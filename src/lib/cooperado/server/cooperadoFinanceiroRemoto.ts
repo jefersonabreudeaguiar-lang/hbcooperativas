@@ -12,10 +12,16 @@ import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFin
 import { cooperadoFinanceiroScopedData } from "@/lib/cooperado/cooperadoFinanceiroScopedData";
 import type { CooperadoFinanceiroRemoto } from "@/lib/cooperado/cooperadoFinanceiroRemotoTypes";
 import type { AppData } from "@/types";
+import { inicioCardMotorFromParidadeFinanceiro } from "@/lib/cooperado/cooperadoInicioCardParidadeMotor";
 
-const inflight = new Map<string, Promise<CooperadoFinanceiroRemoto>>();
+type CloudViews = {
+  finance: CooperadoFinanceiroRemoto;
+  coopNome: string;
+  card: ReturnType<typeof inicioCardMotorFromParidadeFinanceiro>;
+};
+const inflight = new Map<string, Promise<CloudViews>>();
 
-async function read(cnpj: string, cooperadoId: string): Promise<CooperadoFinanceiroRemoto> {
+async function read(cnpj: string, cooperadoId: string): Promise<CloudViews> {
   const sb = getSupabaseAdmin();
   if (!sb) throw new Error("Nuvem indisponível");
   const [{ data: rows, error }, cooperados, op, table] = await Promise.all([
@@ -61,14 +67,24 @@ async function read(cnpj: string, cooperadoId: string): Promise<CooperadoFinance
     // Somente projeção em memória: não grava arquivos nem transações na nuvem.
     for (const mes of meses) data = persistDescontosContaCoopNoArquivo(data, canon, mes, coop.id, linhas);
   }
-  return { cooperadoId: canon, cooperativaId: coop.id, fetchedAt: new Date().toISOString(), paridade: leituraFinanceiraParidadeCooperado(data, canon, coop.id) };
+  const paridade = leituraFinanceiraParidadeCooperado(data, canon, coop.id);
+  return {
+    finance: { cooperadoId: canon, cooperativaId: coop.id, fetchedAt: new Date().toISOString(), paridade },
+    coopNome: coop.nome,
+    card: inicioCardMotorFromParidadeFinanceiro(data, canon, coop.id, paridade),
+  };
 }
 
-export function fetchCooperadoFinanceiroRemoto(cnpj: string, cooperadoId: string): Promise<CooperadoFinanceiroRemoto> {
+export function fetchCooperadoFinanceiroCloudViews(cnpj: string, cooperadoId: string, bypassCache = false): Promise<CloudViews> {
+  if (bypassCache) return read(cnpj, cooperadoId);
   const key = `${cnpj}:${cooperadoId}`;
   const pending = inflight.get(key);
   if (pending) return pending;
   const promise = read(cnpj, cooperadoId).finally(() => inflight.delete(key));
   inflight.set(key, promise);
   return promise;
+}
+
+export async function fetchCooperadoFinanceiroRemoto(cnpj: string, cooperadoId: string): Promise<CooperadoFinanceiroRemoto> {
+  return (await fetchCooperadoFinanceiroCloudViews(cnpj, cooperadoId)).finance;
 }
