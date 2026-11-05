@@ -12,4 +12,8 @@ assert.equal(ignoreSecurityPreview({ ...safe, NEXT_PUBLIC_SUPABASE_URL: "https:/
 assert.equal(ignoreSecurityPreview({ ...safe, HB_HOMOLOGATION_ONLY: undefined }), true);
 assert.equal(ignoreSecurityPreview({ VERCEL_GIT_COMMIT_REF: "codex/seguranca-etapa-1" }), true);
 assert.equal(ignoreSecurityPreview({ VERCEL_GIT_COMMIT_REF: "codex/restore-v1-login" }), false);
+const pilot = { ...safe, VERCEL_GIT_COMMIT_REF: "codex/hb-browser-pilot", VERCEL_ENV: "preview" };
+assert.equal(ignoreSecurityPreview(pilot), false);
+assert.equal(ignoreSecurityPreview({ ...pilot, VERCEL_ENV: "production" }), true);
+assert.equal(ignoreSecurityPreview({ ...pilot, VERCEL_PROJECT_ID: "production-project" }), true);
 console.log("PASS: candidato somente no projeto/banco isolados; configuração ausente bloqueia; linha estável permanece independente.");

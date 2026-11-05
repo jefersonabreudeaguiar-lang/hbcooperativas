@@ -2,10 +2,12 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
 export function ignoreSecurityPreview(env) {
-  if (env.VERCEL_GIT_COMMIT_REF !== "codex/seguranca-etapa-1") return false;
+  const pilot = env.VERCEL_GIT_COMMIT_REF === "codex/hb-browser-pilot";
+  if (!pilot && env.VERCEL_GIT_COMMIT_REF !== "codex/seguranca-etapa-1") return false;
   return env.VERCEL_PROJECT_ID !== "prj_1dqke8xRjtzsCouFEczEB4ZgmF10"
     || env.NEXT_PUBLIC_SUPABASE_URL !== "https://ocyfzramxvxqbtkorubn.supabase.co"
-    || env.HB_HOMOLOGATION_ONLY !== "true";
+    || env.HB_HOMOLOGATION_ONLY !== "true"
+    || (pilot && env.VERCEL_ENV !== "preview");
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
