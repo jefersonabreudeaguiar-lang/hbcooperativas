@@ -77,6 +77,9 @@ begin
   if coalesce((result->>'duplicate')::boolean,false) is not true then
     raise exception 'Repetição não reconhecida';
   end if;
+  if result->>'receipt_code' is distinct from tag then
+    raise exception 'A repetição não devolveu o código de comprovante da compra original';
+  end if;
   select amount_used_cents into used from public.hb_credit_accounts where id=account;
   if used <> 1000 or (select count(*) from public.hb_credit_transactions where id=tag) <> 1 then
     raise exception 'Repetição duplicou débito ou transação';
