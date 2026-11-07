@@ -62,3 +62,27 @@ Backup de Storage cifrado concluído com 1.491 arquivos e 84.088.247 bytes,
 com releitura e decriptação locais verificadas. Não inclui o banco SQL e
 não comprova restauração física. Diretório local na worktree de segurança:
 `backups/ifptyzikekrswippzmsf/storage-2026-11-07T01-51-33-052Z-aae2ea52`.
+
+## Publicação confirmada
+
+Produção publicada no deployment `dpl_6rmWu9Rxi1xkmQmiYQEC1VSAdhFr`,
+com fonte `493f584ba708a3496bae11eb994433c05ba198d8` e estado READY.
+O domínio `https://hbcooperativas.vercel.app` passou a apontar para esse
+deployment. A compilação padrão por Turbopack concluiu na Vercel.
+
+Verificações posteriores à troca do domínio:
+
+- `/api/client-release` retornou 200, build 795, SHA e deployment esperados.
+- `/sw.js` retornou 200 e cache `hb-coop-build-795-chunk-network-v1`.
+- `/login` respondeu 200 com o HTML do aplicativo. No navegador, a sessão
+  existente abriu o painel de gestão e mostrou `app v795`.
+- `/api/credit/account` sem autenticação retornou 401.
+
+Os três acessos fictícios de homologação foram desativados. A conta HB do
+ensaio foi suspensa e teve o PIN de teste invalidado. O mercado fictício
+voltou a PENDING. Os registros sintéticos de compra foram preservados para
+auditoria. Nenhum aceite de termos foi feito durante o ensaio.
+
+Usar a 795 como base oficial nas próximas correções. A candidata ampla em
+homologação ainda contém etapas não publicadas; não promover seu build 790
+diretamente nem reativar transferências antes de concluir o piloto.
