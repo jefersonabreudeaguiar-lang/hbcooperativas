@@ -69,3 +69,28 @@ não representam benchmark de produção nem capacidade certificada.
   retorno. Não restaurar backup antigo sobre lançamentos oficiais posteriores.
 
 Esta etapa reduz riscos comprovados. Não certifica expansão comercial ampla.
+
+## Ensaio com cópia oficial e teste da interface
+
+Com autorização específica do proprietário, o esquema público oficial foi
+exportado em transação somente leitura e snapshot consistente, cifrado e
+restaurado em PostgreSQL local. As 39 tabelas tiveram inventário, contagem e
+conteúdo conferidos. Todas as 18 migrations foram exercitadas, sem pular arquivos;
+os dados originais permaneceram iguais depois delas. Passaram os 14 testes SQL.
+O cluster em texto aberto foi removido. A cópia cifrada permanece somente no
+destino local autorizado. Evidência: `LOCAL-RESTORE-ifptyzikekrswippzmsf-ACCEPTANCE.json`.
+
+O deployment `dpl_6ZeP3vXzdbzi2ybNpnfnaJchLfxh`, SHA `42e627a1`, ficou READY
+na homologação com build 796. A interface do responsável fictício abriu painel,
+Conferir entregas, Em aberto (3 cooperados, total R$ 380 no cenário sintético),
+Pagar cooperados e Livro Caixa. Nenhum pagamento real foi executado. O acesso
+fictício foi desativado, senha invalidada e zero acessos fictícios ativos conferido.
+
+A conferência revelou dois eventos de pagamento com número 1 no Livro Caixa.
+Um teste reproduziu o problema com contador anual atrasado em relação às linhas
+já existentes. O alocador agora considera também os números efetivamente usados,
+sem voltar atrás quando o contador está adiantado e sem renumerar registros
+históricos. Débito e retenção do mesmo pagamento continuam no mesmo evento.
+Releitura com contador perdido, isolamento de cooperativa/ano e repetição do
+pagamento estão cobertos. Números históricos já conflitantes não foram regravados.
+Esta correção ainda exige uma publicação posterior à SHA acima para estar no ar.
