@@ -129,6 +129,40 @@ async function saveOperacionalBase(
 }
 const versionedRowCollections = new Set(["livroCaixa", "valoresAvulsosReceber", "comunicados"]);
 
+/** The staff entry reader must persist the revision together with its local copy. */
+export async function persistStaffEntradaOperacionalSnapshot(
+  cnpj: string,
+  coopId: string,
+  bundle: { operacional: OperacionalSyncPayload; operacionalRevision?: string | null; operacionalScope?: string },
+  before: AppData,
+  next: AppData,
+  stillCurrent: () => boolean
+): Promise<void> {
+  const digits = normalizeCnpj(cnpj);
+  if (bundle.operacionalRevision === undefined) {
+    if (appliedOperacionalBase.has(digits)) throw new Error("A nuvem não confirmou a referência dos dados.");
+    if (!stillCurrent() || getDataOperationalTruth() !== before) throw new Error("A entrada mudou durante a consulta.");
+    const saved = saveDataSafe(next);
+    if (!saved.ok) throw new Error(saved.error);
+    return;
+  }
+  await hydrateOperacionalBase(digits, bundle.operacionalScope);
+  if (!stillCurrent() || getDataOperationalTruth() !== before) throw new Error("A entrada mudou durante a consulta.");
+  const base = appliedOperacionalBase.get(digits);
+  if (base && fingerprintOperacionalPayload(buildOperacionalPayload(before, coopId)) !== fingerprintOperacionalPayload(base.local)) {
+    // A reload must not acknowledge or overwrite an unconfirmed local edit.
+    return;
+  }
+  if (!base && before.comunicadosPublicacaoPendente?.[coopId]) {
+    throw new Error("Há um recado pendente sem referência de edição. Preserve o texto antes de atualizar este aparelho.");
+  }
+  await saveOperacionalBase(digits, {
+    revision: bundle.operacionalRevision,
+    local: buildOperacionalPayload(next, coopId),
+    cloud: bundle.operacional,
+  }, next, stillCurrent);
+}
+
 /** Somente testes H8.9.62 / H8.9.88 — detectar chamada à API pública de push. */
 let pushOperacionalPublicTestEnterHook: (() => void) | null = null;
 

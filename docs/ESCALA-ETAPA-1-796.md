@@ -94,3 +94,17 @@ históricos. Débito e retenção do mesmo pagamento continuam no mesmo evento.
 Releitura com contador perdido, isolamento de cooperativa/ano e repetição do
 pagamento estão cobertos. Números históricos já conflitantes não foram regravados.
 Esta correção ainda exige uma publicação posterior à SHA acima para estar no ar.
+
+O deployment `dpl_2zE6E3zG3KqCMb5tA2eGtReEtpLv`, SHA `f4a69c5a`, publicou
+a correção de sequência e ativou CAS somente no CNPJ sintético 88888888000181.
+O teste de dois navegadores/origens revelou uma integração que faltava: a entrada
+atualizada de staff carregava a versão da API, mas não guardava seu checkpoint.
+O primeiro envio era recusado com "Abra os dados atualizados antes de salvar neste
+aparelho". A nuvem permaneceu na revisão inicial, sem sobrescrita. O rascunho
+local também permaneceu após recarga. Não contar isso como teste de conflito
+entre duas gravações concluído.
+
+A entrada staff agora guarda a revisão e a base local juntas. Ao recarregar com
+checkpoint e edição pendente, não substitui nem confirma essa edição. Pendência
+legada sem referência é recusada explicitamente, sem inventar uma base. A
+regressão integrada cobre primeiro envio e recarga com alteração pendente.

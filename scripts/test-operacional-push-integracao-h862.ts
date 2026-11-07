@@ -14,7 +14,7 @@ import {
   setOperacionalPushSingleFlightEnabledForTests,
 } from "../src/services/operacionalPushSingleFlight.ts";
 import { setSecureApiFetchTestOverrideForTests } from "../src/lib/security/clientSession.ts";
-import { getData, saveDataSafe } from "../src/services/dataStore.ts";
+import { getData, getDataOperationalTruth, saveDataSafe } from "../src/services/dataStore.ts";
 import { setOperacionalCheckpointStorageForTests, type OperacionalCheckpoint } from "../src/services/operacionalCheckpoint.ts";
 import {
   pushOperacionalToCloud,
@@ -22,6 +22,7 @@ import {
   setPushOperacionalInternalTestEnterHookForTests,
   syncOperacionalFromCloud,
   resetOperacionalCheckpointMemoryForTests,
+  persistStaffEntradaOperacionalSnapshot,
 } from "../src/services/cooperativaSyncCloudService.ts";
 
 const CNPJ_A = "62351750000165";
@@ -511,6 +512,29 @@ async function main() {
     load: async (scope) => checkpoints.get(scope) ?? null,
     save: async (scope, base) => { checkpoints.set(scope, structuredClone(base)); },
   });
+  resetOperacionalCheckpointMemoryForTests();
+  saveDataSafe(appData(CNPJ_A, COOP_A, []));
+  const entryBefore = getDataOperationalTruth();
+  const entryCloud = { updatedAt: "2026-01-01T00:00:00Z", arquivosMensais: [], pagamentosCooperado: [],
+    comunicados: [], mensalidades: [], descontos: [], fichaCorrida: [], config: { descontoPadraoCooperativa: 0 } };
+  const entryBundle = { operacional: entryCloud, operacionalRevision, operacionalScope: "fixture-user" };
+  const entryNext = { ...entryBefore, config: entryCloud.config };
+  await persistStaffEntradaOperacionalSnapshot(CNPJ_A, COOP_A, entryBundle, entryBefore, entryNext, () => true);
+  assert.equal(getDataOperationalTruth().operacionalCheckpoint?.scope, `${CNPJ_A}:fixture-user`);
+  const entryBaseId = getDataOperationalTruth().operacionalCheckpoint?.id;
+  saveDataSafe({ ...getDataOperationalTruth(), config: { descontoPadraoCooperativa: 7 } });
+  resetOperacionalCheckpointMemoryForTests();
+  const entryPending = getDataOperationalTruth();
+  await persistStaffEntradaOperacionalSnapshot(CNPJ_A, COOP_A, entryBundle, entryPending,
+    { ...entryPending, config: { descontoPadraoCooperativa: 0 } }, () => true);
+  assert.equal(getDataOperationalTruth().config.descontoPadraoCooperativa, 7, "Entrada após recarga não apaga edição pendente");
+  assert.equal(getDataOperationalTruth().operacionalCheckpoint?.id, entryBaseId, "Entrada não confirma edição que ainda não foi publicada");
+  await pushOperacionalToCloud(CNPJ_A, undefined, COOP_A, { throwOnError: true });
+  assert.equal(operacionalRevision, "revision-confirmed", "Primeiro envio usa a referência preparada pela entrada staff");
+  console.log("PASS — entrada staff guarda referência; recarga preserva pendência e primeiro envio confirma na nuvem.");
+
+  resetOperacionalCheckpointMemoryForTests();
+  operacionalRevision = "revision-original";
   saveDataSafe(appData(CNPJ_A, COOP_A, []));
   assert.equal((await syncOperacionalFromCloud(CNPJ_A)).ok, true);
   const before = getData();

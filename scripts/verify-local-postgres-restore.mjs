@@ -207,7 +207,8 @@ try {
   await mkdir(archiveDir, { recursive: true });
   await writeFile(join(archiveDir, 'verification.json'), JSON.stringify(report, null, 2));
   // Public evidence contains no table contents, credential, password hash or financial individual amount.
-  await writeFile(`docs/LOCAL-RESTORE-${ref}-ACCEPTANCE.json`, JSON.stringify(report, null, 2));
+  const { tables, archiveSha256, ...publicReport } = report;
+  await writeFile(`docs/LOCAL-RESTORE-${ref}-ACCEPTANCE.json`, JSON.stringify({ ...publicReport, tableCount: tables.length }, null, 2));
   console.log(JSON.stringify({ sourceReadOnly: true, paidProjectCreated: false, restored: report.restored,
     contentMatches: report.contentMatches, localDataRemoved: report.localDataRemoved,
     migrations: report.migrationsPassed.length, sqlTests: report.sqlTestsPassed.length, archiveDir }));

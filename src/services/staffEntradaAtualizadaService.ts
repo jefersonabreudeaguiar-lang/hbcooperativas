@@ -1,9 +1,9 @@
 import type { User } from "@/types";
 import { secureApiFetch } from "@/lib/security/clientSession";
-import { getData, saveDataSafe } from "@/services/dataStore";
+import { getData, getDataOperationalTruth } from "@/services/dataStore";
 import { ensureCooperativaLocalForCnpj, fetchCooperadosFromCloud, mergeCloudCooperadosIntoData } from "@/services/cooperadoCloudService";
 import { fetchNotasPedidoFromCloud, mergeCloudNotasIntoData, resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { mergeContratosIntoData, mergeOperacionalIntoData } from "@/services/cooperativaSyncCloudService";
+import { mergeContratosIntoData, mergeOperacionalIntoData, persistStaffEntradaOperacionalSnapshot } from "@/services/cooperativaSyncCloudService";
 import { registrarCatalogoCloudLeitura } from "@/lib/staff/staffCatalogoCloudLeitura";
 import { resetResponsavelPainelIndexCache } from "@/services/responsavelPainelIndex";
 import { resolveGestaoCooperativaId } from "@/utils/cooperativa";
@@ -32,7 +32,7 @@ export async function atualizarEntradaStaff(user: Omit<User, "password">, ativa:
     lerEntradaStaffComRetry("o financeiro e os contratos", async () => {
       const res = await secureApiFetch(`/api/cooperativa-sync?cnpj=${cnpj}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
       if (!res.ok) throw new Error("Consulta indisponível");
-      return await res.json() as { configured?: boolean; contratos?: ContratosSyncPayload | null; operacional?: OperacionalSyncPayload | null };
+      return await res.json() as { configured?: boolean; contratos?: ContratosSyncPayload | null; operacional?: OperacionalSyncPayload | null; operacionalRevision?: string | null; operacionalScope?: string };
     }, (r) => Boolean(r.configured && r.operacional), ativa),
   ]);
   if (!ativa()) throw new Error("Entrada cancelada.");
@@ -40,13 +40,15 @@ export async function atualizarEntradaStaff(user: Omit<User, "password">, ativa:
   if (!bundle.configured || !bundle.operacional || !ativa()) throw new Error("A base financeira atual ainda não está disponível.");
   const contratos: ContratosSyncPayload = bundle.contratos ?? { updatedAt: bundle.operacional.updatedAt, instituicoes: [], produtosInstituicao: [] };
   // Só aplica a base após todas as leituras terem sido confirmadas. Nenhum push na entrada.
-  let next = mergeCloudCooperadosIntoData(getData(), cadastros.cooperados, cnpj, coopId);
+  const before = getDataOperationalTruth();
+  let next = mergeCloudCooperadosIntoData(before, cadastros.cooperados, cnpj, coopId);
   next = mergeOperacionalIntoData(next, bundle.operacional, coopId, cadastros.cooperados);
   next = mergeCloudNotasIntoData(next, entregas.notas, cnpj, { pruneStaleConferidas: true });
   next = mergeContratosIntoData(next, contratos, coopId);
   if (!ativa()) throw new Error("Entrada cancelada.");
-  const saved = saveDataSafe(next);
-  if (!saved.ok) throw new Error(saved.error);
+  await persistStaffEntradaOperacionalSnapshot(cnpj, coopId, {
+    operacional: bundle.operacional, operacionalRevision: bundle.operacionalRevision, operacionalScope: bundle.operacionalScope,
+  }, before, next, ativa);
   registrarCatalogoCloudLeitura(coopId, contratos);
   resetResponsavelPainelIndexCache();
 }
