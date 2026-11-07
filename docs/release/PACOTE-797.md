@@ -44,7 +44,24 @@ oficiais na publicação. O protocolo de gravação continua o da produção 795
   leitura e escrita de outra cooperativa 403, desativação e mudança de vínculo
   recusadas 401, inclusive na renovação. Conta descartável removida ao terminar.
 - Auditoria de dependências de produção: zero vulnerabilidades reportadas.
-- Build e interface do deployment candidato: registrar resultado antes do OK.
+- Build Webpack de produção passou; verificação do bundle de persistência passou.
+- Homologação READY: `dpl_C2XMRKm9JX42gqHP3peSrg2xa2Dz`, SHA
+  `4aaf73336f296ae221e8b080fccdbf7f6732451f`, build 797 confirmado pela API.
+- Responsável fictício: painel, Conferir entregas, Em aberto, Pagar cooperados
+  e Livro Caixa abriram. Painel e Em aberto mostraram os mesmos R$ 380,00 do
+  cenário sintético; livro mostrou os dois pagamentos fictícios anteriores.
+  Nenhum novo pagamento foi executado pela interface.
+- PENDENTE: após login do cooperado fictício, o navegador deixou de responder
+  às leituras de tela. Reproduziu em outra origem sem cache prévio. A sessão
+  inicial vinha de logout do responsável; o reteste começou direto como cooperado.
+  Ainda não foi estabelecida causa nem comparação equivalente com a 795.
+  Não considerar o teste aprovado nem chamar a candidata de pronta para produção.
+- As duas contas fictícias autorizadas foram desativadas e senhas invalidadas
+  depois dos testes. Conta de mercado não foi reativada: a revisão automática
+  recusou sua inclusão por ausência de autorização específica, e o ensaio foi
+  limitado a cooperado/responsável, sem contornar essa decisão.
+- O app oficial foi consultado após a publicação de homologação e permaneceu na
+  795, SHA `493f584ba708a3496bae11eb994433c05ba198d8`.
 
 Os ensaios HTTP não são prova de capacidade/p95 em produção. A suíte ampliada
 antiga de desempenho não foi declarada aprovada. Expansão comercial permanece
