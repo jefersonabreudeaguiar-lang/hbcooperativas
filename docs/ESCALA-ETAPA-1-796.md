@@ -125,3 +125,27 @@ test-h814e-operacional-reset-safe passou após a mudança. A suíte ampliada ain
 não está toda verde: há verificações estáticas antigas e uma divergência no
 cenário de coordenação push/bidirectional a investigar. Não constitui aprovação
 de desempenho ou prontidão comercial.
+
+## Reteste no navegador — 823ff3cf
+
+Deployment `dpl_2fiQUwaLEo32os5AYkCdg7wrj23G`, READY, somente homologação.
+Com duas origens autenticadas, A publicou o aviso sintético e B recebeu conflito.
+Consulta independente confirmou a revisão `0f12e33b-7570-465f-b199-b2959518d14a`
+com o título de A. Depois de recarregar B, seu título, texto e indicação de
+publicação pendente continuaram visíveis. Essa regressão específica passou.
+
+No primeiro acesso de B houve uma recusa transitória de referência local mudada;
+Tentar novamente abriu normalmente. Isso continua como melhoria de recuperação
+da entrada, sem relaxar a proteção contra troca de base durante a persistência.
+
+As sessões foram fechadas, o usuário fictício foi desativado e sua senha invalidada.
+Consulta confirmou zero usuários fictícios ativos. O snapshot criado pelo ensaio
+foi removido condicionado ao CNPJ/revisão/id/título exatos; zero remanescentes.
+O Storage legado da cooperativa fictícia permaneceu preservado. A origem extra
+`hb796-sync-b-fe6dc86c.vercel.app` continua protegida, apontando a este deployment;
+serve apenas ao teste e não é o endereço oficial.
+
+As seis verificações de conferência h82/draft/etapa4 p0–p3 foram redirecionadas
+do arquivo de compatibilidade para a implementação real. Todas passaram sem
+remover suas asserções. A produção foi consultada novamente: build 795,
+SHA `493f584ba708a3496bae11eb994433c05ba198d8`, sem alteração.
