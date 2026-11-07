@@ -553,7 +553,9 @@ export function montarHistoricoPagamentoCooperadoCaixa(
     pagamento.mesesReferencia?.length
       ? pagamento.mesesReferencia.map((m) => formatMesReferencia(m)).join(", ")
       : formatMesReferencia(pagamento.mesReferencia);
-  const fichas = (data.fichaCorrida ?? []).filter((f) => pagamento.fichaIds.includes(f.id));
+  const fichas = (data.fichaCorrida ?? []).filter((f) =>
+    (pagamento.fichaIds ?? []).includes(f.id) || (pagamento.notaPedidoIds ?? []).includes(f.notaPedidoId)
+  );
   const resumoEntrega =
     fichas.length === 1
       ? fichas[0].descricao?.trim()

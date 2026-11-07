@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const cli = require.resolve("tsx/cli");
 const fixtures = [
   "test-session-revocation.mjs",
+  "test-staff-entry-disk-checkpoint.ts",
   "test-livro-caixa-sequencia-stale.ts",
   "test-livro-caixa-pagamento-completo.ts",
   "test-livro-caixa-export-contabil.ts",

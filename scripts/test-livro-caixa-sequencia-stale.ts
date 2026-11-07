@@ -30,4 +30,7 @@ const scoped = { ...stale, livroCaixa: [...stale.livroCaixa!, { ...oldLine, id: 
 assert.equal(alocarSequenciaEvento(scoped, "coop-a", date).ctx.numeroSequencia, 2);
 const ahead = { ...stale, livroCaixaControleAnual: [{ ...stale.livroCaixaControleAnual![0], proximoSequencia: 50 }] };
 assert.equal(alocarSequenciaEvento(ahead, "coop-a", date).ctx.numeroSequencia, 50, "Do not reuse reserved or deleted numbers");
+const legacyPayment = { ...payment, id: "legacy", fichaIds: undefined, notaPedidoIds: undefined } as unknown as PagamentoCooperadoRegistro;
+const withUnrelatedFicha = { ...stale, fichaCorrida: [{ id: "unrelated", notaPedidoId: "unrelated-note" }] } as AppData;
+assert.doesNotThrow(() => lancarPagamentoCooperadoNoCaixa(withUnrelatedFicha, legacyPayment), "Older payment without ID arrays must not crash book reconstruction");
 console.log("PASS: stale/lost counter cannot reuse payment sequence; retention stays grouped, history and tenant/year boundaries preserved.");

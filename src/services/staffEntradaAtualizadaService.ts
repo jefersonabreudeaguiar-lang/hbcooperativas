@@ -1,6 +1,6 @@
-import type { User } from "@/types";
+import type { AppData, User } from "@/types";
 import { secureApiFetch } from "@/lib/security/clientSession";
-import { getData, getDataOperationalTruth } from "@/services/dataStore";
+import { refreshData, getDataOperationalTruth } from "@/services/dataStore";
 import { ensureCooperativaLocalForCnpj, fetchCooperadosFromCloud, mergeCloudCooperadosIntoData } from "@/services/cooperadoCloudService";
 import { fetchNotasPedidoFromCloud, mergeCloudNotasIntoData, resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { mergeContratosIntoData, mergeOperacionalIntoData, persistStaffEntradaOperacionalSnapshot } from "@/services/cooperativaSyncCloudService";
@@ -20,8 +20,14 @@ export async function lerEntradaStaffComRetry<T>(nome: string, ler: () => Promis
   throw new Error("Não foi possível consultar " + nome + ". Toque em tentar novamente.");
 }
 
+export function prepararDadosLocaisEntradaStaff(): AppData {
+  // First-paint last-good memory is not the durable editing copy. Read the scoped
+  // file before any cloud lookup can overwrite a pending checkpoint/outbox.
+  return refreshData();
+}
+
 export async function atualizarEntradaStaff(user: Omit<User, "password">, ativa: () => boolean): Promise<void> {
-  const current = getData();
+  const current = prepararDadosLocaisEntradaStaff();
   const cnpj = await resolveCooperativaCnpj(current, resolveGestaoCooperativaId(user, current), user);
   if (!cnpj || !ativa()) throw new Error("Não foi possível confirmar a cooperativa.");
   const coopId = await ensureCooperativaLocalForCnpj(cnpj);

@@ -5,8 +5,11 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { createRequire } from "node:module";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
+const require = createRequire(import.meta.url);
+const tsxCli = require.resolve("tsx/cli");
 
 const SUITE: { category: string; script: string }[] = [
   { category: "PERF", script: "baseline-performance-rql-h80-readonly.ts" },
@@ -43,7 +46,7 @@ function runOne(rel: string): { ok: boolean; ms: number; missing: boolean } {
   const path = join(ROOT, "scripts", rel);
   if (!existsSync(path)) return { ok: false, ms: 0, missing: true };
   const t0 = Date.now();
-  const r = spawnSync("npx", ["tsx", path], { cwd: ROOT, stdio: "inherit", shell: true });
+  const r = spawnSync(process.execPath, [tsxCli, path], { cwd: ROOT, stdio: "inherit", shell: false });
   return { ok: r.status === 0, ms: Date.now() - t0, missing: false };
 }
 
@@ -72,8 +75,12 @@ if (skipBuild) {
   console.log("\n=== build (skipped: PERF_SUITE_SKIP_BUILD=1) ===");
 } else {
   console.log("\n=== build ===");
-  const build = spawnSync("npm", ["run", "build"], { cwd: ROOT, stdio: "inherit", shell: true });
+  const build = spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build"], { cwd: ROOT, stdio: "inherit" });
   if (build.status !== 0) failed += 1;
+  else {
+    const bundle = spawnSync(process.execPath, ["scripts/verify-app-data-persist-bundle.mjs"], { cwd: ROOT, stdio: "inherit" });
+    if (bundle.status !== 0) failed += 1;
+  }
 }
 
 if (failed > 0) {

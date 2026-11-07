@@ -139,6 +139,7 @@ function ensureBrowserLikeEnvForDataStore(): void {
     },
     addEventListener: () => {},
     removeEventListener: () => {},
+    matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
   } as unknown as Window;
   (globalThis as typeof globalThis & { localStorage: Storage }).localStorage = g.window.localStorage;
 }

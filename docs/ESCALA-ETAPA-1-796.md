@@ -108,3 +108,20 @@ A entrada staff agora guarda a revisão e a base local juntas. Ao recarregar com
 checkpoint e edição pendente, não substitui nem confirma essa edição. Pendência
 legada sem referência é recusada explicitamente, sem inventar uma base. A
 regressão integrada cobre primeiro envio e recarga com alteração pendente.
+
+No reteste real do deployment `dpl_D1LdQNvfPX2LAAjfMBaLGh87fUq9` (fe6dc86c),
+a sessão A gravou e a sessão B recebeu recusa de conflito, sem sobrescrever a
+nuvem. Porém, recarregar B perdeu seu rascunho. Portanto esse gate NÃO passou.
+A entrada podia usar memória de primeiro paint anterior à cópia local durável.
+A correção lê o arquivo local com escopo antes de qualquer consulta da entrada
+e impede o bootstrap global antigo para perfis de gestão. O novo teste reproduziu
+a perda antes da correção e passou depois, preservando checkpoint e outbox.
+As 33 suítes de segurança locais passaram; falta repetir a prova no navegador.
+
+A suíte ampliada de desempenho/fluxos revelou também um erro real no histórico
+de pagamentos legados sem fichaIds. O histórico agora aceita essas listas ausentes
+e pode localizar fichas pelos IDs das notas, com regressão dedicada. O teste
+test-h814e-operacional-reset-safe passou após a mudança. A suíte ampliada ainda
+não está toda verde: há verificações estáticas antigas e uma divergência no
+cenário de coordenação push/bidirectional a investigar. Não constitui aprovação
+de desempenho ou prontidão comercial.
