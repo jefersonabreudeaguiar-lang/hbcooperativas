@@ -165,13 +165,18 @@ export function useCooperadoInicioValorReceberCardState(input: {
     if (!leituraSomentePwa && !gaAuto) return;
     const onRefresh = () => {
       setPersistidoTick((n) => n + 1);
+    };
+    // A completed snapshot only repaints. Rebuilding here would emit this same
+    // event again and synchronously recurse until the renderer stops responding.
+    const onHbDebitChange = () => {
+      onRefresh();
       if (gaAuto && sessionUser) rematerializarCooperadoValorCardLeve(sessionUser);
     };
     window.addEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
-    window.addEventListener(HB_A_RECEBER_HIBRIDO_EVENT, onRefresh);
+    window.addEventListener(HB_A_RECEBER_HIBRIDO_EVENT, onHbDebitChange);
     return () => {
       window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
-      window.removeEventListener(HB_A_RECEBER_HIBRIDO_EVENT, onRefresh);
+      window.removeEventListener(HB_A_RECEBER_HIBRIDO_EVENT, onHbDebitChange);
     };
   }, [leituraSomentePwa, sessionUser?.id, sessionUser?.role]);
 
