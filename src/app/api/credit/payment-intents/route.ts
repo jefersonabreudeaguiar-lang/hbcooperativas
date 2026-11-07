@@ -19,7 +19,7 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 import { reaisToCents } from "@/modules/hb-credit/engine/money";
 import { INTENT_MAX_CENTS } from "@/modules/hb-credit/config";
 import { HB_CREDIT_INSUFFICIENT_CODE } from "@/modules/hb-credit/engine/paymentAffordability";
-import { isCooperadoTransferIntentId } from "@/config/cooperadoTransferenciaCredito";
+import { isCooperadoTransferIntentId, isCooperadoTransferenciaCreditoEnabled } from "@/config/cooperadoTransferenciaCredito";
 import {
   resolveCooperadoNomeForTransfer,
   validateCooperadoTransferForPayer,
@@ -105,6 +105,9 @@ export async function POST(request: Request) {
       prepareHbCreditPaymentAuthorize(gate.ctx.supabase, cnpj, payCooperadoId, actorId);
 
     if (isCooperadoTransferIntentId(parsed.intentId)) {
+      if (!isCooperadoTransferenciaCreditoEnabled()) {
+        return NextResponse.json({ error: "Transferências entre cooperados temporariamente indisponíveis.", code: "HB_TRANSFER_PAUSED" }, { status: 503 });
+      }
       const prepare = await runPrepare();
       if (!prepare.ok) {
         return NextResponse.json(

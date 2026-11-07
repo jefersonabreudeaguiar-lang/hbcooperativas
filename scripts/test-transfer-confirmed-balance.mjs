@@ -10,6 +10,7 @@ let writes = 0;
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/supabase/cooperadoTransferenciaCreditoStorage.ts','utf8'), {
   compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022},
 }).outputText, {exports:api, require:name => {
+  if (name.endsWith('cooperadoTransferenciaCredito')) return {isCooperadoTransferenciaCreditoEnabled:()=>true};
   if (name.endsWith('hbOwnedBalanceRollout')) return {isHbOwnedBalanceOperationsReady:()=>true};
   if (name.endsWith('contaCoopStorage')) return {
     verifyFinancialPin:async()=>({ok:pinOk,error:'PIN incorreto'}),

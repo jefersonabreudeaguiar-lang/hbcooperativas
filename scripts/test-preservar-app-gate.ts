@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { createRequire } from "node:module";
 import {
   PRESERVAR_APP_DEBITO_BLOB_GLOBAL,
   PRESERVAR_APP_GATE_VERSION,
@@ -21,6 +22,7 @@ import {
 } from "../src/lib/plataforma/preservarAppCatalogo.ts";
 
 const root = resolve(import.meta.dirname ?? __dirname, "..");
+const tsxCli = createRequire(import.meta.url).resolve("tsx/cli");
 
 assert.equal(PRESERVAR_APP_GATE_VERSION, 1);
 assert.equal(PRESERVAR_APP_STAFF_LKG_POR_CNPJ, true);
@@ -70,10 +72,10 @@ for (const rel of PRESERVAR_APP_TESTES_CONTRATO) {
 
 function runContrato(rel: string): void {
   console.log(`\n── preservar-app — ${rel}`);
-  const r = spawnSync("npx", ["tsx", rel], {
+  const r = spawnSync(process.execPath, [tsxCli, rel], {
     cwd: root,
     stdio: "inherit",
-    shell: process.platform === "win32",
+    shell: false,
   });
   assert.equal(r.status, 0, `falhou: ${rel}`);
 }

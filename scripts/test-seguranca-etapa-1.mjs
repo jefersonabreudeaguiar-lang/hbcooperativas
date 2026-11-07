@@ -4,6 +4,15 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const cli = require.resolve("tsx/cli");
 const fixtures = [
+  "test-session-revocation.mjs",
+  "test-auth-fail-closed.mjs",
+  "test-sync-storage-read-failure.mjs",
+  "test-operacional-snapshot-rebase.ts",
+  "test-operacional-push-integracao-h862.ts",
+  "test-legacy-financial-schema-repair.mjs",
+  "test-limit-write-preserves-concurrent-state.mjs",
+  "test-hb-atomic-limit-service.mjs",
+  "test-hb-limit-percent-rounding.ts",
   "test-auth-mfa-claim.ts",
   "test-storage-archive.mjs",
   "test-repasse-ciclo-completo.ts",

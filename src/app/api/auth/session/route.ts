@@ -5,8 +5,8 @@ import { isApiSecurityEnforced } from "@/lib/security/env";
 import { buildSessionCookieHeader } from "@/lib/security/sessionCookie";
 import { rateLimitAuth } from "@/lib/security/rateLimit";
 import { resolveEffectiveAppUserRole } from "@/lib/security/authRoutes";
-import { findAppUserById, appUserRowToAuthUser, appUserRowToSessionTokenInput } from "@/lib/supabase/usersAuth";
-import type { UserRole } from "@/types";
+import { appUserRowToAuthUser, appUserRowToSessionTokenInput } from "@/lib/supabase/usersAuth";
+import { resolveCurrentSession } from "@/lib/security/currentSession";
 
 export async function GET(request: Request) {
   if (!rateLimitAuth(request)) {
@@ -27,30 +27,16 @@ export async function GET(request: Request) {
     return NextResponse.json({ valid: false, enforced: true }, { status: 401 });
   }
 
-  const supabase = getSupabaseAdmin();
-  const dbUser = supabase ? await findAppUserById(supabase, session.sub) : null;
-  const source = dbUser ?? {
-    id: session.sub,
-    email: String(session.email),
-    name: String(session.name ?? ""),
-    role: session.role as UserRole,
-    cooperativa_id: session.cooperativaId ?? null,
-    cooperado_id: session.cooperadoId ?? null,
-    cooperativa_cnpj: session.cooperativaCnpj ?? null,
-    active: true,
-    responsavel_principal: session.responsavelPrincipal ?? false,
-    modo_acesso: session.modoAcesso ?? "total",
-    permissoes_extras: session.permissoesExtras ?? null,
-    permissoes_negadas: session.permissoesNegadas ?? null,
-    funcao: session.funcao ?? null,
-    password_hash: "",
-  };
-
+  const current = await resolveCurrentSession(getSupabaseAdmin(), session);
+  if (!current.ok) {
+    return NextResponse.json({ valid: false, enforced: true, code: current.status === 503 ? "SESSION_CHECK_UNAVAILABLE" : "SESSION_REVOKED" }, { status: current.status });
+  }
+  const source = current.user;
   const effectiveRole = resolveEffectiveAppUserRole(source);
   const refreshed = await signAccessToken({
     ...appUserRowToSessionTokenInput(source),
     role: effectiveRole,
-    mfaVerified: true,
+    mfaVerified: false,
   });
 
   const enforced = isApiSecurityEnforced();

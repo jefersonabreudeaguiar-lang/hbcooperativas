@@ -13,7 +13,7 @@ import {
   HB_CREDIT_LIMIT_DIVERGENT_CODE,
   HB_CREDIT_STATE_STALE_CODE,
 } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
-import { isCooperadoTransferIntentId } from "@/config/cooperadoTransferenciaCredito";
+import { isCooperadoTransferIntentId, isCooperadoTransferenciaCreditoEnabled } from "@/config/cooperadoTransferenciaCredito";
 import { authorizeCooperadoTransferPayment } from "@/lib/supabase/cooperadoTransferenciaCreditoStorage";
 import { isHbOwnedBalanceOperationsReady } from "@/config/hbOwnedBalanceRollout";
 
@@ -67,6 +67,9 @@ export async function POST(request: Request) {
   }
 
   if (isCooperadoTransferIntentId(intentId)) {
+    if (!isCooperadoTransferenciaCreditoEnabled()) {
+      return NextResponse.json({ error: "Transferências entre cooperados temporariamente indisponíveis.", code: "HB_TRANSFER_PAUSED" }, { status: 503 });
+    }
     if (!isHbOwnedBalanceOperationsReady(cnpj)) {
       return NextResponse.json({ error: "Transferências entre cooperados estão em validação.", code: "HB_OWNED_BALANCE_NOT_READY" }, { status: 503 });
     }

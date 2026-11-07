@@ -45,6 +45,7 @@ import {
 } from "@/modules/hb-credit/engine/paymentAffordability";
 import { cn } from "@/utils/format";
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
+import { sharePaymentReceipt } from "@/lib/hb-credit/sharePaymentReceipt";
 import {
   hbCooperadoFlowPage,
   hbCooperadoIconTile,
@@ -76,6 +77,7 @@ function HbCreditPagarContent() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<{ receiptCode: string } | null>(null);
+  const [receiptShareMessage, setReceiptShareMessage] = useState("");
   const [contaLimite, setContaLimite] = useState<ContaCoopLimiteCooperado | null>(null);
   const [limiteContaRefreshing, setLimiteContaRefreshing] = useState(false);
   const payInFlightRef = useRef(false);
@@ -419,15 +421,15 @@ function HbCreditPagarContent() {
           <Button variant="secondary" className="mb-3 w-full" onClick={async () => {
             const text = ["HB Créditos — Comprovante", "Pagamento confirmado", `Valor: ${formatCentsBRL(intent.amountCents)}`, `Recebedor: ${draft.parceiroNome}`, `Cooperado: ${cooperadoNome}`, `Comprovante: ${success.receiptCode}`].join("\n");
             try {
-              if (navigator.share) await navigator.share({ title: "Comprovante HB Créditos", text });
-              else {
-                await navigator.clipboard.writeText(text);
-                window.alert("Comprovante copiado. Cole na conversa para compartilhar.");
-              }
-            } catch (e) {
-              if (!(e instanceof DOMException && e.name === "AbortError")) window.alert("Não foi possível compartilhar. Tente novamente.");
+              const result = await sharePaymentReceipt(text, success.receiptCode);
+              setReceiptShareMessage(result === "copied" ? "Comprovante copiado. Cole na conversa para compartilhar."
+                : result === "downloaded" ? "Comprovante baixado. Você pode anexar o arquivo na conversa."
+                : "");
+            } catch {
+              setReceiptShareMessage("Não foi possível preparar o comprovante. Tente novamente.");
             }
           }}>Compartilhar comprovante</Button>
+          {receiptShareMessage && <p role="status" className="mb-3 text-center text-sm text-gray-600">{receiptShareMessage}</p>}
           <Button className={hbCooperadoPrimaryBtn} onClick={() => router.replace("/minha-conta-coop")}>
             Concluir
           </Button>

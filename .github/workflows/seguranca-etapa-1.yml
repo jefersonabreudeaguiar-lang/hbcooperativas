@@ -1,7 +1,7 @@
 name: Segurança e regressão V1
 on:
   push:
-    branches: [codex/seguranca-etapa-1, codex/restore-v1-login]
+    branches: [codex/seguranca-etapa-1, codex/restore-v1-login, codex/hb-scale-readiness]
   pull_request:
     branches: [codex/restore-v1-login]
   workflow_dispatch:

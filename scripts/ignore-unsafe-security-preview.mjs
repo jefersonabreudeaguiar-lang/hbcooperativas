@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
 export function ignoreSecurityPreview(env) {
-  const pilot = env.VERCEL_GIT_COMMIT_REF === "codex/hb-browser-pilot";
+  const pilot = ["codex/hb-browser-pilot", "codex/hb-scale-readiness"].includes(env.VERCEL_GIT_COMMIT_REF);
   if (!pilot && env.VERCEL_GIT_COMMIT_REF !== "codex/seguranca-etapa-1") return false;
   return env.VERCEL_PROJECT_ID !== "prj_1dqke8xRjtzsCouFEczEB4ZgmF10"
     || env.NEXT_PUBLIC_SUPABASE_URL !== "https://ocyfzramxvxqbtkorubn.supabase.co"

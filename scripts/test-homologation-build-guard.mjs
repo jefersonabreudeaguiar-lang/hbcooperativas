@@ -17,3 +17,8 @@ assert.equal(ignoreSecurityPreview(pilot), false);
 assert.equal(ignoreSecurityPreview({ ...pilot, VERCEL_ENV: "production" }), true);
 assert.equal(ignoreSecurityPreview({ ...pilot, VERCEL_PROJECT_ID: "production-project" }), true);
 console.log("PASS: candidato somente no projeto/banco isolados; configuração ausente bloqueia; linha estável permanece independente.");
+
+const scale = { ...pilot, VERCEL_GIT_COMMIT_REF: "codex/hb-scale-readiness" };
+assert.equal(ignoreSecurityPreview(scale), false);
+assert.equal(ignoreSecurityPreview({ ...scale, VERCEL_ENV: "production" }), true);
+assert.equal(ignoreSecurityPreview({ ...scale, NEXT_PUBLIC_SUPABASE_URL: "https://ifptyzikekrswippzmsf.supabase.co" }), true);

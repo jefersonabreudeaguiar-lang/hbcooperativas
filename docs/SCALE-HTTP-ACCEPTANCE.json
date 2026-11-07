@@ -1,0 +1,114 @@
+{
+  "recordedAt": "2026-11-07T02:54:27.594Z",
+  "environment": "homolog-only",
+  "productionChanged": false,
+  "passed": true,
+  "checks": [
+    "real-login",
+    "independent-sessions",
+    "two-tenant-denial",
+    "concurrent-cas-201-409",
+    "retry-preserves-both",
+    "stale-revision-denied",
+    "immediate-deactivation",
+    "tenant-rebinding-requires-login"
+  ],
+  "samples": [
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 401,
+      "ms": 33
+    },
+    {
+      "path": "/api/auth/login",
+      "status": 200,
+      "ms": 4482
+    },
+    {
+      "path": "/api/auth/login",
+      "status": 200,
+      "ms": 1780
+    },
+    {
+      "path": "/api/auth/login",
+      "status": 200,
+      "ms": 1445
+    },
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 403,
+      "ms": 8689
+    },
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 403,
+      "ms": 903
+    },
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 200,
+      "ms": 2499
+    },
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 200,
+      "ms": 2515
+    },
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 403,
+      "ms": 591
+    },
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 409,
+      "ms": 3420
+    },
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 201,
+      "ms": 3913
+    },
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 200,
+      "ms": 811
+    },
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 201,
+      "ms": 1791
+    },
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 200,
+      "ms": 791
+    },
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 409,
+      "ms": 1002
+    },
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 401,
+      "ms": 281
+    },
+    {
+      "path": "/api/auth/session",
+      "status": 401,
+      "ms": 1228
+    },
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 401,
+      "ms": 387
+    },
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 401,
+      "ms": 274
+    }
+  ],
+  "limitation": "Development server API test; not a browser, load benchmark or complete financial acceptance."
+}

@@ -51,6 +51,8 @@ export function getOperacionalReadRevision(cnpj: string, payload: OperacionalSyn
   return read?.cnpj === cnpj ? read.revision : undefined;
 }
 
+
+
 export interface ContratosSyncPayload {
   updatedAt: string;
   instituicoes: Instituicao[];

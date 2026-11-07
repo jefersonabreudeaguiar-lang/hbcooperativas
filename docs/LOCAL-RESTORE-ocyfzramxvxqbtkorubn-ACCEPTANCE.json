@@ -1,0 +1,206 @@
+{
+  "recordedAt": "2026-11-07T10:01:33.523Z",
+  "projectRef": "ocyfzramxvxqbtkorubn",
+  "sourceReadOnly": true,
+  "paidProjectCreated": false,
+  "scope": "public application schema; not full Supabase infrastructure",
+  "archiveEncrypted": true,
+  "restored": true,
+  "contentMatches": true,
+  "existingDataPreservedAfterMigrations": true,
+  "migrationsPassed": [
+    "20261102162441_hb_credit_fiscal_notes_server_only.sql",
+    "20261102162805_hb_v1_schema_compatibility.sql",
+    "20261102175313_hb_v1_rpc_server_only.sql",
+    "20261102175603_hb_credit_authorize_active_account.sql",
+    "20261102175724_hb_credit_remove_legacy_authorize_overload.sql",
+    "20261102180145_hb_credit_refund_consistent_balances.sql",
+    "20261102180929_hb_credit_discount_settlement_scope.sql",
+    "20261102181338_hb_credit_discount_require_settled_receivables.sql",
+    "20261102184911_hb_credit_cashback_receivable_durable.sql",
+    "20261102192056_hb_credit_owned_balance_transfers.sql",
+    "20261102195821_hb_credit_owned_purchase_refund.sql",
+    "20261102220126_hb_credit_payment_retry_identity.sql",
+    "20261102220606_hb_credit_payment_reserved_owner.sql",
+    "20261102222652_hb_credit_app_repasse_snapshot.sql",
+    "20261102223147_hb_credit_operational_book_snapshot.sql",
+    "20261103201749_hb_credit_atomic_limit_batch.sql"
+  ],
+  "migrationsSkipped": [
+    {
+      "file": "20261104182754_hb_operacional_snapshot_compare_and_save.sql",
+      "reason": "Snapshot table already exists in source; this is not a fresh-install test of that migration"
+    },
+    {
+      "file": "20261104225255_hb_operacional_freeze_for_rollback.sql",
+      "reason": "Freeze column already exists in source; this is not a fresh-install test of that migration"
+    }
+  ],
+  "migrationsCommitted": true,
+  "sqlTestsPassed": [
+    "hb_app_repasse_snapshot.sql",
+    "hb_atomic_limit_batch.sql",
+    "hb_cashback_receivable_durable.sql",
+    "hb_discount_settlement_scope.sql",
+    "hb_limit_partial_upsert_preserves_state.sql",
+    "hb_operacional_freeze_for_rollback.sql",
+    "hb_operacional_snapshot_compare_and_save.sql",
+    "hb_operational_book_snapshot.sql",
+    "hb_owned_balance_transfers.sql",
+    "hb_owned_purchase_refund.sql",
+    "hb_payment_retry_identity.sql",
+    "hb_payment_server_access.sql",
+    "hb_refund_balances.sql",
+    "market_receivable_snapshot.sql"
+  ],
+  "localDataRemoved": true,
+  "keyRecovery": "same-windows-user-and-machine-only",
+  "tables": [
+    {
+      "name": "app_users",
+      "count": "9",
+      "hash": "59accfefe4c20b1c4e81ae8d15ba3c66"
+    },
+    {
+      "name": "cooperativas",
+      "count": "3",
+      "hash": "35397953822e3ec88ef3c2f8662fb101"
+    },
+    {
+      "name": "cooperative_audit_log",
+      "count": "95",
+      "hash": "116bff277742b559556d6a974b1d0e1f"
+    },
+    {
+      "name": "hb_asaas_charges",
+      "count": "0",
+      "hash": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "name": "hb_asaas_customers",
+      "count": "0",
+      "hash": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "name": "hb_asaas_webhook_events",
+      "count": "0",
+      "hash": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "name": "hb_credit_accounts",
+      "count": "3",
+      "hash": "ab604a07a1cbd589bde53909d9b6a815"
+    },
+    {
+      "name": "hb_credit_app_repasse",
+      "count": "0",
+      "hash": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "name": "hb_credit_audit_log",
+      "count": "11",
+      "hash": "287cc56067d715916ed7b10cc903d281"
+    },
+    {
+      "name": "hb_credit_cashback_balances",
+      "count": "0",
+      "hash": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "name": "hb_credit_cooperado_transfer_intents",
+      "count": "0",
+      "hash": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "name": "hb_credit_cooperative_caps",
+      "count": "2",
+      "hash": "cba57f824757ee6821350eea6d3c6abe"
+    },
+    {
+      "name": "hb_credit_discount_allocations",
+      "count": "0",
+      "hash": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "name": "hb_credit_fiscal_notes",
+      "count": "0",
+      "hash": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "name": "hb_credit_idempotency_records",
+      "count": "1",
+      "hash": "9d0d0c8fab4f9a761cad577ea61d8ef8"
+    },
+    {
+      "name": "hb_credit_ledger_entries",
+      "count": "1",
+      "hash": "82242243816cf63100b7714b93ff998b"
+    },
+    {
+      "name": "hb_credit_partner_pix_change_requests",
+      "count": "0",
+      "hash": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "name": "hb_credit_partners",
+      "count": "1",
+      "hash": "fb2db851839b4df76756c3b19e0f18ca"
+    },
+    {
+      "name": "hb_credit_payment_intents",
+      "count": "1",
+      "hash": "818064b36577383ab28912d30801b076"
+    },
+    {
+      "name": "hb_credit_receivables",
+      "count": "1",
+      "hash": "a24821f34126a560ced59d6d91730162"
+    },
+    {
+      "name": "hb_credit_refund_requests",
+      "count": "0",
+      "hash": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "name": "hb_credit_refunds",
+      "count": "0",
+      "hash": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "name": "hb_credit_settlements",
+      "count": "0",
+      "hash": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "name": "hb_credit_transactions",
+      "count": "1",
+      "hash": "4bce37e1aa39e299994d939babe0cb15"
+    },
+    {
+      "name": "hb_operacional_snapshots",
+      "count": "0",
+      "hash": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "name": "hb_platform_settings",
+      "count": "1",
+      "hash": "dd55516b55569c9753148663b08d4cf7"
+    },
+    {
+      "name": "notas_pedido",
+      "count": "58",
+      "hash": "e8f2f0346cb934bc8f63e1b99a99117c"
+    },
+    {
+      "name": "password_reset_tokens",
+      "count": "0",
+      "hash": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "name": "security_audit_log",
+      "count": "195",
+      "hash": "6b9c7ab4be0eaff5ccab105bffa473ea"
+    }
+  ],
+  "archiveSha256": "6975104787766a5130c6c6081ee7de881323739a1ad1f318d8aa5f22660a8bb8"
+}
