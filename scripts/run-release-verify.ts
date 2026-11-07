@@ -11,6 +11,10 @@
 import { readFileSync, existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const tsxCli = require.resolve("tsx/cli");
 
 const root = resolve(import.meta.dirname ?? __dirname, "..");
 const args = process.argv.slice(2);
@@ -156,10 +160,20 @@ function runStep(step: Step): boolean {
   console.log(`\n${"═".repeat(64)}`);
   console.log(`Fase ${step.phase} — ${step.title}`);
   console.log(`${"─".repeat(64)}`);
-  const r = spawnSync(step.cmd, step.stepArgs, {
+  const scripts: Record<string, string> = {
+    "gate:preservar-app": "scripts/test-preservar-app-gate.ts",
+    "verify:official-rollout": "scripts/verify-official-rollout-env.ts",
+    "test:perf-fluxos": "scripts/run-suite-perf-fluxos.ts",
+  };
+  // The verifier must use the same Node executable as the deployment, including Windows.
+  const direct = step.cmd === "node" ? step.stepArgs
+    : step.cmd === "npx" && step.stepArgs[0] === "tsx" ? [tsxCli, ...step.stepArgs.slice(1)]
+    : step.cmd === "npm" && step.stepArgs[0] === "run" && scripts[step.stepArgs[1]]
+      ? [tsxCli, scripts[step.stepArgs[1]]] : null;
+  const r = spawnSync(direct ? process.execPath : step.cmd, direct ?? step.stepArgs, {
     cwd: root,
     stdio: "inherit",
-    shell: process.platform === "win32",
+    shell: !direct && process.platform === "win32",
     env: { ...process.env, ...step.env },
   });
   if (r.status === 0) return true;

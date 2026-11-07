@@ -11,6 +11,8 @@ import { canAccessPainelResponsavelSession } from "@/lib/security/responsavelPan
 import { isPlatformAdminSession } from "@/lib/security/appCreator";
 import { requireSessionApiPermission } from "@/lib/security/serverPermissions";
 import { canSessionManageEquipe } from "@/lib/security/staffProvisioningPolicy";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { resolveCurrentSession } from "@/lib/security/currentSession";
 
 export type AuthResult =
   | { ok: true; session: SessionClaims | null; enforced: boolean }
@@ -36,13 +38,22 @@ export async function requireApiAuth(request: Request): Promise<AuthResult> {
     };
   }
 
-  const session = await verifyAccessToken(token);
-  if (!session) {
+  const claims = await verifyAccessToken(token);
+  if (!claims) {
     return {
       ok: false,
       response: NextResponse.json({ error: "Sessão inválida ou expirada." }, { status: 401 }),
     };
   }
+
+  const current = await resolveCurrentSession(getSupabaseAdmin(), claims);
+  if (!current.ok) {
+    return { ok: false, response: NextResponse.json({
+      error: current.status === 503 ? "Não foi possível validar o acesso. Tente novamente." : "Sessão revogada. Entre novamente.",
+      code: current.status === 503 ? "SESSION_CHECK_UNAVAILABLE" : "SESSION_REVOKED",
+    }, { status: current.status }) };
+  }
+  const session = current.session;
 
   const mfaDenied = staffMfaDeniedResponse(session, true);
   if (mfaDenied) {

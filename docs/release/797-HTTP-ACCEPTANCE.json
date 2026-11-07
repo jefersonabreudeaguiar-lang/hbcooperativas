@@ -1,0 +1,57 @@
+{
+  "project": "ocyfzramxvxqbtkorubn",
+  "build": 797,
+  "results": [
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 401,
+      "ms": 17
+    },
+    {
+      "path": "/api/auth/login",
+      "status": 200,
+      "ms": 4014
+    },
+    {
+      "path": "/api/auth/session",
+      "status": 200,
+      "ms": 833
+    },
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 200,
+      "ms": 8329
+    },
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 403,
+      "ms": 579
+    },
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 403,
+      "ms": 606
+    },
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 401,
+      "ms": 555
+    },
+    {
+      "path": "/api/auth/session",
+      "status": 401,
+      "ms": 561
+    },
+    {
+      "path": "/api/auth/session",
+      "status": 401,
+      "ms": 266
+    },
+    {
+      "path": "/api/cooperativa-sync",
+      "status": 401,
+      "ms": 269
+    }
+  ],
+  "fixtureRemoved": true
+}

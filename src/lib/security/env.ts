@@ -13,10 +13,11 @@ export function getAuthSecret(): string {
 
 /** Segurança de API ativa quando nuvem + segredo configurados (produção). */
 export function isApiSecurityEnforced(): boolean {
+  // A missing/misconfigured database must not turn off authorization in production.
+  if (process.env.NODE_ENV === "production") return true;
   if (!isSupabaseConfigured()) return false;
   const secret = process.env.AUTH_SECRET?.trim();
   if (!secret) {
-    if (process.env.NODE_ENV === "production") return true;
     return false;
   }
   return true;

@@ -168,7 +168,17 @@ export function alocarSequenciaEvento(
   let next = ensureControleAnualLivroCaixa(data, cooperativaId);
   const controle = getControleAnualLivroCaixa(next, cooperativaId)!;
   const anoLivro = controle.anoLivro;
-  const numeroSequencia = controle.proximoSequencia;
+  // A restored/merged control can be older than the ledger rows it accompanies.
+  // Existing rows are evidence of numbers already used; never renumber history.
+  const maiorUtilizado = (next.livroCaixa ?? []).reduce((max, linha) => {
+    if (linha.cooperativaId !== cooperativaId || (linha.anoSequencia ?? anoLivro) !== anoLivro) return max;
+    const n = linha.numeroSequencia;
+    return n != null && Number.isSafeInteger(n) && n > max ? n : max;
+  }, 0);
+  const reservado = Number.isSafeInteger(controle.proximoSequencia) && controle.proximoSequencia > 0
+    ? controle.proximoSequencia : 1;
+  const numeroSequencia = Math.max(reservado, maiorUtilizado + 1);
+  if (!Number.isSafeInteger(numeroSequencia + 1)) throw new Error("A sequência do livro caixa excedeu o limite permitido.");
   const grupoEventoId = `evt_lc_${cooperativaId}_${anoLivro}_${numeroSequencia}_${Date.now()}`;
   const atualizado: LivroCaixaControleAnual = {
     ...controle,
@@ -543,7 +553,9 @@ export function montarHistoricoPagamentoCooperadoCaixa(
     pagamento.mesesReferencia?.length
       ? pagamento.mesesReferencia.map((m) => formatMesReferencia(m)).join(", ")
       : formatMesReferencia(pagamento.mesReferencia);
-  const fichas = (data.fichaCorrida ?? []).filter((f) => pagamento.fichaIds.includes(f.id));
+  const fichas = (data.fichaCorrida ?? []).filter((f) =>
+    (pagamento.fichaIds ?? []).includes(f.id) || (pagamento.notaPedidoIds ?? []).includes(f.notaPedidoId)
+  );
   const resumoEntrega =
     fichas.length === 1
       ? fichas[0].descricao?.trim()
