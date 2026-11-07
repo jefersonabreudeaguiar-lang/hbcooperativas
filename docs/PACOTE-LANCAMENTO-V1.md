@@ -71,6 +71,36 @@ https://supabase.com/docs/reference/javascript/storage-from-download.
 Isso remove uma fonte possível de leitura antiga, sem comprovar sozinho a
 causa da divergência normal/anônimo ou resolver a fusão dos dados locais.
 
+### Continuação da correção dos saldos e repasses
+
+Foram reproduzidos em testes dois caminhos de recuperação incorreta. No
+pagamento HB, a mescla usava o máximo do QR e do cache e a normalização
+podia elevar o disponível reduzido pelo servidor. Agora a mescla escolhe
+uma leitura inteira da mesma conta pela data de atualização, com preferência
+ao QR em empate ou data ausente. A normalização preserva o teto recebido.
+Contas bloqueadas não ficam disponíveis por possuírem saldo próprio.
+
+Na proteção do responsável contra dados vazios, o lastro podia sobrepor o
+valor antigo ao registro atualizado de mesmo ID. A mescla agora prefere a
+leitura recebida, respeitando datas anteriores quando ambas são conhecidas.
+Os pagamentos usam a mescla monotônica já existente. O teste reproduziu
+ficha antiga de R$ 999 e ficha paga de R$ 100, preservou R$ 100 e o pagamento
+confirmado, manteve um lançamento manual ausente e recusou resposta antiga.
+
+No fluxo de transferência em validação, a prévia passa a considerar saldo
+próprio e crédito. Após a confirmação, crédito disponível e saldo próprio
+são retornados separadamente. O total do RPC não deve ser somado outra vez
+ao saldo próprio. Falha na releitura não invalida o comprovante nem inventa
+um saldo. O leitor passa a consultar transferências novas mesmo quando
+não há compras de mercado. Nesse caminho novo só usa o débito explícito
+da operação, sem reconstruir transferências legadas sem esse campo.
+
+Testes de saldo recente, isolamento, bloqueio, saldo próprio, confirmação,
+PIN recusado, compensação legada e proteção de snapshots passaram.
+A liberação de operações de saldo próprio continua desabilitada e depende
+da validação autenticada da interface. Nenhuma transferência ou ajuste
+avulso oficial foi regravado durante essa correção.
+
 Referência atual de retorno em produção: build 794, commit
 `252b7fa4512c105358613c5b7bb4160009249893`, deployment
 `dpl_FdoEZyKoaUjgXm61AQYK6eaeJNyc`. A 793 publicou a melhoria de

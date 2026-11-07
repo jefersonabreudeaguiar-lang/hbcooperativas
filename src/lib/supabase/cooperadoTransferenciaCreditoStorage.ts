@@ -6,11 +6,12 @@ import {
 } from "@/config/cooperadoTransferenciaCredito";
 import { INTENT_EXPIRY_MINUTES } from "@/modules/hb-credit/config";
 import { buildHbCreditQrPayload } from "@/lib/hb-credit/hbCreditQrPayload";
-import { getLimiteCooperadoAlinhadoAEntregas } from "@/lib/supabase/contaCoopStorage";
+import { getLimiteCooperado, getLimiteCooperadoAlinhadoAEntregas } from "@/lib/supabase/contaCoopStorage";
 import type { ContaCoopIntent, ContaCoopLimiteCooperado, IntentStatus } from "@/modules/hb-credit/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { verifyFinancialPin } from "@/lib/supabase/contaCoopStorage";
 import { formatHbCreditUsoMotivo, nomeDestinoHbUso } from "@/lib/hb-credit/hbCreditUsoDescricao";
+import { hbPaymentAvailableCents } from "@/modules/hb-credit/engine/paymentAffordability";
 
 export type CooperadoTransferIntent = {
   id: string;
@@ -339,7 +340,7 @@ export async function validateCooperadoTransferForPayer(
   if (!limite) {
     return { ok: false, error: "Cooperado sem limite HB." };
   }
-  if ((limite.valorDisponivelCents ?? 0) < Number(row.amount_cents)) {
+  if (hbPaymentAvailableCents(limite) < Number(row.amount_cents)) {
     return { ok: false, error: "Saldo HB insuficiente." };
   }
 
@@ -380,7 +381,9 @@ export async function authorizeCooperadoTransferPayment(
   | {
       ok: true;
       receiptCode: string;
-      disponivelAposCents: number;
+      disponivelAposCents?: number;
+      saldoProprioAposCents?: number;
+      creditoDebitadoCents?: number;
       duplicate?: boolean;
       cooperadoTransfer: true;
       receiverCooperadoId: string;
@@ -433,7 +436,7 @@ export async function authorizeCooperadoTransferPayment(
 
   const { data: intentRow } = await supabase
     .from("hb_credit_cooperado_transfer_intents")
-    .select("receiver_cooperado_id")
+    .select("receiver_cooperado_id, credit_debited_cents")
     .eq("id", input.intentId)
     .maybeSingle();
   const receiverCooperadoId = intentRow ? String(intentRow.receiver_cooperado_id ?? "") : "";
@@ -441,10 +444,18 @@ export async function authorizeCooperadoTransferPayment(
     ? await resolveCooperadoNomeForTransfer(supabase, input.cooperativeCnpj, receiverCooperadoId)
     : "Cooperado";
 
+  // O RPC de transferência informa o total (crédito + saldo próprio).
+  // O cache da interface guarda esses componentes separados, sem duplicar o saldo.
+  const accountAfter = await getLimiteCooperado(supabase, input.cooperativeCnpj, input.payerCooperadoId, {
+    fastPreview: true, skipAmountUsedReconcile: true, skipCycleHeal: true,
+  }).catch(() => null);
+
   return {
     ok: true,
     receiptCode: result.receipt_code ?? receiptCode,
-    disponivelAposCents: Number(result.disponivel_apos_centavos ?? 0),
+    disponivelAposCents: accountAfter?.valorDisponivelCents,
+    saldoProprioAposCents: accountAfter?.saldoProprioDisponivelCents,
+    creditoDebitadoCents: intentRow?.credit_debited_cents == null ? undefined : Number(intentRow.credit_debited_cents),
     duplicate: Boolean(result.duplicate),
     cooperadoTransfer: true,
     receiverCooperadoId,
@@ -458,7 +469,8 @@ export async function listTransferenciasUsoComoDescontosFicha(
   cnpj: string,
   cooperadoIds: string | string[],
   startIso: string,
-  endIso: string
+  endIso: string,
+  opts?: { requireExplicitCreditDebit?: boolean }
 ): Promise<
   Array<{
     motivo: string;
@@ -497,6 +509,9 @@ export async function listTransferenciasUsoComoDescontosFicha(
 
   const nomeCache = new Map<string, string>();
   for (const row of rows) {
+    // Novas operações informam quanto usaram de crédito. Não reconstruir
+    // automaticamente transferências antigas já acertadas por lançamento avulso.
+    if (opts?.requireExplicitCreditDebit && row.credit_debited_cents == null) continue;
     const receiverId = String(row.receiver_cooperado_id ?? "");
     let receiverNome = nomeDestinoHbUso(row.description ? String(row.description) : "");
     if (!receiverNome || /^crédito para /i.test(receiverNome)) {

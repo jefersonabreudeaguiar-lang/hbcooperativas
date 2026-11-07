@@ -5237,7 +5237,6 @@ async function listCooperadoContaCoopDescontosIntervalo(
   opts?: { incluirPagamentosEstornados?: boolean }
 ): Promise<CooperadoContaCoopDescontoRow[]> {
   const txs = await queryHbTransacoesFichaIntervalo(supabase, cnpj, cooperadoIds, startIso, endIso, opts);
-  if (!txs.length) return [];
 
   const partnerNames = await partnerNamesById(supabase, txs);
   const fromTx = txs
@@ -5256,7 +5255,8 @@ async function listCooperadoContaCoopDescontosIntervalo(
     cnpj,
     cooperadoIds,
     startIso,
-    endIso
+    endIso,
+    { requireExplicitCreditDebit: txs.length === 0 }
   );
   return [
     ...fromTx,
