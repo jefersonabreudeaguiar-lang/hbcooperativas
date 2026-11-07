@@ -1887,31 +1887,42 @@ function FichaCorridaPageInner() {
         );
         return;
       }
-      clearOperacionalPushFingerprint(cnpj, true);
-      await pushNotasPagasToCloud(
-        cnpj,
-        getResumoPagamentoConsolidadoCooperado(
-          nextData,
-          cooperadoSelecionado.id,
-          mesesPagar,
-          coopId,
-          ajustesPorMes
-        ).notaPedidoIds,
-        nextData
-      );
-      await syncOperacionalFromCloud(cnpj);
-      await refreshContaCoopLimiteFromFicha({
-        cnpj,
-        cooperadoId: cooperadoSelecionado.id,
-        cooperativaId: coopId,
-        cooperadoNome: cooperadoSelecionado.nomeCompleto,
-      }).catch(() => {});
-      requestAppSync();
+      // A API já persistiu pagamento e caixa e executou a reconciliação HB.
+      // Atualizar fotos/notas e recarregar o painel não altera essa confirmação.
       setPagoMsgVariant("success");
       setPagoMsg(
         `Pagamento confirmado! ${formatCurrency(pagamento.valorLiquido)} registrado para ${nomeCooperado.split(" ")[0]}. O recibo já está disponível na ficha.`
       );
-    })();
+      clearOperacionalPushFingerprint(cnpj, true);
+      try {
+        await pushNotasPagasToCloud(
+          cnpj,
+          getResumoPagamentoConsolidadoCooperado(
+            nextData,
+            cooperadoSelecionado.id,
+            mesesPagar,
+            coopId,
+            ajustesPorMes
+          ).notaPedidoIds,
+          nextData
+        );
+        await syncOperacionalFromCloud(cnpj);
+        await refreshContaCoopLimiteFromFicha({
+          cnpj,
+          cooperadoId: cooperadoSelecionado.id,
+          cooperativaId: coopId,
+          cooperadoNome: cooperadoSelecionado.nomeCompleto,
+        }).catch(() => {});
+      } catch {
+        setPagoMsgVariant("success");
+        setPagoMsg("Pagamento confirmado na nuvem. A atualização das entregas neste aparelho está pendente; atualize os dados antes de outro lançamento.");
+      } finally {
+        requestAppSync();
+      }
+    })().catch(() => {
+      setPagoMsgVariant("error");
+      setPagoMsg("Não foi possível confirmar a resposta da nuvem. Atualize os dados e confira o registro antes de tentar novamente, para evitar duplicidade.");
+    });
     setConfirmPagamento(false);
     setAbaMesPagamentoResponsavel(mesPrincipal);
     setAba("pagar");

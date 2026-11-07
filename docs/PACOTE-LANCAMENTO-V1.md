@@ -1,5 +1,61 @@
 # HB Cooperativas V1 — pacote em validação
 
+## Situação em 06/11/2026
+
+O piloto `dpl_FHnw7FPyWTvv7SfwYiJ7JNLoTDzx` abriu com as contas fictícias
+de cooperado e responsável no navegador. Início e Financeiro mostraram
+R$ 100,00 para o cooperado de teste, inclusive após recarga e retorno ao
+Início. O responsável concluiu a atualização da cooperativa fictícia.
+
+A recarga preservou um rascunho de comunicado, mas perdeu o aviso de envio
+pendente e desabilitou o envio. A correção passa a guardar a fila na cópia
+local e só remove a geração confirmada pela nuvem. Falhas de publicação
+passam a ser propagadas. O teste cobre recarga, outra cooperativa e edição
+feita durante um envio. Tipos e teste passaram. A conferência da correção
+na interface passou no piloto `dpl_AmBFEgYiD4b65jCLuumdGYd6yYiF`. A recarga
+preservou texto, aviso de pendência e botão habilitado. As duas contas foram
+desativadas novamente e suas senhas temporárias invalidadas.
+
+O gate rápido passou em 82,4 segundos antes desse ajuste adicional. Também
+passaram novamente os testes de leitura indisponível, API recuperável,
+rebase, conflito/retomada simulada e ponte de retorno.
+
+Os testes abaixo são histórico. A referência vigente de retorno é a 794.
+Ainda faltam a compra/comprovante na interface, o cenário real de conflito
+com recarga e o fechamento do ensaio das migrações. A versão final precisa
+ser superior à 794. O teste de restauração física continua adiado por
+decisão do proprietário. Este documento não autoriza publicação oficial.
+
+O ensaio transacional reaplicou em ordem as 16 migrações financeiras e
+executou 14 casos SQL com savepoints separados. Tudo passou e foi revertido.
+As duas migrações de snapshot já instaladas foram validadas pelos testes,
+sem recriar a tabela existente. A primeira tentativa de reaplicar também
+essa criação falhou com `relation already exists` e foi revertida. Isso
+comprova a necessidade de distinguir migrações já instaladas na publicação.
+O ensaio não substitui uma migração sobre uma cópia física do banco oficial.
+
+### Relato de pagamentos e transferências de 06/11
+
+O proprietário observou valores diferentes no navegador normal e no anônimo,
+lentidão ao registrar pagamento e repasses entre cooperados sem aparecer.
+Preservar o lançamento avulso de Jeferson para Jovane. Não reaplicar essa
+transferência, nem reconstruir saldos históricos automaticamente.
+
+A rotina oficial de transferência soma o valor ao limite do destinatário.
+O pacote possui uma rotina de saldo próprio com lançamentos de entrada e
+saída, ainda bloqueada para uso. Sua ativação exige fechar a integração e
+os testes da interface. Também foi encontrada uma saída antecipada no
+leitor de descontos quando não existem compras de mercado, anterior à
+consulta das transferências. O tratamento precisa distinguir transferências
+novas das já compensadas manualmente.
+
+Na candidata, a confirmação visual de pagamento passa a ocorrer depois de
+a API aceitar o registro e antes das atualizações adicionais de notas,
+painel e limite. Falha nessa atualização adicional mantém a confirmação
+e informa a pendência. Falha sem resposta de confirmação orienta conferir
+o registro antes de repetir. A causa da diferença normal/anônimo e a
+integração dos repasses seguem em investigação e bloqueiam o OK final.
+
 Referência atual de retorno em produção: build 794, commit
 `252b7fa4512c105358613c5b7bb4160009249893`, deployment
 `dpl_FdoEZyKoaUjgXm61AQYK6eaeJNyc`. A 793 publicou a melhoria de

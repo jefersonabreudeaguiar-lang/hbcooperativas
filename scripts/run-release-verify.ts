@@ -99,6 +99,12 @@ const PHASE_BIC: Step[] = [
 const PHASE_HB: Step[] = [
   {
     phase: "2",
+    title: "Comunicados pendentes após recarga",
+    cmd: "npx",
+    stepArgs: ["tsx", "scripts/test-comunicado-publicacao-pendente.ts"],
+  },
+  {
+    phase: "2",
     title: "Invariantes E2E alinhamento",
     cmd: "npx",
     stepArgs: ["tsx", "scripts/test-e2e-alignment-invariants.ts"],
