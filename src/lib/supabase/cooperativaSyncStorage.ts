@@ -121,6 +121,7 @@ async function uploadJson(
   }
   const { error } = await supabase.storage.from(BUCKET).upload(path(cnpj, file), body, {
     contentType: "application/json",
+    cacheControl: "0",
     upsert: true,
   });
   if (error) {
@@ -132,7 +133,11 @@ async function uploadJson(
 
 async function fetchJson<T>(supabase: SupabaseClient, cnpj: string, file: string): Promise<T | null> {
   await ensureBucket(supabase);
-  const { data: blob, error } = await supabase.storage.from(BUCKET).download(path(cnpj, file));
+  const { data: blob, error } = await supabase.storage.from(BUCKET).download(
+    path(cnpj, file),
+    { cacheNonce: crypto.randomUUID() },
+    { cache: "no-store" }
+  );
   // Ausência é diferente de indisponibilidade: nunca iniciar um snapshot vazio
   // quando a leitura falhou por rede, permissão ou resposta inválida.
   if (error) {

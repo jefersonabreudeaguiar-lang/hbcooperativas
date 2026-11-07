@@ -13,7 +13,7 @@ import {
   HB_CREDIT_LIMIT_DIVERGENT_CODE,
   HB_CREDIT_STATE_STALE_CODE,
 } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
-import { isCooperadoTransferIntentId } from "@/config/cooperadoTransferenciaCredito";
+import { isCooperadoTransferIntentId, isCooperadoTransferenciaCreditoEnabled } from "@/config/cooperadoTransferenciaCredito";
 import { authorizeCooperadoTransferPayment } from "@/lib/supabase/cooperadoTransferenciaCreditoStorage";
 
 /** Autorização HB — RPC + PIN; precisa de folga acima do default serverless em sync pesado. */
@@ -66,6 +66,9 @@ export async function POST(request: Request) {
   }
 
   if (isCooperadoTransferIntentId(intentId)) {
+    if (!isCooperadoTransferenciaCreditoEnabled()) {
+      return NextResponse.json({ error: "Transferências entre cooperados temporariamente indisponíveis.", code: "HB_TRANSFER_PAUSED" }, { status: 503 });
+    }
     const prepareTransfer = await ensureLimitePronto();
     if (!prepareTransfer.ok) {
       return NextResponse.json(

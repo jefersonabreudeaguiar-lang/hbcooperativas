@@ -943,6 +943,8 @@ export interface FechamentoSnapshot {
 }
 
 export interface AppData {
+  /** Fila local de comunicados. A resposta de um envio antigo não apaga edições novas. */
+  comunicadosPublicacaoPendente?: Record<string, { token: string; ids: string[] }>;
   cooperativas: Cooperativa[];
   users: User[];
   cooperados: Cooperado[];

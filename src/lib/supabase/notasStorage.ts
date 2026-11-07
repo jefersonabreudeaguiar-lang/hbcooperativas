@@ -87,6 +87,7 @@ export async function deleteAndCompactFotoPart(
       .from(BUCKET)
       .upload(storagePath(cnpj, notaId), JSON.stringify(updated), {
         contentType: "application/json",
+        cacheControl: "0",
         upsert: true,
       });
     const { error: tableErr } = await supabase
@@ -126,7 +127,7 @@ export async function fetchNotaMetaFromStorage(
   await ensureEntregasBucket(supabase);
   const { data: blob, error } = await supabase.storage
     .from(BUCKET)
-    .download(storagePath(cnpj, notaId));
+    .download(storagePath(cnpj, notaId), { cacheNonce: crypto.randomUUID() }, { cache: "no-store" });
   if (error || !blob) return null;
   try {
     const parsed = JSON.parse(await blob.text()) as NotaPedido;
@@ -271,6 +272,7 @@ export async function uploadNotaFotoPartBuffer(
     .from(BUCKET)
     .upload(storagePath(cnpj, nota.id), JSON.stringify(metaPayload), {
       contentType: "application/json",
+      cacheControl: "0",
       upsert: true,
     });
   if (metaErr) {
@@ -351,6 +353,7 @@ export async function uploadNotaToStorage(
     .from(BUCKET)
     .upload(storagePath(cnpj, nota.id), body, {
       contentType: "application/json",
+      cacheControl: "0",
       upsert: true,
     });
 
@@ -397,7 +400,7 @@ async function downloadNotasJsonParallel(
       if (idx >= fileNames.length) return;
       const { data: blob, error: dlErr } = await supabase.storage
         .from(BUCKET)
-        .download(`${cnpj}/${fileNames[idx]}`);
+        .download(`${cnpj}/${fileNames[idx]}`, { cacheNonce: crypto.randomUUID() }, { cache: "no-store" });
       if (dlErr || !blob) continue;
       try {
         const parsed = JSON.parse(await blob.text()) as NotaPedido;
@@ -432,7 +435,7 @@ export async function fetchNotaFromStorage(
   await ensureEntregasBucket(supabase);
   const { data: blob, error } = await supabase.storage
     .from(BUCKET)
-    .download(storagePath(cnpj, notaId));
+    .download(storagePath(cnpj, notaId), { cacheNonce: crypto.randomUUID() }, { cache: "no-store" });
   if (error || !blob) return null;
   try {
     const parsed = JSON.parse(await blob.text()) as NotaPedido;

@@ -2,19 +2,27 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
+import { webcrypto } from 'node:crypto';
 
 const exports = {};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/supabase/cooperativaSyncStorage.ts', 'utf8'), {
   compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
-}).outputText, {exports, Buffer, console, require: name => {
+}).outputText, {exports, Buffer, console, crypto:webcrypto, require: name => {
   if (name.endsWith('hbCreditOperacionalFinancialProjection')) return {projectOperationalFinancialRecords: async (_s, _c, p) => p};
   return new Proxy({}, {get: () => () => {throw Error(`Unexpected dependency execution: ${name}`);}});
 }});
 
 let writes = 0;
+const readNonces = new Set();
 const client = (download, buckets = {data: [{name:'hb-cooperativa-sync', file_size_limit: 52428800}], error:null}) => ({storage: {
   listBuckets: async () => buckets,
-  from: () => ({download: async () => download, upload: async () => {writes++; return {error:null};}}),
+  from: () => ({download: async (_path, options, parameters) => {
+    assert.equal(parameters.cache,'no-store');
+    assert.ok(options.cacheNonce);
+    assert.equal(readNonces.has(options.cacheNonce),false);
+    readNonces.add(options.cacheNonce);
+    return download;
+  }, upload: async (_path,_body,options) => {assert.equal(options.cacheControl,'0');writes++; return {error:null};}}),
 }});
 for (const response of [
   {data:null, error:{statusCode:503, message:'offline'}},

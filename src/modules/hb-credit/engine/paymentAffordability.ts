@@ -36,6 +36,7 @@ export function canAffordHbPaymentWithLimite(
   grossCents: number,
   useCashback: boolean
 ): boolean {
+  if (limite.bloqueado) return false;
   const cashback = limite.cashbackDisponivelCents ?? 0;
   const creditDebit = hbCreditDebitFromGrossCents(grossCents, useCashback, cashback);
   return limite.valorDisponivelCents >= creditDebit;
@@ -49,35 +50,27 @@ export function canAffordHbPaymentScanPreview(limite: ContaCoopLimiteCooperado, 
   );
 }
 
-/** Alinha disponível ao motor de cap × usado (como Minha Conta HB). */
+/** Preserva o disponível informado pelo servidor, inclusive reduções por teto. */
 export function normalizeHbPaymentLimiteDisponivel(
   limite: ContaCoopLimiteCooperado
 ): ContaCoopLimiteCooperado {
   const liberado = Math.max(0, limite.limiteLiberadoCents ?? 0);
   const usado = Math.max(0, limite.valorUsadoCents ?? 0);
   const informado = Math.max(0, limite.valorDisponivelCents ?? 0);
-  const efetivo = hbCreditEffectiveDisponivelCents(liberado, liberado, usado);
-  const disponivel = Math.max(informado, efetivo, liberado - usado);
+  const disponivel = limite.bloqueado ? 0 : Math.min(informado, Math.max(0, liberado - usado));
   return { ...limite, valorDisponivelCents: disponivel };
 }
 
-/** Mescla limite do QR com snapshot da conta (cache/nuvem) — evita “saldo insuficiente” falso no PIN. */
+/** Escolhe uma leitura inteira da mesma conta, sem combinar máximos de revisões diferentes. */
 export function mergeHbPaymentLimiteForScan(
   qrLimite: ContaCoopLimiteCooperado,
   account?: ContaCoopLimiteCooperado | null
 ): ContaCoopLimiteCooperado {
   const fromQr = normalizeHbPaymentLimiteDisponivel(qrLimite);
   if (!account) return fromQr;
+  if (account.cooperadoId !== qrLimite.cooperadoId || account.cooperativaCnpj !== qrLimite.cooperativaCnpj) return fromQr;
   const fromAcc = normalizeHbPaymentLimiteDisponivel(account);
-  const pick =
-    fromAcc.valorDisponivelCents >= fromQr.valorDisponivelCents ? fromAcc : fromQr;
-  return {
-    ...pick,
-    cashbackDisponivelCents: Math.max(
-      fromQr.cashbackDisponivelCents ?? 0,
-      fromAcc.cashbackDisponivelCents ?? 0
-    ),
-    valorDisponivelCents: Math.max(fromQr.valorDisponivelCents, fromAcc.valorDisponivelCents),
-    limiteLiberadoCents: Math.max(fromQr.limiteLiberadoCents, fromAcc.limiteLiberadoCents),
-  };
+  const qrTime = Date.parse(fromQr.updatedAt);
+  const accountTime = Date.parse(fromAcc.updatedAt);
+  return Number.isFinite(qrTime) && Number.isFinite(accountTime) && accountTime > qrTime ? fromAcc : fromQr;
 }

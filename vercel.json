@@ -2,6 +2,7 @@
   "ignoreCommand": "node scripts/ignore-unsafe-conferencia-preview.mjs",
   "installCommand": "npm ci",
   "buildCommand": "npm run build",
+  "ignoreCommand": "node scripts/ignore-unsafe-official-v1.mjs",
   "env": {
     "APP_ENV": "production",
     "BIC_ENVIRONMENT": "PRODUCTION",
@@ -22,6 +23,7 @@
     "NEXT_PUBLIC_CONTA_COOP_VALOR_RECEBER_PUBLIC": "1",
     "HB_CREDIT_ENABLED": "true",
     "HB_CREDIT_OPERATIONS_ENABLED": "true",
+    "NEXT_PUBLIC_COOPERADO_TRANSFERENCIA_CREDITO": "false",
     "NEXT_PUBLIC_HB_CREDIT_ENABLED": "true",
     "NEXT_PUBLIC_APP_SCHEDULER_DEFER_SYNC": "true"
   }

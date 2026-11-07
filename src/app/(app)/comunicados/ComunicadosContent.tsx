@@ -25,6 +25,7 @@ import {
 import { ComunicadoForm } from "@/components/comunicado/ComunicadoForm";
 import { ComunicadoCard } from "@/components/comunicado/ComunicadoCard";
 import type { Comunicado, ComunicadoCategoria } from "@/types";
+import { marcarPublicacaoPendente, confirmarPublicacaoPendente } from "@/services/comunicadoPublicacaoPendente";
 
 const FORM_VAZIO = (): Partial<Comunicado> => ({
   categoria: "aviso_geral",
@@ -67,8 +68,8 @@ export default function ComunicadosPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<Partial<Comunicado>>(FORM_VAZIO());
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [alteracoesPendentes, setAlteracoesPendentes] = useState(false);
-  const [idsParaPublicar, setIdsParaPublicar] = useState<Set<string>>(() => new Set());
+  const pendencia = coopId ? data?.comunicadosPublicacaoPendente?.[coopId] : undefined;
+  const alteracoesPendentes = Boolean(pendencia);
   const [publicando, setPublicando] = useState(false);
   const [msgPublicacao, setMsgPublicacao] = useState("");
 
@@ -96,10 +97,7 @@ export default function ComunicadosPage() {
   }, [data, coopId]);
 
   const marcarPendente = (comunicadoId?: string) => {
-    setAlteracoesPendentes(true);
-    if (comunicadoId) {
-      setIdsParaPublicar((prev) => new Set(prev).add(comunicadoId));
-    }
+    if (coopId) updateData((d) => marcarPublicacaoPendente(d, coopId, generateId("publicacao"), comunicadoId));
   };
 
   const limparFormulario = () => {
@@ -235,11 +233,8 @@ export default function ComunicadosPage() {
         { id: c.id, cooperativaId: coopId, excluidoEm: new Date().toISOString() },
       ],
     }));
-    setIdsParaPublicar((prev) => {
-      const next = new Set(prev);
-      next.delete(c.id);
-      return next;
-    });
+    marcarPendente();
+    const token = getData().comunicadosPublicacaoPendente?.[coopId]?.token;
     setMsgPublicacao("");
     try {
       const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
@@ -252,8 +247,9 @@ export default function ComunicadosPage() {
       await pushOperacionalToCloud(cnpj, getData(), coopId, {
         authoritative: true,
         forceOperacionalPush: true,
+        throwOnError: true,
       });
-      setAlteracoesPendentes(false);
+      updateData((d) => confirmarPublicacaoPendente(d, coopId, token));
       setMsgPublicacao("Recado removido. Cooperados deixam de ver após sincronizar o app.");
     } catch (e) {
       marcarPendente();
@@ -267,6 +263,7 @@ export default function ComunicadosPage() {
 
   const handlePublicar = async () => {
     if (!user || !coopId) return;
+    const pendenciaEnviada = getData().comunicadosPublicacaoPendente?.[coopId];
     setPublicando(true);
     setMsgPublicacao("");
     try {
@@ -277,7 +274,7 @@ export default function ComunicadosPage() {
       }
       await ensureComunicadosAudioUploaded(cnpj, coopId);
       const agora = new Date().toISOString();
-      const ids = new Set(idsParaPublicar);
+      const ids = new Set(pendenciaEnviada?.ids ?? []);
       if (ids.size) {
         updateData((d) => ({
           ...d,
@@ -288,9 +285,8 @@ export default function ComunicadosPage() {
         }));
       }
       const d = getData();
-      await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
-      setAlteracoesPendentes(false);
-      setIdsParaPublicar(new Set());
+      await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true, throwOnError: true });
+      updateData((atual) => confirmarPublicacaoPendente(atual, coopId, pendenciaEnviada?.token));
       setMsgPublicacao(
         d.comunicados.some((c) => c.somenteDiretoria && c.ativo !== false)
           ? "Avisos enviados! Recados da diretoria só aparecem para cooperados marcados como membro da diretoria."

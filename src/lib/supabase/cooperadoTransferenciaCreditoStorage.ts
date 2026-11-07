@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   COOPERADO_TRANSFER_INTENT_ID_PREFIX,
   isCooperadoTransferIntentId,
+  isCooperadoTransferenciaCreditoEnabled,
 } from "@/config/cooperadoTransferenciaCredito";
 import { INTENT_EXPIRY_MINUTES } from "@/modules/hb-credit/config";
 import { buildHbCreditQrPayload } from "@/lib/hb-credit/hbCreditQrPayload";
@@ -168,6 +169,7 @@ export async function createCooperadoTransferIntent(
     idempotencyKey?: string;
   }
 ): Promise<{ intent: CooperadoTransferIntent; qrPayload: string }> {
+  if (!isCooperadoTransferenciaCreditoEnabled()) throw new Error("Transferências entre cooperados temporariamente indisponíveis.");
   const digits = normalizeCnpj(input.cooperativeCnpj);
   if (digits.length !== 14 || input.amountCents <= 0) {
     throw new Error("Dados inválidos.");
@@ -386,6 +388,7 @@ export async function authorizeCooperadoTransferPayment(
     }
   | { ok: false; error: string; code?: string }
 > {
+  if (!isCooperadoTransferenciaCreditoEnabled()) return { ok: false, error: "Transferências entre cooperados temporariamente indisponíveis.", code: "HB_TRANSFER_PAUSED" };
   const pinCheck = await verifyFinancialPin(
     supabase,
     input.cooperativeCnpj,

@@ -175,7 +175,8 @@ const painel = read("src/services/responsavelPainelIndex.ts");
 assert.match(painel, /notaLancadaNaFichaCorrida\(data\.fichaCorrida/, "fila some quando a ficha já tem a nota");
 
 const guard = read("src/lib/staff/staffGestaoSnapshotGuard.ts");
-assert.match(guard, /localStorage\.setItem\(key, json\)/, "lastro sobrevive fechar o PWA");
+assert.match(guard, /const compact = compactPersisted\(json\)/, "lastro usa o formato de persistência compactado");
+assert.match(guard, /localStorage\.setItem\(key, compact\)/, "lastro sobrevive fechar o PWA");
 assert.match(guard, /localStorage\.getItem\(key\)/, "reabre o lastro do aparelho");
 
 const poll = read("src/lib/performance/staffFilaNotasLivePoll.ts");
