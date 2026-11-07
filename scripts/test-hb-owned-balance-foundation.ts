@@ -51,6 +51,22 @@ async function main() {
   assert.equal(signedLedgerAmountCentsForExtrato("TRANSFER_OUT", "debit", 300), -300);
   assert.equal(signedLedgerAmountCentsForExtrato("TRANSFER_IN", "credit", 300), 300);
   assert.equal(isHbOwnedBalanceOperationsReady(), false);
+  const previousEnabled = process.env.HB_OWNED_BALANCE_OPERATIONS_ENABLED;
+  const previousScope = process.env.HB_OWNED_BALANCE_CNPJ;
+  try {
+    process.env.HB_OWNED_BALANCE_OPERATIONS_ENABLED = "true";
+    delete process.env.HB_OWNED_BALANCE_CNPJ;
+    assert.equal(isHbOwnedBalanceOperationsReady("88888888000181"), false, "sem escopo não libera");
+    process.env.HB_OWNED_BALANCE_CNPJ = "88888888000181";
+    assert.equal(isHbOwnedBalanceOperationsReady("88888888000181"), true);
+    assert.equal(isHbOwnedBalanceOperationsReady("62351750000165"), false, "piloto não libera cooperativa oficial");
+    assert.equal(isHbOwnedBalanceOperationsReady(), false);
+  } finally {
+    if (previousEnabled === undefined) delete process.env.HB_OWNED_BALANCE_OPERATIONS_ENABLED;
+    else process.env.HB_OWNED_BALANCE_OPERATIONS_ENABLED = previousEnabled;
+    if (previousScope === undefined) delete process.env.HB_OWNED_BALANCE_CNPJ;
+    else process.env.HB_OWNED_BALANCE_CNPJ = previousScope;
+  }
   const noCalls = new Proxy({}, { get() { throw new Error("Operação não liberada acessou o banco"); } }) as SupabaseClient;
   await assert.rejects(createCooperadoTransferIntent(noCalls, {
     cooperativeCnpj: "11111111111111", receiverCooperadoId: "receiver", receiverNome: "Fixture", amountCents: 100,

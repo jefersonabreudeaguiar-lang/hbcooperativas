@@ -2,6 +2,19 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
+const payPage = ts.createSourceFile('page.tsx',fs.readFileSync('src/app/(app)/minha-conta-coop/pagar/page.tsx','utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+let explicitSubmitCalls = 0;
+function inspectSubmit(node) {
+  if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'confirmar') {
+    explicitSubmitCalls++;
+    let owner = node.parent;
+    while (owner && !ts.isJsxAttribute(owner)) owner = owner.parent;
+    assert.ok(owner && owner.name.getText(payPage) === 'onClick','Digitar um PIN de 4 a 8 dígitos não pode confirmar antes do clique em Pagar');
+  }
+  ts.forEachChild(node,inspectSubmit);
+}
+inspectSubmit(payPage);
+assert.equal(explicitSubmitCalls,1,'Uma entrada explícita para confirmar o pagamento');
 const source = fs.readFileSync('src/services/creditApiService.ts', 'utf8');
 let fail = 'getData';
 let accepted = true;

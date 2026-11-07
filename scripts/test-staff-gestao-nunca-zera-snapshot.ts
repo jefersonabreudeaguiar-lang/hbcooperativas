@@ -134,6 +134,29 @@ assert.equal(
   "lastro do F5 não rebaixa nota já lançada"
 );
 
+const lastroComValorAntigo = {
+  ...lastroComManual,
+  fichaCorrida: rico.fichaCorrida.map((f) => ({ ...f, valorLiquido: 999, updatedAt: "2026-11-05T12:00:00Z" })),
+  pagamentosCooperado: [{ id: "p1", cooperativaId: "coop1", status: "aguardando_confirmacao", updatedAt: "2026-11-05T12:00:00Z" } as never],
+  livroCaixa: lastroComManual.livroCaixa.map((l) => ({ ...l, valor: 999, updatedAt: "2026-11-05T12:00:00Z" })),
+};
+const leituraNovaMenor = {
+  ...lastroComValorAntigo,
+  fichaCorrida: [{ id: "f0", cooperativaId: "coop1", status: "pago", valorLiquido: 100, updatedAt: "2026-11-06T12:00:00Z" } as never],
+  pagamentosCooperado: [{ id: "p1", cooperativaId: "coop1", status: "confirmado", updatedAt: "2026-11-06T12:00:00Z" } as never],
+  livroCaixa: [{ id: "pix1", cooperativaId: "coop1", valor: 100, updatedAt: "2026-11-06T12:00:00Z" } as never],
+};
+const recuperado = preservarStaffGestaoContraWipe(lastroComValorAntigo, leituraNovaMenor);
+assert.equal(recuperado.fichaCorrida.find((f) => f.id === "f0")?.valorLiquido, 100, "cache mais rico não restaura o valor antigo do mesmo registro");
+assert.equal(recuperado.fichaCorrida.find((f) => f.id === "f0")?.status, "pago");
+assert.equal(recuperado.pagamentosCooperado.find((p) => p.id === "p1")?.status, "confirmado");
+assert.equal(recuperado.livroCaixa.find((l) => l.id === "pix1")?.valor, 100);
+assert.ok(recuperado.livroCaixa.some((l) => l.id === "man1"), "manual ausente na consulta continua preservado");
+const atrasada = { ...leituraNovaMenor, fichaCorrida: lastroComValorAntigo.fichaCorrida.slice(0,1), pagamentosCooperado:lastroComValorAntigo.pagamentosCooperado };
+const protegido = preservarStaffGestaoContraWipe(recuperado, atrasada);
+assert.equal(protegido.fichaCorrida.find((f) => f.id === "f0")?.valorLiquido,100,"resposta antiga não desfaz valor mais recente");
+assert.equal(protegido.pagamentosCooperado.find((p) => p.id === "p1")?.status,"confirmado");
+
 resetStaffOperacionalColdHydrateForTests();
 assert.equal(
   deveAdiarReconciliarFichaAposLimpezaCacheStaff(rico as never, "coop1"),

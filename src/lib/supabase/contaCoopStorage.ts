@@ -5237,7 +5237,6 @@ async function listCooperadoContaCoopDescontosIntervalo(
   opts?: { incluirPagamentosEstornados?: boolean }
 ): Promise<CooperadoContaCoopDescontoRow[]> {
   const txs = await queryHbTransacoesFichaIntervalo(supabase, cnpj, cooperadoIds, startIso, endIso, opts);
-  if (!txs.length) return [];
 
   const partnerNames = await partnerNamesById(supabase, txs);
   const fromTx = txs
@@ -5256,7 +5255,8 @@ async function listCooperadoContaCoopDescontosIntervalo(
     cnpj,
     cooperadoIds,
     startIso,
-    endIso
+    endIso,
+    { requireExplicitCreditDebit: txs.length === 0 }
   );
   return [
     ...fromTx,
@@ -5626,7 +5626,7 @@ export async function sweepUnusedCashbackToCredit(
   mesReferencia: string,
   actorUserId: string
 ): Promise<{ ok: boolean; error?: string; totalCents?: number; cooperados?: number }> {
-  if (!isHbOwnedBalanceOperationsReady()) {
+  if (!isHbOwnedBalanceOperationsReady(cnpj)) {
     return { ok: false, error: "A conversão para saldo próprio está em validação. O cashback continua disponível." };
   }
   const { data, error } = await supabase.rpc("hb_credit_sweep_cashback_to_credit", {

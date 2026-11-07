@@ -8,6 +8,7 @@ import { stripBinaryForPersist } from "@/utils/fotoEntrega";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { protectNotaAgainstStatusDowngrade } from "@/utils/notaStatus";
 import { compactPersisted, decodePersisted } from "@/lib/staff/appDataPersistIo";
+import { mergePagamentosCooperadoFromCloud } from "@/services/pagamentoRegistroMerge";
 
 export type StaffGestaoRiqueza = {
   cooperados: number;
@@ -352,13 +353,18 @@ export function resetStaffGestaoSnapshotGuardForTests(): void {
   }
 }
 
-function uniaoPorId<T extends { id: string }>(prefer: T[], extra: T[]): T[] {
+function uniaoPorId<T extends { id: string; updatedAt?: string; createdAt?: string }>(prefer: T[], extra: T[]): T[] {
   const map = new Map<string, T>();
   for (const item of extra) {
     if (item?.id) map.set(item.id, item);
   }
   for (const item of prefer) {
-    if (item?.id) map.set(item.id, item);
+    if (!item?.id) continue;
+    const prev = map.get(item.id);
+    const prevTime = Date.parse(prev?.updatedAt ?? prev?.createdAt ?? "");
+    const nextTime = Date.parse(item.updatedAt ?? item.createdAt ?? "");
+    if (Number.isFinite(prevTime) && Number.isFinite(nextTime) && prevTime > nextTime) continue;
+    map.set(item.id, item);
   }
   return [...map.values()];
 }
@@ -412,12 +418,12 @@ export function preservarStaffGestaoContraWipe(
   const excluidosLivro = new Set(
     [...(lastro.livroCaixaExcluidos ?? []), ...(incoming.livroCaixaExcluidos ?? [])].map((e) => e.id)
   );
-  const livroUnido = uniaoPorId(lastro.livroCaixa ?? [], incoming.livroCaixa ?? []).filter(
+  const livroUnido = uniaoPorId(incoming.livroCaixa ?? [], lastro.livroCaixa ?? []).filter(
     (l) => !excluidosLivro.has(l.id)
   );
   const origensUnidas = uniaoPorId(
-    lastro.livroCaixaOrigensCadastro ?? [],
-    incoming.livroCaixaOrigensCadastro ?? []
+    incoming.livroCaixaOrigensCadastro ?? [],
+    lastro.livroCaixaOrigensCadastro ?? []
   );
   const comLivroLastro: AppData = {
     ...incoming,
@@ -436,10 +442,10 @@ export function preservarStaffGestaoContraWipe(
 
   const kept: AppData = {
     ...comLivroLastro,
-    cooperados: uniaoPorId(lastro.cooperados ?? [], incoming.cooperados ?? []),
+    cooperados: uniaoPorId(incoming.cooperados ?? [], lastro.cooperados ?? []),
     notasPedido: uniaoNotasSemRebaixar(lastro.notasPedido ?? [], incoming.notasPedido ?? []),
-    fichaCorrida: uniaoPorId(lastro.fichaCorrida ?? [], incoming.fichaCorrida ?? []),
-    pagamentosCooperado: uniaoPorId(
+    fichaCorrida: uniaoPorId(incoming.fichaCorrida ?? [], lastro.fichaCorrida ?? []),
+    pagamentosCooperado: mergePagamentosCooperadoFromCloud(
       lastro.pagamentosCooperado ?? [],
       incoming.pagamentosCooperado ?? []
     ),

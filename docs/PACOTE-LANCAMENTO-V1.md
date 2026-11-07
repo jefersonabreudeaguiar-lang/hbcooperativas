@@ -1,5 +1,132 @@
 # HB Cooperativas V1 — pacote em validação
 
+## Situação em 06/11/2026
+
+O piloto `dpl_FHnw7FPyWTvv7SfwYiJ7JNLoTDzx` abriu com as contas fictícias
+de cooperado e responsável no navegador. Início e Financeiro mostraram
+R$ 100,00 para o cooperado de teste, inclusive após recarga e retorno ao
+Início. O responsável concluiu a atualização da cooperativa fictícia.
+
+A recarga preservou um rascunho de comunicado, mas perdeu o aviso de envio
+pendente e desabilitou o envio. A correção passa a guardar a fila na cópia
+local e só remove a geração confirmada pela nuvem. Falhas de publicação
+passam a ser propagadas. O teste cobre recarga, outra cooperativa e edição
+feita durante um envio. Tipos e teste passaram. A conferência da correção
+na interface passou no piloto `dpl_AmBFEgYiD4b65jCLuumdGYd6yYiF`. A recarga
+preservou texto, aviso de pendência e botão habilitado. As duas contas foram
+desativadas novamente e suas senhas temporárias invalidadas.
+
+O gate rápido passou em 82,4 segundos antes desse ajuste adicional. Também
+passaram novamente os testes de leitura indisponível, API recuperável,
+rebase, conflito/retomada simulada e ponte de retorno.
+
+Os testes abaixo são histórico. A referência vigente de retorno é a 794.
+Ainda faltam a compra/comprovante na interface, o cenário real de conflito
+com recarga e o fechamento do ensaio das migrações. A versão final precisa
+ser superior à 794. O teste de restauração física continua adiado por
+decisão do proprietário. Este documento não autoriza publicação oficial.
+
+O ensaio transacional reaplicou em ordem as 16 migrações financeiras e
+executou 14 casos SQL com savepoints separados. Tudo passou e foi revertido.
+As duas migrações de snapshot já instaladas foram validadas pelos testes,
+sem recriar a tabela existente. A primeira tentativa de reaplicar também
+essa criação falhou com `relation already exists` e foi revertida. Isso
+comprova a necessidade de distinguir migrações já instaladas na publicação.
+O ensaio não substitui uma migração sobre uma cópia física do banco oficial.
+
+### Relato de pagamentos e transferências de 06/11
+
+O proprietário observou valores diferentes no navegador normal e no anônimo,
+lentidão ao registrar pagamento e repasses entre cooperados sem aparecer.
+Preservar o lançamento avulso de Jeferson para Jovane. Não reaplicar essa
+transferência, nem reconstruir saldos históricos automaticamente.
+
+A rotina oficial de transferência soma o valor ao limite do destinatário.
+O pacote possui uma rotina de saldo próprio com lançamentos de entrada e
+saída, ainda bloqueada para uso. Sua ativação exige fechar a integração e
+os testes da interface. Também foi encontrada uma saída antecipada no
+leitor de descontos quando não existem compras de mercado, anterior à
+consulta das transferências. O tratamento precisa distinguir transferências
+novas das já compensadas manualmente.
+
+Na candidata, a confirmação visual de pagamento passa a ocorrer depois de
+a API aceitar o registro e antes das atualizações adicionais de notas,
+painel e limite. Falha nessa atualização adicional mantém a confirmação
+e informa a pendência. Falha sem resposta de confirmação orienta conferir
+o registro antes de repetir. A causa da diferença normal/anônimo e a
+integração dos repasses seguem em investigação e bloqueiam o OK final.
+
+A confirmação visual antecipada está compilada na homologação
+`dpl_7Gq3ovZWNmRMHYRRx5UJumXV3KMk`, commit
+`d91de40603255038ce6a92052867eb14c4516720`. O gate rápido passou em 71 segundos.
+
+Foi identificada uma configuração ausente nas leituras e gravações JSON do
+Storage. Operacional, contratos e metadados de entregas passam a ser lidos
+com `cache: no-store` e uma referência nova de cache por consulta. As
+gravações desses JSON usam `cacheControl: 0`. As fotos preservam sua política
+de cache. O teste confirmou a troca de entrega conferida para paga nas
+leituras individual e em lote, além das recusas e retomadas já existentes.
+Referência da API instalada e documentação consultada
+https://supabase.com/docs/reference/javascript/storage-from-download.
+Isso remove uma fonte possível de leitura antiga, sem comprovar sozinho a
+causa da divergência normal/anônimo ou resolver a fusão dos dados locais.
+
+### Continuação da correção dos saldos e repasses
+
+Foram reproduzidos em testes dois caminhos de recuperação incorreta. No
+pagamento HB, a mescla usava o máximo do QR e do cache e a normalização
+podia elevar o disponível reduzido pelo servidor. Agora a mescla escolhe
+uma leitura inteira da mesma conta pela data de atualização, com preferência
+ao QR em empate ou data ausente. A normalização preserva o teto recebido.
+Contas bloqueadas não ficam disponíveis por possuírem saldo próprio.
+
+Na proteção do responsável contra dados vazios, o lastro podia sobrepor o
+valor antigo ao registro atualizado de mesmo ID. A mescla agora prefere a
+leitura recebida, respeitando datas anteriores quando ambas são conhecidas.
+Os pagamentos usam a mescla monotônica já existente. O teste reproduziu
+ficha antiga de R$ 999 e ficha paga de R$ 100, preservou R$ 100 e o pagamento
+confirmado, manteve um lançamento manual ausente e recusou resposta antiga.
+
+No fluxo de transferência em validação, a prévia passa a considerar saldo
+próprio e crédito. Após a confirmação, crédito disponível e saldo próprio
+são retornados separadamente. O total do RPC não deve ser somado outra vez
+ao saldo próprio. Falha na releitura não invalida o comprovante nem inventa
+um saldo. O leitor passa a consultar transferências novas mesmo quando
+não há compras de mercado. Nesse caminho novo só usa o débito explícito
+da operação, sem reconstruir transferências legadas sem esse campo.
+
+Testes de saldo recente, isolamento, bloqueio, saldo próprio, confirmação,
+PIN recusado, compensação legada e proteção de snapshots passaram.
+A liberação de operações de saldo próprio continua desabilitada e depende
+da validação autenticada da interface. Nenhuma transferência ou ajuste
+avulso oficial foi regravado durante essa correção.
+
+O deployment `dpl_6bGyUtYDiKP9SBaNdjxVswVTSGjP`, commit `730a12a1`,
+compilou com essas correções. A verificação rápida passou em 79,6 segundos.
+No ensaio de interface, o cooperado fictício abriu o Início com R$ 100 a
+receber e a conta HB com R$ 3 de saldo próprio e R$ 0 de crédito. A cobrança
+fictícia de R$ 1 mostrou corretamente o saldo projetado de R$ 2.
+
+A digitação de um PIN de seis dígitos revelou confirmação antecipada antes
+de terminar a entrada. O app enviou PIN parcial e retornou PIN inválido,
+sem confirmar a compra. A tela foi ajustada para enviar somente pelo botão
+Pagar. O teste inspeciona a entrada de confirmação e garante que ela pertence
+ao clique, além de exercitar confirmação com falha local e recusa de PIN.
+
+A liberação de saldo próprio passa a exigir duas configurações privadas,
+`HB_OWNED_BALANCE_OPERATIONS_ENABLED=true` e `HB_OWNED_BALANCE_CNPJ` com o
+CNPJ autorizado. Sem ambas, ou para outra cooperativa, continua fechada.
+As chamadas de transferência, autorização e conversão informam o CNPJ.
+Essa configuração permite o piloto fictício sem liberar operações oficiais.
+Ainda não foi ativada no projeto oficial.
+
+A fixture desta rodada é `hb_fixture_ui_20261106_receipt`, na cooperativa
+sintética `88888888000181`. Conta HB criada com R$ 3 sintéticos, cobrança
+interna de R$ 1 e mercado fictício temporariamente ativo. Nenhum aceite de
+termo foi registrado, nem PIX ou serviço financeiro externo foi chamado.
+Ao encerrar o ensaio, desativar a conta de login, invalidar os segredos de
+teste e devolver o mercado a PENDING. Preservar a trilha fictícia de teste.
+
 Referência atual de retorno em produção: build 794, commit
 `252b7fa4512c105358613c5b7bb4160009249893`, deployment
 `dpl_FdoEZyKoaUjgXm61AQYK6eaeJNyc`. A 793 publicou a melhoria de

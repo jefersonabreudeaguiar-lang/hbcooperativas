@@ -99,6 +99,24 @@ const PHASE_BIC: Step[] = [
 const PHASE_HB: Step[] = [
   {
     phase: "2",
+    title: "Saldo HB recente e saldo próprio",
+    cmd: "npx",
+    stepArgs: ["tsx", "scripts/test-hb-payment-snapshot-freshness.ts"],
+  },
+  {
+    phase: "2",
+    title: "Transferência confirmada sem duplicar saldo",
+    cmd: "node",
+    stepArgs: ["scripts/test-transfer-confirmed-balance.mjs"],
+  },
+  {
+    phase: "2",
+    title: "Comunicados pendentes após recarga",
+    cmd: "npx",
+    stepArgs: ["tsx", "scripts/test-comunicado-publicacao-pendente.ts"],
+  },
+  {
+    phase: "2",
     title: "Invariantes E2E alinhamento",
     cmd: "npx",
     stepArgs: ["tsx", "scripts/test-e2e-alignment-invariants.ts"],

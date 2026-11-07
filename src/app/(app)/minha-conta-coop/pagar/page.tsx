@@ -78,7 +78,6 @@ function HbCreditPagarContent() {
   const [success, setSuccess] = useState<{ receiptCode: string } | null>(null);
   const [contaLimite, setContaLimite] = useState<ContaCoopLimiteCooperado | null>(null);
   const [limiteContaRefreshing, setLimiteContaRefreshing] = useState(false);
-  const autoPayPinRef = useRef("");
   const payInFlightRef = useRef(false);
   const qrRevalidateRef = useRef(false);
 
@@ -328,25 +327,6 @@ function HbCreditPagarContent() {
 
   const affordOk = limite && intent ? canAffordHbPaymentScanPreview(limite, intent.amountCents) : false;
 
-  useEffect(() => {
-    if (
-      !draft ||
-      !intent ||
-      !limite ||
-      busy ||
-      success ||
-      hasPin === false ||
-      !affordOk ||
-      payPin.length < FINANCIAL_PIN_MIN_LENGTH
-    ) {
-      if (payPin.length < FINANCIAL_PIN_MIN_LENGTH) autoPayPinRef.current = "";
-      return;
-    }
-    if (autoPayPinRef.current === payPin) return;
-    autoPayPinRef.current = payPin;
-    void confirmar();
-  }, [affordOk, busy, confirmar, draft, hasPin, intent, limite, payPin, success]);
-
   const aguardandoCobranca = loadingQr && !draft && !error;
 
   if (!draft && !error && !aguardandoCobranca) {
@@ -509,7 +489,7 @@ function HbCreditPagarContent() {
             disabled={busy || hasPin === false}
             autoFocus
             label="Digite seu PIN"
-            hint={busy ? "Confirmando na nuvem…" : "Confirma automaticamente ao completar"}
+            hint={busy ? "Confirmando na nuvem…" : "Digite seu PIN completo e toque em Pagar"}
           />
         </div>
 
