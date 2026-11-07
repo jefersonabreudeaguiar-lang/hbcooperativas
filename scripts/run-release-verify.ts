@@ -99,6 +99,12 @@ const PHASE_BIC: Step[] = [
 const PHASE_HB: Step[] = [
   {
     phase: "2",
+    title: "Compartilhamento de comprovante sem área de transferência",
+    cmd: "npx",
+    stepArgs: ["tsx", "scripts/test-share-payment-receipt.ts"],
+  },
+  {
+    phase: "2",
     title: "Saldo HB recente e saldo próprio",
     cmd: "npx",
     stepArgs: ["tsx", "scripts/test-hb-payment-snapshot-freshness.ts"],

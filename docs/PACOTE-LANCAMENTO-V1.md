@@ -127,6 +127,17 @@ termo foi registrado, nem PIX ou serviço financeiro externo foi chamado.
 Ao encerrar o ensaio, desativar a conta de login, invalidar os segredos de
 teste e devolver o mercado a PENDING. Preservar a trilha fictícia de teste.
 
+O ensaio real com a correção do PIN confirmou o pagamento fictício de R$ 1
+e exibiu o comprovante `E2BD6CE8` para o cooperado. A conta passou de R$ 3
+para R$ 2 de saldo próprio e o extrato mostrou saída de R$ 1. As entregas
+continuaram com R$ 100 a receber. A consulta SQL confirmou uma transação,
+100 centavos em OWN_BALANCE_USE, saldo próprio de 200 centavos e dívida
+zero. O botão Compartilhar apareceu, mas a cópia do texto não pôde ser
+comprovada nesse navegador. O fluxo passa a oferecer download de texto se
+o compartilhamento nativo e a área de transferência não funcionarem,
+com mensagem visível de resultado. Cancelar o compartilhamento nativo não
+copia nem baixa. O teste dos três caminhos e do cancelamento passou.
+
 Referência atual de retorno em produção: build 794, commit
 `252b7fa4512c105358613c5b7bb4160009249893`, deployment
 `dpl_FdoEZyKoaUjgXm61AQYK6eaeJNyc`. A 793 publicou a melhoria de
