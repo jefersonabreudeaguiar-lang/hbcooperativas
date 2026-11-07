@@ -170,7 +170,7 @@ export async function createCooperadoTransferIntent(
     idempotencyKey?: string;
   }
 ): Promise<{ intent: CooperadoTransferIntent; qrPayload: string }> {
-  if (!isHbOwnedBalanceOperationsReady()) throw new Error("Transferências entre cooperados estão em validação.");
+  if (!isHbOwnedBalanceOperationsReady(input.cooperativeCnpj)) throw new Error("Transferências entre cooperados estão em validação.");
   const digits = normalizeCnpj(input.cooperativeCnpj);
   if (digits.length !== 14 || input.amountCents <= 0) {
     throw new Error("Dados inválidos.");
@@ -391,7 +391,7 @@ export async function authorizeCooperadoTransferPayment(
     }
   | { ok: false; error: string; code?: string }
 > {
-  if (!isHbOwnedBalanceOperationsReady()) return { ok: false, error: "Transferências entre cooperados estão em validação." };
+  if (!isHbOwnedBalanceOperationsReady(input.cooperativeCnpj)) return { ok: false, error: "Transferências entre cooperados estão em validação." };
   const pinCheck = await verifyFinancialPin(
     supabase,
     input.cooperativeCnpj,

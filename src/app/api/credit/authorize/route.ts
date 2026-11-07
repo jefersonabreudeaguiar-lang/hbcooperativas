@@ -67,7 +67,7 @@ export async function POST(request: Request) {
   }
 
   if (isCooperadoTransferIntentId(intentId)) {
-    if (!isHbOwnedBalanceOperationsReady()) {
+    if (!isHbOwnedBalanceOperationsReady(cnpj)) {
       return NextResponse.json({ error: "Transferências entre cooperados estão em validação.", code: "HB_OWNED_BALANCE_NOT_READY" }, { status: 503 });
     }
     const prepareTransfer = await ensureLimitePronto();

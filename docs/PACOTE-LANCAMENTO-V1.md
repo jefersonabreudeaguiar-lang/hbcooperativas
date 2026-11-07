@@ -101,6 +101,32 @@ A liberação de operações de saldo próprio continua desabilitada e depende
 da validação autenticada da interface. Nenhuma transferência ou ajuste
 avulso oficial foi regravado durante essa correção.
 
+O deployment `dpl_6bGyUtYDiKP9SBaNdjxVswVTSGjP`, commit `730a12a1`,
+compilou com essas correções. A verificação rápida passou em 79,6 segundos.
+No ensaio de interface, o cooperado fictício abriu o Início com R$ 100 a
+receber e a conta HB com R$ 3 de saldo próprio e R$ 0 de crédito. A cobrança
+fictícia de R$ 1 mostrou corretamente o saldo projetado de R$ 2.
+
+A digitação de um PIN de seis dígitos revelou confirmação antecipada antes
+de terminar a entrada. O app enviou PIN parcial e retornou PIN inválido,
+sem confirmar a compra. A tela foi ajustada para enviar somente pelo botão
+Pagar. O teste inspeciona a entrada de confirmação e garante que ela pertence
+ao clique, além de exercitar confirmação com falha local e recusa de PIN.
+
+A liberação de saldo próprio passa a exigir duas configurações privadas,
+`HB_OWNED_BALANCE_OPERATIONS_ENABLED=true` e `HB_OWNED_BALANCE_CNPJ` com o
+CNPJ autorizado. Sem ambas, ou para outra cooperativa, continua fechada.
+As chamadas de transferência, autorização e conversão informam o CNPJ.
+Essa configuração permite o piloto fictício sem liberar operações oficiais.
+Ainda não foi ativada no projeto oficial.
+
+A fixture desta rodada é `hb_fixture_ui_20261106_receipt`, na cooperativa
+sintética `88888888000181`. Conta HB criada com R$ 3 sintéticos, cobrança
+interna de R$ 1 e mercado fictício temporariamente ativo. Nenhum aceite de
+termo foi registrado, nem PIX ou serviço financeiro externo foi chamado.
+Ao encerrar o ensaio, desativar a conta de login, invalidar os segredos de
+teste e devolver o mercado a PENDING. Preservar a trilha fictícia de teste.
+
 Referência atual de retorno em produção: build 794, commit
 `252b7fa4512c105358613c5b7bb4160009249893`, deployment
 `dpl_FdoEZyKoaUjgXm61AQYK6eaeJNyc`. A 793 publicou a melhoria de
