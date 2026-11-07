@@ -56,6 +56,21 @@ e informa a pendência. Falha sem resposta de confirmação orienta conferir
 o registro antes de repetir. A causa da diferença normal/anônimo e a
 integração dos repasses seguem em investigação e bloqueiam o OK final.
 
+A confirmação visual antecipada está compilada na homologação
+`dpl_7Gq3ovZWNmRMHYRRx5UJumXV3KMk`, commit
+`d91de40603255038ce6a92052867eb14c4516720`. O gate rápido passou em 71 segundos.
+
+Foi identificada uma configuração ausente nas leituras e gravações JSON do
+Storage. Operacional, contratos e metadados de entregas passam a ser lidos
+com `cache: no-store` e uma referência nova de cache por consulta. As
+gravações desses JSON usam `cacheControl: 0`. As fotos preservam sua política
+de cache. O teste confirmou a troca de entrega conferida para paga nas
+leituras individual e em lote, além das recusas e retomadas já existentes.
+Referência da API instalada e documentação consultada
+https://supabase.com/docs/reference/javascript/storage-from-download.
+Isso remove uma fonte possível de leitura antiga, sem comprovar sozinho a
+causa da divergência normal/anônimo ou resolver a fusão dos dados locais.
+
 Referência atual de retorno em produção: build 794, commit
 `252b7fa4512c105358613c5b7bb4160009249893`, deployment
 `dpl_FdoEZyKoaUjgXm61AQYK6eaeJNyc`. A 793 publicou a melhoria de

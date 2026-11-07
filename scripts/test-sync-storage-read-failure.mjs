@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
+import { webcrypto } from 'node:crypto';
 
 const exports = {};
 const env = {};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/supabase/cooperativaSyncStorage.ts', 'utf8'), {
   compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
-}).outputText, {exports, Buffer, console, process: {env}, require: name => {
+}).outputText, {exports, Buffer, console, crypto:webcrypto, process: {env}, require: name => {
   if (name.endsWith('hbCreditOperacionalFinancialProjection')) return {projectOperationalFinancialRecords: async (_s, _c, p) => p};
   if (name.endsWith('fichaCorridaPagamentoGuard')) return {aplicarPreservacaoFichasReferenciadasPorPagamentosNoOperacional: (_b, p) => ({payload:p})};
   if (name.endsWith('livroCaixaPagamentoGuard')) return {aplicarPreservacaoLivroCaixaPagamentosConfirmadosNoOperacional: (_b, p) => ({payload:p})};
@@ -15,9 +16,19 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/supabase/cooperat
 }});
 
 let writes = 0;
+const readNonces = new Set();
 const client = (download, buckets = {data: [{name:'hb-cooperativa-sync', file_size_limit: 52428800}], error:null}) => ({storage: {
   listBuckets: async () => buckets,
-  from: () => ({download: async () => download, upload: async () => {writes++; return {error:null};}}),
+  from: () => ({download: async (_path, options, parameters) => {
+    assert.equal(parameters.cache, 'no-store');
+    assert.ok(options.cacheNonce, 'Leitura financeira precisa contornar cópias antigas do CDN');
+    assert.equal(readNonces.has(options.cacheNonce), false, 'Cada leitura consulta uma referência nova');
+    readNonces.add(options.cacheNonce);
+    return download;
+  }, upload: async (_path, _body, options) => {
+    assert.equal(options.cacheControl, '0', 'Snapshot financeiro não deve receber cache de uma hora');
+    writes++; return {error:null};
+  }}),
 }});
 for (const response of [
   {data:null, error:{statusCode:503, message:'offline'}},
@@ -89,3 +100,29 @@ activeClient = client({data:{text:async () => JSON.stringify(payload)},error:nul
 assert.equal((await route.POST(request('contratos'))).status,201);
 assert.equal(writes,1);
 console.log('PASS: API devolve erro recuperável, preserva dados e permite nova tentativa após recuperação.');
+
+const notas = {};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/supabase/notasStorage.ts', 'utf8'), {
+  compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
+}).outputText, {exports:notas, Buffer, console, crypto:webcrypto, require: () => ({})});
+let statusAtual = 'conferida';
+const nonceNotas = new Set();
+const notasClient = {storage: {
+  listBuckets: async () => ({data:[{name:'hb-entregas'}]}),
+  from: () => ({
+    list: async () => ({data:[{name:'fixture.json'}]}),
+    download: async (_path, options, parameters) => {
+      assert.equal(parameters.cache, 'no-store');
+      assert.ok(options.cacheNonce);
+      assert.equal(nonceNotas.has(options.cacheNonce), false);
+      nonceNotas.add(options.cacheNonce);
+      return {error:null, data:{text:async () => JSON.stringify({id:'fixture',status:statusAtual,updatedAt:new Date().toISOString()})}};
+    },
+  }),
+}};
+assert.equal((await notas.fetchNotaMetaFromStorage(notasClient,cnpj,'fixture')).status,'conferida');
+statusAtual = 'paga';
+assert.equal((await notas.fetchNotaMetaFromStorage(notasClient,cnpj,'fixture')).status,'paga');
+assert.equal((await notas.fetchNotaFromStorage(notasClient,cnpj,'fixture')).status,'paga');
+assert.equal((await notas.fetchNotasFromStorage(notasClient,cnpj))[0].status,'paga');
+console.log('PASS: leituras individual e em lote de entrega paga não reutilizam a referência de cache antiga.');
