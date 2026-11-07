@@ -945,6 +945,8 @@ export interface FechamentoSnapshot {
 export interface AppData {
   /** Local only. Identifies the revision stored alongside this operational copy. */
   operacionalCheckpoint?: { scope: string; id: string };
+  /** Local outbox. A cloud acknowledgement clears only the submitted generation. */
+  comunicadosPublicacaoPendente?: Record<string, { token: string; ids: string[] }>;
   cooperativas: Cooperativa[];
   users: User[];
   cooperados: Cooperado[];
