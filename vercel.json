@@ -2,8 +2,10 @@
   "installCommand": "npm ci",
   "buildCommand": "npm run build",
   "env": {
-    "HB_OPERACIONAL_VERSIONED_SYNC": "true",
+    "HB_OPERACIONAL_VERSIONED_SYNC": "false",
     "HB_OPERACIONAL_VERSIONED_SYNC_CNPJ": "88888888000181",
+    "HB_OWNED_BALANCE_OPERATIONS_ENABLED": "true",
+    "HB_OWNED_BALANCE_CNPJ": "88888888000181",
     "APP_ENV": "production",
     "BIC_ENVIRONMENT": "PRODUCTION",
     "NEXT_PUBLIC_HB_BIC_PRODUCTION_LOCK": "true",
