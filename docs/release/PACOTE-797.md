@@ -9,7 +9,16 @@ O SHA atual para aprovação é `74c612de4a4262cb2ce358658f521bc906895bdb`,
 deployment de homologação `dpl_4Gc9h2LSnjcRpit2cgTpv6cw6y4s`, READY:
 https://hbcooperativas-homologacao-v1-kwl984uqd-hbcooperativas.vercel.app
 Substitui a seleção anterior `41c34a25`, preservada abaixo como evidência histórica.
-A publicação oficial permanece aguardando OK do proprietário.
+A publicação oficial foi autorizada pelo proprietário e concluída em 08/11/2026:
+deployment `dpl_3F2SkTkp8dUuT1dEKgkxjfh27b7c`, SHA acima, build 797,
+https://hbcooperativas.vercel.app. O build está READY e a identidade foi conferida
+no domínio oficial. Login/JS/SW responderam 200; APIs sem sessão retornaram 401.
+A sessão autenticada existente abriu painel, Conferir/Em aberto e Livro Caixa.
+O arquivo operacional foi comparado antes, depois e após a navegação e permaneceu
+idêntico. Não houve migration nem reimportação de dados. Consulta de logs error/fatal
+do deployment não retornou entradas; não há drains externos configurados.
+Novo relato posterior à publicação: itens pagos ainda aparecem na Ficha e valores
+acertados aparecem no HB Créditos. Investigar em hotfix separado, sem apagar histórico.
 
 A API de financeiro já existente passa a retornar também os pagamentos confirmados
 do próprio cooperado, sem HTML do recibo, assinatura ou dados bancários. A tela
