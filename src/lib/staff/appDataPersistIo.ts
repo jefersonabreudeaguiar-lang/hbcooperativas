@@ -35,10 +35,33 @@ function primaryStaffGestaoCnpjFromLegacyBlob(data: AppData): string {
 export const APP_DATA_STORAGE_KEY = "coopeagriplla_data";
 
 export type AppDataPersistStorage = {
+  readonly length?: number;
+  key?(index: number): string | null;
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
 };
+
+/** Re-encode known JSON caches losslessly. Never remove data, media, queues or credentials. */
+export function compactarCachesAppSemPerda(store: AppDataPersistStorage, cnpj: string): void {
+  const keys = new Set([APP_DATA_STORAGE_KEY, staffGestaoPersistKey(cnpj), `hb-staff-gestao-lkg-v1:${cnpj}`, 'hb-staff-gestao-lkg-v1']);
+  if (store.key && typeof store.length === 'number') {
+    for (let i = 0; i < store.length; i++) {
+      const key = store.key(i);
+      if (key && /^(?:coopeagriplla_data(?::\d{14}(?::contador)?)?|hb-staff-gestao-lkg-v1(?::\d{14})?)$/.test(key)) keys.add(key);
+    }
+  }
+  const values = [...keys].map(key => ({ key, raw: store.getItem(key) })).filter((r): r is { key: string; raw: string } => Boolean(r.raw)).sort((a,b) => b.raw.length-a.raw.length);
+  for (const {key, raw} of values) {
+    if (raw.startsWith(COMPRESSED_PREFIX)) continue;
+    try {
+      const value = JSON.parse(raw);
+      if (!value || typeof value !== 'object') continue;
+      const compact = compactPersisted(raw);
+      if (compact.length < raw.length && decodePersisted(compact) === raw) store.setItem(key, compact);
+    } catch { /* Atomic setItem preserves every byte of the previous copy on failure. */ }
+  }
+}
 
 export type AppDataPersistHint = {
   role?: string;
@@ -126,7 +149,12 @@ export function migrateLegacyAppDataIfMatches(
     if (!parsed || typeof parsed !== "object") return null;
     const owner = primaryStaffGestaoCnpjFromLegacyBlob(parsed);
     if (!owner || owner !== digits) return null;
-    store.setItem(staffGestaoPersistKey(digits), raw);
+    try { store.setItem(staffGestaoPersistKey(digits), raw); }
+    catch {
+      // A full browser must not turn an existing pending delivery into an empty base.
+      // The original legacy key stays intact even if migration cannot be persisted yet.
+      try { compactarCachesAppSemPerda(store, digits); store.setItem(staffGestaoPersistKey(digits), compactPersisted(raw)); } catch { /* read through original */ }
+    }
     return raw;
   } catch {
     return null;
@@ -161,6 +189,7 @@ export function writeAppDataPersistRaw(serialized: string, opts?: AppDataPersist
     // uma falha mantém a cópia anterior, sem apagar lançamentos pendentes.
     if (!sessionLooksStaffGestao(hint.role)) return false;
     try {
+      compactarCachesAppSemPerda(hint.storage, hint.cnpj);
       // O lastro é uma segunda cópia da base; compactá-lo também libera
       // espaço sem descartar nenhum registro ou chave de outra conta.
       const backupKey = `hb-staff-gestao-lkg-v1:${hint.cnpj}`;

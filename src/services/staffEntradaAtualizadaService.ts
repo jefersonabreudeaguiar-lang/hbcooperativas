@@ -2,6 +2,8 @@ import type { User } from "@/types";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import { getData, saveStaffEntradaCloud, staffEntradaEscritaOcupada } from "@/services/dataStore";
 import { iniciarStaffEntrada, aguardarEscritasStaff } from '@/lib/staff/staffEntradaCoordination';
+import { conferirEntradaStaffExistente, registrarEntradaStaffConferida } from '@/lib/staff/staffEntradaVerifiedCache';
+import { fetchCooperativaCloudRevision } from '@/services/cooperativaSyncRevisionService';
 import { reconciliarEntradaStaffCloud } from '@/lib/staff/staffEntradaCloudReconcile';
 import { guardarCopiasEntradaStaff } from '@/lib/staff/staffEntradaRecovery';
 import { listPendingEntregaPublish } from '@/services/pendingEntregaPublishService';
@@ -31,7 +33,22 @@ export async function atualizarEntradaStaff(user: Omit<User, "password">, ativa:
   const release = iniciarStaffEntrada();
   try {
     await aguardarEscritasStaff(staffEntradaEscritaOcupada, ativa);
-    return await atualizarEntradaStaffLivre(user, ativa);
+    const owner = user.cooperativaCnpj ? `${user.id}:${user.role}:${user.cooperativaCnpj}:803` : '';
+    let store: Storage | null = null;
+    try { if (typeof window !== 'undefined') store = window.localStorage; } catch { /* optional accelerator */ }
+    const existing = await conferirEntradaStaffExistente(owner, getData, async () => {
+      const [revision, cadastros] = await Promise.all([fetchCooperativaCloudRevision(user.cooperativaCnpj!), fetchCooperadosFromCloud(user.cooperativaCnpj!)]);
+      if (!revision || !cadastros.ok) return null;
+      const current = getData(), coopId = resolveGestaoCooperativaId(user, current);
+      if (!coopId) return null;
+      const merged = mergeCloudCooperadosIntoData(current, cadastros.cooperados, user.cooperativaCnpj!, coopId);
+      return JSON.stringify(merged.cooperados) === JSON.stringify(current.cooperados) ? revision : null;
+    }, store);
+    if (!ativa()) throw Error('Entrada cancelada.');
+    if (existing) return existing;
+    const revision = await atualizarEntradaStaffLivre(user, ativa);
+    await registrarEntradaStaffConferida(owner, getData(), revision, store);
+    return revision;
   } finally { release(); }
 }
 
