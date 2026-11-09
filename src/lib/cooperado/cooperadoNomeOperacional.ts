@@ -1,4 +1,5 @@
 import type { AppData } from "@/types";
+import { nomeCooperadoSnapshotUtilizavel as nomeValido } from "@/lib/cooperado/nomeCooperadoValido";
 
 /** Nome para gestão/Conferir quando o cadastro local ainda não sincronizou (ficha/nota). */
 export function resolverNomeCooperadoGestao(
@@ -9,15 +10,15 @@ export function resolverNomeCooperadoGestao(
   const direct = data.cooperados.find(
     (c) => c.cooperativaId === cooperativaId && c.id === cooperadoId
   );
-  if (direct?.nomeCompleto?.trim()) return direct.nomeCompleto.trim();
+  if (nomeValido(direct?.nomeCompleto)) return nomeValido(direct?.nomeCompleto)!;
 
   for (const f of data.fichaCorrida ?? []) {
     if (f.cooperativaId !== cooperativaId || f.cooperadoId !== cooperadoId) continue;
-    if (f.cooperadoNomeSnapshot?.trim()) return f.cooperadoNomeSnapshot.trim();
+    if (nomeValido(f.cooperadoNomeSnapshot)) return nomeValido(f.cooperadoNomeSnapshot)!;
   }
   for (const n of data.notasPedido ?? []) {
     if (n.cooperativaId !== cooperativaId || n.cooperadoId !== cooperadoId) continue;
-    if (n.cooperadoNomeSnapshot?.trim()) return n.cooperadoNomeSnapshot.trim();
+    if (nomeValido(n.cooperadoNomeSnapshot)) return nomeValido(n.cooperadoNomeSnapshot)!;
   }
   for (const n of data.notasPedido ?? []) {
     if (n.cooperativaId !== cooperativaId) continue;
@@ -25,7 +26,7 @@ export function resolverNomeCooperadoGestao(
     const ficha = (data.fichaCorrida ?? []).find(
       (row) => row.cooperativaId === cooperativaId && row.notaPedidoId === n.id
     );
-    if (ficha?.cooperadoNomeSnapshot?.trim()) return ficha.cooperadoNomeSnapshot.trim();
+    if (nomeValido(ficha?.cooperadoNomeSnapshot)) return nomeValido(ficha?.cooperadoNomeSnapshot)!;
   }
   return "";
 }

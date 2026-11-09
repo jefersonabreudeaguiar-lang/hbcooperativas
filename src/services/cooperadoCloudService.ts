@@ -6,6 +6,7 @@ import type {
 } from "@/types";
 import { findCooperativaByCnpj, getCooperativaById, normalizeCnpj } from "@/utils/cooperativa";
 import { resolverNomeCooperadoGestao } from "@/lib/cooperado/cooperadoNomeOperacional";
+import { nomeCooperadoSnapshotUtilizavel } from '@/lib/cooperado/nomeCooperadoValido';
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 
 export { resolverNomeCooperadoGestao } from "@/lib/cooperado/cooperadoNomeOperacional";
@@ -742,13 +743,13 @@ export function getCooperadoNomeResolvido(
 ): string {
   if (!cooperativaId) {
     const coop = data.cooperados.find((c) => c.id === cooperadoId);
-    if (coop?.nomeCompleto?.trim()) return coop.nomeCompleto.trim();
+    if (nomeCooperadoSnapshotUtilizavel(coop?.nomeCompleto)) return nomeCooperadoSnapshotUtilizavel(coop?.nomeCompleto)!;
     return resolverNomeCooperadoGestao(data, cooperadoId, coop?.cooperativaId ?? "") || "Desconhecido";
   }
 
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
-  const coop = data.cooperados.find((c) => c.id === canonico);
-  if (coop?.nomeCompleto?.trim()) return coop.nomeCompleto.trim();
+  const coop = data.cooperados.find((c) => c.id === canonico && c.cooperativaId === cooperativaId);
+  if (nomeCooperadoSnapshotUtilizavel(coop?.nomeCompleto)) return nomeCooperadoSnapshotUtilizavel(coop?.nomeCompleto)!;
 
   const nomeCanonico = resolverNomeCooperadoGestao(data, canonico, cooperativaId);
   if (nomeCanonico) return nomeCanonico;

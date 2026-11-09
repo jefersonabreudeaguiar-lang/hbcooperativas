@@ -315,6 +315,7 @@ import {
   liberarEspacoArmazenamento,
   agruparPendentesPorCooperado,
   getChaveGrupoConferencia,
+  getNomeGrupoConferencia,
   notaPertenceGrupoConferencia,
   contarFotosEnviadasNota,
   contarFotosEnviadasNotas,
@@ -6182,7 +6183,7 @@ export default function NotasPedidoStaffMain() {
               </p>
             )}
             {!isCooperado && (
-              <p className="text-sm"><strong>Cooperado:</strong> {getCooperadoNome(data.cooperados, selectedNota.cooperadoId)}</p>
+              <p className="text-sm"><strong>Cooperado:</strong> {getNomeGrupoConferencia([selectedNota], data, coopId)}</p>
             )}
             <p className="text-sm"><strong>Escola:</strong> {getEscolaNotaLabel(selectedNota, data.instituicoes)}</p>
             <p className="text-sm"><strong>Data:</strong> {formatDate(selectedNota.dataEntrega)}</p>

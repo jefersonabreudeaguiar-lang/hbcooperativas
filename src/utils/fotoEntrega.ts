@@ -1,5 +1,7 @@
 import type { AppData, NotaPedido } from "@/types";
 import { resolverNomeCooperadoGestao } from "@/lib/cooperado/cooperadoNomeOperacional";
+import { nomeCooperadoSnapshotUtilizavel } from '@/lib/cooperado/nomeCooperadoValido';
+export { nomeCooperadoSnapshotUtilizavel } from '@/lib/cooperado/nomeCooperadoValido';
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { cpfCooperadoDigits, escolherCooperadoCanonico, nomeNormalizadoCooperado } from "@/utils/cooperadoDedupe";
 import { isInlineDataUrl } from "@/utils/mediaHelpers";
@@ -298,13 +300,6 @@ export interface GrupoConferenciaEntrega {
 }
 
 /** Placeholder da nuvem — não é nome de cooperado e não pode virar rótulo da fila. */
-const NOME_COOPERADO_GENERICO = /^(desconhecido|cooperado|sem nome|—|-)$/i;
-
-export function nomeCooperadoSnapshotUtilizavel(nome?: string | null): string | undefined {
-  const t = nome?.trim();
-  if (!t || NOME_COOPERADO_GENERICO.test(t)) return undefined;
-  return t;
-}
 
 function tsMaisRecenteGrupo(notas: NotaPedido[]): number {
   let max = 0;
@@ -344,10 +339,14 @@ export function resolverCooperadoIdGrupoConferencia(
     nomeCooperadoSnapshotUtilizavel(resolverNomeCooperadoGestao(data, nota.cooperadoId, coopId));
   if (snapshot) {
     const snapNorm = nomeNormalizadoCooperado(snapshot);
-    const byName = data.cooperados.find(
+    const byName = data.cooperados.filter(
       (c) => c.cooperativaId === coopId && nomeNormalizadoCooperado(c.nomeCompleto) === snapNorm
     );
-    if (byName) return canonizarPorTitular(byName.id);
+    if (byName.length === 1) return canonizarPorTitular(byName[0].id);
+    if (byName.length > 1) {
+      const cpf = cpfCooperadoDigits(byName[0].cpfCnpj);
+      if (cpf.length >= 11 && byName.every(c => cpfCooperadoDigits(c.cpfCnpj) === cpf)) return canonizarPorTitular(byName[0].id);
+    }
   }
 
   return canonizarPorTitular(nota.cooperadoId);
@@ -369,6 +368,13 @@ export function getNomeGrupoConferencia(
 ): string {
   const coopId = cooperativaId ?? notas[0]?.cooperativaId;
   for (const n of notas) {
+    if (coopId && n.cooperativaId !== coopId) continue;
+    const cadastro = data.cooperados.find(c => c.id === n.cooperadoId && (!coopId || c.cooperativaId === coopId));
+    const nome = nomeCooperadoSnapshotUtilizavel(cadastro?.nomeCompleto);
+    if (nome) return nome;
+  }
+  for (const n of notas) {
+    if (coopId && n.cooperativaId !== coopId) continue;
     const snap = nomeCooperadoSnapshotUtilizavel(n.cooperadoNomeSnapshot);
     if (snap) return snap;
   }
@@ -382,10 +388,10 @@ export function getNomeGrupoConferencia(
     }
   }
   for (const n of notas) {
-    const cadastro = data.cooperados.find((c) => c.id === n.cooperadoId)?.nomeCompleto?.trim();
+    const cadastro = nomeCooperadoSnapshotUtilizavel(data.cooperados.find((c) => c.id === n.cooperadoId && (!coopId || c.cooperativaId === coopId))?.nomeCompleto);
     if (cadastro) return cadastro;
   }
-  return "Cooperado";
+  return "Identificação pendente";
 }
 
 export function resolverCooperadoIdDoGrupo(
@@ -914,6 +920,7 @@ export function mergeNotaComFotos(a: NotaPedido, b: NotaPedido): NotaPedido {
 
   const merged: NotaPedido = {
     ...meta,
+    cooperadoNomeSnapshot: nomeCooperadoSnapshotUtilizavel(meta.cooperadoNomeSnapshot) ?? nomeCooperadoSnapshotUtilizavel(other.cooperadoNomeSnapshot),
     status,
     fotoPedido: rich.fotoPedido ?? fotosPedido?.[0] ?? meta.fotoPedido,
     fotosPedido,

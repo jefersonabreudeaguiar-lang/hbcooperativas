@@ -4,6 +4,7 @@ import { getData, saveStaffEntradaCloud, staffEntradaEscritaOcupada } from "@/se
 import { iniciarStaffEntrada, aguardarEscritasStaff } from '@/lib/staff/staffEntradaCoordination';
 import { conferirEntradaStaffExistente, registrarEntradaStaffConferida } from '@/lib/staff/staffEntradaVerifiedCache';
 import { fetchCooperativaCloudRevision } from '@/services/cooperativaSyncRevisionService';
+import { APP_BUILD_VERSION } from '@/lib/appBuildVersion';
 import { reconciliarEntradaStaffCloud } from '@/lib/staff/staffEntradaCloudReconcile';
 import { guardarCopiasEntradaStaff } from '@/lib/staff/staffEntradaRecovery';
 import { listPendingEntregaPublish } from '@/services/pendingEntregaPublishService';
@@ -33,7 +34,7 @@ export async function atualizarEntradaStaff(user: Omit<User, "password">, ativa:
   const release = iniciarStaffEntrada();
   try {
     await aguardarEscritasStaff(staffEntradaEscritaOcupada, ativa);
-    const owner = user.cooperativaCnpj ? `${user.id}:${user.role}:${user.cooperativaCnpj}:803` : '';
+    const owner = user.cooperativaCnpj ? `${user.id}:${user.role}:${user.cooperativaCnpj}:${APP_BUILD_VERSION}` : '';
     let store: Storage | null = null;
     try { if (typeof window !== 'undefined') store = window.localStorage; } catch { /* optional accelerator */ }
     const existing = await conferirEntradaStaffExistente(owner, getData, async () => {

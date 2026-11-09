@@ -4,6 +4,7 @@ import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
 import { protectNotaAgainstStatusDowngrade, isNotaNaFilaConferenciaResponsavel, sanitizarNotaParaFilaConferencia } from "@/utils/notaStatus";
 import { mergeNotaComFotos } from "@/utils/fotoEntrega";
 import { isInlineDataUrl } from "@/utils/mediaHelpers";
+import { identificarNomeNota, validarNomeNotaParaFila } from '@/lib/supabase/notaAutoria';
 
 const BUCKET = "hb-entregas";
 export const FOTOS_STORAGE_PARTS = "parts";
@@ -236,11 +237,13 @@ export async function uploadNotaFotoPartBuffer(
   cooperadoNome?: string,
   contentType = "image/jpeg"
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  try { nota = await identificarNomeNota(supabase, cnpj, nota, cooperadoNome); }
+  catch (e) { return { ok: false, error: e instanceof Error ? e.message : 'Cooperado não identificado.' }; }
   await ensureEntregasBucket(supabase);
 
   const metaPayload: NotaPedido = {
     ...nota,
-    cooperadoNomeSnapshot: nota.cooperadoNomeSnapshot ?? cooperadoNome,
+    cooperadoNomeSnapshot: nota.cooperadoNomeSnapshot,
     cooperativaCnpj: cnpj,
     fotoPedido: undefined,
     fotosPedido: undefined,
@@ -332,22 +335,26 @@ export async function uploadNotaToStorage(
   nota: NotaPedido,
   cooperadoNome?: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  try { nota = await identificarNomeNota(supabase, cnpj, nota, cooperadoNome); }
+  catch (e) { return { ok: false, error: e instanceof Error ? e.message : 'Cooperado não identificado.' }; }
   await ensureEntregasBucket(supabase);
 
   // Nunca rebaixar status no storage (ex.: rascunho por cima de aguardando = some da fila).
   const existing = await fetchNotaMetaFromStorage(supabase, cnpj, nota.id);
-  const protectedNota = existing
+  let protectedNota = existing
     ? protectNotaAgainstStatusDowngrade(existing, {
         ...nota,
-        cooperadoNomeSnapshot: nota.cooperadoNomeSnapshot ?? cooperadoNome,
+        cooperadoNomeSnapshot: nota.cooperadoNomeSnapshot,
         cooperativaCnpj: cnpj,
       })
     : {
         ...nota,
-        cooperadoNomeSnapshot: nota.cooperadoNomeSnapshot ?? cooperadoNome,
+        cooperadoNomeSnapshot: nota.cooperadoNomeSnapshot,
         cooperativaCnpj: cnpj,
       };
 
+  try { protectedNota = validarNomeNotaParaFila(protectedNota, existing?.cooperadoNomeSnapshot); }
+  catch (e) { return { ok: false, error: e instanceof Error ? e.message : 'Cooperado não identificado.' }; }
   const body = JSON.stringify(protectedNota);
   const { error } = await supabase.storage
     .from(BUCKET)
@@ -753,6 +760,8 @@ export async function upsertNotasInTable(
   cooperadoNome?: string
 ): Promise<{ ok: true } | { ok: false; tableMissing: boolean; error?: string }> {
   if (notas.length === 0) return { ok: true };
+  try { notas = await Promise.all(notas.map(n => identificarNomeNota(supabase, cnpj, n, cooperadoNome))); }
+  catch (e) { return { ok: false, tableMissing: false, error: e instanceof Error ? e.message : 'Cooperado não identificado.' }; }
 
   const ids = notas.map((n) => n.id);
   const { data: existingRows, error: existingError } = await supabase
@@ -790,11 +799,14 @@ export async function upsertNotasInTable(
     return sanitizarNotaParaFilaConferencia(next);
   });
 
+  try {
+    for (let i = 0; i < protectedNotas.length; i++) protectedNotas[i] = validarNomeNotaParaFila(protectedNotas[i], existingById.get(protectedNotas[i].id)?.payload?.cooperadoNomeSnapshot);
+  } catch (e) { return { ok: false, tableMissing: false, error: e instanceof Error ? e.message : 'Cooperado não identificado.' }; }
   const rows = protectedNotas.map((nota) => ({
     id: nota.id,
     cooperativa_cnpj: cnpj,
     cooperado_id: nota.cooperadoId,
-    cooperado_nome: cooperadoNome || nota.cooperadoNomeSnapshot || nota.cooperadoId,
+    cooperado_nome: nota.cooperadoNomeSnapshot || nota.cooperadoId,
     status: nota.status,
     mes_referencia: nota.mesReferencia,
     payload: nota,

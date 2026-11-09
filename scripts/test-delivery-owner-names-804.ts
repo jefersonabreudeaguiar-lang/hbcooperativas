@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import { identificarNomeNota, validarNomeNotaParaFila } from '../src/lib/supabase/notaAutoria';
+import { nomeCooperadoSnapshotUtilizavel } from '../src/lib/cooperado/nomeCooperadoValido';
+import { getNomeGrupoConferencia, mergeNotaComFotos, resolverCooperadoIdGrupoConferencia } from '../src/utils/fotoEntrega';
+import { resolverNomeCooperadoGestao } from '../src/lib/cooperado/cooperadoNomeOperacional';
+import { emptyInitialData } from '../src/mock/data';
+import type { NotaPedido, AppData, Cooperado } from '../src/types';
+import type { SupabaseClient } from '@supabase/supabase-js';
+async function main(){
+ const cnpj='88888888000181';let member:Record<string,string>|null={id:'member',nomeCompleto:'Maria da Silva',cooperativaCnpj:cnpj};let downloads=0;
+ const sb={storage:{from(bucket:string){assert.equal(bucket,'hb-cooperados');return {async download(path:string){downloads++;assert.equal(path,`${cnpj}/member.json`);return member?{data:new Blob([JSON.stringify({cooperado:member})]),error:null}:{data:null,error:Error('Offline')}}}}}} as unknown as SupabaseClient;
+ const note={id:'note',cooperadoId:'member',cooperativaId:'coop',status:'aguardando_conferencia',cooperadoNomeSnapshot:'Desconhecido',fotoPedido:'data:image/jpeg;base64,KEEP',valorBruto:123,updatedAt:'2026-11-09T10:00:00Z'} as NotaPedido;
+ const before=JSON.stringify(note);
+ const named=await identificarNomeNota(sb,cnpj,note,'Nome errado no aparelho');
+ assert.equal(named.cooperadoNomeSnapshot,'Maria da Silva');assert.equal(named.cooperadoId,note.cooperadoId);assert.equal(named.fotoPedido,note.fotoPedido);assert.equal(named.valorBruto,note.valorBruto);assert.equal(JSON.stringify(note),before);
+ for(const invalid of ['Desconhecido','Nome desconhecido','Cooperado desconhecido','Cooperado','sem nome','c_123_ab','—',''])assert.equal(nomeCooperadoSnapshotUtilizavel(invalid),undefined);
+ member=null;await assert.rejects(identificarNomeNota(sb,cnpj,note,'Desconhecido'),/identificar o cooperado/);
+ assert.equal(validarNomeNotaParaFila(note,'Maria da Silva').cooperadoNomeSnapshot,'Maria da Silva');
+ assert.throws(()=>validarNomeNotaParaFila(note,'Desconhecido'),/identificar/);
+ assert.equal(validarNomeNotaParaFila({...note,status:'rascunho'}).cooperadoNomeSnapshot,undefined,'draft does not persist placeholder either');
+ assert.equal((await identificarNomeNota(sb,cnpj,{...note,cooperadoNomeSnapshot:'Maria da Silva'})).cooperadoNomeSnapshot,'Maria da Silva');
+ member={id:'member',nomeCompleto:'Outro titular',cooperativaCnpj:'11111111000111'};await assert.rejects(identificarNomeNota(sb,cnpj,note),/identificar/);
+ const data={...structuredClone(emptyInitialData),cooperados:[{id:'member',cooperativaId:'other',nomeCompleto:'Pessoa de outra cooperativa'},{id:'member',cooperativaId:'coop',nomeCompleto:'Desconhecido'}] as Cooperado[],notasPedido:[named]} as AppData;
+ assert.equal(getNomeGrupoConferencia([named],data,'coop'),'Maria da Silva');
+ assert.equal(resolverNomeCooperadoGestao(data,'member','coop'),'Maria da Silva');
+ data.cooperados[1].nomeCompleto='Nome confirmado no cadastro';assert.equal(getNomeGrupoConferencia([named],data,'coop'),'Nome confirmado no cadastro');
+ const merged=mergeNotaComFotos(named,{...note,updatedAt:'2026-11-09T11:00:00Z'});
+ assert.equal(merged.cooperadoNomeSnapshot,'Maria da Silva','newer placeholder cannot replace valid snapshot');
+ data.cooperados=[{id:'one',nomeCompleto:'Homônimo',cooperativaId:'coop'},{id:'two',nomeCompleto:'Homônimo',cooperativaId:'coop'}] as Cooperado[];
+ assert.equal(resolverCooperadoIdGrupoConferencia(data,{...note,cooperadoNomeSnapshot:'Homônimo'},'coop'),'member','ambiguous names never reassign delivery identity');
+ assert.ok(downloads>=4);console.log('PASS: exact tenant/member identity, canonical name, unknown-name rejection, pending preservation, snapshot recovery and merge protection.');
+}
+void main();
