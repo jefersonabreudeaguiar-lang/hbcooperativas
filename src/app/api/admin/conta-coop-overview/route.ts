@@ -14,6 +14,7 @@ export async function GET(request: Request) {
   if (adminDenied) return adminDenied;
 
   const url = new URL(request.url);
+  const allPending = url.searchParams.get('allPending') === '1';
   const mesReferencia = url.searchParams.get("mes")?.trim() || defaultMesReferenciaContaCoopAdmin();
 
   if (!isSupabaseConfigured()) {
@@ -64,15 +65,20 @@ export async function GET(request: Request) {
     });
   }
 
+  const readAllocations = async () => {
+    const rows: Record<string, unknown>[] = [];
+    for (let offset = 0; ; offset += 500) {
+      let query = supabase.from('hb_credit_discount_allocations').select('id, cooperative_cnpj, gross_cents, discount_cents, net_partner_cents, cashback_cents, app_cents, coop_cents, app_pool_status, coop_pool_status, app_repasse_id, cashback_status').neq('cashback_status', 'REVERSED').order('id').range(offset, offset + 499);
+      if (!allPending) query = query.eq('mes_referencia', mesReferencia);
+      const result = await query;
+      if (result.error) return { data: null, error: result.error };
+      rows.push(...(result.data ?? []));
+      if ((result.data?.length ?? 0) < 500) return { data: rows, error: null };
+    }
+  };
   const [{ data: allocations, error: allocError }, { data: partners, error: partnersError }, { data: repasses, error: repasseError }] =
     await Promise.all([
-      supabase
-        .from("hb_credit_discount_allocations")
-        .select(
-          "cooperative_cnpj, gross_cents, discount_cents, net_partner_cents, cashback_cents, app_cents, coop_cents, app_pool_status, coop_pool_status, app_repasse_id, cashback_status"
-        )
-        .eq("mes_referencia", mesReferencia)
-        .neq("cashback_status", "REVERSED"),
+      readAllocations(),
       supabase.from("hb_credit_partners").select("cooperative_cnpj, status, name"),
       supabase
         .from("hb_credit_app_repasse")
@@ -84,6 +90,7 @@ export async function GET(request: Request) {
   if (allocError) warnings.push(`Alocações: ${allocError.message}`);
   if (partnersError) warnings.push(`Mercados: ${partnersError.message}`);
   if (repasseError) warnings.push(`Repasses: ${repasseError.message}`);
+  if (warnings.length) return NextResponse.json({ ok: false, error: 'Não foi possível conferir os valores na nuvem.' }, { status: 503 });
 
   const overview: ContaCoopPlatformOverview = buildContaCoopPlatformOverview({
     mesReferencia,
@@ -101,5 +108,5 @@ export async function GET(request: Request) {
     ok: true,
     overview,
     warning: warnings.length ? warnings.join(" · ") : undefined,
-  });
+  }, { headers: { 'Cache-Control': 'private, no-store' } });
 }

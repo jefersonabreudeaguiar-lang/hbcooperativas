@@ -21,6 +21,8 @@ export async function GET() {
     return NextResponse.json({ ok: true, pricing: fallback });
   }
 
-  const pricing = await fetchCobrancaSaasPlatformSettings(supabase);
-  return NextResponse.json({ ok: true, pricing });
+  try {
+    const pricing = await fetchCobrancaSaasPlatformSettings(supabase, true);
+    return NextResponse.json({ ok: true, pricing }, { headers: { 'Cache-Control': 'no-store' } });
+  } catch { return NextResponse.json({ ok: false, error: 'Preços da nuvem indisponíveis.' }, { status: 503 }); }
 }

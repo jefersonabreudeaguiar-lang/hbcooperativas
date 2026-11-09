@@ -1,7 +1,7 @@
 {
   "installCommand": "npm ci",
   "buildCommand": "npm run build",
-  "ignoreCommand": "node scripts/ignore-unsafe-release-800.mjs",
+  "ignoreCommand": "node scripts/ignore-unsafe-release-801.mjs",
   "env": {
     "APP_ENV": "production",
     "BIC_ENVIRONMENT": "PRODUCTION",

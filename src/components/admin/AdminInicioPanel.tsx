@@ -8,7 +8,7 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { useAppData } from "@/hooks/useAppData";
 import { formatCurrency, formatDateTime, getCurrentMesReferencia } from "@/utils/format";
 import { secureApiFetch } from "@/lib/security/clientSession";
-import { listarCobrancasSaasAdmin } from "@/services/cobrancaSaasService";
+import { usePlatformBillingOverview } from "@/hooks/usePlatformBillingOverview";
 import {
   buildLevantamentoFromAppData,
   mergeLevantamentoComDadosLocais,
@@ -28,9 +28,31 @@ interface AdminInicioPanelProps {
 
 export function AdminInicioPanel({ onNavigate }: AdminInicioPanelProps) {
   const data = useAppData();
+  const billing = usePlatformBillingOverview();
   const [cloud, setCloud] = useState<CloudPlatformOverview | null>(null);
   const [appUsage, setAppUsage] = useState<LevantamentoAberturasApp | null>(null);
   const [contaCoop, setContaCoop] = useState<ContaCoopPlatformOverview | null>(null);
+  const [creditError, setCreditError] = useState(false);
+
+  useEffect(() => {
+    let active = true, busy = false;
+    const refresh = async () => {
+      if (!active || busy || document.hidden) return;
+      busy = true;
+      try {
+        const r = await secureApiFetch(`/api/admin/conta-coop-overview?allPending=1&mes=${getCurrentMesReferencia()}`, { cache: 'no-store' });
+        const json = await r.json();
+        if (!r.ok || !json.ok || !json.overview) throw Error('Nuvem indisponível');
+        if (active) { setContaCoop(json.overview); setCreditError(false); }
+      } catch { if (active) setCreditError(true); }
+      finally { busy = false; }
+    };
+    const tick = () => { void refresh(); };
+    tick();
+    const timer = window.setInterval(tick, 60_000);
+    window.addEventListener('focus', tick);
+    return () => { active = false; clearInterval(timer); window.removeEventListener('focus', tick); };
+  }, []);
 
   useEffect(() => {
     void secureApiFetch("/api/admin/platform-overview", { cache: "no-store" })
@@ -41,10 +63,6 @@ export function AdminInicioPanel({ onNavigate }: AdminInicioPanelProps) {
       .then((r) => r.json())
       .then((json: { levantamento?: LevantamentoAberturasApp }) => setAppUsage(json.levantamento ?? null))
       .catch(() => setAppUsage(null));
-    void secureApiFetch(`/api/admin/conta-coop-overview?mes=${getCurrentMesReferencia()}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((json: { overview?: ContaCoopPlatformOverview }) => setContaCoop(json.overview ?? null))
-      .catch(() => setContaCoop(null));
   }, []);
 
   const snapshot = useMemo(
@@ -58,18 +76,18 @@ export function AdminInicioPanel({ onNavigate }: AdminInicioPanelProps) {
   }, [appUsage, data]);
 
   const cobranca = useMemo(() => {
-    if (!data) return null;
-    const rows = listarCobrancasSaasAdmin(data);
+    if (!billing.overview) return null;
+    const rows = billing.overview.rows;
     const aReceber = rows
       .filter((r) =>
         ["cobranca_enviada", "aguardando_confirmacao", "aviso_bloqueio", "bloqueado"].includes(r.statusMes)
       )
-      .reduce((s, r) => s + r.valorTotal, 0);
+      .reduce((s, r) => s + r.totalEmAberto, 0);
     return {
       pendentes: rows.filter((r) => r.aguardandoConfirmacao).length,
       aReceber,
     };
-  }, [data]);
+  }, [billing.overview]);
 
   if (!data || !snapshot) {
     return <p className="text-sm text-gray-500 py-12 text-center">Carregando painel…</p>;
@@ -119,7 +137,7 @@ export function AdminInicioPanel({ onNavigate }: AdminInicioPanelProps) {
         />
         <StatCard
           title="Cobrança em aberto"
-          value={formatCurrency(cobranca?.aReceber ?? 0)}
+          value={cobranca ? formatCurrency(cobranca.aReceber) : billing.error ? "Indisponível" : "Conferindo…"}
           subtitle={
             cobranca?.pendentes
               ? `${cobranca.pendentes} aguardando confirmação`
@@ -130,8 +148,8 @@ export function AdminInicioPanel({ onNavigate }: AdminInicioPanelProps) {
         />
         <StatCard
           title="HB Créditos · HB"
-          value={formatCentsAdmin(contaCoop?.totais.appCents ?? 0)}
-          subtitle="Parte 30% no mês atual"
+          value={creditError ? 'Indisponível' : contaCoop ? formatCentsAdmin(contaCoop.totais.appRepassePendenteCents) : "Conferindo…"}
+          subtitle="Parte do desconto liquidada e ainda não repassada · todos os meses"
           icon={<Wallet size={22} />}
         />
         <StatCard

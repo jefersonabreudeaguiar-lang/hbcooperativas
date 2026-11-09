@@ -37,7 +37,7 @@ function normalizePricing(raw: unknown): CobrancaSaasPlatformSettings {
 }
 
 export async function fetchCobrancaSaasPlatformSettings(
-  supabase: SupabaseClient
+  supabase: SupabaseClient, strict = false
 ): Promise<CobrancaSaasPlatformSettings> {
   const { data, error } = await supabase
     .from("hb_platform_settings")
@@ -45,6 +45,7 @@ export async function fetchCobrancaSaasPlatformSettings(
     .eq("id", SETTINGS_ROW_ID)
     .maybeSingle();
 
+  if (error && strict) throw new Error('Não foi possível consultar os preços da plataforma.');
   if (error || !data?.cobranca_saas) {
     return {
       precoCooperado: COBRANCA_SAAS_PRECO_COOPERADO_DEFAULT,

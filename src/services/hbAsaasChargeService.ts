@@ -43,6 +43,8 @@ import {
   calcularValorCobrancaSaas,
   defaultCobrancaSaas,
   getPeriodoCobrancaSaas,
+  getPeriodoCobrancaSaasAberto,
+  periodoCobrancaSaasEstaPago,
   type CobrancaSaasPricing,
 } from "@/services/cobrancaSaasService";
 import { normalizeCnpj } from "@/utils/cooperativa";
@@ -245,7 +247,7 @@ function lancamentoAguardandoConfirmacao(
 ): boolean {
   if (!cicloInicioEm && !cob?.cicloInicioEm) return false;
   const ciclo = cicloInicioEm ?? cob!.cicloInicioEm!;
-  const periodo = getPeriodoCobrancaSaas(ciclo);
+  const periodo = getPeriodoCobrancaSaasAberto(cob ?? defaultCobrancaSaas({ cicloInicioEm: ciclo }));
   const lanc = (cob?.historico ?? []).find((h) => h.periodoId === periodo.periodoId);
   return lanc?.status === "aguardando_confirmacao" || cob?.statusMes === "aguardando_confirmacao";
 }
@@ -259,32 +261,8 @@ function resolveSaasDue(
 
   const lancAtual = (cob?.historico ?? []).find((h) => h.periodoId === periodo.periodoId);
 
-  if (cob?.ultimoPeriodoPago === periodo.periodoId) {
-    if (lancAtual?.status === "paga" || cob.statusMes === "em_dia") return false;
-  }
-
-  if (lancAtual?.status === "paga" && cob?.ultimoPeriodoPago === periodo.periodoId) {
-    return false;
-  }
-
-  if (lancAtual?.status === "aguardando_confirmacao" || cob?.statusMes === "aguardando_confirmacao") {
-    return false;
-  }
-
-  const cobrancaReaberta =
-    cob?.statusMes === "cobranca_enviada" ||
-    cob?.statusMes === "aviso_bloqueio" ||
-    cob?.statusMes === "bloqueado" ||
-    lancAtual?.status === "enviada" ||
-    lancAtual?.status === "rejeitada";
-
-  if (lancAtual?.status === "paga") {
-    return cobrancaReaberta;
-  }
-
-  if (cob?.ultimoPeriodoPago === periodo.periodoId) {
-    return cobrancaReaberta || !lancAtual;
-  }
+  if ((cob && periodoCobrancaSaasEstaPago(cob, periodo.periodoId, periodo.mesReferencia)) || lancAtual?.status === 'cancelada') return false;
+  if (lancAtual?.status === 'aguardando_confirmacao') return false;
 
   return true;
 }
@@ -357,16 +335,18 @@ export async function buildUnifiedHbChargeBreakdown(
 
   let periodoSaas: HbUnifiedChargeBreakdown["periodoSaas"] = null;
   let saasDue = false;
+  let saasValorTotal = saasCalc.valorTotal;
 
   if (cicloInicioEm) {
-    const periodo = getPeriodoCobrancaSaas(cicloInicioEm);
+    const periodo = getPeriodoCobrancaSaasAberto(cob ?? defaultCobrancaSaas({ cicloInicioEm }));
     periodoSaas = {
       periodoId: periodo.periodoId,
       label: periodo.label,
       vencimento: periodo.vencimento,
       mesReferencia: periodo.mesReferencia,
     };
-    saasDue = resolveSaasDue(saasCalc.valorTotal, cob, periodo);
+    saasValorTotal = cob?.historico?.find(h => h.periodoId === periodo.periodoId)?.valorTotal ?? saasCalc.valorTotal;
+    saasDue = resolveSaasDue(saasValorTotal, cob, periodo);
   }
 
   const unitCents = Math.round(pricing.precoCooperado * 100);
@@ -419,7 +399,7 @@ export async function buildUnifiedHbChargeBreakdown(
       );
   const repasseAguardandoFechamento = repasseAguardandoPagamentosCooperados;
 
-  const saasSubtotalCents = saasDue ? Math.round(saasCalc.valorTotal * 100) : 0;
+  const saasSubtotalCents = saasDue ? Math.round(saasValorTotal * 100) : 0;
   const totalCents = saasSubtotalCents + (repasseDue ? repasseSubtotalCents : 0);
 
   let statusMessage: string | undefined;
@@ -832,7 +812,7 @@ async function confirmSaasOnCloud(
   const cob = (coopRow?.cobranca_saas ?? {}) as CobrancaSaasCooperativa;
   if (!cob.cicloInicioEm) return { ok: false, error: "Ciclo SaaS não iniciado." };
 
-  const periodoCalc = getPeriodoCobrancaSaas(cob.cicloInicioEm);
+  const periodoCalc = getPeriodoCobrancaSaasAberto(cob);
   const periodo =
     breakdown.periodoSaas ??
     ({

@@ -123,7 +123,8 @@ export async function PATCH(
     );
   }
   if (body.cobrancaSaas != null) {
-    patch.cobranca_saas = body.cobrancaSaas;
+    if (guard.session?.role === 'admin') patch.cobranca_saas = body.cobrancaSaas;
+    else if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Informe pagamento pela ação de cobrança. A confirmação é exclusiva do administrador.' }, { status: 403 });
   }
 
   if (Object.keys(patch).length === 0) {

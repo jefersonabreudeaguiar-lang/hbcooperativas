@@ -18,8 +18,7 @@ import { Button } from "@/components/ui/Button";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { Input, FormField } from "@/components/ui/Form";
 import { useAppData } from "@/hooks/useAppData";
-import { updateData, getData } from "@/services/dataStore";
-import { pushCobrancaSaasToCloud } from "@/services/cooperativaCloudService";
+import { updateData } from "@/services/dataStore";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import {
   applyCobrancaSaasPricingToData,
@@ -27,16 +26,8 @@ import {
   getCobrancaSaasMinimoLabel,
   getCobrancaSaasPrecoLabel,
   getCobrancaSaasPricing,
-  bloquearTemporarioCobrancaSaas,
-  confirmarPagamentoCobrancaSaas,
-  desbloquearCobrancaSaas,
-  ensureCobrancaPeriodoAtualSaas,
-  enviarAvisoBloqueioCobrancaSaas,
-  listarCobrancasSaasAdmin,
-  rejeitarPagamentoCobrancaSaas,
-  registrarCobrancaSaas,
-  sincronizarCicloCobrancaSaas,
   type CobrancaSaasAdminRow,
+  patchCobrancaSaas,
 } from "@/services/cobrancaSaasService";
 import { formatCurrency } from "@/utils/format";
 import { cn } from "@/utils/format";
@@ -47,6 +38,9 @@ import { createAdminHbAsaasCharge, fetchAdminHbChargePreview } from "@/services/
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import type { HbUnifiedChargeBreakdown } from "@/services/hbAsaasChargeTypes";
 import type { User } from "@/types";
+import type { CobrancaSaasCooperativa } from '@/types';
+import { usePlatformBillingOverview } from '@/hooks/usePlatformBillingOverview';
+import { requestBillingAction } from '@/services/platformBillingClient';
 
 type AdminUser = Pick<User, "id" | "name">;
 type FiltroCobranca = "todos" | "pendencias" | "bloqueadas" | "em_dia";
@@ -74,6 +68,7 @@ function statusTone(status: CobrancaSaasAdminRow["statusMes"]): string {
 
 export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
   const data = useAppData();
+  const billing = usePlatformBillingOverview();
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState<FiltroCobranca>("todos");
   const [expandidoId, setExpandidoId] = useState<string | null>(null);
@@ -150,7 +145,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
     setSalvandoPrecos(true);
     try {
       const payload = { precoCooperado, minimoMes };
-      updateData((d) => applyCobrancaSaasPricingToData(d, payload));
+
 
       const res = await secureApiFetch("/api/admin/cobranca-saas-pricing", {
         method: "PUT",
@@ -165,12 +160,16 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
         });
         return;
       }
+      updateData((d) => applyCobrancaSaasPricingToData(d, payload));
+      window.dispatchEvent(new Event("hb-platform-billing-changed"));
       setFeedback({
         type: "ok",
         text:
           json.warning ??
           `Valores atualizados: ${formatCurrency(precoCooperado)}/cooperado · mín. ${formatCurrency(minimoMes)}. Ciclo de adesão inalterado.`,
       });
+    } catch (e) {
+      setFeedback({ type: 'erro', text: e instanceof Error ? e.message : 'Não foi possível salvar os preços na nuvem.' });
     } finally {
       setSalvandoPrecos(false);
     }
@@ -198,23 +197,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
     }
   };
 
-  useEffect(() => {
-    if (!data?.cooperativas.length) return;
-    updateData((d) => {
-      let next = d;
-      let changed = false;
-      for (const coop of d.cooperativas) {
-        const before = JSON.stringify(coop.cobrancaSaas ?? {});
-        next = sincronizarCicloCobrancaSaas(next, coop.id);
-        next = ensureCobrancaPeriodoAtualSaas(next, coop.id).data;
-        const after = JSON.stringify(next.cooperativas.find((c) => c.id === coop.id)?.cobrancaSaas ?? {});
-        if (before !== after) changed = true;
-      }
-      return changed ? next : d;
-    });
-  }, [data?.cooperativas.length, data?.cooperados.length]);
-
-  const rows = useMemo(() => (data ? listarCobrancasSaasAdmin(data) : []), [data]);
+  const rows = useMemo(() => billing.overview?.rows ?? [], [billing.overview]);
 
   useEffect(() => {
     if (!expandidoId) return;
@@ -257,7 +240,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
           r.statusMes === "aviso_bloqueio" ||
           r.statusMes === "bloqueado"
       )
-      .reduce((s, r) => s + r.valorTotal, 0);
+      .reduce((s, r) => s + r.totalEmAberto, 0);
     const aguardandoConfirmacao = rows.filter((r) => r.aguardandoConfirmacao).length;
     const bloqueadas = rows.filter((r) => r.statusMes === "bloqueado").length;
     return {
@@ -270,36 +253,13 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
     };
   }, [rows]);
 
-  const syncSaasCloud = async (cooperativaId: string): Promise<boolean> => {
-    const coop = getData().cooperativas.find((c) => c.id === cooperativaId);
-    if (!coop?.cobrancaSaas) return true;
-    return pushCobrancaSaasToCloud(coop.cnpj, coop.cobrancaSaas);
-  };
-
-  const run = (cooperativaId: string, fn: () => void, okMsg: string) => {
-    setFeedback(null);
-    setBusyId(cooperativaId);
-    try {
-      fn();
-      syncSaasCloud(cooperativaId);
-      setFeedback({ type: "ok", text: okMsg });
-    } catch (e) {
-      setFeedback({ type: "erro", text: e instanceof Error ? e.message : "Falha ao aplicar ação." });
-    } finally {
-      setBusyId(null);
-    }
-  };
-
   const handleCobrar = async (row: CobrancaSaasAdminRow) => {
     setFeedback(null);
     setBusyId(row.cooperativaId);
     try {
-      updateData((d) => {
-        const r = registrarCobrancaSaas(d, row.cooperativaId, user.name);
-        if (!r.ok) throw new Error(r.error ?? "Não foi possível registrar a cobrança.");
-        return r.data;
-      });
-      const synced = await syncSaasCloud(row.cooperativaId);
+      const confirmedBilling = await requestBillingAction(row.cnpj, 'registrar', row.periodoId);
+      updateData(d => { const coop = d.cooperativas.find(c => c.cnpj.replace(/\D/g, '') === row.cnpj); return coop ? patchCobrancaSaas(d, coop.id, confirmedBilling) : d; });
+      const synced = true;
       const preview = previewByCoop[row.cooperativaId]?.breakdown;
       const totalLabel =
         preview && preview.totalCents > 0
@@ -329,95 +289,45 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
     }
   };
 
+  const applyConfirmedBilling = (row: CobrancaSaasAdminRow, cob: CobrancaSaasCooperativa) => {
+    updateData(d => {
+      const coop = d.cooperativas.find(c => c.cnpj.replace(/\D/g, '') === row.cnpj);
+      return coop ? patchCobrancaSaas(d, coop.id, cob) : d;
+    });
+  };
   const handleConfirmarPagamento = async (row: CobrancaSaasAdminRow) => {
-    setFeedback(null);
-    setBusyId(row.cooperativaId);
+    setFeedback(null); setBusyId(row.cooperativaId);
     try {
-      updateData((d) => {
-        const r = confirmarPagamentoCobrancaSaas(d, row.cooperativaId, user.name);
-        if (!r.ok) throw new Error(r.error ?? "Não foi possível confirmar.");
-        return r.data;
-      });
-      const synced = await syncSaasCloud(row.cooperativaId);
-      setFeedback({
-        type: synced ? "ok" : "erro",
-        text: synced
-          ? `Pagamento confirmado — ${row.nome} em dia. O responsável deixa de ver a cobrança neste ciclo.`
-          : `Pagamento confirmado neste aparelho, mas não gravou na nuvem. O responsável ainda pode ver a cobrança. Tente de novo.`,
-      });
-    } catch (e) {
-      setFeedback({ type: "erro", text: e instanceof Error ? e.message : "Falha ao aplicar ação." });
-    } finally {
-      setBusyId(null);
-    }
+      const cob = await requestBillingAction(row.cnpj, 'confirmar', row.periodoId);
+      applyConfirmedBilling(row, cob);
+      setFeedback({ type: 'ok', text: 'Pagamento deste ciclo confirmado na nuvem. Outras pendências, se houver, permanecem.' });
+    } catch (e) { setFeedback({ type: 'erro', text: e instanceof Error ? e.message : 'Confirmação não concluída.' }); }
+    finally { setBusyId(null); }
   };
-
   const handleRejeitarPagamento = async (row: CobrancaSaasAdminRow) => {
-    const motivo = window.prompt(
-      `Recusar pagamento informado por ${row.nome}?\n\nOpcional: descreva o motivo para o responsável.`
-    );
+    const motivo = window.prompt(`Recusar o pagamento informado por ${row.nome}? Informe o motivo, se necessário.`);
     if (motivo === null) return;
-    setFeedback(null);
-    setBusyId(row.cooperativaId);
+    setFeedback(null); setBusyId(row.cooperativaId);
     try {
-      updateData((d) => {
-        const r = rejeitarPagamentoCobrancaSaas(d, row.cooperativaId, user.name, motivo);
-        if (!r.ok) throw new Error(r.error ?? "Não foi possível recusar.");
-        return r.data;
-      });
-      const synced = await syncSaasCloud(row.cooperativaId);
-      setFeedback({
-        type: synced ? "ok" : "erro",
-        text: synced
-          ? `Pagamento não confirmado — ${row.nome} notificado.`
-          : `Recusa gravada neste aparelho, mas não publicou na nuvem. Tente de novo.`,
-      });
-    } catch (e) {
-      setFeedback({ type: "erro", text: e instanceof Error ? e.message : "Falha ao aplicar ação." });
-    } finally {
-      setBusyId(null);
-    }
+      const cob = await requestBillingAction(row.cnpj, 'rejeitar', row.periodoId, motivo);
+      applyConfirmedBilling(row, cob);
+      setFeedback({ type: 'ok', text: 'Pagamento não confirmado. A cobrança permanece na nuvem.' });
+    } catch (e) { setFeedback({ type: 'erro', text: e instanceof Error ? e.message : 'Recusa não concluída.' }); }
+    finally { setBusyId(null); }
   };
-
-  const handleAviso = (row: CobrancaSaasAdminRow) => {
-    run(
-      row.cooperativaId,
-      () => {
-        updateData((d) => enviarAvisoBloqueioCobrancaSaas(d, row.cooperativaId));
-      },
-      `Aviso de bloqueio enviado ao responsável de ${row.nome}.`
-    );
+  const runCloudAction = async (row: CobrancaSaasAdminRow, action: string, text: string) => {
+    setBusyId(row.cooperativaId); setFeedback(null);
+    try { applyConfirmedBilling(row, await requestBillingAction(row.cnpj, action, row.periodoId)); setFeedback({ type: 'ok', text }); }
+    catch (e) { setFeedback({ type: 'erro', text: e instanceof Error ? e.message : 'Ação não concluída.' }); }
+    finally { setBusyId(null); }
   };
-
+  const handleAviso = (row: CobrancaSaasAdminRow) => { void runCloudAction(row, 'avisar', 'Aviso registrado na nuvem.'); };
   const handleBloquear = (row: CobrancaSaasAdminRow) => {
-    if (
-      !window.confirm(
-        `Aplicar bloqueio temporário em "${row.nome}"?\n\nO responsável verá um aviso destacado na área da cooperativa. Os fluxos do app continuam acessíveis, com alerta permanente até o desbloqueio.`
-      )
-    ) {
-      return;
-    }
-    run(
-      row.cooperativaId,
-      () => {
-        updateData((d) => bloquearTemporarioCobrancaSaas(d, row.cooperativaId, user.name));
-      },
-      `Bloqueio temporário aplicado em ${row.nome}.`
-    );
+    if (window.confirm(`Suspender temporariamente ${row.nome}? A suspensão limita lançamentos até a regularização.`)) void runCloudAction(row, 'bloquear', 'Suspensão registrada na nuvem.');
   };
-
-  const handleDesbloquear = (row: CobrancaSaasAdminRow) => {
-    run(
-      row.cooperativaId,
-      () => {
-        updateData((d) => desbloquearCobrancaSaas(d, row.cooperativaId));
-      },
-      `Bloqueio removido — ${row.nome}.`
-    );
-  };
-
-  if (!data) {
-    return <p className="text-sm text-gray-500 py-8 text-center">Carregando cobranças…</p>;
+  const handleDesbloquear = (row: CobrancaSaasAdminRow) => { void runCloudAction(row, 'desbloquear', 'Suspensão removida. Débitos não confirmados permanecem em aberto.'); };
+  if (!data || !billing.overview) {
+    return <p role="status" className="text-sm text-gray-500 py-8 text-center">{billing.error ?? 'Conferindo todas as cobranças na nuvem…'}</p>;
   }
 
   return (

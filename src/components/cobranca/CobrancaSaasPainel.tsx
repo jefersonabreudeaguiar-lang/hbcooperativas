@@ -21,16 +21,13 @@ import {
   ensureCobrancaPeriodoAtualSaas,
   getPainelCobrancaSaasResponsavel,
   patchCobrancaSaas,
-  responsavelInformouPagamentoSaas,
-  sincronizarCicloCobrancaSaas,
+  applyCobrancaSaasPricingToData, defaultCobrancaSaas, getPeriodoCobrancaSaasAberto,
 } from "@/services/cobrancaSaasService";
-import {
-  fetchCobrancaSaasFromCloud,
-  mergeCobrancaSaas,
-} from "@/services/cooperativaCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { isDiretoriaRole } from "@/permissions";
 import { PROPRIETARIO_APP } from "@/config/contratoServicoApp";
+import { secureApiFetch } from '@/lib/security/clientSession';
+import { requestBillingAction } from '@/services/platformBillingClient';
 
 /**
  * Painel superior de mensalidade do aplicativo — PIX, boleto e confirmação de pagamento.
@@ -42,39 +39,50 @@ export function CobrancaSaasPainel() {
   const [copiedBoleto, setCopiedBoleto] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [feedbackError, setFeedbackError] = useState(false);
+  const [cloudReadyFor, setCloudReadyFor] = useState<string | null>(null);
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
 
   useEffect(() => {
-    if (!user || !coopId || user.role === "cooperado") return;
-    const d = getData();
-    const coop = d.cooperativas.find((c) => c.id === coopId);
+    if (!user || !coopId || !isDiretoriaRole(user.role)) return;
+    const coop = getData().cooperativas.find(c => c.id === coopId);
     if (!coop) return;
-    let cancelled = false;
-    const aplicar = (cloud?: ReturnType<typeof mergeCobrancaSaas>) => {
-      if (cancelled) return;
-      updateData((current) => {
-        const before = JSON.stringify(current.cooperativas.find((c) => c.id === coopId)?.cobrancaSaas ?? {});
-        let next = current;
-        if (cloud) {
-          const local = current.cooperativas.find((c) => c.id === coopId)?.cobrancaSaas;
-          const merged = mergeCobrancaSaas(local, cloud);
-          if (merged) next = patchCobrancaSaas(next, coopId, merged);
-        }
-        next = sincronizarCicloCobrancaSaas(next, coopId);
-        next = ensureCobrancaPeriodoAtualSaas(next, coopId).data;
-        const after = JSON.stringify(next.cooperativas.find((c) => c.id === coopId)?.cobrancaSaas ?? {});
-        return before === after ? current : next;
-      });
+    let cancelled = false, inFlight = false;
+    const refresh = async () => {
+      if (cancelled || inFlight || document.hidden) return;
+      inFlight = true;
+      try {
+        const [response, priceResponse] = await Promise.all([
+          secureApiFetch(`/api/cooperativas/${coop.cnpj.replace(/\D/g, '')}`, { cache: 'no-store' }),
+          secureApiFetch('/api/public/cobranca-saas-pricing', { cache: 'no-store' }),
+        ]);
+        if (!response.ok || !priceResponse.ok) throw Error('Não foi possível confirmar a cobrança na nuvem.');
+        const [cloud, prices] = await Promise.all([response.json(), priceResponse.json()]);
+        if (!cloud.success || !prices.ok || !prices.pricing) throw Error('Cobrança indisponível.');
+        if (cancelled) return;
+        updateData(current => {
+          let next = applyCobrancaSaasPricingToData(current, prices.pricing);
+          next = patchCobrancaSaas(next, coopId, cloud.cobrancaSaas ?? defaultCobrancaSaas());
+          next = ensureCobrancaPeriodoAtualSaas(next, coopId).data;
+          const before = current.cooperativas.find(c => c.id === coopId)?.cobrancaSaas;
+          const after = next.cooperativas.find(c => c.id === coopId)?.cobrancaSaas;
+          if (after) after.historico = after.historico?.map(h => {
+            const previous = before?.historico?.find(p => p.id === h.id);
+            return previous && h.id.startsWith('cs_') && previous.status === 'enviada' && h.status === 'enviada' && previous.valorTotal === h.valorTotal && previous.qtdCooperados === h.qtdCooperados ? previous : h;
+          });
+          return JSON.stringify(before) === JSON.stringify(after) && JSON.stringify(current.config) === JSON.stringify(next.config) ? current : next;
+        });
+        setCloudReadyFor(`${user.id}:${coopId}`); setFeedback(null); setFeedbackError(false);
+      } catch (e) { if (!cancelled) { setFeedback(e instanceof Error ? e.message : 'Cobrança indisponível.'); setFeedbackError(true); } }
+      finally { inFlight = false; }
     };
-    void fetchCobrancaSaasFromCloud(coop.cnpj).then((cloud) => {
-      aplicar(cloud ?? undefined);
-    });
-    return () => {
-      cancelled = true;
-    };
+    void refresh();
+    const tick = () => { void refresh(); };
+    const timer = window.setInterval(tick, 30_000);
+    window.addEventListener('focus', tick); window.addEventListener('online', tick);
+    return () => { cancelled = true; clearInterval(timer); window.removeEventListener('focus', tick); window.removeEventListener('online', tick); };
   }, [user?.id, user?.role, coopId]);
-
   const painel = useMemo(() => {
     if (!data || !coopId) return null;
     return getPainelCobrancaSaasResponsavel(data, coopId);
@@ -83,6 +91,7 @@ export function CobrancaSaasPainel() {
   if (!user || !data || !isDiretoriaRole(user.role) || !painel) {
     return null;
   }
+  if (cloudReadyFor !== `${user.id}:${coopId}`) return <p role="status" className="mb-4 text-sm text-gray-600">{feedback ?? 'Conferindo cobrança na nuvem…'}</p>;
 
   if (painel.statusMes === "aguardando_primeiro_cooperado" || painel.valorTotal <= 0) return null;
   if (painel.statusMes === "em_dia" || painel.lancamentoStatus === "paga") return null;
@@ -94,24 +103,18 @@ export function CobrancaSaasPainel() {
     setTimeout(() => setCopiedBoleto(false), 2000);
   };
 
-  const informarPagamento = () => {
+  const informarPagamento = async () => {
     if (!coopId) return;
-    setBusy(true);
-    setFeedback(null);
+    setBusy(true); setFeedback(null); setFeedbackError(false);
     try {
-      updateData((d) => {
-        const r = responsavelInformouPagamentoSaas(d, coopId, user.name);
-        if (!r.ok) throw new Error(r.error ?? "Não foi possível informar pagamento.");
-        return r.data;
-      });
-      setFeedback("Pagamento informado. Aguarde a confirmação do proprietário do aplicativo.");
-    } catch (e) {
-      setFeedback(e instanceof Error ? e.message : "Erro ao informar pagamento.");
-    } finally {
-      setBusy(false);
-    }
+      const coop = getData().cooperativas.find(c => c.id === coopId)!;
+      const period = getPeriodoCobrancaSaasAberto(coop.cobrancaSaas!);
+      const updated = await requestBillingAction(coop.cnpj, 'informar', period.periodoId);
+      updateData(current => patchCobrancaSaas(current, coopId, updated));
+      setFeedback('Pagamento informado na nuvem. Aguarde a confirmação do proprietário do aplicativo.');
+    } catch (e) { setFeedback(e instanceof Error ? e.message : 'Pagamento não informado.'); setFeedbackError(true); }
+    finally { setBusy(false); }
   };
-
   const variant =
     painel.statusMes === "bloqueado"
       ? "error"
@@ -160,7 +163,7 @@ export function CobrancaSaasPainel() {
         )}
 
         {feedback && (
-          <AlertBanner variant="success" className="mb-3" onDismiss={() => setFeedback(null)}>
+          <AlertBanner variant={feedbackError ? 'error' : 'success'} className="mb-3" onDismiss={() => setFeedback(null)}>
             {feedback}
           </AlertBanner>
         )}

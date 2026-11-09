@@ -141,28 +141,46 @@ export function getPeriodoCobrancaSaas(
   vencimento: string;
   label: string;
 } {
-  const start = new Date(cicloInicioEm);
-  const dia = Math.min(start.getDate(), 28);
-  let inicio = new Date(ref.getFullYear(), ref.getMonth(), dia);
-  if (ref < inicio) {
-    inicio = new Date(ref.getFullYear(), ref.getMonth() - 1, dia);
-  }
-  const fim = new Date(inicio.getFullYear(), inicio.getMonth() + 1, dia);
-  fim.setDate(fim.getDate() - 1);
-  const vencimento = new Date(inicio.getFullYear(), inicio.getMonth() + 1, dia);
-  const periodoId = toIsoDay(inicio);
-  const mesReferencia = `${inicio.getFullYear()}-${pad2(inicio.getMonth() + 1)}`;
-  const label = `${pad2(inicio.getDate())}/${pad2(inicio.getMonth() + 1)}/${inicio.getFullYear()} → ${pad2(fim.getDate())}/${pad2(fim.getMonth() + 1)}/${fim.getFullYear()}`;
-  return {
-    periodoId,
-    mesReferencia,
-    inicio: toIsoDay(inicio),
-    fim: toIsoDay(fim),
-    vencimento: toIsoDay(vencimento),
-    label,
+  const initial = businessDay(cicloInicioEm);
+  const current = businessDay(ref);
+  const anchor = Number(initial.slice(8, 10));
+  const y = Number(current.slice(0, 4)), m = Number(current.slice(5, 7)) - 1;
+  const inMonth = (year: number, month: number) => {
+    const last = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    return new Date(Date.UTC(year, month, Math.min(anchor, last)));
   };
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  let start = inMonth(y, m);
+  if (iso(start) > current) start = inMonth(y, m - 1);
+  const next = inMonth(start.getUTCFullYear(), start.getUTCMonth() + 1);
+  const end = new Date(next.getTime() - 86400000);
+  const inicio = iso(start), fim = iso(end), vencimento = iso(next);
+  return { periodoId: inicio, mesReferencia: inicio.slice(0, 7), inicio, fim, vencimento,
+    label: `${inicio.split('-').reverse().join('/')} → ${fim.split('-').reverse().join('/')}` };
 }
 
+/** Plain dates are business dates; timestamps are interpreted in the cooperative business timezone. */
+function businessDay(input: string | Date): string {
+  if (typeof input === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input)) return input;
+  const date = input instanceof Date ? input : new Date(input);
+  if (!Number.isFinite(date.getTime())) throw new Error('Data de cobrança inválida.');
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Fortaleza', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const get = (type: string) => parts.find(p => p.type === type)!.value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+/** Oldest issued unpaid cycle wins over a newer cycle. Existing period IDs retain their agreed anchor. */
+export function getPeriodoCobrancaSaasAberto(cob: CobrancaSaasCooperativa, ref: Date = new Date()): ReturnType<typeof getPeriodoCobrancaSaas> {
+  if (!cob.cicloInicioEm) throw new Error('Ciclo de cobrança não iniciado.');
+  const history = [...(cob.historico ?? [])].filter(h => /^\d{4}-\d{2}-\d{2}$/.test(h.periodoId)).sort((a, b) => a.periodoId.localeCompare(b.periodoId));
+  const firstPeriod = history[0]?.periodoId;
+  const originalDay = Number(businessDay(cob.cicloInicioEm).slice(8, 10));
+  const expectedDay = firstPeriod ? Math.min(originalDay, new Date(Date.UTC(Number(firstPeriod.slice(0, 4)), Number(firstPeriod.slice(5, 7)), 0)).getUTCDate()) : originalDay;
+  const anchor = firstPeriod && Number(firstPeriod.slice(8, 10)) !== expectedDay ? firstPeriod : cob.cicloInicioEm;
+  const current = getPeriodoCobrancaSaas(anchor, ref);
+  const unpaid = history.find(h => h.periodoId <= current.periodoId && !['paga', 'cancelada'].includes(h.status) && !periodoCobrancaSaasEstaPago(cob, h.periodoId, h.mesReferencia));
+  return unpaid ? getPeriodoCobrancaSaas(anchor, new Date(`${unpaid.periodoId}T15:00:00Z`)) : current;
+}
 export function contarCooperadosCobranca(data: AppData, cooperativaId: string): number {
   return cooperadosUnicosParaCobranca(
     data.cooperados.filter((c) => c.cooperativaId === cooperativaId)
@@ -194,6 +212,7 @@ export function sincronizarCicloCobrancaSaas(data: AppData, cooperativaId: strin
   const atual = coop.cobrancaSaas ?? defaultCobrancaSaas();
 
   if (!primeiro) {
+    if (atual.cicloInicioEm && atual.historico?.length) return data;
     if (atual.statusMes === "aguardando_primeiro_cooperado" && !atual.cicloInicioEm) {
       return data;
     }
@@ -256,6 +275,7 @@ export interface CobrancaSaasAdminRow {
   cnpjFormatado: string;
   qtdCooperados: number;
   valorTotal: number;
+  totalEmAberto: number;
   cicloInicioEm?: string;
   periodoId?: string;
   mesVencimentoLabel: string;
@@ -270,6 +290,16 @@ export interface CobrancaSaasAdminRow {
   valorFormatado: string;
   informadoPagamentoEm?: string;
   informadoPagamentoPor?: string;
+}
+
+export function totalCobrancaSaasEmAberto(cob: CobrancaSaasCooperativa): number {
+  const periods = new Map<string, CobrancaSaasLancamento>();
+  for (const h of cob.historico ?? []) {
+    const previous = periods.get(h.periodoId);
+    if (!previous || previous.status !== 'paga') periods.set(h.periodoId, h);
+  }
+  return Math.round([...periods.values()].filter(h => !['paga', 'cancelada'].includes(h.status) && !periodoCobrancaSaasEstaPago(cob, h.periodoId, h.mesReferencia))
+    .reduce((s, h) => s + Math.max(0, Number(h.valorTotal) || 0), 0) * 100) / 100;
 }
 
 function statusLabel(s: CobrancaSaasStatusMes): string {
@@ -355,6 +385,7 @@ export function periodoCobrancaSaasEstaPago(
   if (periodoId) {
     if (cob.ultimoPeriodoPago === periodoId) return true;
     if (historico.some((h) => h.periodoId === periodoId && h.status === "paga")) return true;
+    return historico.some(h => (!h.periodoId || /^\d{4}-\d{2}$/.test(h.periodoId)) && h.mesReferencia === (mesReferencia ?? periodoId.slice(0, 7)) && h.status === 'paga');
   }
   const mes = mesReferencia || (periodoId ? ymFromPeriodoId(periodoId) : undefined);
   if (mes) {
@@ -365,9 +396,7 @@ export function periodoCobrancaSaasEstaPago(
 }
 
 function diasAtraso(vencimento: string, ref = new Date()): number {
-  const v = new Date(`${vencimento}T23:59:59`);
-  const diff = ref.getTime() - v.getTime();
-  return diff > 0 ? Math.floor(diff / 86400000) : 0;
+  return Math.max(0, Math.round((Date.parse(`${businessDay(ref)}T00:00:00Z`) - Date.parse(`${vencimento}T00:00:00Z`)) / 86400000));
 }
 
 /** Gera cobrança do ciclo atual, aplica avisos de atraso e sincroniza statusMes. */
@@ -384,7 +413,7 @@ export function ensureCobrancaPeriodoAtualSaas(
     return { data: next, ok: true };
   }
 
-  const periodo = getPeriodoCobrancaSaas(cob.cicloInicioEm);
+  const periodo = getPeriodoCobrancaSaasAberto(cob);
   const qtd = contarCooperadosCobranca(next, cooperativaId);
   if (qtd <= 0) return { data: next, ok: true };
 
@@ -405,12 +434,13 @@ export function ensureCobrancaPeriodoAtualSaas(
 
   let historico = [...(cob.historico ?? [])];
   let lanc = lancamentoPeriodoAtual(cob, periodo.periodoId);
+  if (lanc?.status === 'cancelada') return { data: next, ok: true };
   const calc = calcularValorCobrancaSaas(qtd, getCobrancaSaasPricing(next));
   const now = new Date().toISOString();
 
   if (!lanc) {
     lanc = {
-      id: gerarId(),
+      id: `cs_${normalizeCnpj(coop.cnpj)}_${periodo.periodoId}`,
       periodoId: periodo.periodoId,
       mesReferencia: periodo.mesReferencia,
       qtdCooperados: calc.qtd,
@@ -516,11 +546,12 @@ export function getPainelCobrancaSaasResponsavel(
   const precisaContrato = precisaAssinarContratoServico(coop);
   const qtd = contarCooperadosCobranca(data, cooperativaId);
   const calc = calcularValorCobrancaSaas(qtd, getCobrancaSaasPricing(data));
-  const periodo = cob.cicloInicioEm ? getPeriodoCobrancaSaas(cob.cicloInicioEm) : undefined;
+  const periodo = cob.cicloInicioEm ? getPeriodoCobrancaSaasAberto(cob) : undefined;
   const lanc = periodo ? lancamentoPeriodoAtual(cob, periodo.periodoId) : undefined;
+  const valorTotal = lanc?.valorTotal ?? calc.valorTotal;
   const atraso = periodo ? diasAtraso(periodo.vencimento) : 0;
   const pago = periodoCobrancaSaasEstaPago(cob, periodo?.periodoId, periodo?.mesReferencia);
-  const statusMes: CobrancaSaasStatusMes = pago ? "em_dia" : cob.statusMes;
+  const statusMes: CobrancaSaasStatusMes = pago || lanc?.status === 'cancelada' ? "em_dia" : lanc?.status === 'aguardando_confirmacao' ? 'aguardando_confirmacao' : ['bloqueado', 'aviso_bloqueio'].includes(cob.statusMes) ? cob.statusMes : cob.cicloInicioEm ? 'cobranca_enviada' : 'aguardando_primeiro_cooperado';
 
   return {
     precisaContrato,
@@ -530,9 +561,9 @@ export function getPainelCobrancaSaasResponsavel(
     vencimentoLabel: periodo
       ? periodo.vencimento.split("-").reverse().join("/")
       : "—",
-    qtdCooperados: qtd,
-    valorTotal: calc.valorTotal,
-    valorFormatado: formatCurrency(calc.valorTotal),
+    qtdCooperados: lanc?.qtdCooperados ?? qtd,
+    valorTotal,
+    valorFormatado: formatCurrency(valorTotal),
     statusMes,
     statusLabel: statusLabel(statusMes),
     lancamentoStatus: lanc?.status,
@@ -540,15 +571,15 @@ export function getPainelCobrancaSaasResponsavel(
     pixNome: PROPRIETARIO_APP.pixNome,
     cpfProprietario: PROPRIETARIO_APP.cpfFormatado,
     boletoReferencia:
-      periodo && calc.valorTotal > 0
-        ? gerarReferenciaBoletoSaas(normalizeCnpj(coop.cnpj), periodo.periodoId, calc.valorTotal)
+      periodo && valorTotal > 0
+        ? gerarReferenciaBoletoSaas(normalizeCnpj(coop.cnpj), periodo.periodoId, valorTotal)
         : undefined,
     podeInformarPagamento: Boolean(
       !pago &&
         !precisaContrato &&
         lanc &&
         (lanc.status === "enviada" || lanc.status === "rejeitada") &&
-        calc.valorTotal > 0
+        valorTotal > 0
     ),
     aguardandoConfirmacao: !pago && lanc?.status === "aguardando_confirmacao",
     avisoMensagem: pago ? undefined : cob.avisoMensagem,
@@ -569,7 +600,7 @@ export function responsavelInformouPagamentoSaas(
   if (!coop || !cob?.cicloInicioEm) {
     return { data: next, ok: false, error: "Ciclo de cobrança ainda não iniciado." };
   }
-  const periodo = getPeriodoCobrancaSaas(cob.cicloInicioEm);
+  const periodo = getPeriodoCobrancaSaasAberto(cob);
   const lanc = lancamentoPeriodoAtual(cob, periodo.periodoId);
   if (!lanc || (lanc.status !== "enviada" && lanc.status !== "rejeitada")) {
     return { data: next, ok: false, error: "Não há cobrança em aberto para informar pagamento." };
@@ -614,7 +645,7 @@ export function rejeitarPagamentoCobrancaSaas(
     return { data, ok: false, error: "Ciclo não iniciado." };
   }
   const diaCobranca = resolveDiaCobrancaSaas(getCobrancaSaasPricing(data));
-  const periodo = getPeriodoCobrancaSaas(cob.cicloInicioEm);
+  const periodo = getPeriodoCobrancaSaasAberto(cob);
   const lanc = lancamentoPeriodoAtual(cob, periodo.periodoId);
   if (!lanc || lanc.status !== "aguardando_confirmacao") {
     return { data, ok: false, error: "Não há pagamento aguardando confirmação." };
@@ -656,16 +687,18 @@ export function listarCobrancasSaasAdmin(data: AppData): CobrancaSaasAdminRow[] 
       const cob = c.cobrancaSaas ?? defaultCobrancaSaas();
       const qtd = contarCooperadosCobranca(data, c.id);
       const calc = calcularValorCobrancaSaas(qtd, getCobrancaSaasPricing(data));
-      const periodo = cob.cicloInicioEm ? getPeriodoCobrancaSaas(cob.cicloInicioEm) : undefined;
+      const periodo = cob.cicloInicioEm ? getPeriodoCobrancaSaasAberto(cob) : undefined;
       const lanc = periodo ? lancamentoPeriodoAtual(cob, periodo.periodoId) : undefined;
+      const billed = lanc?.valorTotal ?? calc.valorTotal;
       return {
         cooperativaId: c.id,
         nome: c.nome,
         cnpj: normalizeCnpj(c.cnpj),
         cnpjFormatado: c.cnpj,
         qtdCooperados: qtd,
-        valorTotal: calc.valorTotal,
-        valorFormatado: formatCurrency(calc.valorTotal),
+        valorTotal: billed,
+        totalEmAberto: totalCobrancaSaasEmAberto(cob),
+        valorFormatado: formatCurrency(billed),
         cicloInicioEm: cob.cicloInicioEm,
         periodoId: periodo?.periodoId,
         mesVencimentoLabel: periodo
@@ -707,8 +740,12 @@ export function registrarCobrancaSaas(
     return { data: next, ok: false, error: "Sem cooperados para cobrar neste ciclo." };
   }
   const calc = calcularValorCobrancaSaas(qtd, getCobrancaSaasPricing(next));
-  const periodo = getPeriodoCobrancaSaas(cob.cicloInicioEm);
+  const periodo = getPeriodoCobrancaSaasAberto(cob);
   const now = new Date().toISOString();
+  if (periodoCobrancaSaasEstaPago(cob, periodo.periodoId, periodo.mesReferencia)) return { data: next, ok: false, error: 'Este ciclo já foi confirmado como pago.' };
+  const existing = lancamentoPeriodoAtual(cob, periodo.periodoId);
+  if (existing?.status === 'cancelada') return { data: next, ok: false, error: 'Esta cobrança foi cancelada.' };
+  if (existing) return { data: next, ok: true, valorTotal: existing.valorTotal };
   const lancamento: CobrancaSaasLancamento = {
     id: gerarId(),
     periodoId: periodo.periodoId,
@@ -744,9 +781,11 @@ export function confirmarPagamentoCobrancaSaas(
     return { data: next, ok: false, error: "Ciclo de cobrança ainda não iniciado." };
   }
   const cob = coop.cobrancaSaas;
-  const periodo = getPeriodoCobrancaSaas(cicloInicioEm);
+  const periodo = getPeriodoCobrancaSaasAberto(cob);
   const now = new Date().toISOString();
   const lancAtual = lancamentoPeriodoAtual(cob, periodo.periodoId);
+
+  if (lancAtual?.status === 'cancelada') return { data: next, ok: false, error: 'Esta cobrança foi cancelada.' };
 
   if (
     lancAtual &&
@@ -858,7 +897,7 @@ export function getCobrancaSaasAvisosResponsavel(
 
   const coop = data.cooperativas.find((c) => c.id === cooperativaId);
   const cob = coop?.cobrancaSaas;
-  const periodo = cob?.cicloInicioEm ? getPeriodoCobrancaSaas(cob.cicloInicioEm) : undefined;
+  const periodo = cob?.cicloInicioEm ? getPeriodoCobrancaSaasAberto(cob) : undefined;
 
   if (
     (cob && periodoCobrancaSaasEstaPago(cob, periodo?.periodoId, periodo?.mesReferencia)) ||
