@@ -95,6 +95,16 @@ aprovado acima, sem promover o build que aponta para o banco de homologação.
 
 ## Publicação e retorno
 
+Conferência adicional do ciclo de pagamento: a lógica existente foi exercitada
+sem alterar código de produção em `test-pagamento-ciclo-historico.ts`. Pagamento
+de dois meses zerou o aberto; uma entrega posterior no mesmo mês abriu só seu
+novo saldo e permitiu outro pagamento. No mês seguinte o ciclo também reiniciou.
+Após reabrir os dados, os três meses, os três pagamentos, seus recibos e entradas
+anteriores do Livro Caixa permaneceram. Um PIX com dois meses foi somado uma vez.
+As abas mensais já existem no Financeiro do cooperado e em Pagar do responsável.
+Nenhum pagamento real foi criado/alterado por esse teste e o SHA aprovado do app
+permanece `41c34a25ffea303c9d35d42e5939641974d5cda5`.
+
 1. Testar a seleção como Preview no projeto de homologação, sem dados oficiais.
 2. Apresentar URL, SHA, resultados e riscos ao proprietário; aguardar OK específico.
 3. Com OK, criar deployment do mesmo SHA no projeto oficial com configuração

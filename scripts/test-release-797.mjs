@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 const cli = createRequire(import.meta.url).resolve('tsx/cli');
 const tests = [
   'test-cooperado-card-refresh-feedback.mjs',
+  'test-pagamento-ciclo-historico.ts',
   'test-release-797-boundary.mjs', 'test-session-revocation.mjs', 'test-auth-fail-closed.mjs',
   'test-auth-mfa-claim.ts', 'test-livro-caixa-sequencia-stale.ts',
   'test-livro-caixa-pagamento-completo.ts', 'test-livro-caixa-export-contabil.ts',
