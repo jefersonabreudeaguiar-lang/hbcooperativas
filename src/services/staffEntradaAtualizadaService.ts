@@ -2,7 +2,7 @@ import type { User } from "@/types";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import { getData, saveStaffEntradaCloud } from "@/services/dataStore";
 import { reconciliarEntradaStaffCloud } from '@/lib/staff/staffEntradaCloudReconcile';
-import { compactPersisted, decodePersisted } from '@/lib/staff/appDataPersistIo';
+import { guardarCopiasEntradaStaff } from '@/lib/staff/staffEntradaRecovery';
 import { listPendingEntregaPublish } from '@/services/pendingEntregaPublishService';
 import { listPendingDeliveryImages } from '@/services/offlineImageQueueService';
 import { ensureCooperativaLocalForCnpj, fetchCooperadosFromCloud, mergeCloudCooperadosIntoData } from "@/services/cooperadoCloudService";
@@ -61,14 +61,8 @@ export async function atualizarEntradaStaff(user: Omit<User, "password">, ativa:
   if (!ativa()) throw new Error("Entrada cancelada.");
   const reconciled = reconciliarEntradaStaffCloud(getData(), next, bundle.operacional, entregas.notas, coopId, startedAt, pendingIds);
   // Keep retired device-only copies recoverable; never upload them automatically.
-  if (Object.values(reconciled.retired).some(rows => rows.length)) {
-    const key = `hb-staff-entrada-retired:${cnpj}`;
-    const previous = JSON.parse(decodePersisted(localStorage.getItem(key)) ?? '{}') as Record<string, Array<{ id: string }>>;
-    for (const [domain, rows] of Object.entries(reconciled.retired)) {
-      previous[domain] = [...new Map([...(previous[domain] ?? []), ...rows as Array<{ id: string }>].map(r => [r.id, r])).values()];
-    }
-    localStorage.setItem(key, compactPersisted(JSON.stringify(previous)));
-  }
+  await guardarCopiasEntradaStaff(cnpj, reconciled.retired);
+  if (!ativa()) throw new Error("Entrada cancelada.");
   resetResponsavelPainelIndexCache();
   const saved = saveStaffEntradaCloud(reconciled.data, cnpj);
   if (!saved.ok) throw new Error(saved.error);

@@ -19,7 +19,7 @@ upload antigas. Fotos ainda não publicadas ficam guardadas como rascunho, fora 
 fila de conferência. Filas de publicação e imagens offline permanecem intactas.
 Falha na leitura da fila offline bloqueia a confirmação em vez de supor fila vazia.
 
-Versões anteriores substituídas são guardadas em cópia local compactada por CNPJ,
+Versões anteriores substituídas são guardadas em IndexedDB local por CNPJ,
 fora do painel ativo e sem republicação automática. Falha ao guardar essa cópia
 interrompe a entrada. O cache de leitura e o fallback local são atualizados juntos,
 evitando que uma quantidade maior de registros antigos vença a resposta atual.
