@@ -10,6 +10,7 @@ import { getData, isAppDataWarm } from "@/services/dataStore";
 import { isMobileCooperativaApp } from "@/lib/mobileExperience";
 import { usePainelResponsavelMobilePref } from "@/hooks/usePainelResponsavelMobilePref";
 import { resetCooperadoAposVazamentoPainelGestao } from "@/lib/cooperado/resetCooperadoAposVazamentoPainelGestao";
+import { contadorPodeConsultarCentral } from '@/lib/staff/contadorDadosCooperativa';
 
 export function GestaoAccessGuard({ children }: { children: React.ReactNode }) {
   const { accountUser, user } = useAuth();
@@ -53,6 +54,7 @@ export function GestaoAccessGuard({ children }: { children: React.ReactNode }) {
     if (!accountUser && !user) return;
     if (!isGestaoOnlyRoute(pathname)) return;
     const sessao = accountUser ?? user;
+    if (contadorPodeConsultarCentral(sessao, pathname)) return;
     if (sessao && resetCooperadoAposVazamentoPainelGestao(sessao, pathname)) return;
     if (!identidade.staffPainelUi) {
       router.replace("/dashboard");

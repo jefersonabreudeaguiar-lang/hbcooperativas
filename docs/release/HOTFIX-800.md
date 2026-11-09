@@ -6,6 +6,9 @@ Base: produção 799 `c704c94998e80159e838d751e61bf41e24655e49`.
 
 - Contador passa pela confirmação completa da nuvem antes de visualizar valores.
   Cache próprio, por CNPJ e perfil; não herda o arquivo global nem o fallback da gestão.
+- Login e entrada antiga em `/dashboard` encaminham para a central. O guard permite
+  a árvore de consulta `/contador` ao perfil ativo, sem convertê-lo em gestão nem
+  liberar rotas de operação.
 - Atualização do contador usa somente leitura, sem sync bidirecional ou materialização
   de descontos HB. Revisão leve a cada minuto, ao voltar à janela e ao recuperar
   conexão provoca nova confirmação quando necessário. Falha não é reconhecida como

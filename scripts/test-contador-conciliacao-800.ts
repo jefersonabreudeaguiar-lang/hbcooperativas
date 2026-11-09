@@ -2,11 +2,15 @@ import assert from 'node:assert/strict';
 import { emptyInitialData } from '../src/mock/data';
 import type { AppData, PagamentoCooperadoRegistro } from '../src/types';
 import { calcularConciliacaoMensal, getDemonstrativoPagamentosMes, listMesesConciliacao } from '../src/services/conciliacaoMensalService';
-import { contadorDadosCooperativa, aplicarSnapshotContadorCloud } from '../src/lib/staff/contadorDadosCooperativa';
+import { contadorDadosCooperativa, aplicarSnapshotContadorCloud, contadorPodeConsultarCentral } from '../src/lib/staff/contadorDadosCooperativa';
 import { criarContadorRevisionWatch } from '../src/lib/staff/contadorRevisionWatch';
 import { resolveAppDataStorageKey } from '../src/lib/staff/appDataPersistIo';
 
 async function main() {
+  assert.equal(contadorPodeConsultarCentral({ role: 'contador' }, '/contador/dashboard'), true);
+  assert.equal(contadorPodeConsultarCentral({ role: 'cooperado' }, '/contador/dashboard'), false);
+  assert.equal(contadorPodeConsultarCentral({ role: 'contador', active: false }, '/contador/dashboard'), false);
+  for (const path of ['/ficha-corrida', '/notas-pedido', '/contratos', '/contador-falso']) assert.equal(contadorPodeConsultarCentral({ role: 'contador' }, path), false);
   const p = { id: 'p1', cooperativaId: 'a', cooperadoId: 'm1', mesReferencia: '2026-10', mesesReferencia: ['2026-09', '2026-10'],
     status: 'confirmado', valorBruto: 100, descontoCooperativa: 5, valorLiquido: 60, pagoEm: '2026-11-06T10:00:00Z',
     fichaIds: [], notaPedidoIds: [], descontosExtras: [{ tipo: 'mensalidade', valor: 10 }, { tipo: 'conta_coop', valor: 15 }, { tipo: 'cota', valor: 5 }, { tipo: 'manual', valor: 5 }] } as unknown as PagamentoCooperadoRegistro;

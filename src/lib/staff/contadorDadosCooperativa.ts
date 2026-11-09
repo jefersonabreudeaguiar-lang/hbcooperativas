@@ -1,6 +1,10 @@
 import type { AppData } from '@/types';
 import type { OperacionalSyncPayload } from '@/lib/supabase/cooperativaSyncStorage';
 
+export function contadorPodeConsultarCentral(user: { role?: string; active?: boolean } | null | undefined, path: string): boolean {
+  return user?.role === 'contador' && user.active !== false && (path === '/contador' || path.startsWith('/contador/'));
+}
+
 /** Replace supplied domains with saved cloud evidence, including an explicitly empty ledger. */
 export function aplicarSnapshotContadorCloud(data: AppData, payload: OperacionalSyncPayload, coopId: string): AppData {
   const next = { ...data };

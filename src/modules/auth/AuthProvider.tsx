@@ -414,7 +414,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           persistirInicioCardValorReceberCooperado(safeUser);
         }
       }
-      const redirectTo = role === "parceiro" ? "/mercado-parceiro" : "/dashboard";
+      const redirectTo = role === "parceiro" ? "/mercado-parceiro" : role === 'contador' ? '/contador/dashboard' : "/dashboard";
       if (typeof window !== "undefined") {
         if (
           role === "cooperado" &&

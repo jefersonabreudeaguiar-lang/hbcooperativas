@@ -1096,6 +1096,10 @@ function AdminDashboard() {
 export default function DashboardPage() {
   const { user, accountUser } = useAuth();
   const authSubject = accountUser ?? user;
+  const contadorRouter = useRouter();
+  useEffect(() => {
+    if (authSubject?.role === 'contador' && authSubject.active !== false) contadorRouter.replace('/contador/dashboard');
+  }, [authSubject?.role, authSubject?.active, contadorRouter]);
   const dataReady = useAppDataReady();
   const instantResume =
     isCooperadoInstantResumeEnabled() &&
