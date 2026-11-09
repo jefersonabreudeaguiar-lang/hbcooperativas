@@ -28,6 +28,8 @@ for (const action of ["create", "edit", "delete", "approve"] as const) {
 }
 assert.equal(can("contador", "contador", "view"), true);
 assert.equal(can("contador", "relatorios", "export"), true);
+assert.equal(can('contador', 'contador', 'edit'), false, 'exportação não autoriza edição');
+assert.match(readFileSync(join(ROOT, 'src/app/(app)/contador/parecer/page.tsx'), 'utf8'), /const podeEditar = check\("contador", "edit"\)/);
 
 const data = {
   ...emptyInitialData,

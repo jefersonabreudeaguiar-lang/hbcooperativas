@@ -9,6 +9,8 @@ Base: produção 799 `c704c94998e80159e838d751e61bf41e24655e49`.
 - Login e entrada antiga em `/dashboard` encaminham para a central. O guard permite
   a árvore de consulta `/contador` ao perfil ativo, sem convertê-lo em gestão nem
   liberar rotas de operação.
+- Parecer em modo consulta não confunde permissão de exportar com permissão de
+  editar, nem promete salvar uma alteração que a API somente leitura recusaria.
 - Atualização do contador usa somente leitura, sem sync bidirecional ou materialização
   de descontos HB. Revisão leve a cada minuto, ao voltar à janela e ao recuperar
   conexão provoca nova confirmação quando necessário. Falha não é reconhecida como

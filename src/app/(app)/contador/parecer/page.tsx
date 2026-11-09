@@ -55,7 +55,7 @@ export default function ContadorParecerPage() {
 
   if (!data || !user || !coopId) return null;
 
-  const podeEditar = check("contador", "export") || user.role === "contador";
+  const podeEditar = check("contador", "edit");
 
   const carregarParecer = () => {
     if (parecer) {
@@ -80,7 +80,7 @@ export default function ContadorParecerPage() {
   };
 
   const salvar = (comAssinatura = false) => {
-    if (!texto.trim()) return;
+    if (!podeEditar || !texto.trim()) return;
     updateData((d) =>
       salvarParecerContabil(
         d,
