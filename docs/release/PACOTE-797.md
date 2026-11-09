@@ -3,6 +3,37 @@
 Base exata: produção 795, commit `493f584ba708a3496bae11eb994433c05ba198d8`.
 Branch `codex/hb-release-797-ready`. A versão 796 de escala não será promovida.
 
+## Candidata atual após reorganização do financeiro — 08/11/2026
+
+O SHA atual para aprovação é `74c612de4a4262cb2ce358658f521bc906895bdb`,
+deployment de homologação `dpl_4Gc9h2LSnjcRpit2cgTpv6cw6y4s`, READY:
+https://hbcooperativas-homologacao-v1-kwl984uqd-hbcooperativas.vercel.app
+Substitui a seleção anterior `41c34a25`, preservada abaixo como evidência histórica.
+A publicação oficial permanece aguardando OK do proprietário.
+
+A API de financeiro já existente passa a retornar também os pagamentos confirmados
+do próprio cooperado, sem HTML do recibo, assinatura ou dados bancários. A tela
+separa A receber agora, Último pagamento e Recebido no histórico, com meses e
+descontos para conferência. Essa seção funciona mesmo enquanto o AppData local
+ainda não carregou; uma ficha quitada não fica limitada à apresentação de zero.
+O cache da leitura compara também o histórico para perceber novos pagamentos
+mesmo quando o saldo pendente continua zero. Não há escrita em dados financeiros.
+
+18 suítes locais, checagem de tipos e release verify rápido passaram. O novo teste
+cobre isolamento de cooperativa/cooperado, deduplicação de PIX multi-mês, ausência
+de recibo/assinatura no payload, apresentação quitada e com nova entrega pendente.
+Uma leitura do novo modelo com dados oficiais confirmou a separação dos valores,
+sem gravar a consulta nem exportar dados individuais para o repositório.
+
+Na interface, a conta fictícia mostrou R$ 100,00 pendentes, sem último pagamento,
+histórico vazio expansível e navegação sem travamento — conforme sua base sintética.
+O cenário quitado com meses pagos foi coberto pelo render real do componente no
+teste isolado; não foi criada compra ou transferência fictícia na nuvem para isso.
+A conta fictícia foi desativada e a senha invalidada. Produção conferida: 795.
+
+Ao publicar, usar o SHA atual acima. A volta continua sendo a 795 sem restauração
+de banco/JSON, preservando pagamentos e novas entregas feitos entre as versões.
+
 ## Entra no pacote
 
 1. APIs protegidas verificam se a conta ainda está ativa e se seu papel, e-mail,
