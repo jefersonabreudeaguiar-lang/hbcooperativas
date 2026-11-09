@@ -12,6 +12,7 @@ import {
 } from "@/services/cooperadoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { beginSaveBatch, endSaveBatch, getData, getSession, isAppDataWarm, notifyAppDataSubscribers, updateData } from "@/services/dataStore";
+import { staffEntradaEmAndamento } from '@/lib/staff/staffEntradaCoordination';
 import {
   persistDescontosContaCoopNoArquivo,
   getDescontosContaCoopMesCached,
@@ -322,6 +323,7 @@ export async function refreshContaCoopDescontosCooperativaPendentes(opts: {
   data?: AppData;
   pushCloud?: boolean;
 }): Promise<boolean> {
+  if (staffEntradaEmAndamento()) return false;
   const before = opts.data ?? getData();
   const beforeFp = arquivosMensaisFingerprint(before.arquivosMensais);
   let data = before;

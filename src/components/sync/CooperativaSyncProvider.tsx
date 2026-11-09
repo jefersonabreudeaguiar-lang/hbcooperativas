@@ -1,4 +1,5 @@
 "use client";
+import { staffEntradaEmAndamento } from '@/lib/staff/staffEntradaCoordination';
 
 import {
   createContext,
@@ -615,6 +616,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     const userInitiatedRun = opts?.userInitiated === true;
     const currentUser = userRef.current;
     if (!currentUser) return;
+    if (currentUser.role !== 'cooperado' && staffEntradaEmAndamento()) return;
     if (syncingRef.current) {
       if (userInitiatedRun && currentUser.role === "cooperado") {
         cooperadoUserRefreshQueuedRef.current = true;

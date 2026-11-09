@@ -1030,6 +1030,11 @@ function shouldPreserveConferenciaInProgressTruth(): boolean {
   return isConferenciaDeferLocalPersistActive() || saveBatchDepth > 0;
 }
 
+/** Entry waits for existing writes; it must not reset an active batch or discard its data. */
+export function staffEntradaEscritaOcupada(): boolean {
+  return shouldPreserveConferenciaInProgressTruth();
+}
+
 function applyConferenciaInProgressTruthIfNeeded(data: AppData): AppData {
   if (!memoryCache || !shouldPreserveConferenciaInProgressTruth()) return data;
   return preserveConferenciaInProgressOperationalTruth(data, memoryCache);
@@ -1067,7 +1072,8 @@ export function saveDataSafe(data: AppData): { ok: true } | { ok: false; error: 
 
 /** Only the full staff entry read may replace an obsolete count-based fallback. No cloud write. */
 export function saveStaffEntradaCloud(data: AppData, cnpj: string): { ok: true } | { ok: false; error: string } {
-  if (shouldPreserveConferenciaInProgressTruth()) return { ok: false, error: 'Aguarde a conclusão da conferência e tente novamente.' };
+  if (isConferenciaDeferLocalPersistActive()) return { ok: false, error: 'Aguarde a conclusão da conferência e tente novamente.' };
+  if (saveBatchDepth > 0) return { ok: false, error: 'Uma atualização anterior ainda está terminando neste navegador. Aguarde alguns segundos e tente novamente.' };
   const saved = persistDataToStorage(data, { skipNotify: true });
   if (saved.ok) {
     if (getSession()?.role !== 'contador') confirmarStaffGestaoLastGoodCloud(getData(), cnpj);

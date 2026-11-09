@@ -1,6 +1,7 @@
 import type { User } from "@/types";
 import { secureApiFetch } from "@/lib/security/clientSession";
-import { getData, saveStaffEntradaCloud } from "@/services/dataStore";
+import { getData, saveStaffEntradaCloud, staffEntradaEscritaOcupada } from "@/services/dataStore";
+import { iniciarStaffEntrada, aguardarEscritasStaff } from '@/lib/staff/staffEntradaCoordination';
 import { reconciliarEntradaStaffCloud } from '@/lib/staff/staffEntradaCloudReconcile';
 import { guardarCopiasEntradaStaff } from '@/lib/staff/staffEntradaRecovery';
 import { listPendingEntregaPublish } from '@/services/pendingEntregaPublishService';
@@ -27,6 +28,14 @@ export async function lerEntradaStaffComRetry<T>(nome: string, ler: () => Promis
 }
 
 export async function atualizarEntradaStaff(user: Omit<User, "password">, ativa: () => boolean): Promise<CooperativaCloudRevision> {
+  const release = iniciarStaffEntrada();
+  try {
+    await aguardarEscritasStaff(staffEntradaEscritaOcupada, ativa);
+    return await atualizarEntradaStaffLivre(user, ativa);
+  } finally { release(); }
+}
+
+async function atualizarEntradaStaffLivre(user: Omit<User, "password">, ativa: () => boolean): Promise<CooperativaCloudRevision> {
   const startedAt = Date.now();
   const current = getData();
   const cnpj = await resolveCooperativaCnpj(current, resolveGestaoCooperativaId(user, current), user);
@@ -61,6 +70,7 @@ export async function atualizarEntradaStaff(user: Omit<User, "password">, ativa:
     ...listPendingEntregaPublish({ cnpj }).map(r => r.nota.id),
   ]);
   if (!ativa()) throw new Error("Entrada cancelada.");
+  await aguardarEscritasStaff(staffEntradaEscritaOcupada, ativa, 10_000);
   const reconciled = reconciliarEntradaStaffCloud(getData(), next, bundle.operacional, entregas.notas, coopId, startedAt, pendingIds);
   if (user.role === 'contador') {
     // Accounting must inspect the saved ledger, not entries synthesized by the UI merge.
