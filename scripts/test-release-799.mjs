@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 const cli = createRequire(import.meta.url).resolve('tsx/cli');
 const tests = [
+  'test-notas-confirmacao-completa-799.ts',
   'test-staff-entrada-cloud-799.ts', 'test-staff-entrada-retry.ts', 'test-staff-entrada-sem-valores-antigos.tsx',
   'test-staff-gestao-lkg-por-cnpj.ts', 'test-staff-gestao-nunca-zera-snapshot.ts',
   'test-financeiro-pendentes-798.ts',

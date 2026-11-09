@@ -509,7 +509,7 @@ export function mergeCloudNotasIntoData(
 
 export async function fetchNotasPedidoFromCloud(
   cnpj: string,
-  options?: { since?: string; forceFull?: boolean; repairFila?: boolean }
+  options?: { since?: string; forceFull?: boolean; repairFila?: boolean; confirmarCompleta?: boolean }
 ): Promise<{
   ok: boolean;
   notas: NotaPedido[];
@@ -525,6 +525,7 @@ export async function fetchNotasPedidoFromCloud(
 
   try {
     const qs = new URLSearchParams({ cnpj: digits, lite: "1" });
+    if (options?.confirmarCompleta) qs.set('confirmarCompleta', '1');
     if (since) qs.set("since", since);
     if (forceFull && options?.repairFila !== false && typeof sessionStorage !== "undefined") {
       const repairKey = `hb_repair_fila_done:${digits}:v2`;
@@ -536,6 +537,7 @@ export async function fetchNotasPedidoFromCloud(
     const res = await secureApiFetch(`/api/notas-pedido?${qs.toString()}`, { cache: "no-store" });
     if (!res.ok) return { ok: false, notas: [], delta: Boolean(since) };
     const json = await res.json().catch(() => ({}));
+    if (options?.confirmarCompleta && json.complete !== true) return { ok: false, notas: [], delta: Boolean(since) };
     if (!Array.isArray(json.notas)) return { ok: false, notas: [], delta: Boolean(since) };
     const notas = ((json.notas ?? []) as unknown[])
       .map(mapRowToNota)

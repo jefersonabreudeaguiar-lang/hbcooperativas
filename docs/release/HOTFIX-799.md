@@ -7,6 +7,8 @@ sessão anônima. A entrada consultava a nuvem, mas mesclava esses registros com
 cache antigo e o fallback baseado em contagens podia recolocá-los na leitura.
 
 A entrada agora exige leitura completa bem-sucedida das entregas e financeiro.
+SQL e Storage são paginados; erro de listagem, download ou JSON invalida a
+confirmação. A listagem explícita de confirmação não repara nem publica notas.
 Coleções explicitamente fornecidas de fichas, avulsos e ajustes prevalecem sobre
 cópias anteriores do aparelho. Domínio omitido nunca significa coleção vazia.
 Alterações realizadas depois do início da consulta são preservadas. A consulta

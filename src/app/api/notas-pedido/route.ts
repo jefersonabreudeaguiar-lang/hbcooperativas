@@ -46,9 +46,22 @@ export async function GET(request: Request) {
   const since = searchParams.get("since")?.trim() || undefined;
   const delta = Boolean(since);
   const filaOnly = searchParams.get("fila") === "1";
-
   const visiveis = (lista: NotaPedido[]) =>
     lista.filter((n) => n.status !== "rascunho");
+
+  if (searchParams.get('confirmarCompleta') === '1') {
+    if (since || filaOnly) return NextResponse.json({ error: 'A confirmação exige listagem completa.' }, { status: 400 });
+    try {
+      const [table, storage] = await Promise.all([
+        fetchNotasFromTable(supabase, cnpj, undefined, true),
+        fetchNotasFromStorage(supabase, cnpj, true),
+      ]);
+      return NextResponse.json({ notas: visiveis(table.tableMissing ? storage : mergeNotasSources(table.notas, storage)).map(sanitizarNotaParaFilaConferencia),
+        source: 'confirmed-full', complete: true }, { headers: { 'Cache-Control': 'private, no-store' } });
+    } catch {
+      return NextResponse.json({ error: 'Não foi possível confirmar todas as entregas. Tente novamente.' }, { status: 503 });
+    }
+  }
 
   const responderLista = async (lista: NotaPedido[], source: string) => {
     const merged = visiveis(lista).map(sanitizarNotaParaFilaConferencia);

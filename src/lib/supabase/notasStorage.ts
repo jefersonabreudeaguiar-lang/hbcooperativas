@@ -368,8 +368,8 @@ export async function uploadNotaToStorage(
 const NOTAS_STORAGE_DOWNLOAD_CONCURRENCY = 16;
 
 /** Lista só os `<notaId>.json` da pasta do CNPJ (pastas de fotos ficam de fora). */
-async function listNotaJsonFileNames(supabase: SupabaseClient, cnpj: string): Promise<string[]> {
-  await ensureEntregasBucket(supabase);
+async function listNotaJsonFileNames(supabase: SupabaseClient, cnpj: string, strict = false): Promise<string[]> {
+  if (!strict) await ensureEntregasBucket(supabase);
   const names: string[] = [];
   let offset = 0;
   const pageSize = 500;
@@ -377,6 +377,7 @@ async function listNotaJsonFileNames(supabase: SupabaseClient, cnpj: string): Pr
     const { data: page, error } = await supabase.storage
       .from(BUCKET)
       .list(cnpj, { limit: pageSize, offset });
+    if (error && strict) throw new Error('Não foi possível listar todas as entregas.');
     if (error || !page?.length) break;
     for (const file of page) {
       if (file.name.endsWith(".json")) names.push(file.name);
@@ -390,7 +391,7 @@ async function listNotaJsonFileNames(supabase: SupabaseClient, cnpj: string): Pr
 async function downloadNotasJsonParallel(
   supabase: SupabaseClient,
   cnpj: string,
-  fileNames: readonly string[]
+  fileNames: readonly string[], strict = false
 ): Promise<NotaPedido[]> {
   const notas: NotaPedido[] = [];
   let cursor = 0;
@@ -401,11 +402,16 @@ async function downloadNotasJsonParallel(
       const { data: blob, error: dlErr } = await supabase.storage
         .from(BUCKET)
         .download(`${cnpj}/${fileNames[idx]}`, { cacheNonce: crypto.randomUUID() }, { cache: "no-store" });
-      if (dlErr || !blob) continue;
+      if (dlErr || !blob) {
+        if (strict) throw new Error('Não foi possível ler todas as entregas.');
+        continue;
+      }
       try {
         const parsed = JSON.parse(await blob.text()) as NotaPedido;
         if (parsed?.id) notas.push(parsed);
+        else if (strict) throw new Error('Entrega inválida.');
       } catch {
+        if (strict) throw new Error('Não foi possível validar todas as entregas.');
         /* ignore corrupt file */
       }
     }
@@ -419,11 +425,11 @@ async function downloadNotasJsonParallel(
 
 export async function fetchNotasFromStorage(
   supabase: SupabaseClient,
-  cnpj: string
+  cnpj: string, strict = false
 ): Promise<NotaPedido[]> {
-  const names = await listNotaJsonFileNames(supabase, cnpj);
+  const names = await listNotaJsonFileNames(supabase, cnpj, strict);
   if (!names.length) return [];
-  return downloadNotasJsonParallel(supabase, cnpj, names);
+  return downloadNotasJsonParallel(supabase, cnpj, names, strict);
 }
 
 export async function fetchNotaFromStorage(
@@ -624,8 +630,26 @@ export async function fetchFilaConferenciaFromTable(
 export async function fetchNotasFromTable(
   supabase: SupabaseClient,
   cnpj: string,
-  since?: string
+  since?: string, strict = false
 ): Promise<{ notas: NotaPedido[]; tableMissing: boolean; serverWatermark?: string }> {
+  if (strict) {
+    if (since) throw new Error('A confirmação exige listagem completa.');
+    const rows: Array<{ payload: unknown; status: unknown; updated_at: unknown }> = [];
+    for (let offset = 0; ; offset += 500) {
+      const { data, error } = await supabase.from('notas_pedido').select('payload, status, updated_at')
+        .eq('cooperativa_cnpj', cnpj).order('id', { ascending: true }).range(offset, offset + 499);
+      if (error) {
+        if (isNotasPedidoTableMissing(error)) return { notas: [], tableMissing: true };
+        throw new Error('Não foi possível consultar todas as entregas.');
+      }
+      if (!Array.isArray(data)) throw new Error('Listagem incompleta.');
+      rows.push(...data);
+      if (data.length < 500) break;
+    }
+    const result = mapNotasPedidoTableRows(rows);
+    if (result.notas.length !== rows.length) throw new Error('Entregas inválidas na listagem.');
+    return { ...result, tableMissing: false };
+  }
   if (since) {
     const [deltaRes, filaRes] = await Promise.all([
       supabase

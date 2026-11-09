@@ -33,7 +33,7 @@ export async function atualizarEntradaStaff(user: Omit<User, "password">, ativa:
   if (!coopId || !ativa()) throw new Error("Não foi possível confirmar a cooperativa.");
   const [cadastros, entregas, response] = await Promise.all([
     lerEntradaStaffComRetry("os cooperados", () => fetchCooperadosFromCloud(cnpj), (r) => r.ok, ativa),
-    lerEntradaStaffComRetry("as entregas", () => fetchNotasPedidoFromCloud(cnpj, { forceFull: true, repairFila: false }), (r) => r.ok && !r.delta, ativa),
+    lerEntradaStaffComRetry("as entregas", () => fetchNotasPedidoFromCloud(cnpj, { forceFull: true, repairFila: false, confirmarCompleta: true }), (r) => r.ok && !r.delta, ativa),
     lerEntradaStaffComRetry("o financeiro e os contratos", async () => {
       const res = await secureApiFetch(`/api/cooperativa-sync?cnpj=${cnpj}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
       if (!res.ok) throw new Error("Consulta indisponível");
