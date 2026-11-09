@@ -16,6 +16,7 @@ import {
   preservarStaffGestaoContraWipe,
   primaryStaffGestaoCnpjFromData,
   staffGestaoRiquezaTotal,
+  confirmarStaffGestaoLastGoodCloud,
 } from "@/lib/staff/staffGestaoSnapshotGuard";
 import {
   APP_DATA_STORAGE_KEY,
@@ -1062,6 +1063,17 @@ export function saveDataSafe(data: AppData): { ok: true } | { ok: false; error: 
   }
 
   return persistDataToStorage(data);
+}
+
+/** Only the full staff entry read may replace an obsolete count-based fallback. No cloud write. */
+export function saveStaffEntradaCloud(data: AppData, cnpj: string): { ok: true } | { ok: false; error: string } {
+  if (shouldPreserveConferenciaInProgressTruth()) return { ok: false, error: 'Aguarde a conclusão da conferência e tente novamente.' };
+  const saved = persistDataToStorage(data, { skipNotify: true });
+  if (saved.ok) {
+    confirmarStaffGestaoLastGoodCloud(getData(), cnpj);
+    notify();
+  }
+  return saved;
 }
 
 /** Dados em memória sem view de push pós-conferência (fila/UI não reexibe nota já conferida). */

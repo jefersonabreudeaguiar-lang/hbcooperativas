@@ -302,6 +302,14 @@ export function peekStaffGestaoLastGood(cnpjHint?: string): AppData | null {
   return lastGoodByCnpj.get(cnpj) ?? null;
 }
 
+/** A successful full entry read supersedes the count-based device fallback. */
+export function confirmarStaffGestaoLastGoodCloud(data: AppData, cnpj: string): void {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14 || !coopIdForCnpj(data, digits)) throw new Error('Cooperativa inválida.');
+  lastGoodByCnpj.set(digits, data);
+  persistLastGoodToSessionNow(digits, data);
+}
+
 /** Persist/LKG ilegível — libera F5 sem tela branca (Chrome com blob corrompido). */
 export function discardStaffGestaoLocalForCnpj(cnpj: string): void {
   const digits = normalizeCnpj(cnpj);

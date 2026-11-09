@@ -48,3 +48,4 @@ next-env.d.ts
 # relatórios locais de auditoria semanal
 /scripts/reports/*
 !/scripts/reports/.gitkeep
+/.tmp-release-799*

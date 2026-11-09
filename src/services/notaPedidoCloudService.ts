@@ -536,6 +536,7 @@ export async function fetchNotasPedidoFromCloud(
     const res = await secureApiFetch(`/api/notas-pedido?${qs.toString()}`, { cache: "no-store" });
     if (!res.ok) return { ok: false, notas: [], delta: Boolean(since) };
     const json = await res.json().catch(() => ({}));
+    if (!Array.isArray(json.notas)) return { ok: false, notas: [], delta: Boolean(since) };
     const notas = ((json.notas ?? []) as unknown[])
       .map(mapRowToNota)
       .filter((n): n is NotaPedido => Boolean(n));
