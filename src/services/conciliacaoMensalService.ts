@@ -1,17 +1,14 @@
 import type { AppData } from "@/types";
-import { CONTA_COOP_DESCONTO_SPLIT } from "@/config/contaCoopEconomia";
 import { round2, sumBy } from "@/utils/calculations";
 import { hrefRelatorio } from "@/utils/relatorioRoutes";
 import {
   dedupeFichaCorridaPorNota,
   fichaValidaNoExtrato,
   getTotalAPagarCooperado,
-  pagamentoCobreMesReferencia,
-  pagamentoRegistradoParaRelatorio,
-  somaValorPagamentosRegistrados,
 } from "@/services/notaPedidoService";
-import { calcularFechamentoMensalLive, listMesesComLancamentos } from "@/services/relatorioService";
-import { reconciliarLivroCaixaContabilCooperativa, resumoLivroCaixa } from "@/services/livroCaixaService";
+import { listMesesComLancamentos } from "@/services/relatorioService";
+import { dataLancamentoPagamento, resolverDataIsoLancamentoLivroCaixa } from "@/services/livroCaixaService";
+import { contadorDadosCooperativa } from '@/lib/staff/contadorDadosCooperativa';
 import { getUserCooperativaId } from "@/utils/cooperativa";
 
 export type ConciliacaoStatus = "ok" | "divergencia" | "ausente" | "parcial";
@@ -61,434 +58,99 @@ export interface ConciliacaoMensalResult {
 
 const TOLERANCIA = 0.02;
 
-function compare(valorA: number, valorB: number): ConciliacaoStatus {
-  if (valorA === 0 && valorB === 0) return "ausente";
-  if (Math.abs(valorA - valorB) <= TOLERANCIA) return "ok";
-  return "divergencia";
+function compare(a: number, b: number): ConciliacaoStatus {
+  return a === 0 && b === 0 ? 'ausente' : Math.abs(a - b) <= TOLERANCIA ? 'ok' : 'divergencia';
 }
 
-function notasConferidasMes(data: AppData, mes: string) {
-  return data.notasPedido.filter(
-    (n) => n.mesReferencia === mes && (n.status === "conferida" || n.status === "pago")
-  );
-}
-
-function sumDescontosPorTipo(
-  data: AppData,
-  mes: string,
-  tipo: "cooperativa" | "mensalidade" | "cota" | "conta_coop"
-): number {
-  const fichas = data.fichaCorrida.filter((f) => f.mesReferencia === mes);
-  let total = 0;
-  for (const f of fichas) {
-    for (const d of f.descontosDetalhe ?? []) {
-      if (d.tipo === tipo) total += d.valor;
-    }
-  }
-  for (const p of data.pagamentosCooperado.filter((pg) => pg.mesReferencia === mes)) {
-    for (const d of p.descontosExtras ?? []) {
-      if (d.tipo === tipo) total += d.valor;
-    }
-  }
-  return round2(total);
-}
-
-function countNotasSemFicha(data: AppData, mes: string): number {
-  const notas = notasConferidasMes(data, mes);
-  const fichaNotaIds = new Set(
-    data.fichaCorrida.filter((f) => f.mesReferencia === mes).map((f) => f.notaPedidoId)
-  );
-  return notas.filter((n) => !fichaNotaIds.has(n.id)).length;
-}
-
-export function calcularConciliacaoMensal(
-  data: AppData,
-  mesReferencia: string,
-  cooperativaId?: string
-): ConciliacaoMensalResult {
-  const coopId = cooperativaId ?? data.cooperativas[0]?.id ?? "";
-  const fonte = coopId ? reconciliarLivroCaixaContabilCooperativa(data, coopId) : data;
-  const fechamento = fonte.fechamentos.find((f) => f.mesReferencia === mesReferencia);
-  const calc = calcularFechamentoMensalLive(mesReferencia, fonte);
-
-  const notasOk = notasConferidasMes(fonte, mesReferencia);
-  const fichasMes = dedupeFichaCorridaPorNota(
-    fonte.fichaCorrida.filter((f) => f.mesReferencia === mesReferencia && fichaValidaNoExtrato(fonte, f)),
-    fonte.notasPedido
-  );
-  const totalBrutoNotas = round2(sumBy(notasOk, (n) => n.valorBruto));
-  const totalBrutoFicha = round2(sumBy(fichasMes, (f) => f.valorBruto));
-
-  const descontoCoopFicha = sumDescontosPorTipo(fonte, mesReferencia, "cooperativa");
-  const descontoCoopPagamentos = round2(
-    sumBy(
-      fonte.pagamentosCooperado.filter(
-        (p) =>
-          p.cooperativaId === coopId &&
-          pagamentoCobreMesReferencia(p, mesReferencia) &&
-          pagamentoRegistradoParaRelatorio(p)
-      ),
-      (p) => p.descontoCooperativa
-    )
-  );
-  const descontoCoopTotal = round2(descontoCoopFicha + descontoCoopPagamentos);
-
-  const ajusteMes = fonte.ajustesFichaMes?.find(
-    (a) => a.cooperativaId === coopId && a.mesReferencia === mesReferencia
-  );
-  const descontoAvulsoCoop = ajusteMes?.descontoAvulso ?? 0;
-
-  const descontoMensFicha = sumDescontosPorTipo(fonte, mesReferencia, "mensalidade");
-  const mensalidadesPagas = fonte.mensalidades.filter(
-    (m) => m.mesReferencia === mesReferencia && m.status === "paga"
-  );
-  const totalMensPagas = round2(sumBy(mensalidadesPagas, (m) => m.valor));
-
-  const descontoCotaFicha = sumDescontosPorTipo(fonte, mesReferencia, "cota");
-  const cotasMes = fonte.cotas.flatMap((c) =>
-    c.historicoPagamentos.filter((hp) => hp.data.startsWith(mesReferencia))
-  );
-  const totalCotas = round2(sumBy(cotasMes, (c) => c.valor));
-
-  const descontoContaCoop = sumDescontosPorTipo(fonte, mesReferencia, "conta_coop");
-
-  const pagamentosMes = fonte.pagamentosCooperado.filter(
-    (p) => p.cooperativaId === coopId && pagamentoCobreMesReferencia(p, mesReferencia)
-  );
-  const totalPagoCooperados = somaValorPagamentosRegistrados(pagamentosMes);
-
-  const caixaMes = resumoLivroCaixa(fonte, coopId, mesReferencia);
-  const debitosPagamentoCaixa = round2(
-    sumBy(
-      caixaMes.lancamentos.filter((l) => l.origem === "pagamento_cooperado" && l.tipo === "debito"),
-      (l) => l.valor
-    )
-  );
-
-  const creditosMensCaixa = round2(
-    sumBy(
-      caixaMes.lancamentos.filter((l) => l.origem === "mensalidade" && l.tipo === "credito"),
-      (l) => l.valor
-    )
-  );
-
-  const creditosTaxaCoopCaixa = round2(
-    sumBy(
-      caixaMes.lancamentos.filter((l) => l.origem === "taxa_cooperativa" && l.tipo === "credito"),
-      (l) => l.valor
-    )
-  );
-
-  const creditosMensFichaCaixa = round2(
-    sumBy(
-      caixaMes.lancamentos.filter((l) => l.origem === "mensalidade_ficha" && l.tipo === "credito"),
-      (l) => l.valor
-    )
-  );
-
-  const debitosHbAppRepasse = round2(
-    sumBy(
-      caixaMes.lancamentos.filter((l) => l.origem === "hb_app_repasse" && l.tipo === "debito"),
-      (l) => l.valor
-    )
-  );
-
-  const descontoMensPagamentos = round2(
-    sumBy(pagamentosMes, (p) =>
-      (p.descontosExtras ?? []).filter((d) => d.tipo === "mensalidade").reduce((s, d) => s + d.valor, 0)
-    )
-  );
-  const descontoMensRetido = round2(Math.max(descontoMensFicha, descontoMensPagamentos));
-
-  const totalAPagar = round2(
-    sumBy(fonte.cooperados, (c) => getTotalAPagarCooperado(fonte, c.id, mesReferencia))
-  );
-
-  const linhas: LinhaConciliacao[] = [
-    {
-      id: "entregas_ficha",
-      label: "Entregas × Ficha",
-      descricao: "Valor bruto das notas conferidas versus lançamentos na ficha corrida.",
-      valorA: totalBrutoNotas,
-      labelA: "Notas conferidas",
-      valorB: totalBrutoFicha,
-      labelB: "Ficha corrida (bruto)",
-      diferenca: round2(totalBrutoNotas - totalBrutoFicha),
-      status: compare(totalBrutoNotas, totalBrutoFicha),
-      detalhe: countNotasSemFicha(fonte, mesReferencia) > 0
-        ? `${countNotasSemFicha(fonte, mesReferencia)} nota(s) conferida(s) sem ficha.`
-        : undefined,
-    },
-    {
-      id: "desconto_mensalidade",
-      label: "Mensalidades descontadas",
-      descricao: "Descontos tipo mensalidade na ficha versus mensalidades confirmadas como pagas.",
-      valorA: descontoMensFicha,
-      labelA: "Desconto na ficha",
-      valorB: totalMensPagas,
-      labelB: "Mensalidades pagas",
-      diferenca: round2(descontoMensFicha - totalMensPagas),
-      status: compare(descontoMensFicha, totalMensPagas),
-    },
-    {
-      id: "desconto_cota",
-      label: "Cotas descontadas",
-      descricao: "Descontos de cota na ficha versus cotas recebidas no mês.",
-      valorA: descontoCotaFicha,
-      labelB: "Cotas recebidas",
-      valorB: totalCotas,
-      labelA: "Desconto na ficha",
-      diferenca: round2(descontoCotaFicha - totalCotas),
-      status: compare(descontoCotaFicha, totalCotas),
-    },
-    {
-      id: "pagamentos_caixa",
-      label: "Pagamentos × Livro caixa",
-      descricao: "Pagamentos registrados aos cooperados (PIX) versus débitos no livro caixa.",
-      valorA: totalPagoCooperados,
-      labelA: "Pagamentos registrados",
-      valorB: debitosPagamentoCaixa,
-      labelB: "Débitos no caixa",
-      diferenca: round2(totalPagoCooperados - debitosPagamentoCaixa),
-      status:
-        totalPagoCooperados > 0 && debitosPagamentoCaixa === 0
-          ? "divergencia"
-          : compare(totalPagoCooperados, debitosPagamentoCaixa),
-      detalhe:
-        totalPagoCooperados > 0 && debitosPagamentoCaixa === 0
-          ? "Pagamentos registrados sem lançamento correspondente no livro caixa."
-          : undefined,
-    },
-    {
-      id: "mensalidades_caixa",
-      label: "Mensalidades × Livro caixa",
-      descricao: "Mensalidades pagas via PIX versus créditos registrados no livro caixa.",
-      valorA: totalMensPagas,
-      labelA: "Mensalidades pagas (PIX)",
-      valorB: creditosMensCaixa,
-      labelB: "Créditos PIX no caixa",
-      diferenca: round2(totalMensPagas - creditosMensCaixa),
-      status:
-        totalMensPagas > 0 && creditosMensCaixa === 0 ? "divergencia" : compare(totalMensPagas, creditosMensCaixa),
-    },
-    {
-      id: "mensalidade_ficha_caixa",
-      label: "Mensalidade na ficha × Caixa",
-      descricao: "Mensalidade abatida no pagamento do cooperado versus crédito contábil no livro caixa.",
-      valorA: descontoMensRetido,
-      labelA: "Mensalidade retida na ficha",
-      valorB: creditosMensFichaCaixa,
-      labelB: "Crédito contábil no caixa",
-      diferenca: round2(descontoMensRetido - creditosMensFichaCaixa),
-      status:
-        descontoMensRetido > 0 && creditosMensFichaCaixa === 0
-          ? "divergencia"
-          : compare(descontoMensRetido, creditosMensFichaCaixa),
-      detalhe:
-        descontoMensRetido > 0 && creditosMensFichaCaixa === 0
-          ? "Desconto de mensalidade na ficha sem lançamento contábil correspondente."
-          : undefined,
-    },
-    {
-      id: "taxa_cooperativa_caixa",
-      label: "Taxa cooperativa × Caixa",
-      descricao: "Taxa de 5% retida nos pagamentos versus créditos contábeis no livro caixa.",
-      valorA: descontoCoopPagamentos,
-      labelA: "Taxa nos pagamentos",
-      valorB: creditosTaxaCoopCaixa,
-      labelB: "Crédito contábil no caixa",
-      diferenca: round2(descontoCoopPagamentos - creditosTaxaCoopCaixa),
-      status:
-        descontoCoopPagamentos > 0 && creditosTaxaCoopCaixa === 0
-          ? "divergencia"
-          : compare(descontoCoopPagamentos, creditosTaxaCoopCaixa),
-      detalhe:
-        descontoCoopPagamentos > 0 && creditosTaxaCoopCaixa === 0
-          ? "Taxa cooperativa sem lançamento contábil correspondente no livro caixa."
-          : undefined,
-    },
-    {
-      id: "obrigacao_pagamento",
-      label: "Obrigação × Pagamentos",
-      descricao: "Total a pagar aos cooperados versus total registrado pelo responsável (PIX).",
-      valorA: totalAPagar,
-      labelA: "A pagar (ficha)",
-      valorB: totalPagoCooperados,
-      labelB: "Pago registrado",
-      diferenca: round2(totalAPagar - totalPagoCooperados),
-      status: totalAPagar >= totalPagoCooperados - TOLERANCIA ? "ok" : "divergencia",
-      detalhe:
-        totalAPagar > totalPagoCooperados + TOLERANCIA
-          ? `Saldo pendente de pagamento: R$ ${(totalAPagar - totalPagoCooperados).toFixed(2)}`
-          : undefined,
-    },
-    {
-      id: "conta_coop",
-      label: "HB Créditos (ficha)",
-      descricao: "Total de descontos HB Créditos lançados na ficha do mês.",
-      valorA: descontoContaCoop,
-      labelA: "Desconto ficha",
-      valorB: descontoContaCoop,
-      labelB: "Referência ficha",
-      diferenca: 0,
-      status: descontoContaCoop > 0 ? "parcial" : "ausente",
-      detalhe:
-        descontoContaCoop > 0
-          ? "Conciliação com ledger HB Credit na nuvem — ver aba HB Créditos."
-          : "Sem compras HB Créditos neste mês.",
-    },
-    {
-      id: "hb_app_repasse_caixa",
-      label: `Repasse HB (${CONTA_COOP_DESCONTO_SPLIT.appPercent}% HB Créditos)`,
-      descricao: `Débito no livro caixa por repasse confirmado à plataforma HB (taxa ${CONTA_COOP_DESCONTO_SPLIT.appPercent}% do desconto).`,
-      valorA: debitosHbAppRepasse,
-      labelA: "Pago (livro caixa)",
-      valorB: debitosHbAppRepasse,
-      labelB: "Registrado no caixa",
-      diferenca: 0,
-      status:
-        debitosHbAppRepasse > 0
-          ? "ok"
-          : descontoContaCoop > 0
-            ? "parcial"
-            : "ausente",
-      detalhe:
-        descontoContaCoop > 0 && debitosHbAppRepasse === 0
-          ? `Há movimento HB Créditos na ficha, mas repasse HB ${CONTA_COOP_DESCONTO_SPLIT.appPercent}% ainda não confirmado no livro caixa (aba HB Créditos > Descontos).`
-          : debitosHbAppRepasse > 0
-            ? "Valor apurado na nuvem — conferir aba HB Créditos > Descontos."
-            : undefined,
-    },
-  ];
-
-  if (descontoCoopTotal > 0 || descontoAvulsoCoop > 0) {
-    linhas.splice(1, 0, {
-      id: "desconto_cooperativa",
-      label: "Desconto cooperativa",
-      descricao: "Percentual/desconto da cooperativa na ficha versus ajuste avulso do mês.",
-      valorA: descontoCoopTotal,
-      labelA: "Descontos na ficha/pagamentos",
-      valorB: descontoAvulsoCoop,
-      labelB: "Desconto avulso do mês",
-      diferenca: round2(descontoCoopTotal - descontoAvulsoCoop),
-      status: descontoAvulsoCoop > 0 ? compare(descontoCoopTotal, descontoAvulsoCoop) : "parcial",
-    });
-  }
-
-  const alertas: AlertaConciliacao[] = [];
-  const now = Date.now();
-  const seteDias = 7 * 24 * 60 * 60 * 1000;
-
-  for (const p of pagamentosMes.filter((pg) => pg.status === "aguardando_confirmacao")) {
-    const idade = now - new Date(p.pagoEm).getTime();
-    if (idade > seteDias) {
-      alertas.push({
-        id: `pg_sem_assinatura_${p.id}`,
-        severidade: "aviso",
-        titulo: "Pagamento sem assinatura do cooperado",
-        descricao: `Pagamento de ${p.mesReferencia} aguardando confirmação há mais de 7 dias.`,
-        href: "/ficha-corrida",
-      });
-    }
-  }
-
-  const notasSemFicha = countNotasSemFicha(fonte, mesReferencia);
-  if (notasSemFicha > 0) {
-    alertas.push({
-      id: "notas_sem_ficha",
-      severidade: "critico",
-      titulo: "Notas conferidas sem ficha",
-      descricao: `${notasSemFicha} entrega(s) conferida(s) ainda não lançada(s) na ficha corrida.`,
-      href: "/ficha-corrida",
-    });
-  }
-
-  for (const l of linhas.filter((x) => x.status === "divergencia")) {
-    alertas.push({
-      id: `div_${l.id}`,
-      severidade: "critico",
-      titulo: `Divergência: ${l.label}`,
-      descricao: `Diferença de R$ ${Math.abs(l.diferenca).toFixed(2)} entre ${l.labelA} e ${l.labelB}.`,
-      href: hrefRelatorio("conciliacao_mensal", { mes: mesReferencia }),
-    });
-  }
-
-  if (fechamento?.status === "aprovado" && linhas.some((l) => l.status === "divergencia")) {
-    alertas.push({
-      id: "fechamento_com_divergencia",
-      severidade: "critico",
-      titulo: "Fechamento aprovado com divergência",
-      descricao: "O mês está aprovado no fechamento, mas a conciliação ainda aponta diferenças.",
-      href: "/fechamento-mensal",
-    });
-  }
-
-  const mensAbertas = fonte.mensalidades.filter(
-    (m) => m.mesReferencia === mesReferencia && m.status !== "paga"
-  ).length;
-  if (mensAbertas > 0) {
-    alertas.push({
-      id: "mensalidades_abertas",
-      severidade: "info",
-      titulo: "Mensalidades em aberto",
-      descricao: `${mensAbertas} mensalidade(s) pendente(s) no mês.`,
-      href: "/mensalidades",
-    });
-  }
-
-  const conciliadas = linhas.filter((l) => l.status === "ok").length;
-  const divergencias = linhas.filter((l) => l.status === "divergencia").length;
-  const ausentes = linhas.filter((l) => l.status === "ausente").length;
-
-  return {
-    mesReferencia,
-    linhas,
-    alertas,
-    resumo: {
-      totalLinhas: linhas.length,
-      conciliadas,
-      divergencias,
-      ausentes,
-      percentualOk: linhas.length ? Math.round((conciliadas / linhas.length) * 100) : 100,
-    },
-    kpis: {
-      totalEntregasConferidas: notasOk.length,
-      totalAPagarCooperados: totalAPagar,
-      totalPagoCooperados: totalPagoCooperados,
-      pagamentosSemAssinatura: pagamentosMes.filter((p) => p.status === "aguardando_confirmacao").length,
-      notasSemFicha: notasSemFicha,
-      mensalidadesAbertas: mensAbertas,
-      fechamentoStatus: fechamento?.status ?? null,
-    },
+/** Saved evidence only: reconciliation never creates or repairs a ledger entry. */
+export function calcularConciliacaoMensal(data: AppData, mesReferencia: string, cooperativaId?: string): ConciliacaoMensalResult {
+  const coopId = cooperativaId ?? data.cooperativas[0]?.id ?? '';
+  const fonte = contadorDadosCooperativa(data, coopId);
+  const confirmed = [...new Map(fonte.pagamentosCooperado.filter(p => p.status === 'confirmado').map(p => [p.id, p])).values()];
+  const cashPayments = confirmed.filter(p => dataLancamentoPagamento(p).slice(0, 7) === mesReferencia);
+  const cash = fonte.livroCaixa.filter(l => resolverDataIsoLancamentoLivroCaixa(l, fonte).slice(0, 7) === mesReferencia);
+  const notas = fonte.notasPedido.filter(n => n.mesReferencia === mesReferencia && ['conferida', 'pago'].includes(n.status));
+  const fichas = dedupeFichaCorridaPorNota(fonte.fichaCorrida.filter(f => f.mesReferencia === mesReferencia && fichaValidaNoExtrato(fonte, f)), fonte.notasPedido);
+  const fichaNotes = new Set(fichas.map(f => f.notaPedidoId));
+  const notasSemFicha = notas.filter(n => !fichaNotes.has(n.id)).length;
+  const totalAPagar = round2(sumBy(fonte.cooperados, c => getTotalAPagarCooperado(fonte, c.id, mesReferencia, coopId)));
+  const totalPago = round2(sumBy(cashPayments, p => p.valorLiquido));
+  const totalBruto = round2(sumBy(cashPayments, p => p.valorBruto));
+  const extra = (tipo: string) => round2(sumBy(cashPayments, p => sumBy((p.descontosExtras ?? []).filter(d => d.tipo === tipo && !/\(estornada\)/i.test(d.motivo ?? '')), d => d.valor)));
+  const outros = (p: typeof cashPayments[number]) => (p.descontosExtras ?? []).filter(d => !['mensalidade', 'credito_avulso', 'cooperativa'].includes(d.tipo) && d.valor > 0 && !/\(estornada\)/i.test(d.motivo ?? ''));
+  const sumCash = (origem: string, tipo: string) => round2(sumBy(cash.filter(l => l.origem === origem && l.tipo === tipo), l => l.valor));
+  const linhas: LinhaConciliacao[] = [];
+  const add = (id: string, label: string, descricao: string, a: number, b: number, labelA: string, labelB: string, broken = 0) => {
+    a = round2(a); b = round2(b);
+    linhas.push({ id, label, descricao, valorA: a, valorB: b, labelA, labelB, diferenca: round2(a - b),
+      status: broken ? 'divergencia' : compare(a, b), detalhe: broken ? `${broken} vínculo(s) de pagamento ausente(s), duplicado(s) ou com valor divergente.` : undefined });
   };
+  const links = (expected: (p: typeof cashPayments[number]) => number, matches: (origin: string, id: string) => boolean, tipo: string) => cashPayments.filter(p => {
+    const rows = cash.filter(l => l.tipo === tipo && matches(l.origemId ?? '', p.id));
+    const amount = expected(p);
+    return Math.abs(amount - sumBy(rows, l => l.valor)) > TOLERANCIA || (amount > TOLERANCIA && rows.length === 0) || new Set(rows.map(l => l.origemId)).size !== rows.length;
+  }).length;
+  add('entregas_ficha', 'Entregas × Ficha', 'Competência das entregas: compara notas conferidas com a ficha registrada, sem alterar valores históricos.',
+    sumBy(notas, n => n.valorBruto), sumBy(fichas, f => f.valorBruto), 'Notas conferidas (bruto)', 'Ficha corrida (bruto)');
+  add('pagamentos_caixa', 'Pagamentos brutos × Livro Caixa', 'Data efetiva do pagamento: bruto registrado versus débito bruto salvo no caixa. O líquido é mostrado separadamente no painel.',
+    totalBruto, sumCash('pagamento_cooperado', 'debito'), 'Bruto dos pagamentos confirmados', 'Débitos brutos no caixa',
+    links(p => p.valorBruto, (o, id) => o === `pg_caixa_${id}`, 'debito'));
+  add('taxa_cooperativa_caixa', 'Taxa cooperativa × Caixa', 'Retenção dos pagamentos confirmados na data efetiva de pagamento; cada taxa é conferida pelo identificador do pagamento.',
+    sumBy(cashPayments, p => p.descontoCooperativa), sumCash('taxa_cooperativa', 'credito'), 'Taxa nos pagamentos', 'Taxa salva no caixa',
+    links(p => p.descontoCooperativa, (o, id) => o === `pg_taxa_${id}`, 'credito'));
+  add('mensalidade_ficha_caixa', 'Mensalidade retida × Caixa', 'Descontos efetivamente retidos em pagamentos confirmados versus créditos de retenção no caixa, sem somar novamente a ficha.',
+    extra('mensalidade'), sumCash('mensalidade_ficha', 'credito'), 'Mensalidade nos pagamentos', 'Retenção salva no caixa',
+    links(p => sumBy((p.descontosExtras ?? []).filter(d => d.tipo === 'mensalidade'), d => d.valor), (o, id) => o === `pg_mensficha_${id}` || o.startsWith(`pg_mensficha_${id}_m`), 'credito'));
+  add('outros_descontos_caixa', 'Outros descontos × Caixa', 'HB Créditos, cotas e outros débitos retidos nos pagamentos confirmados versus créditos correspondentes salvos no caixa.',
+    sumBy(cashPayments, p => sumBy(outros(p), d => d.valor)), sumCash('desconto_ficha', 'credito'), 'Outros descontos nos pagamentos', 'Retenções salvas no caixa',
+    links(p => sumBy(outros(p), d => d.valor), (o, id) => o.startsWith(`pg_desc_${id}_`), 'credito'));
+  const paidMemberships = fonte.mensalidades.filter(m => m.status === 'paga' && m.dataPagamento?.slice(0, 7) === mesReferencia);
+  add('mensalidades_caixa', 'Mensalidades recebidas × Caixa', 'Recebimentos diretos confirmados, pela data de recebimento, versus créditos diretos de mensalidade no caixa.',
+    sumBy(paidMemberships, m => m.valor), sumCash('mensalidade', 'credito'), 'Mensalidades recebidas', 'Créditos diretos no caixa');
+  linhas.push({ id: 'obrigacao_pagamento', label: 'Saldo pendente da competência', descricao: 'Saldo que ainda falta pagar pelas entregas do período. Pagamentos já concluídos não são subtraídos uma segunda vez.',
+    valorA: totalAPagar, valorB: 0, labelA: 'Ainda a pagar', labelB: 'Saldo quitado', diferenca: totalAPagar,
+    status: totalAPagar > TOLERANCIA ? 'parcial' : notas.length || cashPayments.length ? 'ok' : 'ausente', detalhe: totalAPagar > TOLERANCIA ? 'Há obrigações ainda abertas; isso não significa divergência no pagamento já registrado.' : undefined });
+  const hb = extra('conta_coop');
+  linhas.push({ id: 'conta_coop', label: 'HB Créditos retidos', descricao: 'Descontos HB efetivamente retidos nos pagamentos deste mês de caixa. O extrato de compras exige conferência própria no ledger HB.',
+    valorA: hb, valorB: hb, labelA: 'Retido nos pagamentos', labelB: 'Referência de retenção', diferenca: 0, status: hb ? 'parcial' : 'ausente',
+    detalhe: hb ? 'Informativo: este valor não comprova, sozinho, conciliação com o ledger de compras HB.' : 'Nenhuma retenção HB nos pagamentos deste mês.' });
+  const repasse = sumCash('hb_app_repasse', 'debito');
+  linhas.push({ id: 'hb_app_repasse_caixa', label: 'Repasses HB registrados', descricao: 'Pagamentos de repasse identificados no Livro Caixa; não substitui confirmação do recebedor na nuvem.',
+    valorA: repasse, valorB: repasse, labelA: 'Débito salvo no caixa', labelB: 'Referência de registro', diferenca: 0,
+    status: repasse || hb ? 'parcial' : 'ausente', detalhe: 'Conferir a liquidação na área HB Créditos. Esta linha é informativa.' });
+  const alertas: AlertaConciliacao[] = [];
+  for (const l of linhas.filter(l => l.status === 'divergencia')) alertas.push({ id: `div_${l.id}`, severidade: 'critico', titulo: `Divergência: ${l.label}`,
+    descricao: l.detalhe ?? `Diferença de R$ ${Math.abs(l.diferenca).toFixed(2)} entre ${l.labelA} e ${l.labelB}.`, href: hrefRelatorio('conciliacao_mensal', { mes: mesReferencia }) });
+  if (notasSemFicha) alertas.push({ id: 'notas_sem_ficha', severidade: 'critico', titulo: 'Notas conferidas sem ficha', descricao: `${notasSemFicha} entrega(s) conferida(s) sem ficha registrada.` });
+  const pending = fonte.pagamentosCooperado.filter(p => p.status === 'aguardando_confirmacao' && dataLancamentoPagamento(p).slice(0, 7) === mesReferencia);
+  if (pending.length) alertas.push({ id: 'pagamentos_aguardando', severidade: 'aviso', titulo: 'Pagamentos aguardando confirmação', descricao: `${pending.length} pagamento(s) ainda não entram nos totais confirmados.` });
+  const fechamento = fonte.fechamentos.find(f => f.mesReferencia === mesReferencia);
+  if (fechamento?.status === 'aprovado' && linhas.some(l => l.status === 'divergencia')) alertas.push({ id: 'fechamento_com_divergencia', severidade: 'critico', titulo: 'Fechamento aprovado com divergência', descricao: 'O fechamento aprovado não elimina diferenças encontradas nos registros.' });
+  const mensalidadesAbertas = fonte.mensalidades.filter(m => m.mesReferencia === mesReferencia && !['paga', 'aguardando_confirmacao'].includes(m.status)).length;
+  const conciliadas = linhas.filter(l => l.status === 'ok').length;
+  const verificaveis = linhas.filter(l => l.status !== 'ausente').length;
+  return { mesReferencia, linhas, alertas, resumo: { totalLinhas: linhas.length, conciliadas, divergencias: linhas.filter(l => l.status === 'divergencia').length,
+    ausentes: linhas.filter(l => l.status === 'ausente').length, percentualOk: verificaveis ? Math.round(conciliadas / verificaveis * 100) : 0 },
+    kpis: { totalEntregasConferidas: notas.length, totalAPagarCooperados: totalAPagar, totalPagoCooperados: totalPago,
+      pagamentosSemAssinatura: pending.length, notasSemFicha, mensalidadesAbertas, fechamentoStatus: fechamento?.status ?? null } };
 }
 
-export function listMesesConciliacao(data: AppData): string[] {
-  return listMesesComLancamentos(data);
+export function listMesesConciliacao(data: AppData, cooperativaId?: string): string[] {
+  const fonte = contadorDadosCooperativa(data, cooperativaId ?? data.cooperativas[0]?.id ?? '');
+  const meses = new Set(listMesesComLancamentos(fonte));
+  for (const p of fonte.pagamentosCooperado) meses.add(dataLancamentoPagamento(p).slice(0, 7));
+  for (const l of fonte.livroCaixa) meses.add(resolverDataIsoLancamentoLivroCaixa(l, fonte).slice(0, 7));
+  return [...meses].filter(m => /^\d{4}-\d{2}$/.test(m)).sort().reverse();
 }
 
-export function getDemonstrativoPagamentosMes(data: AppData, mesReferencia: string) {
-  const pagamentos = data.pagamentosCooperado
-    .filter((p) => pagamentoCobreMesReferencia(p, mesReferencia))
-    .sort((a, b) => new Date(b.pagoEm).getTime() - new Date(a.pagoEm).getTime());
-
-  return pagamentos.map((p) => {
-    const cooperado = data.cooperados.find((c) => c.id === p.cooperadoId);
-    return {
-      id: p.id,
-      cooperadoNome: cooperado?.nomeCompleto ?? "Cooperado",
-      valorBruto: p.valorBruto,
-      descontoCooperativa: p.descontoCooperativa,
-      descontosExtras: p.descontosExtras,
-      valorLiquido: p.valorLiquido,
-      status: p.status,
-      pagoPor: p.pagoPor,
-      pagoEm: p.pagoEm,
-      assinado: Boolean(p.assinaturaCooperado),
-      assinadoEm: p.assinadoEm,
-      qtdEntregas: p.notaPedidoIds.length,
-    };
-  });
+/** Cash-date statement: a multi-month receipt appears once, in the month it was paid. */
+export function getDemonstrativoPagamentosMes(data: AppData, mesReferencia: string, cooperativaId?: string) {
+  const fonte = contadorDadosCooperativa(data, cooperativaId ?? data.cooperativas[0]?.id ?? '');
+  return [...new Map(fonte.pagamentosCooperado.filter(p => dataLancamentoPagamento(p).slice(0, 7) === mesReferencia).map(p => [p.id, p])).values()]
+    .sort((a, b) => new Date(b.pagoEm).getTime() - new Date(a.pagoEm).getTime()).map(p => ({
+      id: p.id, cooperadoNome: fonte.cooperados.find(c => c.id === p.cooperadoId)?.nomeCompleto ?? 'Cooperado',
+      valorBruto: p.valorBruto, descontoCooperativa: p.descontoCooperativa, descontosExtras: p.descontosExtras, valorLiquido: p.valorLiquido,
+      status: p.status, pagoPor: p.pagoPor, pagoEm: p.pagoEm, assinado: Boolean(p.assinaturaCooperado), assinadoEm: p.assinadoEm, qtdEntregas: (p.notaPedidoIds ?? []).length,
+    }));
 }
-
 export { getUserCooperativaId };

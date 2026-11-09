@@ -25,7 +25,7 @@ export default function ContadorSnapshotPage() {
   const { coopId } = usePermissions();
   const [mes, setMes] = useState(getCurrentMesReferencia());
 
-  const meses = useMemo(() => (data ? listMesesConciliacao(data) : [mes]), [data, mes]);
+  const meses = useMemo(() => (data ? listMesesConciliacao(data, coopId ?? undefined) : [mes]), [data, mes, coopId]);
   const snapshots = useMemo(() => {
     if (!data || !coopId) return [];
     return listSnapshotsCooperativa(data, coopId);

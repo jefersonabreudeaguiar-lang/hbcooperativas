@@ -827,7 +827,10 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       await withSyncTimeout(
         (async () => {
           let antesCooperadoEntregasSync: ReturnType<typeof getData> | null = null;
-          if (cooperadoLogado) {
+          if (currentUser.role === 'contador') {
+            const { atualizarEntradaStaff } = await import('@/services/staffEntradaAtualizadaService');
+            await atualizarEntradaStaff(currentUser, () => userRef.current?.id === currentUser.id);
+          } else if (cooperadoLogado) {
             const cooperadoCanonico =
               currentUser.cooperadoId &&
               resolverCooperadoIdCanonico(getData(), currentUser.cooperadoId, currentCoopId);
@@ -1008,6 +1011,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         currentUser.role === "tesoureiro" ||
         currentUser.role === "admin";
       const refreshHb = (): Promise<void> => {
+        if (currentUser.role === 'contador') return Promise.resolve();
         if (isStaffConferenciaModalOpen()) return Promise.resolve();
         if (staffUser && !isStaffHbCoopBackgroundSyncRoute()) return Promise.resolve();
         return refreshContaCoopDescontosAfterOperacionalSync({

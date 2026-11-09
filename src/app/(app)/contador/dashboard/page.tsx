@@ -36,7 +36,7 @@ export default function ContadorDashboardPage() {
   const { user, coopId } = usePermissions();
   const [mes, setMes] = useState(getCurrentMesReferencia());
 
-  const meses = useMemo(() => (data ? listMesesConciliacao(data) : [mes]), [data, mes]);
+  const meses = useMemo(() => (data ? listMesesConciliacao(data, coopId ?? undefined) : [mes]), [data, mes, coopId]);
   const conciliacao = useMemo(
     () => (data ? calcularConciliacaoMensal(data, mes, coopId ?? undefined) : null),
     [data, mes, coopId]
@@ -95,11 +95,13 @@ export default function ContadorDashboardPage() {
               variant="gold"
             />
             <StatCard
-              title="Pago confirmado"
+              title="Pago no mês de caixa"
               value={formatCurrency(conciliacao.kpis.totalPagoCooperados)}
               variant="success"
             />
           </div>
+
+          <p className="mb-6 text-sm text-gray-600">Entregas e saldo a pagar seguem a competência. Pagamentos e retenções seguem a data efetiva do pagamento. Alertas históricos permanecem até a conferência dos documentos.</p>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
             <Card className="lg:col-span-2">

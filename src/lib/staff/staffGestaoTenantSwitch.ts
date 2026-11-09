@@ -12,5 +12,5 @@ export function shouldFlushAppDataMemoryOnTenantChange(prevCnpj: string, nextCnp
 }
 
 export function shouldAdoptStaffPersistHint(role: string | undefined, nextCnpj: string): boolean {
-  return isStaffGestaoRole(role) && normalizeCnpj(nextCnpj).length === 14;
+  return (isStaffGestaoRole(role) || role === 'contador') && normalizeCnpj(nextCnpj).length === 14;
 }

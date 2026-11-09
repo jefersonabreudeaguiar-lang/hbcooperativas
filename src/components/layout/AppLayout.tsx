@@ -643,7 +643,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
             <CooperadoApresentacaoFinanceiraGate>{routePanels}</CooperadoApresentacaoFinanceiraGate>
           </CooperadoPostDeployGate>
         )
-      : navUser && (staffPainelUi || navUser.role === "responsavel" || navUser.role === "tesoureiro")
+      : navUser && (staffPainelUi || navUser.role === "responsavel" || navUser.role === "tesoureiro" || navUser.role === "contador")
         ? <StaffDadosAtuaisGate key={`${navUser.id}:${navUser.role}:${navUser.cooperativaCnpj ?? navUser.cooperativaId}`} user={navUser}>{routePanels}</StaffDadosAtuaisGate>
         : navUser ? routePanels : <div role="status" className="p-8 text-sm text-gray-600">Preparando seu painel…</div>;
 

@@ -56,7 +56,7 @@ function browserStorage(): AppDataPersistStorage | null {
 }
 
 function sessionLooksStaffGestao(role?: string): boolean {
-  return role === "responsavel" || role === "tesoureiro" || role === "admin";
+  return role === "responsavel" || role === "tesoureiro" || role === "admin" || role === 'contador';
 }
 
 function readSessionHint(storage?: AppDataPersistStorage): { role?: string; cnpj: string } {
@@ -106,7 +106,7 @@ function staffGestaoSemCnpj(hint: { role?: string; cnpj: string }): boolean {
 export function resolveAppDataStorageKey(opts?: AppDataPersistHint): string {
   const hint = resolveHint(opts);
   if (sessionLooksStaffGestao(hint.role) && hint.cnpj.length === 14) {
-    return staffGestaoPersistKey(hint.cnpj);
+    return staffGestaoPersistKey(hint.cnpj) + (hint.role === 'contador' ? ':contador' : '');
   }
   return APP_DATA_STORAGE_KEY;
 }
@@ -143,6 +143,7 @@ export function readAppDataPersistRaw(opts?: AppDataPersistHint): string | null 
   }
   const scoped = decodePersisted(hint.storage.getItem(key));
   if (scoped) return scoped;
+  if (hint.role === 'contador') return null;
   return migrateLegacyAppDataIfMatches(hint.cnpj, hint.storage);
 }
 

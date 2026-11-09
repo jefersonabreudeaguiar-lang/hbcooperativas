@@ -406,6 +406,7 @@ export function preservarStaffGestaoContraWipe(
   baseline: AppData | null | undefined,
   incoming: AppData
 ): AppData {
+  if (readStaffSessionHint().role === 'contador') return incoming;
   const incomingCnpj = resolveStaffGestaoCnpj(incoming);
   const scopedPeek = incomingCnpj.length === 14 ? lastGoodByCnpj.get(incomingCnpj) : undefined;
   const baselineOk =

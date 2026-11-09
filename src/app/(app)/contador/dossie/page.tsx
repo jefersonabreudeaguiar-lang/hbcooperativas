@@ -27,7 +27,7 @@ export default function ContadorDossiePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const meses = useMemo(() => (data ? listMesesConciliacao(data) : [mes]), [data, mes]);
+  const meses = useMemo(() => (data ? listMesesConciliacao(data, coopId ?? undefined) : [mes]), [data, mes, coopId]);
   const fechamento = useMemo(
     () => data?.fechamentos.find((f) => f.mesReferencia === mes),
     [data, mes]

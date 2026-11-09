@@ -57,7 +57,7 @@ export async function GET(request: Request) {
         fetchNotasFromStorage(supabase, cnpj, true),
       ]);
       return NextResponse.json({ notas: visiveis(table.tableMissing ? storage : mergeNotasSources(table.notas, storage)).map(sanitizarNotaParaFilaConferencia),
-        source: 'confirmed-full', complete: true }, { headers: { 'Cache-Control': 'private, no-store' } });
+        source: 'confirmed-full', complete: true, serverWatermark: table.serverWatermark }, { headers: { 'Cache-Control': 'private, no-store' } });
     } catch {
       return NextResponse.json({ error: 'Não foi possível confirmar todas as entregas. Tente novamente.' }, { status: 503 });
     }

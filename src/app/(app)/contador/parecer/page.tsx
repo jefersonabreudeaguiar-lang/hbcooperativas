@@ -47,7 +47,7 @@ export default function ContadorParecerPage() {
   const [salvo, setSalvo] = useState(false);
   const [modalEmissao, setModalEmissao] = useState<"pdf" | "print" | null>(null);
 
-  const meses = useMemo(() => (data ? listMesesConciliacao(data) : [mes]), [data, mes]);
+  const meses = useMemo(() => (data ? listMesesConciliacao(data, coopId ?? undefined) : [mes]), [data, mes, coopId]);
   const parecer = useMemo(() => {
     if (!data || !coopId) return undefined;
     return getParecerContabilMes(data, coopId, mes);

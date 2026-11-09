@@ -25,6 +25,7 @@ import {
   gerarRelatorioRazaoAnaliticoHtml,
 } from "@/utils/relatorioHtml";
 import type { DossieArquivo } from "@/utils/downloadDossie";
+import { contadorDadosCooperativa } from '@/lib/staff/contadorDadosCooperativa';
 
 function auditCsv(entries: ReturnType<typeof auditLogParaExportacao>): string {
   const header = "data;usuario;acao;entidade;resumo";
@@ -46,10 +47,11 @@ export function buildDossieMensalArquivos(
   cooperativaId: string,
   emissor?: EmissorRelatorio
 ): DossieArquivo[] {
+  data = contadorDadosCooperativa(data, cooperativaId);
   const coop = getCooperativaById(data, cooperativaId);
   const fechamento = data.fechamentos.find((f) => f.mesReferencia === mesReferencia);
   const conciliacao = calcularConciliacaoMensal(data, mesReferencia, cooperativaId);
-  const demonstrativo = getDemonstrativoPagamentosMes(data, mesReferencia);
+  const demonstrativo = getDemonstrativoPagamentosMes(data, mesReferencia, cooperativaId);
   const mapa = getMapaReceitasContrato(data, mesReferencia, cooperativaId);
   const extrato = getExtratoContaCoopMes(data, mesReferencia, cooperativaId);
   const razoes = getRazaoAnaliticoTodosCooperados(data, mesReferencia, cooperativaId);

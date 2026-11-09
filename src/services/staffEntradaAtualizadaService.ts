@@ -12,6 +12,8 @@ import { registrarCatalogoCloudLeitura } from "@/lib/staff/staffCatalogoCloudLei
 import { resetResponsavelPainelIndexCache } from "@/services/responsavelPainelIndex";
 import { resolveGestaoCooperativaId } from "@/utils/cooperativa";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
+import { aplicarSnapshotContadorCloud } from '@/lib/staff/contadorDadosCooperativa';
+import type { CooperativaCloudRevision } from '@/lib/performance/cooperadoEventDrivenSync';
 
 export async function lerEntradaStaffComRetry<T>(nome: string, ler: () => Promise<T>, validar: (valor: T) => boolean, ativa: () => boolean): Promise<T> {
   for (let tentativa = 0; tentativa < 2; tentativa++) {
@@ -24,7 +26,7 @@ export async function lerEntradaStaffComRetry<T>(nome: string, ler: () => Promis
   throw new Error("Não foi possível consultar " + nome + ". Toque em tentar novamente.");
 }
 
-export async function atualizarEntradaStaff(user: Omit<User, "password">, ativa: () => boolean): Promise<void> {
+export async function atualizarEntradaStaff(user: Omit<User, "password">, ativa: () => boolean): Promise<CooperativaCloudRevision> {
   const startedAt = Date.now();
   const current = getData();
   const cnpj = await resolveCooperativaCnpj(current, resolveGestaoCooperativaId(user, current), user);
@@ -60,6 +62,10 @@ export async function atualizarEntradaStaff(user: Omit<User, "password">, ativa:
   ]);
   if (!ativa()) throw new Error("Entrada cancelada.");
   const reconciled = reconciliarEntradaStaffCloud(getData(), next, bundle.operacional, entregas.notas, coopId, startedAt, pendingIds);
+  if (user.role === 'contador') {
+    // Accounting must inspect the saved ledger, not entries synthesized by the UI merge.
+    reconciled.data = aplicarSnapshotContadorCloud(reconciled.data, bundle.operacional, coopId);
+  }
   // Keep retired device-only copies recoverable; never upload them automatically.
   await guardarCopiasEntradaStaff(cnpj, reconciled.retired);
   if (!ativa()) throw new Error("Entrada cancelada.");
@@ -68,4 +74,7 @@ export async function atualizarEntradaStaff(user: Omit<User, "password">, ativa:
   if (!saved.ok) throw new Error(saved.error);
   registrarCatalogoCloudLeitura(coopId, contratos);
   resetResponsavelPainelIndexCache();
+  return { operacionalUpdatedAt: bundle.operacional.updatedAt ?? null,
+    operationalResetVersion: bundle.operacional.operationalResetVersion ?? 0,
+    contratosUpdatedAt: bundle.contratos?.updatedAt ?? null, notasUpdatedAt: entregas.serverWatermark ?? null };
 }

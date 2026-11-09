@@ -49,3 +49,4 @@ next-env.d.ts
 /scripts/reports/*
 !/scripts/reports/.gitkeep
 /.tmp-release-799*
+/.tmp-release-800*

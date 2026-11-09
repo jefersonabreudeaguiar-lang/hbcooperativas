@@ -1070,7 +1070,7 @@ export function saveStaffEntradaCloud(data: AppData, cnpj: string): { ok: true }
   if (shouldPreserveConferenciaInProgressTruth()) return { ok: false, error: 'Aguarde a conclusão da conferência e tente novamente.' };
   const saved = persistDataToStorage(data, { skipNotify: true });
   if (saved.ok) {
-    confirmarStaffGestaoLastGoodCloud(getData(), cnpj);
+    if (getSession()?.role !== 'contador') confirmarStaffGestaoLastGoodCloud(getData(), cnpj);
     notify();
   }
   return saved;

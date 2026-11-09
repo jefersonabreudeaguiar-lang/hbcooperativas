@@ -399,7 +399,7 @@ export default function RelatoriosPage() {
       return gerarRelatorioConciliacaoHtml(data, conc, coop, emissor);
     }
     if (tipo === "demonstrativo_pagamentos") {
-      const linhas = getDemonstrativoPagamentosMes(data, mes);
+      const linhas = getDemonstrativoPagamentosMes(data, mes, coopId ?? undefined);
       return gerarRelatorioDemonstrativoPagamentosHtml(data, mes, linhas, emissor);
     }
     if (tipo === "razao_analitico") {
@@ -814,7 +814,7 @@ export default function RelatoriosPage() {
       }
       case "demonstrativo_pagamentos": {
         headers = ["Cooperado", "Bruto", "Desc. coop.", "Líquido", "Status", "Assinado", "Registrado por", "Data"];
-        rows = getDemonstrativoPagamentosMes(data, mes).map((p) => [
+        rows = getDemonstrativoPagamentosMes(data, mes, coopId ?? undefined).map((p) => [
           p.cooperadoNome,
           String(p.valorBruto),
           String(p.descontoCooperativa),
@@ -1714,7 +1714,7 @@ export default function RelatoriosPage() {
         );
       }
       case "demonstrativo_pagamentos": {
-        const linhas = getDemonstrativoPagamentosMes(data, mes);
+        const linhas = getDemonstrativoPagamentosMes(data, mes, coopId ?? undefined);
         return (
           <DataTable
             data={linhas}
