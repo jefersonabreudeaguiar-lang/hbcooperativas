@@ -20,6 +20,10 @@ Branch `codex/hb-release-797-ready`. A versão 796 de escala não será promovid
    IDs e reconhece fichas associadas pelas notas, sem interromper a tela.
 6. Identificação 797 no aplicativo e service worker. Verificadores locais usam
    o mesmo Node 24 do deploy. Controle de destino impede cruzar projetos/bancos.
+7. O aviso de snapshot financeiro concluído apenas repinta o cartão do cooperado.
+   Antes ele iniciava outro recálculo que emitia o mesmo aviso, causando repetição
+   síncrona. Alteração de débito HB continua recalculando, sem realimentar o aviso.
+   Não muda a fórmula dos valores nem os dados financeiros.
 
 ## Fica fora
 
@@ -38,7 +42,8 @@ oficiais na publicação. O protocolo de gravação continua o da produção 795
 ## Validação desta seleção
 
 - Checagem de tipos passou.
-- `test-release-797.mjs`: 15 suítes isoladas passaram.
+- `test-release-797.mjs`: 16 suítes isoladas passaram, incluindo a regressão do
+  ciclo de eventos, que falhou no código antigo e passou após a correção.
 - `run-release-verify.ts --fast`: passou com os contratos originais da 795.
 - HTTP real, Next local e banco de homologação: login 200, leitura própria 200,
   leitura e escrita de outra cooperativa 403, desativação e mudança de vínculo
@@ -51,11 +56,11 @@ oficiais na publicação. O protocolo de gravação continua o da produção 795
   e Livro Caixa abriram. Painel e Em aberto mostraram os mesmos R$ 380,00 do
   cenário sintético; livro mostrou os dois pagamentos fictícios anteriores.
   Nenhum novo pagamento foi executado pela interface.
-- PENDENTE: após login do cooperado fictício, o navegador deixou de responder
+- FALHA ANTERIOR: após login do cooperado fictício, o navegador deixou de responder
   às leituras de tela. Reproduziu em outra origem sem cache prévio. A sessão
   inicial vinha de logout do responsável; o reteste começou direto como cooperado.
-  Ainda não foi estabelecida causa nem comparação equivalente com a 795.
-  Não considerar o teste aprovado nem chamar a candidata de pronta para produção.
+  A investigação seguinte reproduziu o ciclo do evento de snapshot no hook do card.
+  O resultado desta falha foi substituído pelo reteste concluído abaixo.
 - As duas contas fictícias autorizadas foram desativadas e senhas invalidadas
   depois dos testes. Conta de mercado não foi reativada: a revisão automática
   recusou sua inclusão por ausência de autorização específica, e o ensaio foi
@@ -66,6 +71,27 @@ oficiais na publicação. O protocolo de gravação continua o da produção 795
 Os ensaios HTTP não são prova de capacidade/p95 em produção. A suíte ampliada
 antiga de desempenho não foi declarada aprovada. Expansão comercial permanece
 uma etapa separada.
+
+## Reteste concluído em 08/11/2026 — aguardando OK
+
+Versão candidata aprovada para o escopo deste pacote: build 797, commit
+`41c34a25ffea303c9d35d42e5939641974d5cda5`, deployment
+`dpl_3FrbB5eJTwW8JjpRBD8hVaNXzaSA`, estado READY.
+URL: https://hbcooperativas-homologacao-v1-9g73zey13-hbcooperativas.vercel.app
+
+O cooperado fictício entrou sem travamento. Início, Financeiro e HB Créditos
+exibiram R$ 100,00 de ficha a receber, igual à entrega pendente conferida por leitura
+independente na nuvem, sem pagamento nem avulso associado. HB disponível para
+compra permaneceu R$ 0,00, sem liberação fictícia de limite. Voltar ao início e
+recarregar preservou o valor e a interface respondeu normalmente. Não foi feita
+compra/pagamento real ou fictício neste ensaio. O novo commit muda apenas o hook
+do cooperado e seu teste em relação ao deployment anterior; as telas do responsável
+validadas anteriormente não foram modificadas.
+
+O cooperado fictício foi desativado novamente e a senha temporária invalidada.
+Leitura final do app oficial confirmou a 795 e o deployment de retorno abaixo.
+A publicação da 797 está aguardando o OK específico do proprietário. Usar o SHA
+aprovado acima, sem promover o build que aponta para o banco de homologação.
 
 ## Publicação e retorno
 

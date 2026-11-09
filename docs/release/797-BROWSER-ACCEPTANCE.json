@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-08",
+  "environment": "homologacao",
+  "build": 797,
+  "commit": "41c34a25ffea303c9d35d42e5939641974d5cda5",
+  "deployment": "dpl_3FrbB5eJTwW8JjpRBD8hVaNXzaSA",
+  "state": "READY",
+  "syntheticTenant": "88888888000181",
+  "cooperado": {
+    "login": "passed",
+    "inicioReceber": 100,
+    "financeiroReceber": 100,
+    "hbFichaReceber": 100,
+    "cloudPendingDelivery": 100,
+    "cloudPayments": 0,
+    "cloudAdjustments": 0,
+    "hbAvailableToSpend": 0,
+    "navigateBack": "passed",
+    "reload": "passed",
+    "temporaryAccessDisabled": true
+  },
+  "responsavelPreviousDeployment": {
+    "deployment": "dpl_C2XMRKm9JX42gqHP3peSrg2xa2Dz",
+    "dashboard": "passed",
+    "conferencia": "passed",
+    "emAberto": 380,
+    "pagarCooperados": "passed",
+    "livroCaixa": "passed",
+    "responsavelCodeUnchangedByFix": true
+  },
+  "localSuites": 16,
+  "typecheck": "passed",
+  "releaseVerifyFast": "passed",
+  "snapshotFeedbackRegression": "failed_before_passed_after",
+  "newFinancialTransactionExecuted": false,
+  "productionChanged": false,
+  "officialBuildObserved": 795,
+  "awaitingOwnerApproval": true,
+  "scope": "Selected session, cashbook and cooperado repaint fixes; excludes wider 796 financial/CAS changes"
+}
