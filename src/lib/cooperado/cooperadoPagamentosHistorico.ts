@@ -15,6 +15,7 @@ export function buildCooperadoHistoricoPagamentos(data: AppData, cooperadoId: st
   const pagamentos = [...byId.values()].sort((a, b) => b.pagoEm.localeCompare(a.pagoEm) || a.id.localeCompare(b.id)).map(p => {
     if (![p.valorBruto, p.valorLiquido, p.descontoCooperativa].every(Number.isFinite)) throw Error('Pagamento com valores indisponíveis');
     return { id: p.id, meses: [...new Set(p.mesesReferencia?.length ? p.mesesReferencia : [p.mesReferencia])].sort(),
+      fichaIds: [...new Set(p.fichaIds ?? [])], notaPedidoIds: [...new Set(p.notaPedidoIds ?? [])],
       pagoEm: p.pagoEm, valorBruto: p.valorBruto, descontoCooperativa: p.descontoCooperativa,
       descontos: (p.descontosExtras ?? []).map(d => ({ descricao: d.motivo?.trim() ||
         (d.tipo === 'conta_coop' ? 'HB Créditos' : d.tipo === 'mensalidade' ? 'Mensalidade' : 'Ajuste avulso'), valor: d.valor })),

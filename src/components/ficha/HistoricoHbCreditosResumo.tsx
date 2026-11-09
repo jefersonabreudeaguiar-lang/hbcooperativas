@@ -37,6 +37,8 @@ type Props = {
   variant?: "default" | "cooperado";
   /** Mês quitado / histórico — não mistura compras de meses posteriores (API abate ficha aberta até hoje). */
   somenteMesReferencia?: boolean;
+  somentePendentes?: boolean;
+  pagamentosRevision?: string;
 };
 
 export function HistoricoHbCreditosResumo({
@@ -48,6 +50,8 @@ export function HistoricoHbCreditosResumo({
   titularCooperadoIds,
   variant = "default",
   somenteMesReferencia = false,
+  somentePendentes = false,
+  pagamentosRevision,
 }: Props) {
   const [lancamentos, setLancamentos] = useState<HbUtilizacaoResumoLancamento[]>([]);
   const [erro, setErro] = useState<string | null>(null);
@@ -75,7 +79,7 @@ export function HistoricoHbCreditosResumo({
     setCarregando(true);
     setErro(null);
     const ids = titularCooperadoIds?.length ? titularCooperadoIds : [cooperadoId];
-    fetchHbUtilizacaoResumoCooperado(cnpj, ids, mesReferencia, saldoBase)
+    fetchHbUtilizacaoResumoCooperado(cnpj, ids, mesReferencia, saldoBase, { somentePendentes })
       .then((rows) => {
         if (!cancel) {
           const filtradas =
@@ -102,6 +106,8 @@ export function HistoricoHbCreditosResumo({
     descontosExtrasKey,
     titularIdsKey,
     somenteMesReferencia,
+    somentePendentes,
+    pagamentosRevision,
   ]);
 
   const compacto = variant === "cooperado";
@@ -134,7 +140,7 @@ export function HistoricoHbCreditosResumo({
     if (variant === "cooperado") {
       return (
         <p className="text-[11px] text-gray-500">
-          Sem compras {HB_CREDIT_PRODUCT_NAME} neste mês.
+          {somentePendentes ? `Nenhum desconto ${HB_CREDIT_PRODUCT_NAME} pendente. Movimentos quitados permanecem no histórico do mês pago.` : `Sem compras ${HB_CREDIT_PRODUCT_NAME} neste mês.`}
         </p>
       );
     }

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { listCooperadoHbUtilizacaoResumoAbateValorReceber } from "@/lib/supabase/contaCoopStorage";
 import { enriquecerSaldosHbUtilizacao } from "@/lib/hb-credit/utilizacaoResumo";
 import { requireCreditApi, requireCreditCnpj, requireCreditCooperado, requireCreditSettlementAccess } from "@/lib/security/creditGuard";
+import { fetchOperacionalSync } from "@/lib/supabase/cooperativaSyncStorage";
+import { projetarHbPendentesFinanceiro } from "@/lib/hb-credit/hbFinanceiroPendentes";
 
 export async function GET(request: Request) {
   const gate = await requireCreditApi(request);
@@ -64,10 +66,20 @@ export async function GET(request: Request) {
     mesReferencia
   );
 
+  if (url.searchParams.get("somentePendentes") === "true") {
+    try {
+      const operacional = await fetchOperacionalSync(gate.ctx.supabase, cnpj);
+      if (!operacional) throw new Error("Pagamento indisponível");
+      lancamentos = projetarHbPendentesFinanceiro(lancamentos, operacional.pagamentosCooperado ?? [], cooperadoIds);
+    } catch {
+      return NextResponse.json({ error: "Não foi possível conferir os pagamentos. Tente novamente." }, { status: 503 });
+    }
+  }
+
   const saldoBase = saldoBaseParam != null ? Number(saldoBaseParam) : NaN;
   if (Number.isFinite(saldoBase)) {
     lancamentos = enriquecerSaldosHbUtilizacao(lancamentos, saldoBase);
   }
 
-  return NextResponse.json({ ok: true, lancamentos });
+  return NextResponse.json({ ok: true, lancamentos }, { headers: { "Cache-Control": "private, no-store" } });
 }

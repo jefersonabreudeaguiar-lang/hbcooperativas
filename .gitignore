@@ -39,6 +39,7 @@ yarn-error.log*
 # vercel
 .vercel
 /.tmp-release-797*
+/.tmp-release-798*
 
 # typescript
 *.tsbuildinfo

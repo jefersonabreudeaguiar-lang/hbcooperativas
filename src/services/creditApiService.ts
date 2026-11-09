@@ -999,7 +999,8 @@ export async function fetchHbUtilizacaoResumoCooperado(
   cnpj: string,
   cooperadoId: string | string[],
   mesReferencia: string,
-  saldoBaseAReceber?: number
+  saldoBaseAReceber?: number,
+  options?: { somentePendentes?: boolean }
 ) {
   const ids = [...new Set((Array.isArray(cooperadoId) ? cooperadoId : [cooperadoId]).filter(Boolean))];
   const primary = ids[0] ?? "";
@@ -1010,6 +1011,7 @@ export async function fetchHbUtilizacaoResumoCooperado(
     mesReferencia,
   });
   if (extra.length) params.set("cooperadoIds", extra.join(","));
+  if (options?.somentePendentes) params.set("somentePendentes", "true");
   if (saldoBaseAReceber != null && Number.isFinite(saldoBaseAReceber)) {
     params.set("saldoBaseAReceber", saldoBaseAReceber.toFixed(2));
   }

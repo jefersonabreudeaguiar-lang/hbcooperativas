@@ -52,6 +52,7 @@ import { useAuth } from "@/modules/auth/AuthProvider";
 import { shouldRenderCooperadoJefersonRebuildShell } from "@/lib/cooperado/cooperadoJefersonRebuildPilot";
 import { CooperadoJefersonRebuildTabCorpo } from "@/components/cooperado/CooperadoJefersonRebuildTabCorpo";
 import { CooperadoPagamentosResumo } from "@/components/cooperado/CooperadoPagamentosResumo";
+import { escolherItensFichaExibicao, projetarQuitacaoRemotaNasFichas } from "@/lib/cooperado/cooperadoFichaItensCache";
 import { getInstituicoesCatalogo } from "@/services/catalogoContratosService";
 import {
   resumoFromPagamento,
@@ -1538,19 +1539,20 @@ function FichaCorridaPageInner() {
         ? fichaResumoSnap!.itensEntregas!
         : null;
     const comCache = (vivo: ReturnType<typeof agregarItensFichaMes>) =>
-      vivo.itens.length === 0 && cacheEntregas ? cacheEntregas : vivo;
+      escolherItensFichaExibicao(vivo, cacheEntregas, isCooperado && !visualizandoHistorico, Boolean(data));
     if (!data || !cooperadoSelecionadoId) return comCache(resumoItensMes);
     if (!isCooperado && aba === "pagar") return resumoItensPagamento;
     if (isCooperado && !visualizandoHistorico) {
+      const leitura = projetarQuitacaoRemotaNasFichas(data, financeiroRemoto, cooperadoSelecionadoId, coopId ?? "");
       if (mesesFinanceiroCooperado.length > 1) {
         return comCache(
-          agregarItensFichaMeses(data, cooperadoSelecionadoId, mesesFinanceiroCooperado, coopId, {
+          agregarItensFichaMeses(leitura, cooperadoSelecionadoId, mesesFinanceiroCooperado, coopId, {
             apenasPendentes: true,
           })
         );
       }
       return comCache(
-        agregarItensFichaMes(data, cooperadoSelecionadoId, mesAtivo, coopId, {
+        agregarItensFichaMes(leitura, cooperadoSelecionadoId, mesAtivo, coopId, {
           apenasPendentes: true,
         })
       );
@@ -1600,6 +1602,7 @@ function FichaCorridaPageInner() {
     paridadeCooperadoMobile,
     resumoItensMes,
     fichaResumoSnap,
+    financeiroRemoto,
     resumoItensPagamento,
     visualizandoHistorico,
   ]);
@@ -2295,7 +2298,7 @@ function FichaCorridaPageInner() {
         )}
 
       {verCreditosCooperado && cooperadoSelecionadoId && coopCnpjResumo && !exibirPagamento && (
-        <Card title="Compras no HB Créditos" className="mb-6">
+        <Card title="HB Créditos pendentes" className="mb-6">
           <HistoricoHbCreditosResumo
             cnpj={coopCnpjResumo}
             cooperadoId={cooperadoSelecionadoId}
@@ -2303,6 +2306,8 @@ function FichaCorridaPageInner() {
             valorEntregas={resumoExibicao?.valorEntregas ?? 0}
             descontosExtras={descontosExtrasResumo}
             variant="cooperado"
+            somentePendentes
+            pagamentosRevision={financeiroRemoto?.fetchedAt}
           />
         </Card>
       )}
@@ -2751,7 +2756,7 @@ function FichaCorridaPageInner() {
           {verEntregasCooperado && <Card
             title={
               isCooperado
-                ? "Resumo de entregas por itens"
+                ? visualizandoHistorico ? "Histórico de entregas por itens" : "Entregas em aberto por itens"
                 : `Resumo das entregas · ${
                     mesesPendentesPagamento.length > 1
                       ? formatMesesReferenciaRotulo(mesesPendentesPagamento)
@@ -2760,7 +2765,9 @@ function FichaCorridaPageInner() {
             }
             className="mb-6"
           >
-            <TabelaResumoItens itens={resumoItensExibicao.itens} entregas={resumoItensExibicao.entregas} />
+            {isCooperado && !visualizandoHistorico && resumoItensExibicao.entregas === 0 ? (
+              <p className="text-sm text-gray-600">Nenhuma entrega pendente de pagamento. As entregas quitadas permanecem no histórico.</p>
+            ) : <TabelaResumoItens itens={resumoItensExibicao.itens} entregas={resumoItensExibicao.entregas} />}
             {fichasPendentesMes.some((f) => f.divisaoEntrega && f.divisaoEntrega.participantes.length > 1) && (
               <div className="mt-4 space-y-2">
                 {fichasPendentesMes
@@ -2792,7 +2799,7 @@ function FichaCorridaPageInner() {
           {isCooperado ? (
             <>
               {verCreditosCooperado && cooperadoSelecionadoId && coopCnpjResumo && (
-                <Card title="Compras no HB Créditos" className="mb-6">
+                <Card title="HB Créditos pendentes" className="mb-6">
                   <HistoricoHbCreditosResumo
                     cnpj={coopCnpjResumo}
                     cooperadoId={cooperadoSelecionadoId}
@@ -2800,6 +2807,8 @@ function FichaCorridaPageInner() {
                     valorEntregas={resumoExibicao?.valorEntregas ?? 0}
                     descontosExtras={descontosExtrasResumo}
                     variant="cooperado"
+                    somentePendentes
+                    pagamentosRevision={financeiroRemoto?.fetchedAt}
                   />
                 </Card>
               )}

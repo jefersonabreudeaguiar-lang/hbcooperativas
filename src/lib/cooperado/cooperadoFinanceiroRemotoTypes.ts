@@ -3,7 +3,8 @@ import type { LeituraFinanceiraParidadeCooperado } from "@/lib/cooperado/coopera
 export type CooperadoHistoricoPagamentos = {
   totalRecebido: number;
   pagamentos: { id: string; meses: string[]; pagoEm: string; valorBruto: number;
-    descontoCooperativa: number; descontos: { descricao: string; valor: number }[]; valorRecebido: number }[];
+    descontoCooperativa: number; descontos: { descricao: string; valor: number }[]; valorRecebido: number;
+    fichaIds?: string[]; notaPedidoIds?: string[] }[];
 };
 
 export type CooperadoFinanceiroRemoto = {
