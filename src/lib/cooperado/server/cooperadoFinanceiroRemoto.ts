@@ -13,6 +13,7 @@ import { cooperadoFinanceiroScopedData } from "@/lib/cooperado/cooperadoFinancei
 import type { CooperadoFinanceiroRemoto } from "@/lib/cooperado/cooperadoFinanceiroRemotoTypes";
 import type { AppData } from "@/types";
 import { inicioCardMotorFromParidadeFinanceiro } from "@/lib/cooperado/cooperadoInicioCardParidadeMotor";
+import { buildCooperadoHistoricoPagamentos } from "@/lib/cooperado/cooperadoPagamentosHistorico";
 
 type CloudViews = {
   finance: CooperadoFinanceiroRemoto;
@@ -69,7 +70,8 @@ async function read(cnpj: string, cooperadoId: string): Promise<CloudViews> {
   }
   const paridade = leituraFinanceiraParidadeCooperado(data, canon, coop.id);
   return {
-    finance: { cooperadoId: canon, cooperativaId: coop.id, fetchedAt: new Date().toISOString(), paridade },
+    finance: { cooperadoId: canon, cooperativaId: coop.id, fetchedAt: new Date().toISOString(), paridade,
+      historicoPagamentos: buildCooperadoHistoricoPagamentos(data, canon, coop.id) },
     coopNome: coop.nome,
     card: inicioCardMotorFromParidadeFinanceiro(data, canon, coop.id, paridade),
   };

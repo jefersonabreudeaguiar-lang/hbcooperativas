@@ -32,7 +32,8 @@ export function useCooperadoFinanceiroRemoto(input: {
           // Resposta vinculada ao JWT; uma troca de sessão não pode atualizar a tela anterior.
           if (cancelled) return;
           const previous = cache.get(key);
-          if (previous && JSON.stringify(previous.paridade) === JSON.stringify(payload.paridade)) return;
+          if (previous && JSON.stringify([previous.paridade, previous.historicoPagamentos]) ===
+            JSON.stringify([payload.paridade, payload.historicoPagamentos])) return;
           cache.set(key, payload);
           for (const listener of listeners) listener();
         } catch { /* mantém a última leitura conhecida durante falha de rede */ }

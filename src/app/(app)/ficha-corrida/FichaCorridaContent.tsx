@@ -51,6 +51,7 @@ import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { shouldRenderCooperadoJefersonRebuildShell } from "@/lib/cooperado/cooperadoJefersonRebuildPilot";
 import { CooperadoJefersonRebuildTabCorpo } from "@/components/cooperado/CooperadoJefersonRebuildTabCorpo";
+import { CooperadoPagamentosResumo } from "@/components/cooperado/CooperadoPagamentosResumo";
 import { getInstituicoesCatalogo } from "@/services/catalogoContratosService";
 import {
   resumoFromPagamento,
@@ -2105,6 +2106,7 @@ function FichaCorridaPageInner() {
             title="Financeiro"
             subtitle="Mês em aberto com valores pendentes — meses pagos ficam nas abas ao lado"
           />
+          {financeiroRemoto && <CooperadoPagamentosResumo financeiro={financeiroRemoto} />}
           {financeiroRemoto ? <Card title="Resumo financeiro">
             <ResumoDescontosMes
               valorBruto={financeiroRemoto.paridade.resumo.valorBruto}
@@ -2149,6 +2151,8 @@ function FichaCorridaPageInner() {
             : "Ficha consolidada das entregas; na aba Pagar fica o valor e o PIX"
         }
       />
+
+      {isCooperado && financeiroRemoto && <CooperadoPagamentosResumo financeiro={financeiroRemoto} />}
 
       {pagoMsg && (
         <AlertBanner variant={pagoMsgVariant} className="mb-4" onDismiss={() => setPagoMsg("")}>
