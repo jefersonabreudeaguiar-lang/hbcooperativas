@@ -18,10 +18,6 @@ import {
   reconciliarNotasConferenciaDecididasLocalmente,
 } from "@/lib/conferencia/conferenciaFilaDecisaoLocal";
 import { yieldConferenciaUiFrame } from "@/lib/conferencia/conferenciaUiYield";
-import {
-  delayMs,
-  slideMsConferenciaLancamentoSequencia,
-} from "@/lib/conferencia/conferenciaSequenciaLancamentoFotos";
 import { listarPendentesConferenciaResponsavel } from "@/lib/conferencia/responsavelConferenciaFilaNav";
 import { resolveStaffNotasPedidoNotifyDomains } from "@/lib/performance/staffNotasPedidoNotifyDomains";
 import { scheduleStaffResponsavelNotasPollLoop } from "@/lib/performance/staffResponsavelNotasPullBoot";
@@ -723,12 +719,6 @@ export default function NotasPedidoStaffMain() {
   const [conferenciaLancandoUi, setConferenciaLancandoUi] = useState(false);
   const [conferenciaFotoErro, setConferenciaFotoErro] = useState("");
   const [conferenciaFotoIdx, setConferenciaFotoIdx] = useState(0);
-  const [lancamentoSequencia, setLancamentoSequencia] = useState<{
-    url: string;
-    displayIdx: number;
-    total: number;
-  } | null>(null);
-  const lancamentoSequenciaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const conferenciaFotoCacheRef = useRef<Map<string, string>>(new Map());
   const conferenciaFotoLoadGenRef = useRef(0);
   const conferenciaCnpjRef = useRef<string | undefined>(undefined);
@@ -1294,22 +1284,6 @@ export default function NotasPedidoStaffMain() {
     ]
   );
 
-  const executarSlideshowLeveConferenciaMultiFoto = useCallback(
-    async (nota: NotaPedido, total: number) => {
-      const slideMs = Math.min(slideMsConferenciaLancamentoSequencia(total), 400);
-      for (let idx = 0; idx < total; idx++) {
-        const cacheKey = conferenciaFotoCacheKey(nota.id, idx);
-        const url = conferenciaFotoCacheRef.current.get(cacheKey);
-        if (url) {
-          setLancamentoSequencia({ url, displayIdx: idx, total });
-          await delayMs(slideMs);
-        }
-      }
-      setLancamentoSequencia(null);
-    },
-    []
-  );
-
   const aquecerUiConferencia = useCallback(() => {
     loadStaffNotasConferirChunk();
     prefetchConferenciaFotoPrefetchModule();
@@ -1349,7 +1323,6 @@ export default function NotasPedidoStaffMain() {
       if (!emCache) setConferenciaFotoAtualUrl(null);
       setConferenciaFotoCarregando(!emCache);
       setConferenciaFotoIdx(clamped);
-      setLancamentoSequencia(null);
       carregarItensParaFotoConferencia(clamped);
       void loadConferenciaFoto(selectedNota, clamped);
     },
@@ -3264,11 +3237,6 @@ export default function NotasPedidoStaffMain() {
       }
     }
     startTransition(() => {
-      if (lancamentoSequenciaTimerRef.current) {
-        clearTimeout(lancamentoSequenciaTimerRef.current);
-        lancamentoSequenciaTimerRef.current = null;
-      }
-      setLancamentoSequencia(null);
       setConferenciaTransicao(false);
       setConferenciaFotoErro("");
       setConferenciaDivisaoQtd(0);
@@ -3296,11 +3264,6 @@ export default function NotasPedidoStaffMain() {
     const d = getDataOperationalTruth() ?? getData() ?? data;
     const notaAnteriorId = selectedNota?.id;
     const aplicarEstado = () => {
-    if (lancamentoSequenciaTimerRef.current) {
-      clearTimeout(lancamentoSequenciaTimerRef.current);
-      lancamentoSequenciaTimerRef.current = null;
-    }
-    setLancamentoSequencia(null);
     setConferenciaFotoErro("");
     const mesmaNota = notaAnteriorId === nota.id;
     if (!mesmaNota) {
@@ -3614,69 +3577,6 @@ export default function NotasPedidoStaffMain() {
     conferenciaItensLiveRef.current = conferenciaItens;
   }, [conferenciaItens]);
 
-  const aguardarSequenciaLancamentoFotos = useCallback(
-    async (nota: NotaPedido, total: number, opts?: { rapido?: boolean }): Promise<void> => {
-      if (total === 0 || opts?.rapido) return;
-
-      if (lancamentoSequenciaTimerRef.current) {
-        clearTimeout(lancamentoSequenciaTimerRef.current);
-        lancamentoSequenciaTimerRef.current = null;
-      }
-
-      const slideMs = slideMsConferenciaLancamentoSequencia(total);
-
-      return new Promise((resolve) => {
-        let idx = 0;
-        let settled = false;
-        const finish = () => {
-          if (settled) return;
-          settled = true;
-          if (lancamentoSequenciaTimerRef.current) {
-            clearTimeout(lancamentoSequenciaTimerRef.current);
-            lancamentoSequenciaTimerRef.current = null;
-          }
-          setLancamentoSequencia(null);
-          resolve();
-        };
-        const hardStopMs = Math.min(8000, Math.max(1800, total * slideMs + 900));
-        const hardStop = setTimeout(finish, hardStopMs);
-
-        const mostrar = async () => {
-          try {
-            const cacheKey = conferenciaFotoCacheKey(nota.id, idx);
-            const url =
-              conferenciaFotoCacheRef.current.get(cacheKey) ??
-              (await Promise.race([
-                loadConferenciaFoto(nota, idx),
-                new Promise<null>((res) => setTimeout(() => res(null), 4000)),
-              ]));
-            if (url) {
-              setLancamentoSequencia({ url, displayIdx: idx, total });
-            }
-          } catch {
-            /* slideshow opcional — não bloquear fila */
-          }
-        };
-
-        void mostrar();
-
-        const avancar = () => {
-          idx += 1;
-          if (idx >= total) {
-            clearTimeout(hardStop);
-            finish();
-            return;
-          }
-          void mostrar();
-          lancamentoSequenciaTimerRef.current = setTimeout(avancar, slideMs);
-        };
-
-        lancamentoSequenciaTimerRef.current = setTimeout(avancar, slideMs);
-      });
-    },
-    [loadConferenciaFoto]
-  );
-
   const handleLancarNota = () => {
     if (lancandoRef.current || !user || !data || !selectedNota) return;
 
@@ -3703,16 +3603,6 @@ export default function NotasPedidoStaffMain() {
       itensConferenciaAtivos,
       conferenciaDescontoPct
     ).liquido;
-
-    if (multiFoto && !ultimaFoto) {
-      if (lancamentoSequenciaTimerRef.current) {
-        clearTimeout(lancamentoSequenciaTimerRef.current);
-        lancamentoSequenciaTimerRef.current = null;
-      }
-      setLancamentoSequencia(null);
-    } else if (lancamentoSequencia) {
-      return;
-    }
 
     const errors: typeof conferirErrors = {};
     if (isDivisaoEntregaHabilitada() && conferenciaDivisaoQtd >= 2) {
@@ -3776,6 +3666,7 @@ export default function NotasPedidoStaffMain() {
       return;
     }
 
+    let itensFotoFinal: NotaPedidoItem[] | undefined;
     if (multiFoto) {
       const dSync = getDataOperationalTruth() ?? getData() ?? data;
       const reid = reidratarProgressoMultiFotoConferencia(dSync, selectedNota.id, qtdFotosAprovadas);
@@ -3793,15 +3684,26 @@ export default function NotasPedidoStaffMain() {
         !fotosLancadasConferenciaRef.current.has(fotoAtual) &&
         !conferenciaFotoSomenteLeitura
       ) {
-        const lanc = lancarFotoConferenciaAtual(fotoAtual, qtdFotosAprovadas, { uiFirst: true });
-        if (!lanc.ok) {
-          setConferirErrors({ itens: lanc.error });
-          return;
+        const comFotoAtual = new Set(fotosLancadasConferenciaRef.current).add(fotoAtual);
+        if (validarTodasFotosLancadasConferencia(comFotoAtual, qtdFotosAprovadas).ok) {
+          // A última foto entra na mesma gravação que confirma a entrega.
+          itensFotoFinal = calcularItensNota(
+            itensConferenciaAtivos.map(i => ({ ...i, valorBruto: 0 })),
+            conferenciaDescontoPct
+          ).itens;
+        } else {
+          const lanc = lancarFotoConferenciaAtual(fotoAtual, qtdFotosAprovadas, { uiFirst: true });
+          if (!lanc.ok) {
+            setConferirErrors({ itens: lanc.error });
+            return;
+          }
         }
       }
 
       const gate = validarTodasFotosLancadasConferencia(
-        fotosLancadasConferenciaRef.current,
+        itensFotoFinal
+          ? new Set(fotosLancadasConferenciaRef.current).add(fotoAtual)
+          : fotosLancadasConferenciaRef.current,
         qtdFotosAprovadas
       );
       if (!gate.ok) {
@@ -3819,13 +3721,14 @@ export default function NotasPedidoStaffMain() {
     const concluirGravacaoAprovacao = () => {
     let notaAtualizada: NotaPedido | null = null;
     const notaId = selectedNota.id;
-    clearConferenciaDraftMemoria(notaId);
+    const lancamentosPorFoto = new Map(lancamentosFotoConferenciaRef.current);
+    if (itensFotoFinal) lancamentosPorFoto.set(fotoAtual, itensFotoFinal);
     const chaveAtual = getChaveGrupoConferencia(selectedNota, data, coopId);
     const coopNomeAprovar = getCooperadoNomeResolvido(data, conferenciaCooperadoId, coopId);
 
     const itensConsolidados = multiFoto
       ? consolidarItensLancamentoPorFoto(
-          lancamentosOrdenadosPorFoto(lancamentosFotoConferenciaRef.current, qtdFotosAprovadas),
+          lancamentosOrdenadosPorFoto(lancamentosPorFoto, qtdFotosAprovadas),
           conferenciaDescontoPct
         )
       : itensConferenciaAtivos.map((i) => ({ ...i, valorBruto: 0 }));
@@ -3920,7 +3823,7 @@ export default function NotasPedidoStaffMain() {
       if (multiFoto) {
         let state = d;
         for (let idx = 0; idx < qtdFotosAprovadas; idx++) {
-          const itens = lancamentosFotoConferenciaRef.current.get(idx);
+          const itens = lancamentosPorFoto.get(idx);
           if (!itens?.length) continue;
           state = aplicarLancamentoFotoConferenciaEmDados(state, {
             nota: selectedNota,
@@ -4047,12 +3950,12 @@ export default function NotasPedidoStaffMain() {
       return;
     }
 
+    clearConferenciaDraftMemoria(notaId);
     removerNotaDaFilaSticky(notaId);
     requestAppSyncLight();
 
     const notaPatchSnapshot = notaAtualizada;
 
-    const notaAprovadaRef = selectedNota;
     let proxima = obterProximaNotaConferencia(chaveAtual, notaId);
     if (proxima?.id === notaId) proxima = null;
 
@@ -4109,42 +4012,20 @@ export default function NotasPedidoStaffMain() {
         requestAnimationFrame(() => liberarLancamentoConferencia());
       });
     } else {
-      void (async () => {
-        try {
-          if (!multiFoto) {
-            await aguardarSequenciaLancamentoFotos(notaAprovadaRef, qtdFotosAprovadas);
-          }
-          fecharConferirModal();
-        } catch {
-          /* ignore */
-        } finally {
-          liberarLancamentoConferencia();
-        }
-      })();
+      fecharConferirModal();
+      liberarLancamentoConferencia();
     }
     };
 
-    if (multiFoto) {
-      travarLancamentoConferencia();
-      void (async () => {
-        try {
-          concluirGravacaoAprovacao();
-          void executarSlideshowLeveConferenciaMultiFoto(selectedNota, qtdFotosAprovadas);
-        } catch (err) {
-          liberarLancamentoConferencia();
-          setConferirErrors({
-            itens:
-              err instanceof Error
-                ? err.message
-                : "Falha ao lançar as fotos na ficha do cooperado.",
-          });
-        }
-      })();
-      return;
-    }
-
     travarLancamentoConferencia();
-    concluirGravacaoAprovacao();
+    try {
+      concluirGravacaoAprovacao();
+    } catch (error) {
+      liberarLancamentoConferencia();
+      setConferirErrors({
+        itens: error instanceof Error ? error.message : "Não foi possível concluir o lançamento.",
+      });
+    }
   };
 
   const handleRejeitarNota = () => {
@@ -5820,16 +5701,13 @@ export default function NotasPedidoStaffMain() {
       } size="full"
         footer={selectedNota && isNotaNaFilaConferenciaResponsavel(selectedNota.status) && check("notas_pedido", "approve") ? (
           <div className="flex flex-col sm:flex-row gap-2 justify-between">
-            <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }} disabled={conferenciaLancandoUi || conferenciaTransicao || Boolean(lancamentoSequencia) || (syncingForUi && !conferirModal)}>
+            <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }} disabled={conferenciaLancandoUi || conferenciaTransicao || (syncingForUi && !conferirModal)}>
               <XCircle size={18} /> Pedir correção
             </Button>
-            <Button size="lg" onClick={handleLancarNota} disabled={conferenciaLancandoUi || conferenciaTransicao || Boolean(lancamentoSequencia) || (syncingForUi && !conferirModal)}>
+            <Button size="lg" onClick={handleLancarNota} disabled={conferenciaLancandoUi || conferenciaTransicao || (syncingForUi && !conferirModal)}>
               <CheckCircle size={18} />
               {(() => {
                 if (conferenciaLancandoUi) return "Lançando na ficha…";
-                if (lancamentoSequencia) {
-                  return `Lançando foto ${lancamentoSequencia.displayIdx + 1} de ${lancamentoSequencia.total}…`;
-                }
                 if (conferenciaTransicao) return "Carregando próxima entrega…";
                 if (!selectedNota) return "Aprovar e lançar na ficha";
                 const qtdFotosBtn = contarFotosEnviadasNota(selectedNota);
@@ -5877,7 +5755,7 @@ export default function NotasPedidoStaffMain() {
               selectedNota={selectedNota}
               data={data}
               coopId={coopId}
-              lancamentoSequencia={lancamentoSequencia}
+              lancamentoSequencia={null}
               conferenciaFotoIdx={conferenciaFotoIdx}
               conferenciaFotoCarregando={conferenciaFotoCarregando}
               conferenciaFotoAtualUrl={conferenciaFotoAtualUrl}
@@ -5886,7 +5764,6 @@ export default function NotasPedidoStaffMain() {
               fotosLancadasUi={fotosLancadasUi}
               onAmpliarFoto={() => setConferenciaFotoAmpliada(true)}
               onFotoImgError={(idx) => {
-                if (lancamentoSequencia) return;
                 if (idx !== conferenciaFotoIdx) return;
                 const key = conferenciaFotoCacheKey(selectedNota.id, idx);
                 const prevUrl = conferenciaFotoCacheRef.current.get(key);
