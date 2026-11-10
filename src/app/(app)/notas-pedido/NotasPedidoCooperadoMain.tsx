@@ -140,7 +140,6 @@ import {
   rebuildFichasNota,
   finalizarFichasConferenciaMultiFoto,
   fichasValoresAlinhadosComNota,
-  sincronizarTotaisNotaComFichas,
   excluirEntregaNota,
   isNotaPedidoExcluida,
   podeExcluirEntregaNota,
@@ -3674,7 +3673,8 @@ export default function NotasPedidoCooperadoMain() {
 
     const itensConsolidados = multiFoto
       ? consolidarItensLancamentoPorFoto(
-          lancamentosOrdenadosPorFoto(lancamentosFotoConferenciaRef.current, qtdFotosAprovadas)
+          lancamentosOrdenadosPorFoto(lancamentosFotoConferenciaRef.current, qtdFotosAprovadas),
+          conferenciaDescontoPct
         )
       : itensConferenciaAtivos.map((i) => ({ ...i, valorBruto: 0 }));
     const calcConsolidado = calcularItensNota(itensConsolidados, conferenciaDescontoPct);
@@ -3693,6 +3693,7 @@ export default function NotasPedidoCooperadoMain() {
         ? valorAprovado / divisaoPreview.participantes.length
         : valorAprovado;
 
+    try {
     updateData((d) => {
       const now = new Date().toISOString();
       if (coopId && conferenciaInstId) setInstituicaoPadraoId(coopId, conferenciaInstId);
@@ -3756,14 +3757,7 @@ export default function NotasPedidoCooperadoMain() {
       if (divisao) {
         notaAtualizada = { ...notaAtualizada, divisaoEntrega: divisao };
       }
-      const fichasExistentes = d.fichaCorrida.filter((f) => f.notaPedidoId === selectedNota.id);
-      if (fichasExistentes.length > 0) {
-        notaAtualizada = sincronizarTotaisNotaComFichas(notaAtualizada!, d.fichaCorrida, {
-          forcarDescontoLiquido: true,
-          sincronizarBruto: fichasExistentes.length > 1,
-          preservarTotaisDoLancamentoAtual: true,
-        });
-      }
+      // Fichas parciais não substituem os itens acabados de conferir.
       const notasPedido = d.notasPedido.map((n) => (n.id === selectedNota.id ? notaAtualizada! : n));
 
       if (multiFoto) {
@@ -3830,6 +3824,10 @@ export default function NotasPedidoCooperadoMain() {
         changes: "Entrega conferida",
       });
     });
+    } catch (error) {
+      setConferirErrors({ itens: error instanceof Error ? error.message : "Não foi possível validar as somas da entrega." });
+      return;
+    }
 
     removerNotaDaFilaSticky(notaId);
 

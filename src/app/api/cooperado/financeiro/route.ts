@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   if (denied) return denied;
   try {
     const payload = await fetchCooperadoFinanceiroRemoto(cnpj, auth.session.cooperadoId);
-    return NextResponse.json(payload, { headers: { "Cache-Control": "private, no-store" } });
+    return NextResponse.json({ ...payload, sessionUserId: auth.session.sub }, { headers: { "Cache-Control": "private, no-store" } });
   } catch {
     return NextResponse.json({ error: "Não foi possível atualizar o financeiro agora." }, { status: 503 });
   }

@@ -98,57 +98,70 @@ export const NotasPedidoConferirItensTable = memo(function NotasPedidoConferirIt
   onDraftCommit,
 }: NotasPedidoConferirItensTableProps) {
   const [draft, setDraft] = useState(conferenciaItens);
+  const draftRef = useRef(conferenciaItens);
   const draftKeyRef = useRef(conferenciaDraftKey);
   const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const idleCommitRef = useRef<number | null>(null);
+  const cancelCommit = useCallback(() => {
+    if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+    commitTimerRef.current = null;
+    if (idleCommitRef.current !== null && typeof cancelIdleCallback !== 'undefined') cancelIdleCallback(idleCommitRef.current);
+    idleCommitRef.current = null;
+  }, []);
 
   useEffect(() => {
     if (draftKeyRef.current === conferenciaDraftKey) return;
+    cancelCommit();
     draftKeyRef.current = conferenciaDraftKey;
+    draftRef.current = conferenciaItens;
     setDraft(conferenciaItens);
     onDraftLiveChange(conferenciaItens);
-  }, [conferenciaDraftKey, conferenciaItens, onDraftLiveChange]);
+  }, [conferenciaDraftKey, conferenciaItens, onDraftLiveChange, cancelCommit]);
 
   const scheduleCommit = useCallback(
     (items: ConferenciaItemRow[]) => {
-      if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+      cancelCommit();
+      const key = draftKeyRef.current;
       commitTimerRef.current = setTimeout(() => {
         commitTimerRef.current = null;
-        onDraftCommit(items);
-      }, 320);
+        const commit = () => {
+          idleCommitRef.current = null;
+          if (draftKeyRef.current === key && draftRef.current === items) onDraftCommit(items);
+        };
+        if (typeof requestIdleCallback !== 'undefined') idleCommitRef.current = requestIdleCallback(commit, { timeout: 1000 });
+        else commit();
+      }, 400);
     },
-    [onDraftCommit]
+    [onDraftCommit, cancelCommit]
   );
 
   useEffect(
     () => () => {
-      if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+      cancelCommit();
     },
-    []
+    [cancelCommit]
   );
 
   const applyQty = useCallback(
-    (idx: number, qty: number, commitNow: boolean) => {
-      setDraft((prev) => {
-        const next = prev.map((item, i) => (i === idx ? { ...item, quantidade: qty } : item));
-        onDraftLiveChange(next);
-        if (commitNow) {
-          if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
-          onDraftCommit(next);
-        } else {
-          scheduleCommit(next);
-        }
-        return next;
-      });
+    (idx: number, qty: number) => {
+      const prev = draftRef.current;
+      if (!prev[idx] || prev[idx].quantidade === qty) return;
+      const next = prev.slice();
+      next[idx] = { ...prev[idx], quantidade: qty };
+      draftRef.current = next;
+      onDraftLiveChange(next);
+      setDraft(next);
+      scheduleCommit(next);
     },
     [onDraftCommit, onDraftLiveChange, scheduleCommit]
   );
 
   const onLiveQty = useCallback(
-    (idx: number, qty: number) => applyQty(idx, qty, false),
+    (idx: number, qty: number) => applyQty(idx, qty),
     [applyQty]
   );
   const onCommitQty = useCallback(
-    (idx: number, qty: number) => applyQty(idx, qty, true),
+    (idx: number, qty: number) => applyQty(idx, qty),
     [applyQty]
   );
 

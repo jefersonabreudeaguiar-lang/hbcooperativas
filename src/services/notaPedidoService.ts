@@ -85,17 +85,23 @@ function valorBrutoItemLinha(item: NotaPedidoItem): number {
 function mesclarItemResumo(map: Map<string, ItemResumoFichaMes>, item: NotaPedidoItem) {
   if (item.quantidade <= 0) return;
   const valorLinha = valorBrutoItemLinha(item);
-  const key =
-    item.produtoInstituicaoId ||
-    `${(item.produtoNome ?? "").trim()}::${(item.unidade ?? "").trim()}`;
+  let key = JSON.stringify([
+    item.produtoInstituicaoId || (item.produtoNome ?? "").trim(),
+    item.unidade,
+    item.precoUnitario,
+  ]);
   const existente = map.get(key);
   if (existente) {
-    existente.quantidade = round2(existente.quantidade + item.quantidade);
-    existente.valorBruto = round2(existente.valorBruto + valorLinha);
-    existente.precoUnitario =
-      existente.quantidade > 0 ? round2(existente.valorBruto / existente.quantidade) : item.precoUnitario;
-  } else {
-    map.set(key, {
+    const quantidade = Number((existente.quantidade + item.quantidade).toPrecision(15));
+    const valorBruto = round2(existente.valorBruto + valorLinha);
+    if (round2(quantidade * item.precoUnitario) === valorBruto) {
+      existente.quantidade = quantidade;
+      existente.valorBruto = valorBruto;
+      return;
+    }
+    key += `:occ:${map.size}`;
+  }
+  map.set(key, {
       produtoInstituicaoId: item.produtoInstituicaoId,
       produtoNome: item.produtoNome,
       unidade: item.unidade,
@@ -103,7 +109,6 @@ function mesclarItemResumo(map: Map<string, ItemResumoFichaMes>, item: NotaPedid
       quantidade: item.quantidade,
       valorBruto: valorLinha,
     });
-  }
 }
 
 /** Soma itens de todas as entregas do cooperado no mês (ficha corrida consolidada). */
@@ -169,18 +174,7 @@ export function agregarItensFichaMeses(
     const parcial = agregarItensFichaMes(data, cooperadoId, mes, cooperativaId, opts);
     entregas += parcial.entregas;
     for (const item of parcial.itens) {
-      const key =
-        item.produtoInstituicaoId ||
-        `${(item.produtoNome ?? "").trim()}::${(item.unidade ?? "").trim()}`;
-      const existente = map.get(key);
-      if (existente) {
-        existente.quantidade = round2(existente.quantidade + item.quantidade);
-        existente.valorBruto = round2(existente.valorBruto + item.valorBruto);
-        existente.precoUnitario =
-          existente.quantidade > 0 ? round2(existente.valorBruto / existente.quantidade) : item.precoUnitario;
-      } else {
-        map.set(key, { ...item });
-      }
+      mesclarItemResumo(map, item);
     }
   }
   const itens = [...map.values()].sort((a, b) => a.produtoNome.localeCompare(b.produtoNome, "pt-BR"));
@@ -862,7 +856,9 @@ function encontrarFichaExistenteParaLancamento(
     const porFoto = candidatas.find((f) =>
       descricaoFichaCorrespondeFoto(f.descricao, opts.fotoIndex!, opts.totalFotos!)
     );
-    if (porFoto) return porFoto;
+    // Outra foto da mesma nota não é um retry desta foto. Reutilizar o ID da
+    // única ficha existente fazia a sincronização sobrescrever a foto anterior.
+    return porFoto;
   }
   const estavel = idEstavelFichaCorrida(nota.id, cooperadoId, opts);
   const porId = candidatas.find((f) => f.id === estavel);
@@ -1199,7 +1195,9 @@ export function finalizarFichasConferenciaMultiFoto(data: AppData, nota: NotaPed
 
   for (let i = 0; i < total; i++) {
     const hit = existentes.find((f) => descricaoFichaCorrespondeFoto(f.descricao, i, total));
-    if (!hit) return rebuildFichasNota(data, nota);
+    if (!hit) {
+      throw new Error(`Não foi possível concluir: confira o lançamento da foto ${i + 1}/${total}. Nenhum total foi substituído.`);
+    }
 
     const pct = hit.percentualDescontoCooperativa ?? nota.percentualDescontoCooperativa ?? 0;
     const calc = hit.itens?.length
@@ -1225,6 +1223,14 @@ export function finalizarFichasConferenciaMultiFoto(data: AppData, nota: NotaPed
     ctxFicha = [...without, ...novasFichas];
   }
 
+  const soma = somaTotaisFichasNota(novasFichas, nota.id);
+  const centavos = (valor: number) => Math.round(valor * 100);
+  if (new Set(novasFichas.map(f => f.id)).size !== novasFichas.length ||
+      centavos(soma.valorBruto) !== centavos(nota.valorBruto) ||
+      centavos(soma.valorDesconto) !== centavos(nota.valorDesconto) ||
+      centavos(soma.valorLiquido) !== centavos(nota.valorLiquido)) {
+    throw new Error('As somas das fotos e da entrega não coincidem. Revise os itens antes de concluir; os lançamentos anteriores foram preservados.');
+  }
   const fichaCorrida = recalcularSaldosFichaNota([...without, ...novasFichas], nota);
   const arquivosMensais = upsertArquivoMensal(
     { ...data, fichaCorrida: without },
@@ -3303,7 +3309,8 @@ function chaveConsolidacaoItemPorFoto(
 
 /** Soma itens lançados em várias fotos da mesma entrega. */
 export function consolidarItensLancamentoPorFoto(
-  lancamentos: NotaPedidoItem[][]
+  lancamentos: NotaPedidoItem[][],
+  percentualDesconto = 0
 ): NotaPedidoItem[] {
   const map = new Map<string, NotaPedidoItem>();
   for (let fotoIndex = 0; fotoIndex < lancamentos.length; fotoIndex++) {
@@ -3311,14 +3318,31 @@ export function consolidarItensLancamentoPorFoto(
     for (let itemIndex = 0; itemIndex < lista.length; itemIndex++) {
       const item = lista[itemIndex];
       if (item.quantidade <= 0) continue;
-      const key = chaveConsolidacaoItemPorFoto(item, fotoIndex, itemIndex);
+      // Um ID de catálogo não torna preços ou unidades diferentes equivalentes.
+      const key = JSON.stringify([
+        chaveConsolidacaoItemPorFoto(item, fotoIndex, itemIndex),
+        item.precoUnitario,
+        item.unidade,
+      ]);
       const prev = map.get(key);
       if (prev) {
-        map.set(key, {
+        const combinado = {
           ...prev,
-          quantidade: round2(prev.quantidade + item.quantidade),
+          // Quantidade não é moeda: não descartar milésimos de kg.
+          quantidade: Number((prev.quantidade + item.quantidade).toPrecision(15)),
           valorBruto: round2(prev.valorBruto + item.valorBruto),
-        });
+        };
+        const separado = calcularItensNota([prev, item], percentualDesconto);
+        const junto = calcularItensNota([combinado], percentualDesconto);
+        // A consolidação é só de apresentação. Não pode mudar um centavo do
+        // bruto, do desconto ou do líquido já conferido em cada foto.
+        if (junto.valorBruto === separado.valorBruto &&
+            junto.valorDesconto === separado.valorDesconto &&
+            junto.valorLiquido === separado.valorLiquido) {
+          map.set(key, { ...combinado, valorBruto: junto.valorBruto });
+        } else {
+          map.set(`${key}:occ:${fotoIndex}:${itemIndex}`, { ...item });
+        }
       } else {
         map.set(key, { ...item });
       }

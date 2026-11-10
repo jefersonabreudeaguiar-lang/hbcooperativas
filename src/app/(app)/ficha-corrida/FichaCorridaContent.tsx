@@ -11,7 +11,7 @@ import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify"
 import { isAppDataWarm } from "@/services/dataStore";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { useCooperadoFinanceiroUiSnapshot } from "@/hooks/useCooperadoFinanceiroUiSnapshot";
-import { useCooperadoFinanceiroRemoto } from "@/hooks/useCooperadoFinanceiroRemoto";
+import { useCooperadoFinanceiroRemotoState } from "@/hooks/useCooperadoFinanceiroRemoto";
 import { useCooperadoMessengerReadModelRevision } from "@/hooks/useCooperadoMessengerReadModelRevision";
 import { useCooperadoDormantAppData } from "@/hooks/useCooperadoDormantAppData";
 import {
@@ -290,10 +290,11 @@ function FichaCorridaPageInner() {
   const ready = useEnsureAppDataWarm();
   const tabActive = useCooperadoTabPanelActive("/ficha-corrida");
   const { user, isCooperado, cooperadoId, check, coopId: coopIdPerm } = usePermissions();
-  const financeiroRemoto = useCooperadoFinanceiroRemoto({
-    active: tabActive && isCooperado, userId: user?.id, cooperadoId,
+  const financeiroConsulta = useCooperadoFinanceiroRemotoState({
+    active: tabActive && isCooperado, requireFreshOnActivation: true, userId: user?.id, cooperadoId,
     cooperativaId: coopIdPerm ?? user?.cooperativaId,
   });
+  const financeiroRemoto = financeiroConsulta.data;
   const fichaAppDataDomains = useMemo(
     (): AppDataNotifyDomain[] => responsavelFichaAppDataDomains(isCooperado),
     [isCooperado]
@@ -2101,6 +2102,11 @@ function FichaCorridaPageInner() {
   const verFotosCooperado = secaoCooperadoAberta && abaSecaoCooperado === "fotos";
   const verEntregasCooperado = verResumoCooperado || verFichaCooperado;
 
+  if (isCooperado && !financeiroRemoto) {
+    return <div><PageHeader title="Financeiro" subtitle="Conferindo os valores atualizados na nuvem" />
+      {financeiroConsulta.error ? <div role="alert" className="rounded-xl border bg-white p-6"><p>{financeiroConsulta.error}</p><Button onClick={financeiroConsulta.retry} className="mt-4">Tentar novamente</Button></div> : <FinanceiroTabSkeleton />}
+    </div>;
+  }
   if (!data) {
     if (isCooperado) {
       return (

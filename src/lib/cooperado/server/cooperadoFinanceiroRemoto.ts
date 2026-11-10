@@ -27,9 +27,9 @@ async function read(cnpj: string, cooperadoId: string): Promise<CloudViews> {
   if (!sb) throw new Error("Nuvem indisponível");
   const [{ data: rows, error }, cooperados, op, table] = await Promise.all([
     sb.from("cooperativas").select("*").eq("cnpj", cnpj).limit(1),
-    fetchCooperadosFromStorage(sb, cnpj),
+    fetchCooperadosFromStorage(sb, cnpj, { complete: true }),
     fetchOperacionalSync(sb, cnpj),
-    fetchNotasFromTable(sb, cnpj),
+    fetchNotasFromTable(sb, cnpj, undefined, true),
   ]);
   if (error || !rows?.length || !op) throw new Error("Dados financeiros indisponíveis");
   const coop = cooperativaFromCloudRow(rows[0] as Record<string, unknown>);

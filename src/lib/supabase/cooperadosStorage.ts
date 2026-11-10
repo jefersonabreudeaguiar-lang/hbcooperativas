@@ -94,8 +94,10 @@ export async function fetchCooperadoFromStorage(
 
 export async function fetchCooperadosFromStorage(
   supabase: SupabaseClient,
-  cnpj: string
+  cnpj: string,
+  options?: { complete?: boolean }
 ): Promise<Cooperado[]> {
+  if (options?.complete) return fetchCooperadosCompletosParalelos(supabase, cnpj);
   await ensureCooperadosBucket(supabase);
   const { data: files, error } = await supabase.storage.from(BUCKET).list(cnpj, { limit: 500 });
   if (error || !files?.length) return [];
@@ -122,6 +124,33 @@ export async function fetchCooperadosFromStorage(
   return mergeDuplicatasAssinaturaNaLista(cooperados)
     .map(normalizarAssinaturaLegadoCooperado)
     .sort((a, b) => a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR"));
+}
+
+/** Financial reads: bounded parallelism, complete pagination and no bucket mutations. */
+async function fetchCooperadosCompletosParalelos(supabase: SupabaseClient, cnpj: string): Promise<Cooperado[]> {
+  const names: string[] = [];
+  for (let offset = 0; ; offset += 500) {
+    const r = await supabase.storage.from(BUCKET).list(cnpj, { limit: 500, offset, sortBy: { column: 'name', order: 'asc' } });
+    if (r.error || !Array.isArray(r.data)) throw Error('Não foi possível conferir todos os cadastros financeiros.');
+    names.push(...r.data.filter(f => f.name.endsWith('.json')).map(f => f.name));
+    if (r.data.length < 500) break;
+  }
+  const rows: Cooperado[] = new Array(names.length);
+  let cursor = 0, failed = false;
+  await Promise.all(Array.from({ length: Math.min(8, names.length) }, async () => {
+    try {
+    for (;;) {
+      const index = cursor++;
+      if (failed || index >= names.length) return;
+      const r = await supabase.storage.from(BUCKET).download(`${cnpj}/${names[index]}`, { cacheNonce: crypto.randomUUID() }, { cache: 'no-store' });
+      if (r.error || !r.data) throw Error('Não foi possível confirmar um cadastro financeiro.');
+      const member = JSON.parse(await r.data.text()).cooperado as Cooperado | undefined;
+      if (!member?.id || !member.nomeCompleto?.trim()) throw Error('Cadastro financeiro incompleto.');
+      rows[index] = member;
+    }
+    } catch (e) { failed = true; throw e; }
+  }));
+  return mergeDuplicatasAssinaturaNaLista(rows).map(normalizarAssinaturaLegadoCooperado).sort((a,b) => a.nomeCompleto.localeCompare(b.nomeCompleto,'pt-BR'));
 }
 
 /** Lista bruta (inclui duplicados/desligados) — uso administrativo. */

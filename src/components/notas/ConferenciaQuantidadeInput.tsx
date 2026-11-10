@@ -32,11 +32,13 @@ export const ConferenciaQuantidadeInput = memo(function ConferenciaQuantidadeInp
   onCommitQty,
 }: ConferenciaQuantidadeInputProps) {
   const [text, setText] = useState(() => formatQtyForInput(value));
+  const textRef = useRef(formatQtyForInput(value));
   const editingRef = useRef(false);
 
   useEffect(() => {
     if (editingRef.current) return;
-    setText(formatQtyForInput(value));
+    textRef.current = formatQtyForInput(value);
+    setText(textRef.current);
   }, [value]);
 
   const emitLive = useCallback(
@@ -62,13 +64,15 @@ export const ConferenciaQuantidadeInput = memo(function ConferenciaQuantidadeInp
       }}
       onChange={(e) => {
         const raw = e.target.value;
+        textRef.current = raw;
         setText(raw);
         emitLive(raw);
       }}
       onBlur={() => {
         editingRef.current = false;
-        const qty = parseQtyInput(text);
-        setText(formatQtyForInput(qty));
+        const qty = parseQtyInput(textRef.current);
+        textRef.current = formatQtyForInput(qty);
+        setText(textRef.current);
         onCommitQty(qty);
       }}
     />

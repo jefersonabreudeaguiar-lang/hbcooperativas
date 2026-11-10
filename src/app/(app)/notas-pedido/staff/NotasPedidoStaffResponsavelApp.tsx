@@ -158,7 +158,6 @@ import {
   rebuildFichasNota,
   finalizarFichasConferenciaMultiFoto,
   fichasValoresAlinhadosComNota,
-  sincronizarTotaisNotaComFichas,
   excluirEntregaNota,
   isNotaPedidoExcluida,
   podeExcluirEntregaNota,
@@ -3602,12 +3601,13 @@ export default function NotasPedidoStaffMain() {
 
   const handleConferenciaDraftCommit = useCallback(
     (items: ConferenciaItemRow[]) => {
-      conferenciaItensLiveRef.current = items as ItemForm[];
-      setConferenciaItens(items as ItemForm[]);
-      setConferirErrors((e) => ({ ...e, itens: undefined }));
-      setConferenciaTotaisUi(calcularTotaisConferenciaItens(items as ItemForm[], conferenciaDescontoPct));
+      if (conferenciaItensLiveRef.current !== items) return;
+      setConferirErrors((e) => e.itens ? ({ ...e, itens: undefined }) : e);
+      const total = calcularTotaisConferenciaItens(items as ItemForm[], conferenciaDescontoPct);
+      setConferenciaTotaisUi(previous => previous.bruto === total.bruto && previous.desconto === total.desconto && previous.liquido === total.liquido ? previous : total);
+      persistirDraftConferenciaEmMemoria();
     },
-    [conferenciaDescontoPct]
+    [conferenciaDescontoPct, persistirDraftConferenciaEmMemoria]
   );
 
   useEffect(() => {
@@ -3825,7 +3825,8 @@ export default function NotasPedidoStaffMain() {
 
     const itensConsolidados = multiFoto
       ? consolidarItensLancamentoPorFoto(
-          lancamentosOrdenadosPorFoto(lancamentosFotoConferenciaRef.current, qtdFotosAprovadas)
+          lancamentosOrdenadosPorFoto(lancamentosFotoConferenciaRef.current, qtdFotosAprovadas),
+          conferenciaDescontoPct
         )
       : itensConferenciaAtivos.map((i) => ({ ...i, valorBruto: 0 }));
     const calcConsolidado = calcularItensNota(itensConsolidados, conferenciaDescontoPct);
@@ -3912,14 +3913,8 @@ export default function NotasPedidoStaffMain() {
       if (divisao) {
         notaAtualizada = { ...notaAtualizada, divisaoEntrega: divisao };
       }
-      const fichasExistentes = d.fichaCorrida.filter((f) => f.notaPedidoId === selectedNota.id);
-      if (fichasExistentes.length > 0) {
-        notaAtualizada = sincronizarTotaisNotaComFichas(notaAtualizada!, d.fichaCorrida, {
-          forcarDescontoLiquido: true,
-          sincronizarBruto: fichasExistentes.length > 1,
-          preservarTotaisDoLancamentoAtual: true,
-        });
-      }
+      // Os itens acabados de conferir são a fonte deste fechamento. Uma ficha
+      // parcial antiga não pode substituir quantidades ou totais recém-digitados.
       const notasPedido = d.notasPedido.map((n) => (n.id === selectedNota.id ? notaAtualizada! : n));
 
       if (multiFoto) {
@@ -4011,6 +4006,10 @@ export default function NotasPedidoStaffMain() {
         dadosAposAprovacao = savedAprovacao.data;
         markNotaConferenciaDecididaLocalmente(notaId);
       }
+    } catch (error) {
+      liberarLancamentoConferencia();
+      setConferirErrors({ itens: error instanceof Error ? error.message : "Não foi possível validar as somas da entrega." });
+      return;
     } finally {
       const batchPersist = endConferenciaModalSaveBatch();
       if (!batchPersist.ok) persistAprovacaoErro = batchPersist.error;
@@ -6112,7 +6111,7 @@ export default function NotasPedidoStaffMain() {
                 conferenciaFotoIdx={conferenciaFotoIdx}
                 conferenciaDescontoPct={conferenciaDescontoPct}
                 conferenciaItens={conferenciaItens}
-                conferenciaDraftKey={`${selectedNota.id}:${conferenciaFotoIdx}`}
+                conferenciaDraftKey={`${selectedNota.id}:${conferenciaFotoIdx}:${conferenciaInstId}`}
                 conferirErrorsItens={conferirErrors.itens}
                 onDraftLiveChange={handleConferenciaDraftLive}
                 onDraftCommit={handleConferenciaDraftCommit}

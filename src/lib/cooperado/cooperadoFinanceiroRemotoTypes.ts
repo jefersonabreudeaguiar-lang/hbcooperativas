@@ -8,6 +8,7 @@ export type CooperadoHistoricoPagamentos = {
 };
 
 export type CooperadoFinanceiroRemoto = {
+  sessionUserId?: string;
   cooperadoId: string;
   cooperativaId: string;
   fetchedAt: string;
