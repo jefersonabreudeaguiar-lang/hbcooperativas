@@ -38,7 +38,7 @@ export async function atualizarEntradaStaff(user: Omit<User, "password">, ativa:
     let store: Storage | null = null;
     try { if (typeof window !== 'undefined') store = window.localStorage; } catch { /* optional accelerator */ }
     const existing = await conferirEntradaStaffExistente(owner, getData, async () => {
-      const [revision, cadastros] = await Promise.all([fetchCooperativaCloudRevision(user.cooperativaCnpj!), fetchCooperadosFromCloud(user.cooperativaCnpj!)]);
+      const [revision, cadastros] = await Promise.all([fetchCooperativaCloudRevision(user.cooperativaCnpj!), fetchCooperadosFromCloud(user.cooperativaCnpj!, { confirmarCompleta: true })]);
       if (!revision || !cadastros.ok) return null;
       const current = getData(), coopId = resolveGestaoCooperativaId(user, current);
       if (!coopId) return null;
@@ -61,7 +61,7 @@ async function atualizarEntradaStaffLivre(user: Omit<User, "password">, ativa: (
   const coopId = await ensureCooperativaLocalForCnpj(cnpj);
   if (!coopId || !ativa()) throw new Error("Não foi possível confirmar a cooperativa.");
   const [cadastros, entregas, response] = await Promise.all([
-    lerEntradaStaffComRetry("os cooperados", () => fetchCooperadosFromCloud(cnpj), (r) => r.ok, ativa),
+    lerEntradaStaffComRetry("os cooperados", () => fetchCooperadosFromCloud(cnpj, { confirmarCompleta: true }), (r) => r.ok, ativa),
     lerEntradaStaffComRetry("as entregas", () => fetchNotasPedidoFromCloud(cnpj, { forceFull: true, repairFila: false, confirmarCompleta: true }), (r) => r.ok && !r.delta, ativa),
     lerEntradaStaffComRetry("o financeiro e os contratos", async () => {
       const res = await secureApiFetch(`/api/cooperativa-sync?cnpj=${cnpj}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) });

@@ -375,15 +375,21 @@ export function mergeCloudCooperadosIntoData(
 }
 
 export async function fetchCooperadosFromCloud(
-  cnpj: string
+  cnpj: string,
+  options?: { confirmarCompleta?: boolean }
 ): Promise<{ ok: boolean; cooperados: Cooperado[] }> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return { ok: false, cooperados: [] };
 
   try {
-    const res = await secureApiFetch(`/api/cooperados?cnpj=${digits}`, { cache: "no-store" });
+    const qs = new URLSearchParams({ cnpj: digits });
+    if (options?.confirmarCompleta) qs.set("confirmarCompleta", "1");
+    const res = await secureApiFetch(`/api/cooperados?${qs}`, { cache: "no-store" });
     if (!res.ok) return { ok: false, cooperados: [] };
     const json = await res.json().catch(() => ({}));
+    if (options?.confirmarCompleta && (json.complete !== true || !Array.isArray(json.cooperados))) {
+      return { ok: false, cooperados: [] };
+    }
     return { ok: true, cooperados: (json.cooperados ?? []) as Cooperado[] };
   } catch {
     return { ok: false, cooperados: [] };

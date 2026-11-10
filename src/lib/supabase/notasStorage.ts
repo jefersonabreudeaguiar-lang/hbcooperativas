@@ -383,7 +383,7 @@ async function listNotaJsonFileNames(supabase: SupabaseClient, cnpj: string, str
   for (;;) {
     const { data: page, error } = await supabase.storage
       .from(BUCKET)
-      .list(cnpj, { limit: pageSize, offset });
+      .list(cnpj, { limit: pageSize, offset, sortBy: { column: "name", order: "asc" } });
     if (error && strict) throw new Error('Não foi possível listar todas as entregas.');
     if (error || !page?.length) break;
     for (const file of page) {
@@ -402,15 +402,24 @@ async function downloadNotasJsonParallel(
 ): Promise<NotaPedido[]> {
   const notas: NotaPedido[] = [];
   let cursor = 0;
+  let failed = false;
   const worker = async () => {
-    for (;;) {
+    while (!failed) {
       const idx = cursor++;
       if (idx >= fileNames.length) return;
-      const { data: blob, error: dlErr } = await supabase.storage
-        .from(BUCKET)
-        .download(`${cnpj}/${fileNames[idx]}`, { cacheNonce: crypto.randomUUID() }, { cache: "no-store" });
+      const download = () => supabase.storage.from(BUCKET).download(
+        `${cnpj}/${fileNames[idx]}`, { cacheNonce: crypto.randomUUID() },
+        { cache: "no-store", ...(strict ? { signal: AbortSignal.timeout(8_000) } : {}) }
+      );
+      let { data: blob, error: dlErr } = await download();
+      if (strict && !failed && (dlErr || !blob)) {
+        ({ data: blob, error: dlErr } = await download());
+      }
       if (dlErr || !blob) {
-        if (strict) throw new Error('Não foi possível ler todas as entregas.');
+        if (strict) {
+          failed = true;
+          throw new Error('Não foi possível ler todas as entregas.');
+        }
         continue;
       }
       try {
@@ -418,12 +427,15 @@ async function downloadNotasJsonParallel(
         if (parsed?.id) notas.push(parsed);
         else if (strict) throw new Error('Entrega inválida.');
       } catch {
-        if (strict) throw new Error('Não foi possível validar todas as entregas.');
+        if (strict) {
+          failed = true;
+          throw new Error('Não foi possível validar todas as entregas.');
+        }
         /* ignore corrupt file */
       }
     }
   };
-  const workers = Math.min(NOTAS_STORAGE_DOWNLOAD_CONCURRENCY, fileNames.length);
+  const workers = Math.min(strict ? 32 : NOTAS_STORAGE_DOWNLOAD_CONCURRENCY, fileNames.length);
   await Promise.all(Array.from({ length: workers }, worker));
   return notas.sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()

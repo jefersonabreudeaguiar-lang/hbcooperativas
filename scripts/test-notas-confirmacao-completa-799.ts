@@ -6,6 +6,7 @@ import { setSecureApiFetchTestOverrideForTests } from '../src/lib/security/clien
 async function main() {
   let sqlError = false, listError = false, downloadError = false, corrupt = false;
   let sqlPages = 0, storagePages = 0, writes = 0;
+  let failOnce = false, retries = 0;
   const row = (i: number) => ({ payload: { id: `n${i}`, status: 'conferida', updatedAt: '2026-11-01' }, status: 'pago', updated_at: '2026-11-02' });
   const fake = {
     from: () => ({ select: () => ({ eq: () => ({ order: () => ({ range: async (offset: number) => {
@@ -21,15 +22,23 @@ async function main() {
           return { error: listError ? { message: 'unavailable' } : null,
             data: Array.from({ length: offset === 0 ? 500 : 1 }, (_, i) => ({ name: `n${offset + i}.json` })) };
         },
-        download: async (path: string) => ({ error: downloadError ? { message: 'unavailable' } : null,
-          data: new Blob([corrupt ? '{bad' : JSON.stringify({ id: path, status: 'pago', updatedAt: '2026-11-02' })]) }),
+        download: async (path: string) => {
+          if (failOnce && path.endsWith('/n0.json') && retries++ === 0) {
+            return { error: { message: 'temporary failure' }, data: null };
+          }
+          return { error: downloadError ? { message: 'unavailable' } : null,
+            data: new Blob([corrupt ? '{bad' : JSON.stringify({ id: path, status: 'pago', updatedAt: '2026-11-02' })]) };
+        },
       }),
     },
   } as never;
   const sql = await fetchNotasFromTable(fake, '88888888000181', undefined, true);
   assert.equal(sql.notas.length, 501); assert.equal(sqlPages, 2); assert.ok(sql.notas.every(n => n.status === 'pago'));
+  failOnce = true;
   const storage = await fetchNotasFromStorage(fake, '88888888000181', true);
   assert.equal(storage.length, 501); assert.equal(storagePages, 2); assert.equal(writes, 0);
+  assert.equal(retries, 2, 'the failed file is downloaded again without listing all pages again');
+  failOnce = false;
   sqlError = true;
   await assert.rejects(fetchNotasFromTable(fake, '88888888000181', undefined, true), /consultar/);
   listError = true;

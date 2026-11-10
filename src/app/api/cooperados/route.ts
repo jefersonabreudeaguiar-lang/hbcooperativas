@@ -25,8 +25,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ cooperados: [], configured: false });
   }
 
-  const cooperados = await fetchCooperadosFromStorage(supabase, cnpj);
-  return NextResponse.json({ cooperados, source: "storage" });
+  const complete = searchParams.get("confirmarCompleta") === "1";
+  try {
+    const cooperados = await fetchCooperadosFromStorage(supabase, cnpj, { complete });
+    return NextResponse.json({ cooperados, source: "storage", ...(complete ? { complete } : {}) });
+  } catch {
+    return NextResponse.json({ error: "Não foi possível conferir todos os cadastros." }, { status: 503 });
+  }
 }
 
 export async function POST(request: Request) {
