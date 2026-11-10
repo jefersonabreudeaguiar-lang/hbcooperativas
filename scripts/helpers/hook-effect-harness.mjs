@@ -4,6 +4,7 @@ export function hookHarness() {
   const equal=(a,b)=>a&&b&&a.length===b.length&&a.every((v,i)=>Object.is(v,b[i]));
   const react={
     memo:fn=>fn,
+    startTransition:fn=>fn(),
     useRef(value){const i=cursor++;return slots[i]??=( {current:value} );},
     useState(initial){const i=cursor++;if(!slots[i]){const slot={value:typeof initial==='function'?initial():initial};slot.set=value=>{const next=typeof value==='function'?value(slot.value):value;if(!Object.is(next,slot.value)){slot.value=next;dirty=true;}};slots[i]=slot;}return [slots[i].value,slots[i].set];},
     useCallback(fn,deps){return react.useMemo(()=>fn,deps);},

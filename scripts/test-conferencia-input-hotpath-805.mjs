@@ -14,6 +14,26 @@ assert.equal(liveChanges,100);assert.equal(timers.pending,1);
 assert.equal(resolveConferenciaItensLive({current:live},base)[20].quantidade,100.25,'approve before idle reads the final typed digit');
 timers.flushTimers();assert.equal(commits,0,'parent work waits for idle');timers.flushIdle();assert.equal(commits,1);assert.equal(lastCommitted,live);
 rows(tree)[0].onLiveQty(0,9);tree=render();props={...props,conferenciaDraftKey:'note:1:other-contract',conferenciaItens:base};tree=render();timers.flushTimers();timers.flushIdle();assert.equal(commits,1,'old photo/contract cannot commit into the next one');assert.equal(live,base);
+// Captures receive native focus transitions; the browser still owns Tab order.
+const internal={}, external={};const root={contains:target=>target===internal};
+tree.props.onFocusCapture();
+for(const idx of [0,1,2,3,2,1,0]){
+  rows(tree)[idx].onLiveQty(idx,86+idx);
+  tree=render();
+  timers.flushTimers();timers.flushIdle();
+  tree.props.onBlurCapture({currentTarget:root,relatedTarget:internal});
+  tree.props.onFocusCapture();
+  assert.equal(commits,1,'pausing and moving in either direction inside the table cannot update the parent');
+}
+assert.equal(resolveConferenciaItensLive({current:live},base)[0].quantidade,86,'immediate approval reads the live value');
+tree.props.onBlurCapture({currentTarget:root,relatedTarget:external});
+timers.flushTimers();
+tree.props.onFocusCapture();timers.flushIdle();
+assert.equal(commits,1,'re-entering the table cancels queued parent work');
+tree.props.onBlurCapture({currentTarget:root,relatedTarget:external});
+timers.flushTimers();timers.flushIdle();assert.equal(commits,2);assert.equal(lastCommitted,live);
+tree.props.onFocusCapture();tree.props.onBlurCapture({currentTarget:root,relatedTarget:null});
+timers.flushTimers();timers.flushIdle();assert.equal(commits,2,'leaving an unchanged draft does no work');
 h.cleanup();assert.equal(timers.pending,0);
 const inputHarness=hookHarness(),inputExports={};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/notas/ConferenciaQuantidadeInput.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports:inputExports,require:name=>name==='react'?inputHarness.react:name==='react/jsx-runtime'?jsx:{Input:()=>null}});

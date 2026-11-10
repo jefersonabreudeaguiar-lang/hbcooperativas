@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { NotaPedido } from "@/types";
 import { AlertBanner } from "@/components/ui/AlertBanner";
@@ -99,9 +99,11 @@ export const NotasPedidoConferirItensTable = memo(function NotasPedidoConferirIt
 }: NotasPedidoConferirItensTableProps) {
   const [draft, setDraft] = useState(conferenciaItens);
   const draftRef = useRef(conferenciaItens);
+  const committedDraftRef = useRef(conferenciaItens);
   const draftKeyRef = useRef(conferenciaDraftKey);
   const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const idleCommitRef = useRef<number | null>(null);
+  const focusWithinRef = useRef(false);
   const cancelCommit = useCallback(() => {
     if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
     commitTimerRef.current = null;
@@ -114,6 +116,7 @@ export const NotasPedidoConferirItensTable = memo(function NotasPedidoConferirIt
     cancelCommit();
     draftKeyRef.current = conferenciaDraftKey;
     draftRef.current = conferenciaItens;
+    committedDraftRef.current = conferenciaItens;
     setDraft(conferenciaItens);
     onDraftLiveChange(conferenciaItens);
   }, [conferenciaDraftKey, conferenciaItens, onDraftLiveChange, cancelCommit]);
@@ -121,12 +124,17 @@ export const NotasPedidoConferirItensTable = memo(function NotasPedidoConferirIt
   const scheduleCommit = useCallback(
     (items: ConferenciaItemRow[]) => {
       cancelCommit();
+      // Tab/Shift+Tab e pausas para ler a foto não encerram a digitação.
+      // A aprovação já lê draftRef/liveRef sem esperar este trabalho do painel.
+      if (focusWithinRef.current || committedDraftRef.current === items) return;
       const key = draftKeyRef.current;
       commitTimerRef.current = setTimeout(() => {
         commitTimerRef.current = null;
         const commit = () => {
           idleCommitRef.current = null;
-          if (draftKeyRef.current === key && draftRef.current === items) onDraftCommit(items);
+          if (focusWithinRef.current || draftKeyRef.current !== key || draftRef.current !== items) return;
+          committedDraftRef.current = items;
+          onDraftCommit(items);
         };
         if (typeof requestIdleCallback !== 'undefined') idleCommitRef.current = requestIdleCallback(commit, { timeout: 1000 });
         else commit();
@@ -150,10 +158,11 @@ export const NotasPedidoConferirItensTable = memo(function NotasPedidoConferirIt
       next[idx] = { ...prev[idx], quantidade: qty };
       draftRef.current = next;
       onDraftLiveChange(next);
-      setDraft(next);
+      // O texto do input é urgente; cores e totais da tabela podem ceder ao foco.
+      startTransition(() => setDraft(next));
       scheduleCommit(next);
     },
-    [onDraftCommit, onDraftLiveChange, scheduleCommit]
+    [onDraftLiveChange, scheduleCommit]
   );
 
   const onLiveQty = useCallback(
@@ -189,7 +198,18 @@ export const NotasPedidoConferirItensTable = memo(function NotasPedidoConferirIt
   const fotoLabelIdx = Math.min(conferenciaFotoIdx, Math.max(0, totalFotos - 1));
 
   return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
+    <div
+      className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm"
+      onFocusCapture={() => {
+        focusWithinRef.current = true;
+        cancelCommit();
+      }}
+      onBlurCapture={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget)) return;
+        focusWithinRef.current = false;
+        scheduleCommit(draftRef.current);
+      }}
+    >
       <div className="bg-green-700 text-white px-4 py-3">
         <p className="font-semibold">{conferenciaInstNome || "Contrato"}</p>
         <p className="text-green-100 text-xs mt-0.5">
