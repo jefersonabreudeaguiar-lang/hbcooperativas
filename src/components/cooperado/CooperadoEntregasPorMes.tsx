@@ -299,8 +299,8 @@ function EntregaSemanaItem({
                 Itens conferidos
               </p>
               <ul className="divide-y divide-gray-100 text-sm">
-                {itens.map((item) => (
-                  <li key={item.produtoInstituicaoId} className="flex justify-between gap-2 px-3 py-2">
+                {itens.map((item, idx) => (
+                  <li key={`${item.produtoInstituicaoId}:${idx}`} className="flex justify-between gap-2 px-3 py-2">
                     <span className="text-gray-800">
                       {item.produtoNome} · {item.quantidade} {item.unidade}
                     </span>

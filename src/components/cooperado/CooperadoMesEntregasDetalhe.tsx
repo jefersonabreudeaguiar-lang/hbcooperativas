@@ -82,9 +82,9 @@ export function CooperadoMesEntregasDetalhe({
                   </div>
                   {itens.length > 0 && (
                     <ul className="mt-3 pt-3 border-t border-gray-100 text-sm space-y-1">
-                      {itens.map((item) => (
+                      {itens.map((item, idx) => (
                         <li
-                          key={item.produtoInstituicaoId}
+                          key={`${item.produtoInstituicaoId}:${idx}`}
                           className="flex justify-between gap-2 text-gray-700"
                         >
                           <span>

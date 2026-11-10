@@ -216,18 +216,7 @@ export function agregarItensNotasCooperado(
     }
 
     for (const item of itensFonte) {
-      if (item.quantidade <= 0) continue;
-      const key =
-        item.produtoInstituicaoId ||
-        `${(item.produtoNome ?? "").trim()}::${(item.unidade ?? "").trim()}`;
-      const valorLinha = valorBrutoItemLinha(item);
-      const existente = map.get(key);
-      if (existente) {
-        existente.quantidade = round2(existente.quantidade + item.quantidade);
-        existente.valorBruto = round2(existente.valorBruto + valorLinha);
-      } else {
-        map.set(key, { ...item, valorBruto: valorLinha });
-      }
+      mesclarItemResumo(map, item);
     }
   }
 
@@ -1407,24 +1396,11 @@ export function consolidarItensDeFichasNota(
   fichas: FichaCorrida[],
   notaId: string
 ): NotaPedidoItem[] {
-  const map = new Map<string, NotaPedidoItem>();
-  for (const f of fichas.filter((x) => x.notaPedidoId === notaId)) {
-    for (const item of f.itens ?? []) {
-      if ((item.quantidade ?? 0) <= 0) continue;
-      const key =
-        item.produtoInstituicaoId ||
-        `${(item.produtoNome ?? "").trim()}::${(item.unidade ?? "").trim()}`;
-      const valorLinha = valorBrutoItemLinha(item);
-      const existente = map.get(key);
-      if (existente) {
-        existente.quantidade = round2(existente.quantidade + item.quantidade);
-        existente.valorBruto = round2(existente.valorBruto + valorLinha);
-      } else {
-        map.set(key, { ...item, valorBruto: valorLinha });
-      }
-    }
-  }
-  return [...map.values()].sort((a, b) =>
+  // Não refazer uma média nem arredondar quantidades da ficha. As linhas
+  // originais também preservam o desconto arredondado de cada foto.
+  return fichas.filter(f => f.notaPedidoId === notaId)
+    .flatMap(f => (f.itens ?? []).filter(i => i.quantidade > 0)
+      .map(i => ({ ...i, valorBruto: valorBrutoItemLinha(i) }))).sort((a, b) =>
     (a.produtoNome ?? "").localeCompare(b.produtoNome ?? "", "pt-BR")
   );
 }

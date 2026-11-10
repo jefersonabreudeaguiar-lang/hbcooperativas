@@ -32,8 +32,8 @@ export function ReciboResumoView({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {resumo.itens.map((i) => (
-                <tr key={i.produtoInstituicaoId}>
+              {resumo.itens.map((i, idx) => (
+                <tr key={`${i.produtoInstituicaoId}:${idx}`}>
                   <td className="px-3 py-2 font-medium text-gray-900">{i.produtoNome}</td>
                   <td className="px-3 py-2 text-right text-gray-700">
                     {i.quantidade} {i.unidade}

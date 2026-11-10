@@ -428,8 +428,8 @@ function MesFichaAccordion({
                             </div>
                             {itens.length > 0 && (
                               <ul className="mt-3 pt-3 border-t border-gray-100 text-sm space-y-1">
-                                {itens.map((item) => (
-                                  <li key={item.produtoInstituicaoId} className="flex justify-between gap-2 text-gray-700">
+                                {itens.map((item, idx) => (
+                                  <li key={`${item.produtoInstituicaoId}:${idx}`} className="flex justify-between gap-2 text-gray-700">
                                     <span>
                                       {item.produtoNome} · {item.quantidade} {item.unidade}
                                     </span>
@@ -484,8 +484,8 @@ function MesFichaAccordion({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {itensMes.itens.map((i) => (
-                      <tr key={i.produtoInstituicaoId}>
+                    {itensMes.itens.map((i, idx) => (
+                      <tr key={`${i.produtoInstituicaoId}:${idx}`}>
                         <td className="px-4 py-2.5 font-medium text-gray-900">{i.produtoNome}</td>
                         <td className="px-4 py-2.5 text-right text-gray-700">
                           {i.quantidade} {i.unidade}

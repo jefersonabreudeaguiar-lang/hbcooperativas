@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { calcularItensNota, consolidarItensLancamentoPorFoto, buildFichaFromNota, finalizarFichasConferenciaMultiFoto, getResumoPagamentoCooperado, dedupeFichaCorridaPorNota } from '../src/services/notaPedidoService';
+import { calcularItensNota, consolidarItensLancamentoPorFoto, consolidarItensDeFichasNota, agregarItensNotasCooperado, buildFichaFromNota, finalizarFichasConferenciaMultiFoto, getResumoPagamentoCooperado, dedupeFichaCorridaPorNota } from '../src/services/notaPedidoService';
 import type { AppData, NotaPedido, NotaPedidoItem } from '../src/types';
 
 function item(quantidade: number, precoUnitario: number, unidade = 'kg'): NotaPedidoItem {
@@ -59,6 +59,12 @@ for (const [notaCampo,fichaCampo] of [['valorBruto','valorBruto'],['valorDescont
 }
 const resumo = getResumoPagamentoCooperado(data,'c','2026-11','coop');
 assert.equal(resumo.valorBruto,nota.valorBruto);
+const reabertos = calcularItensNota(consolidarItensDeFichasNota(data.fichaCorrida,nota.id),percentual);
+for (const campo of ['valorBruto','valorDesconto','valorLiquido'] as const) assert.equal(reabertos[campo],nota[campo],`reabertura: ${campo}`);
+const extrato = agregarItensNotasCooperado(data,'c',[nota],'coop');
+assert.equal(extrato.reduce((s,i)=>s+Math.round(i.valorBruto*100),0),Math.round(nota.valorBruto*100));
+assert.equal(extrato.filter(i=>i.precoUnitario===5).reduce((s,i)=>s+i.quantidade,0),1);
+assert.equal(extrato.filter(i=>i.precoUnitario===7).reduce((s,i)=>s+i.quantidade,0),1);
 const original = JSON.stringify(data);
 assert.throws(() => finalizarFichasConferenciaMultiFoto({...data,fichaCorrida:data.fichaCorrida.slice(1)},nota),/foto 1\/3/);
 assert.throws(() => finalizarFichasConferenciaMultiFoto(data,{...nota,valorBruto:nota.valorBruto+0.01}),/somas das fotos/);
