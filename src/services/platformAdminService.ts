@@ -148,19 +148,20 @@ export function measureBrowserStorageLimits(data: AppData): StorageLimitsSnapsho
     audit: data.auditLog.length,
   };
 
-  if (typeof window === "undefined") {
-    return {
+  const indisponivel = (statusLabel: string, status: StorageLimitsSnapshot["status"]): StorageLimitsSnapshot => ({
       totalBytes: 0,
       dataBytes: 0,
       sessionBytes: 0,
       outrosBytes: 0,
       limiteEstimadoBytes: BROWSER_STORAGE_LIMIT_BYTES,
       percentualUsado: 0,
-      status: "ok",
-      statusLabel: "Indisponível no servidor",
+      status,
+      statusLabel,
       maioresChaves: [],
       totaisRegistros,
-    };
+  });
+  if (typeof window === "undefined") {
+    return indisponivel("Indisponível no servidor", "ok");
   }
 
   let totalBytes = 0;
@@ -168,15 +169,20 @@ export function measureBrowserStorageLimits(data: AppData): StorageLimitsSnapsho
   let sessionBytes = 0;
   const maioresChaves: { chave: string; bytes: number; label: string }[] = [];
 
-  for (let i = 0; i < localStorage.length; i++) {
-    const chave = localStorage.key(i);
-    if (!chave) continue;
-    const valor = localStorage.getItem(chave) ?? "";
-    const bytes = byteSize(chave, valor);
-    totalBytes += bytes;
-    if (chave === STORAGE_KEY) dataBytes = bytes;
-    else if (chave === SESSION_KEY) sessionBytes = bytes;
-    maioresChaves.push({ chave, bytes, label: labelStorageKey(chave) });
+  try {
+    const storage = window.localStorage;
+    for (let i = 0; i < storage.length; i++) {
+      const chave = storage.key(i);
+      if (!chave) continue;
+      const valor = storage.getItem(chave) ?? "";
+      const bytes = byteSize(chave, valor);
+      totalBytes += bytes;
+      if (chave === STORAGE_KEY) dataBytes = bytes;
+      else if (chave === SESSION_KEY) sessionBytes = bytes;
+      maioresChaves.push({ chave, bytes, label: labelStorageKey(chave) });
+    }
+  } catch {
+    return indisponivel("O navegador não permitiu medir o armazenamento local.", "atencao");
   }
 
   maioresChaves.sort((a, b) => b.bytes - a.bytes);

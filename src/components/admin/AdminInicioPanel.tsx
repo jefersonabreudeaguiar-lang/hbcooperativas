@@ -94,7 +94,7 @@ export function AdminInicioPanel({ onNavigate }: AdminInicioPanelProps) {
   }
   if (snapshot.storage.status !== "ok") {
     alerts.push({
-      title: "Armazenamento local elevado",
+      title: "Armazenamento local",
       text: snapshot.storage.statusLabel,
       action: "sistema",
       tone: "info",
