@@ -16,7 +16,7 @@ import { Card } from "@/components/ui/Card";
 import { PixQrModal } from "@/components/pix/PixQrModal";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppData } from "@/hooks/useAppData";
-import { getData, updateData } from "@/services/dataStore";
+import { getData, updateData, updateDataSafe } from "@/services/dataStore";
 import {
   ensureCobrancaPeriodoAtualSaas,
   getPainelCobrancaSaasResponsavel,
@@ -53,7 +53,7 @@ export function CobrancaSaasPainel() {
     let cancelled = false;
     const aplicar = (cloud?: ReturnType<typeof mergeCobrancaSaas>) => {
       if (cancelled) return;
-      updateData((current) => {
+      const saved = updateDataSafe((current) => {
         const before = JSON.stringify(current.cooperativas.find((c) => c.id === coopId)?.cobrancaSaas ?? {});
         let next = current;
         if (cloud) {
@@ -66,6 +66,7 @@ export function CobrancaSaasPainel() {
         const after = JSON.stringify(next.cooperativas.find((c) => c.id === coopId)?.cobrancaSaas ?? {});
         return before === after ? current : next;
       });
+      if (!saved.ok) setFeedback(saved.error);
     };
     void fetchCobrancaSaasFromCloud(coop.cnpj).then((cloud) => {
       aplicar(cloud ?? undefined);
