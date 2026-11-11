@@ -1,5 +1,5 @@
 import type { AppData, Cooperado } from "@/types";
-import { updateData } from "@/services/dataStore";
+import { updateDataSafe } from "@/services/dataStore";
 import { normalizeCnpj } from "@/utils/cooperativa";
 
 export function isAppStandalone(): boolean {
@@ -104,7 +104,7 @@ export function registrarAcessoCooperadoApp(opts: {
   const now = new Date().toISOString();
   let saved: Cooperado | null = null;
 
-  updateData((d) => {
+  const result = updateDataSafe((d) => {
     const idx = d.cooperados.findIndex((c) => c.id === cooperadoId);
     if (idx < 0) return d;
     const atual = d.cooperados[idx];
@@ -131,7 +131,7 @@ export function registrarAcessoCooperadoApp(opts: {
     };
   });
 
-  if (saved && cnpj && normalizeCnpj(cnpj).length === 14) {
+  if (result.ok && saved && cnpj && normalizeCnpj(cnpj).length === 14) {
     const digits = normalizeCnpj(cnpj);
     void import("@/services/cooperadoCloudService").then(({ pushCooperadoToCloud }) => {
       void pushCooperadoToCloud(digits, saved!, email);
