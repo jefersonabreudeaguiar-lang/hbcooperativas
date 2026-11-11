@@ -42,12 +42,15 @@ const comItens = renderToStaticMarkup(React.createElement(CooperadoPagamentosRes
     entregasPorMes: [{
       mes: '2026-10', entregas: 1, valorBruto: 100,
       itens: [{ produtoInstituicaoId: 'item', produtoNome: 'Melancia', quantidade: 10.125,
-        unidade: 'kg', precoUnitario: 10, valorBruto: 100 }],
+        unidade: 'kg', precoUnitario: 10, valorBruto: 100 },
+      { produtoInstituicaoId: 'item-outro-contrato', produtoNome: 'melancia', quantidade: 2.5,
+        unidade: 'KG', precoUnitario: 12, valorBruto: 30 }],
     }],
   },
 }));
-assert.match(comItens, /Itens entregues/);
+assert.match(comItens, /Total de itens entregues/);
 assert.match(comItens, /Melancia/);
-assert.match(comItens, /10,125 kg/);
+assert.match(comItens, /12,625 kg/);
+assert.doesNotMatch(comItens, /10,125 kg/);
 assert.match(comItens, /Nenhum valor pendente/);
 console.log('PASS: remote history stays separate from receivables; tenant/member boundaries, deduplication and paid-month rendering hold.');

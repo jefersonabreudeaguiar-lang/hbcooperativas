@@ -51,7 +51,7 @@ import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { shouldRenderCooperadoJefersonRebuildShell } from "@/lib/cooperado/cooperadoJefersonRebuildPilot";
 import { CooperadoJefersonRebuildTabCorpo } from "@/components/cooperado/CooperadoJefersonRebuildTabCorpo";
-import { CooperadoPagamentosResumo } from "@/components/cooperado/CooperadoPagamentosResumo";
+import { CooperadoItensEntregues, CooperadoPagamentosResumo } from "@/components/cooperado/CooperadoPagamentosResumo";
 import { escolherItensFichaExibicao, projetarQuitacaoRemotaNasFichas } from "@/lib/cooperado/cooperadoFichaItensCache";
 import { getInstituicoesCatalogo } from "@/services/catalogoContratosService";
 import {
@@ -2161,7 +2161,7 @@ function FichaCorridaPageInner() {
         }
       />
 
-      {isCooperado && financeiroRemoto && <CooperadoPagamentosResumo financeiro={financeiroRemoto} />}
+      {isCooperado && financeiroRemoto && <CooperadoPagamentosResumo financeiro={financeiroRemoto} mostrarItens={verResumoCooperado} />}
 
       {pagoMsg && (
         <AlertBanner variant={pagoMsgVariant} className="mb-4" onDismiss={() => setPagoMsg("")}>
@@ -2260,6 +2260,11 @@ function FichaCorridaPageInner() {
 
       {secaoCooperadoAberta && (
         <CooperadoFinanceiroSecoesNav value={abaSecaoCooperado} onChange={setAbaSecaoCooperado} />
+      )}
+      {secaoCooperadoAberta && verFichaCooperado && financeiroRemoto && (
+        <section aria-label="Total de itens entregues" className="mb-4 space-y-3">
+          <CooperadoItensEntregues financeiro={financeiroRemoto} />
+        </section>
       )}
 
       {isCooperado &&

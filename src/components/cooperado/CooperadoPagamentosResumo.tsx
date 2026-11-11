@@ -1,7 +1,38 @@
 import type { CooperadoFinanceiroRemoto } from '@/lib/cooperado/cooperadoFinanceiroRemotoTypes';
 import { formatCurrency, formatDate, formatMesReferencia } from '@/utils/format';
 
-export function CooperadoPagamentosResumo({ financeiro }: { financeiro: CooperadoFinanceiroRemoto }) {
+export function CooperadoItensEntregues({ financeiro }: { financeiro: CooperadoFinanceiroRemoto }) {
+  return financeiro.entregasPorMes?.map(({ mes, itens }, mesIndex) => {
+    const totais = new Map<string, { produtoNome: string; unidade: string; quantidade: number }>();
+    for (const item of itens) {
+      const produtoNome = item.produtoNome.trim();
+      const unidade = item.unidade.trim().toLowerCase();
+      const chave = JSON.stringify([produtoNome.toLocaleLowerCase('pt-BR'), unidade]);
+      const total = totais.get(chave);
+      if (total) total.quantidade += item.quantidade;
+      else totais.set(chave, { produtoNome, unidade, quantidade: item.quantidade });
+    }
+    return (
+      <details key={mes} open={mesIndex === 0 ? true : undefined} className="rounded-2xl border border-gray-200 bg-white p-4">
+        <summary className="cursor-pointer font-semibold text-gray-900">Total de itens entregues · {formatMesReferencia(mes)}</summary>
+        <p className="mt-2 text-xs text-gray-600">Inclui entregas conferidas em aberto e já pagas.</p>
+        <ul className="mt-2 divide-y divide-gray-100 text-sm">
+          {[...totais].map(([chave, item]) => (
+            <li key={chave} className="flex justify-between gap-3 py-2">
+              <span>{item.produtoNome}</span>
+              <span className="shrink-0 font-semibold">{item.quantidade.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} {item.unidade}</span>
+            </li>
+          ))}
+        </ul>
+      </details>
+    );
+  });
+}
+
+export function CooperadoPagamentosResumo({ financeiro, mostrarItens = true }: {
+  financeiro: CooperadoFinanceiroRemoto;
+  mostrarItens?: boolean;
+}) {
   const history = financeiro.historicoPagamentos;
   if (!history) return null;
   const latest = history.pagamentos[0];
@@ -23,20 +54,7 @@ export function CooperadoPagamentosResumo({ financeiro }: { financeiro: Cooperad
         <p className="mt-1 text-xs text-gray-600">Soma dos pagamentos confirmados</p>
       </div>
     </div>
-    {financeiro.entregasPorMes?.map(({ mes, itens }, mesIndex) => (
-      <details key={mes} open={mesIndex === 0 ? true : undefined} className="rounded-2xl border border-gray-200 bg-white p-4">
-        <summary className="cursor-pointer font-semibold text-gray-900">Itens entregues · {formatMesReferencia(mes)}</summary>
-        <p className="mt-2 text-xs text-gray-600">Inclui entregas conferidas em aberto e já pagas.</p>
-        <ul className="mt-2 divide-y divide-gray-100 text-sm">
-          {itens.map((item, index) => (
-            <li key={index} className="flex justify-between gap-3 py-2">
-              <span>{item.produtoNome}</span>
-              <span className="shrink-0 font-semibold">{item.quantidade.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} {item.unidade}</span>
-            </li>
-          ))}
-        </ul>
-      </details>
-    ))}
+    {mostrarItens && <CooperadoItensEntregues financeiro={financeiro} />}
     <details open={financeiro.paridade.valorLiquido <= 0} className="rounded-2xl border border-gray-200 bg-white p-4">
       <summary className="cursor-pointer font-semibold text-gray-900">Histórico de pagamentos ({history.pagamentos.length})</summary>
       <p className="my-3 text-sm text-gray-600">Estes valores já foram pagos. Novas entregas entram em A receber agora.</p>
