@@ -7,7 +7,7 @@ import type { NotaPedido } from "@/types";
 import { listCooperadoContaCoopDescontosAbateValorReceber } from "@/lib/supabase/contaCoopStorage";
 import { cooperativaFromCloudRow } from "@/utils/cooperativaCadastro";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { persistDescontosContaCoopNoArquivo, reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
+import { agregarItensFichaMes, persistDescontosContaCoopNoArquivo, reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import { cooperadoFinanceiroScopedData } from "@/lib/cooperado/cooperadoFinanceiroScopedData";
 import type { CooperadoFinanceiroRemoto } from "@/lib/cooperado/cooperadoFinanceiroRemotoTypes";
@@ -71,7 +71,11 @@ async function read(cnpj: string, cooperadoId: string): Promise<CloudViews> {
   const paridade = leituraFinanceiraParidadeCooperado(data, canon, coop.id);
   return {
     finance: { cooperadoId: canon, cooperativaId: coop.id, fetchedAt: new Date().toISOString(), paridade,
-      historicoPagamentos: buildCooperadoHistoricoPagamentos(data, canon, coop.id) },
+      historicoPagamentos: buildCooperadoHistoricoPagamentos(data, canon, coop.id),
+      entregasEmAberto: meses.map((mes) => ({
+        mes,
+        ...agregarItensFichaMes(data, canon, mes, coop.id, { apenasPendentes: true }),
+      })).filter(({ itens }) => itens.length > 0) },
     coopNome: coop.nome,
     card: inicioCardMotorFromParidadeFinanceiro(data, canon, coop.id, paridade),
   };

@@ -1,4 +1,5 @@
 import type { LeituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import type { agregarItensFichaMes } from "@/services/notaPedidoService";
 
 export type CooperadoHistoricoPagamentos = {
   totalRecebido: number;
@@ -14,4 +15,5 @@ export type CooperadoFinanceiroRemoto = {
   fetchedAt: string;
   paridade: LeituraFinanceiraParidadeCooperado;
   historicoPagamentos?: CooperadoHistoricoPagamentos;
+  entregasEmAberto?: (ReturnType<typeof agregarItensFichaMes> & { mes: string })[];
 };
