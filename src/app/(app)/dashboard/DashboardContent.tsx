@@ -1030,7 +1030,7 @@ function AdminDashboard() {
         </Link>
       )}
 
-      {heavy ? (
+      {currentHeavy ? (
         <FilaDoDiaPanel items={fila} />
       ) : (
         <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6 animate-pulse min-h-[8rem]" aria-busy="true" />
