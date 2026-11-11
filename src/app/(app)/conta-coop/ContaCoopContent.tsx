@@ -238,6 +238,55 @@ export default function ContaCoopPage() {
   );
 }
 
+function TermoAdesaoMercado({ cnpj, userId }: { cnpj: string; userId: string }) {
+  const noticeKey = `hb.credit.termo-mercado.v1:${cnpj}:${userId}`;
+  const [showNotice, setShowNotice] = useState(false);
+
+  useEffect(() => {
+    try {
+      setShowNotice(localStorage.getItem(noticeKey) !== "1");
+    } catch {
+      setShowNotice(false);
+    }
+  }, [noticeKey]);
+
+  function dismissNotice() {
+    setShowNotice(false);
+    try {
+      localStorage.setItem(noticeKey, "1");
+    } catch {
+      // The download remains available when browser storage is unavailable.
+    }
+  }
+
+  return (
+    <Card className="space-y-2 !p-4">
+      <h3 className="font-semibold text-gray-900">Termo de adesão do mercado parceiro</h3>
+      {cnpj !== "62351750000165" && (
+        <p className="text-sm text-gray-600">
+          Modelo da COOPEAGRI PLA para referência. Use os dados e as condições da sua cooperativa no termo que será assinado.
+        </p>
+      )}
+      {showNotice && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600">
+          <p>Baixe o termo para imprimir ou enviar ao mercado parceiro.</p>
+          <button type="button" onClick={dismissNotice} className="underline underline-offset-2">
+            Entendi
+          </button>
+        </div>
+      )}
+      <a
+        href="/termo-adesao-mercado-coopeagri-pla.jpg"
+        download
+        onClick={dismissNotice}
+        className="inline-flex min-h-10 items-center font-medium text-emerald-800 underline underline-offset-2"
+      >
+        Baixar termo de adesão (JPG)
+      </a>
+    </Card>
+  );
+}
+
 function ContaCoopContent() {
   const tabActive = useCooperadoTabPanelActive("/conta-coop");
   const { user } = usePermissions();
@@ -1774,6 +1823,7 @@ function ContaCoopContent() {
 
       {tab === "mercados" && (
         <div className="space-y-4">
+          {user?.id && cnpj.length === 14 && <TermoAdesaoMercado cnpj={cnpj} userId={user.id} />}
           {pixChangeRequests.length > 0 && (
             <Card className="space-y-3 border-amber-300 bg-amber-50/60 !p-4">
               <h3 className="font-semibold text-gray-900">Solicitações de mudança de PIX</h3>
