@@ -36,6 +36,7 @@ import { useCooperadoInicioAberturaQuiescenceActive } from "@/hooks/useCooperado
 import { peekStaffGestaoLastGood } from "@/lib/staff/staffGestaoSnapshotGuard";
 import {
   staffGestaoAppDataParaPainel,
+  escolherStaffGestaoSnapshotParaLeitura,
   staffGestaoPainelDataRevisionToken,
 } from "@/lib/staff/staffGestaoPainelLeitura";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -832,6 +833,8 @@ function AdminDashboard() {
 
   const adminStatsWorker = isRqlAdminStatsWorkerEnabled();
   const [workerHeavy, setWorkerHeavy] = useState<{
+    coopId: string;
+    revision: number;
     stats: AdminDashboardStats;
     fila: FilaDoDiaItem[];
   } | null>(null);
@@ -839,7 +842,7 @@ function AdminDashboard() {
   const quickStats = useMemo(() => {
     if (!meta || deferredRevision == null || deferredRevision < 0) return null;
     try {
-      const d = staffGestaoAppDataParaPainel(meta.coopId || undefined);
+      const d = escolherStaffGestaoSnapshotParaLeitura(meta.coopId || undefined);
       if (!d) return null;
       return getAdminStatsCached(d, meta.coopId || undefined, { skipValoresAPagar: true });
     } catch {
@@ -847,37 +850,25 @@ function AdminDashboard() {
     }
   }, [deferredRevision, meta?.coopId]);
 
-  const heavy = useMemo(() => {
-    if (adminStatsWorker || !meta || deferredRevision == null || deferredRevision < 0) {
-      return null;
-    }
-    try {
-      const d = staffGestaoAppDataParaPainel(meta.coopId || undefined);
-      if (!d) return null;
-      const coopScope = meta.coopId || undefined;
-      return {
-        stats: getAdminStatsCached(d, coopScope),
-        fila: getFilaDoDiaCached(d, coopScope, meta.mes),
-      };
-    } catch {
-      return null;
-    }
-  }, [adminStatsWorker, deferredRevision, meta?.coopId, meta?.mes]);
-
   useEffect(() => {
-    if (!adminStatsWorker || !meta || deferredRevision == null || deferredRevision < 0) {
+    if (!meta || deferredRevision == null || deferredRevision < 0) {
       setWorkerHeavy(null);
       return;
     }
     let cancelled = false;
+    const timer = window.setTimeout(() => {
     try {
       const d = staffGestaoAppDataParaPainel(meta.coopId || undefined);
       if (!d) return;
       const coopScope = meta.coopId || undefined;
       const fila = getFilaDoDiaCached(d, coopScope, meta.mes);
+      if (!adminStatsWorker) {
+        setWorkerHeavy({ coopId: meta.coopId, revision: deferredRevision, stats: getAdminStatsCached(d, coopScope), fila });
+        return;
+      }
       void requestAdminStatsFromWorker(d, coopScope, undefined, deferredRevision)
         .then((stats) => {
-          if (!cancelled) setWorkerHeavy({ stats, fila });
+          if (!cancelled) setWorkerHeavy({ coopId: meta.coopId, revision: deferredRevision, stats, fila });
         })
         .catch(() => {
           /* totais ficam em “…” */
@@ -885,19 +876,23 @@ function AdminDashboard() {
     } catch {
       /* Início sem fila/totais — não tela branca */
     }
+    }, 250);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [adminStatsWorker, deferredRevision, meta?.coopId, meta?.mes]);
 
   if (!navUser || !meta) return <PageSkeleton />;
 
   const { coopNome, mes, instalacao, assinatura, cnpj, coopId } = meta;
-  const statsComValores = workerHeavy?.stats ?? heavy?.stats;
+  const currentHeavy = workerHeavy?.coopId === coopId && workerHeavy.revision === deferredRevision
+    ? workerHeavy : null;
+  const statsComValores = currentHeavy?.stats;
   const stats = statsComValores ?? quickStats;
-  const fila = workerHeavy?.fila ?? heavy?.fila ?? [];
+  const fila = currentHeavy?.fila ?? [];
   const totaisFinanceirosPendentes =
-    adminStatsWorker ? !workerHeavy?.stats : !statsComValores && Boolean(quickStats);
+    adminStatsWorker ? !statsComValores : !statsComValores && Boolean(quickStats);
 
   const primeiroDiaOpts = {
     role: navUser.role,
