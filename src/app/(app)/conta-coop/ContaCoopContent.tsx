@@ -1,5 +1,6 @@
 "use client";
 
+import { termoAdesaoMercadoHtml } from "@/utils/termoAdesaoMercadoHtml";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState, startTransition, useDeferredValue } from "react";
 import { useSearchParams } from "next/navigation";
@@ -238,7 +239,8 @@ export default function ContaCoopPage() {
   );
 }
 
-function TermoAdesaoMercado({ cnpj, userId }: { cnpj: string; userId: string }) {
+
+function TermoAdesaoMercado({ cnpj, nome, userId }: { cnpj: string; nome: string; userId: string }) {
   const noticeKey = `hb.credit.termo-mercado.v1:${cnpj}:${userId}`;
   const [showNotice, setShowNotice] = useState(false);
 
@@ -259,14 +261,20 @@ function TermoAdesaoMercado({ cnpj, userId }: { cnpj: string; userId: string }) 
     }
   }
 
+  function downloadTermo() {
+    const blob = new Blob([termoAdesaoMercadoHtml({ nome, cnpj })], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `termo-adesao-hb-creditos-${cnpj}.html`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+    dismissNotice();
+  }
+
   return (
     <Card className="space-y-2 !p-4">
       <h3 className="font-semibold text-gray-900">Termo de adesão do mercado parceiro</h3>
-      {cnpj !== "62351750000165" && (
-        <p className="text-sm text-gray-600">
-          Modelo da COOPEAGRI PLA para referência. Use os dados e as condições da sua cooperativa no termo que será assinado.
-        </p>
-      )}
       {showNotice && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600">
           <p>Baixe o termo para imprimir ou enviar ao mercado parceiro.</p>
@@ -275,14 +283,13 @@ function TermoAdesaoMercado({ cnpj, userId }: { cnpj: string; userId: string }) 
           </button>
         </div>
       )}
-      <a
-        href="/termo-adesao-mercado-coopeagri-pla.jpg"
-        download
-        onClick={dismissNotice}
+      <button
+        type="button"
+        onClick={downloadTermo}
         className="inline-flex min-h-10 items-center font-medium text-emerald-800 underline underline-offset-2"
       >
-        Baixar termo de adesão (JPG)
-      </a>
+        Baixar termo de adesão
+      </button>
     </Card>
   );
 }
@@ -1264,16 +1271,17 @@ function ContaCoopContent() {
     }
   };
 
-  const cooperativaNome =
+  const cooperativaDoTermo =
     useAppDataSelectorWhenActive(
       tabActive,
       (data) => {
-        if (!user) return "Cooperativa";
+        if (!user) return null;
         const coopId = getUserCooperativaId(user, data);
-        return data.cooperativas.find((c) => c.id === coopId)?.nome ?? "Cooperativa";
+        return data.cooperativas.find((c) => c.id === coopId) ?? null;
       },
       [user?.id, user?.cooperativaId]
-    ) ?? "Cooperativa";
+    );
+  const cooperativaNome = cooperativaDoTermo?.nome ?? "Cooperativa";
 
   const statusMercadoLabel = (status: string) => {
     if (status === "ativo") return "Ativo";
@@ -1823,7 +1831,10 @@ function ContaCoopContent() {
 
       {tab === "mercados" && (
         <div className="space-y-4">
-          {user?.id && cnpj.length === 14 && <TermoAdesaoMercado cnpj={cnpj} userId={user.id} />}
+          {user?.id && cooperativaDoTermo?.nome.trim() && cnpj.length === 14 &&
+            normalizeCnpj(cooperativaDoTermo.cnpj) === cnpj && (
+              <TermoAdesaoMercado cnpj={cnpj} nome={cooperativaDoTermo.nome} userId={user.id} />
+            )}
           {pixChangeRequests.length > 0 && (
             <Card className="space-y-3 border-amber-300 bg-amber-50/60 !p-4">
               <h3 className="font-semibold text-gray-900">Solicitações de mudança de PIX</h3>
