@@ -23,17 +23,21 @@ import type { AdminSection } from "@/components/admin/AdminNav";
 
 export default function AdminPortalPage() {
   const { user, loading: authLoading, loginCreatorAdmin } = useAuth();
+  const canAccess = !authLoading && !!user && isAppCreator(user);
   const data = useAppData();
   const [section, setSection] = useState<AdminSection>("inicio");
   const [contaCoopPendentes, setContaCoopPendentes] = useState(0);
 
   useEffect(() => {
-    if (!user || !isAppCreator(user)) return;
+    if (!canAccess) return;
+    const controller = new AbortController();
     void secureApiFetch(`/api/admin/conta-coop-overview?mes=${getCurrentMesReferencia()}`, {
       cache: "no-store",
+      signal: controller.signal,
     })
       .then((r) => r.json())
       .then((json: { overview?: ContaCoopPlatformOverview }) => {
+        if (controller.signal.aborted) return;
         const overview = json.overview;
         if (!overview) {
           setContaCoopPendentes(0);
@@ -44,18 +48,19 @@ export default function AdminPortalPage() {
         ).length;
         setContaCoopPendentes(pendentes);
       })
-      .catch(() => setContaCoopPendentes(0));
-  }, [user]);
+      .catch(() => { if (!controller.signal.aborted) setContaCoopPendentes(0); });
+    return () => controller.abort();
+  }, [canAccess, user?.id]);
 
   const badges = useMemo(() => {
-    if (!data) return {};
+    if (!canAccess || !data) return {};
     const rows = listarCobrancasSaasAdmin(data);
     const cobrancaPendente = rows.filter((r) => r.aguardandoConfirmacao || r.statusMes === "bloqueado").length;
     return {
       cobranca: cobrancaPendente > 0 ? cobrancaPendente : undefined,
       "conta-coop": contaCoopPendentes > 0 ? contaCoopPendentes : undefined,
     } satisfies Partial<Record<AdminSection, number>>;
-  }, [contaCoopPendentes, data]);
+  }, [canAccess, contaCoopPendentes, data]);
 
   if (authLoading) {
     return (
@@ -67,14 +72,6 @@ export default function AdminPortalPage() {
 
   if (!user) {
     return <AdminPortalLogin onLogin={loginCreatorAdmin} />;
-  }
-
-  if (!data) {
-    return (
-      <AdminPortalShell activeSection={section} onSectionChange={setSection} subtitle={`Criador · ${user.email}`}>
-        <div className="flex items-center justify-center min-h-[40vh] text-sm text-gray-500">Carregando dados…</div>
-      </AdminPortalShell>
-    );
   }
 
   if (!isAppCreator(user)) {

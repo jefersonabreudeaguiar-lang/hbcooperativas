@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/Button";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { Input, FormField } from "@/components/ui/Form";
 import { useAppData } from "@/hooks/useAppData";
-import { updateData, getData } from "@/services/dataStore";
+import { updateData, getData, updateDataSafe } from "@/services/dataStore";
 import { pushCobrancaSaasToCloud } from "@/services/cooperativaCloudService";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import {
@@ -200,7 +200,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
 
   useEffect(() => {
     if (!data?.cooperativas.length) return;
-    updateData((d) => {
+    const saved = updateDataSafe((d) => {
       let next = d;
       let changed = false;
       for (const coop of d.cooperativas) {
@@ -212,6 +212,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
       }
       return changed ? next : d;
     });
+    if (!saved.ok) setFeedback({ type: "erro", text: saved.error });
   }, [data?.cooperativas.length, data?.cooperados.length]);
 
   const rows = useMemo(() => (data ? listarCobrancasSaasAdmin(data) : []), [data]);
