@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { isCooperativasTableMissing } from "@/lib/supabase/errors";
 import { normalizeCnpj } from "@/utils/cooperativa";
-import { exigeSenhaCadastroCooperado, mensalidadeConfigComSenhaCadastro, mensalidadeConfigSemSenhaCadastro } from "@/utils/cooperativaCadastro";
+import { mensalidadeConfigComSenhaCadastro } from "@/utils/cooperativaCadastro";
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -37,16 +37,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Cliente Supabase indisponível." }, { status: 503 });
   }
 
-  const { data: existing } = await supabase
-    .from("cooperativas")
-    .select("id")
-    .eq("cnpj", cnpj)
-    .maybeSingle();
-
-  if (existing) {
-    return NextResponse.json({ error: "Este CNPJ já está cadastrado." }, { status: 409 });
-  }
-
   const { data, error } = await supabase
     .from("cooperativas")
     .insert({
@@ -61,10 +51,13 @@ export async function POST(request: Request) {
         ? mensalidadeConfigComSenhaCadastro(undefined, senhaCadastroCooperado)
         : null,
     })
-    .select("id, nome, cnpj, endereco, telefone, responsavel, email, status, mensalidade_config, created_at, updated_at")
+    .select("id, nome, cnpj, endereco, telefone, responsavel, email, status, created_at, updated_at")
     .single();
 
   if (error) {
+    if (error.code === "23505") {
+      return NextResponse.json({ error: "Este CNPJ já está cadastrado." }, { status: 409 });
+    }
     console.error("[cooperativas/register]", error.message);
     if (isCooperativasTableMissing(error)) {
       return NextResponse.json(
