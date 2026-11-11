@@ -18,7 +18,7 @@ function getStaffMobileViewportSnapshot(): boolean {
   return isStaffMobileViewportActive();
 }
 
-/** Gestão: keep-alive de abas só no mobile — desktop usa rota única (evita 4 árvores pesadas). */
+/** Indica se a gestão está no layout mobile. */
 export function useStaffMobileViewport(): boolean {
   return useSyncExternalStore(
     subscribeStaffMobileViewport,

@@ -21,6 +21,7 @@ const panels = {
 };
 type PanelHref = keyof typeof panels;
 const isPanel = (path: string): path is PanelHref => Object.hasOwn(panels, path);
+const desktopPanels = new Set<string>(["/dashboard", "/ficha-corrida", "/livro-caixa"]);
 
 const RetainedPanel = memo(function RetainedPanel({ href, active }: { href: PanelHref; active: boolean }) {
   const instance = useId();
@@ -36,10 +37,15 @@ const RetainedPanel = memo(function RetainedPanel({ href, active }: { href: Pane
 export function StaffMobileTabKeepAlive({ pathname, children }: { pathname: string; children: ReactNode }) {
   const enabled = isStaffMobileTabKeepAliveEnabled();
   const mobile = useStaffMobileViewport();
-  const [visited, setVisited] = useState<string[]>([]);
-  const activeKey = isPanel(pathname) ? pathname : null;
+  const [mobileVisited, setMobileVisited] = useState<string[]>([]);
+  const [desktopVisited, setDesktopVisited] = useState<string[]>([]);
+  const visited = mobile ? mobileVisited : desktopVisited;
+  const setVisited = mobile ? setMobileVisited : setDesktopVisited;
+  const activeKey = isPanel(pathname) && (mobile || desktopPanels.has(pathname)) ? pathname : null;
   const retained = activeKey
-    ? trimStaffTabCacheOrder([activeKey, ...visited], activeKey, 6, false)
+    ? mobile
+      ? trimStaffTabCacheOrder([activeKey, ...visited], activeKey, 6, false)
+      : [activeKey, ...visited.filter((href) => href !== activeKey)].slice(0, 2)
     : visited;
 
   useLayoutEffect(() => {
@@ -48,8 +54,8 @@ export function StaffMobileTabKeepAlive({ pathname, children }: { pathname: stri
   }, [enabled, mobile, pathname, activeKey]);
 
   // Ajuste derivado da rota antes do commit: evita um segundo commit de layout.
-  if (enabled && mobile && activeKey && visited[0] !== activeKey) setVisited(retained);
-  if (!enabled || !mobile) return <>{children}</>;
+  if (enabled && activeKey && visited[0] !== activeKey) setVisited(retained);
+  if (!enabled) return <>{children}</>;
   return <CooperadoTabPanelProvider activeHref={pathname}>
     {retained.filter(isPanel).map(href => <RetainedPanel key={href} href={href} active={href === activeKey} />)}
     {!activeKey && children}
