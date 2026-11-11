@@ -85,9 +85,8 @@ export function aplicarPreservacaoLivroCaixaPagamentosConfirmadosNoOperacional<
   T extends OperacionalLivroCaixaSlice,
 >(existing: T | null | undefined, incoming: T): PreservarLivroCaixaPixResult<T> {
   const protectedPayments = preservarLivroCaixaDePagamentosConfirmados(existing, incoming);
-  if (!existing?.livroCaixa?.length) return protectedPayments;
   const linhas = new Map((protectedPayments.payload.livroCaixa ?? []).map((l) => [l.id, l]));
-  const excluidos = [...(existing.livroCaixaExcluidos ?? []), ...(incoming.livroCaixaExcluidos ?? [])];
+  const excluidos = [...(existing?.livroCaixaExcluidos ?? []), ...(incoming.livroCaixaExcluidos ?? [])];
   const excluidosUnicos = [...new Map(excluidos.map((e) => [`${e.cooperativaId ?? ""}:${e.id}`, e])).values()];
   let removeuExcluido = false;
   for (const [id, linha] of linhas) {
@@ -97,7 +96,7 @@ export function aplicarPreservacaoLivroCaixaPagamentosConfirmadosNoOperacional<
     }
   }
   const restauradas = [...protectedPayments.restauradas];
-  for (const linha of existing.livroCaixa) {
+  for (const linha of existing?.livroCaixa ?? []) {
     if (!isLancamentoManualEditavel(linha)) continue;
     if (excluidos.some((e) => e.id === linha.id && (!e.cooperativaId || e.cooperativaId === linha.cooperativaId))) continue;
     const recebida = linhas.get(linha.id);

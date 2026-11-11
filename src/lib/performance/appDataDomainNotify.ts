@@ -99,6 +99,7 @@ export function inferAppDataDomainsTouched(before: AppData, after: AppData): App
     arrayTouched(before.pagamentos, after.pagamentos) ||
     arrayTouched(before.financeiro, after.financeiro) ||
     arrayTouched(before.livroCaixa, after.livroCaixa) ||
+    arrayTouched(before.livroCaixaExcluidos, after.livroCaixaExcluidos) ||
     arrayTouched(before.fechamentos, after.fechamentos)
   ) {
     out.add("financeiro");

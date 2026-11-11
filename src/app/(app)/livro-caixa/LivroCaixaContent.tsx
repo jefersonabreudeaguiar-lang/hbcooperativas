@@ -13,7 +13,7 @@ import { PageHeader, Modal } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea, FormField } from "@/components/ui/Form";
 import { Card } from "@/components/ui/Card";
-import { updateData, addAuditEntry, getData, getDataOperationalTruth, generateId } from "@/services/dataStore";
+import { updateData, updateDataSafe, addAuditEntry, getData, getDataOperationalTruth, generateId } from "@/services/dataStore";
 import { flushStaffGestaoLastGoodNow } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
@@ -105,6 +105,9 @@ export default function LivroCaixaPage() {
   const [cadastroOrigemOpen, setCadastroOrigemOpen] = useState(false);
   const [novaOrigemNome, setNovaOrigemNome] = useState("");
   const [publicando, setPublicando] = useState(false);
+  const publicandoRef = useRef(false);
+  const novoLancamentoId = useRef<string | null>(null);
+  const [feedbackCaixa, setFeedbackCaixa] = useState("");
   const [editing, setEditing] = useState<LivroCaixaLancamento | null>(null);
   const [buscaSequencia, setBuscaSequencia] = useState("");
   const [destaqueSeqId, setDestaqueSeqId] = useState<string | null>(null);
@@ -151,10 +154,13 @@ export default function LivroCaixaPage() {
 
   const openNovo = () => {
     resetForm();
+    setFeedbackCaixa("");
+    novoLancamentoId.current = generateId("lc");
     setModalOpen(true);
   };
 
   const openEditar = (l: LivroCaixaLancamento) => {
+    setFeedbackCaixa("");
     setEditing(l);
     setTipo(l.tipo);
     setValor(String(l.valor));
@@ -294,11 +300,20 @@ export default function LivroCaixaPage() {
   const canDeleteLancamento = check("livro_caixa", "delete");
 
   const salvarLancamento = () => {
-    const v = parseFloat(valor.replace(",", "."));
-    if (!Number.isFinite(v) || v <= 0 || !historico.trim()) return;
+    if (publicandoRef.current || (editing ? !canEditLancamento : !canEdit)) return;
+    const texto = valor.trim();
+    const formatoValido = /^\d+(?:[.,]\d{1,2})?$/.test(texto) || /^\d{1,3}(?:\.\d{3})+,\d{1,2}$/.test(texto);
+    const v = Number(texto.includes(",") ? texto.replace(/\./g, "").replace(",", ".") : texto);
+    if (!formatoValido || !Number.isSafeInteger(Math.round(v * 100)) || v <= 0 || !historico.trim()) {
+      setFeedbackCaixa("Informe um valor válido e preencha o histórico.");
+      return;
+    }
 
-    if (editing) {
-      updateData((d) => {
+    const id = editing?.id ?? novoLancamentoId.current;
+    if (!id) return;
+    let alterado = false;
+    const saved = updateDataSafe((d) => {
+      if (editing) {
         const orig = resolverOrigemForm();
         const next = atualizarLancamentoManual(d, coopId, editing.id, {
           tipo,
@@ -309,6 +324,7 @@ export default function LivroCaixaPage() {
           origemCadastroId: orig.origemCadastroId,
         });
         if (next === d) return d;
+        alterado = true;
         return addAuditEntry(next, {
           entityType: "financeiro",
           entityId: editing.id,
@@ -317,37 +333,43 @@ export default function LivroCaixaPage() {
           userName: permUser.name,
           changes: `Livro caixa · ${tipo} ${formatCurrency(v)} · ${historico.trim().slice(0, 80)}`,
         });
-      });
-    } else {
-      updateData((d) => {
+      } else {
         const orig = resolverOrigemForm();
         const next = criarLancamentoManual(d, coopId, tipo, v, historico, {
+          id,
           data: dataLanc,
           origem: orig.origem,
           origemCadastroId: orig.origemCadastroId,
           responsavel: permUser.name,
         });
+        if (next === d) return d;
+        alterado = true;
         return addAuditEntry(next, {
           entityType: "financeiro",
-          entityId: coopId,
+          entityId: id,
           action: "criar",
           userId: permUser.id,
           userName: permUser.name,
           changes: `Livro caixa · ${tipo} ${formatCurrency(v)}`,
         });
-      });
+      }
+    });
+    if (!saved.ok || !alterado) {
+      setFeedbackCaixa(saved.ok ? "Este lançamento já foi registrado ou não está disponível para edição." : saved.error);
+      return;
     }
 
+    novoLancamentoId.current = null;
     setAbaLivro(pastaDoFormulario());
     setModalOpen(false);
     resetForm();
     flushStaffGestaoLastGoodNow(getDataOperationalTruth());
-    void publicar({ force: true });
+    void publicar({ alteracaoLocal: "Lançamento salvo neste aparelho." });
   };
 
   const salvarNovaOrigem = () => {
     const nome = novaOrigemNome.trim();
-    if (!nome || !canEdit) return;
+    if (!nome || !canEdit || publicandoRef.current) return;
     const existente = origensCadastro.find((o) => o.nome.toLowerCase() === nome.toLowerCase());
     if (existente) {
       setOrigem(`cad:${existente.id}`);
@@ -374,11 +396,11 @@ export default function LivroCaixaPage() {
     setNovaOrigemNome("");
     setCadastroOrigemOpen(false);
     flushStaffGestaoLastGoodNow(getDataOperationalTruth());
-    void publicar({ force: true });
+    void publicar({ alteracaoLocal: "Origem cadastrada neste aparelho." });
   };
 
   const excluirLancamento = (l: LivroCaixaLancamento) => {
-    if (!canDeleteLancamento || !podeExcluirLancamentoLivroCaixa(l)) return;
+    if (publicandoRef.current || !canDeleteLancamento || !podeExcluirLancamentoLivroCaixa(l)) return;
     if (
       !confirm(
         `Apagar este lançamento avulso?\n\n${l.historico}\n${formatCurrency(l.valor)}\n\nMovimentos automáticos (PIX, pagamentos, retenções) não podem ser apagados aqui.`
@@ -386,9 +408,11 @@ export default function LivroCaixaPage() {
     ) {
       return;
     }
-    updateData((d) => {
+    let excluido = false;
+    const saved = updateDataSafe((d) => {
       const next = excluirLancamentoLivroCaixa(d, coopId, l.id);
       if (next === d) return d;
+      excluido = true;
       return addAuditEntry(next, {
         entityType: "financeiro",
         entityId: l.id,
@@ -398,8 +422,12 @@ export default function LivroCaixaPage() {
         changes: `Livro caixa removido · ${l.historico.slice(0, 80)}`,
       });
     });
+    if (!saved.ok || !excluido) {
+      setFeedbackCaixa(saved.ok ? "O lançamento não está mais disponível para exclusão." : saved.error);
+      return;
+    }
     flushStaffGestaoLastGoodNow(getDataOperationalTruth());
-    void publicar({ force: true });
+    void publicar({ alteracaoLocal: "Lançamento excluído neste aparelho." });
   };
 
   const irParaSequencia = () => {
@@ -557,18 +585,27 @@ export default function LivroCaixaPage() {
     });
   };
 
-  const publicar = async (opts?: { force?: boolean }) => {
+  const publicar = async (opts?: { alteracaoLocal?: string }) => {
+    if (publicandoRef.current) return;
+    publicandoRef.current = true;
     setPublicando(true);
+    setFeedbackCaixa(opts?.alteracaoLocal ? `${opts.alteracaoLocal} Sincronizando…` : "Sincronizando Livro Caixa…");
     try {
       const d = getDataOperationalTruth();
       const cnpj = await resolveCooperativaCnpj(d, coopId, permUser);
-      if (cnpj) {
-        await pushOperacionalToCloud(cnpj, d, coopId, {
-          authoritative: true,
-          forceOperacionalPush: opts?.force === true,
-        });
-      }
+      if (!cnpj) throw new Error("Não foi possível identificar a cooperativa.");
+      await pushOperacionalToCloud(cnpj, d, coopId, {
+        authoritative: true,
+        skipOperationalResetPush: true,
+        throwOnError: true,
+        skipBulkCooperadosCloudPush: true,
+      });
+      setFeedbackCaixa("Livro Caixa sincronizado.");
+    } catch (error) {
+      const detalhe = error instanceof Error ? error.message : "Falha de conexão.";
+      setFeedbackCaixa(`${opts?.alteracaoLocal ? opts.alteracaoLocal + " " : ""}A nuvem não confirmou a atualização. Use Sincronizar. ${detalhe}`);
     } finally {
+      publicandoRef.current = false;
       setPublicando(false);
     }
   };
@@ -585,16 +622,17 @@ export default function LivroCaixaPage() {
         action={
           canEdit && (
             <div className="flex gap-2">
-              <Button variant="secondary" onClick={() => void publicar({ force: true })} disabled={publicando}>
+              <Button variant="secondary" onClick={() => void publicar()} disabled={publicando}>
                 <Send size={16} /> {publicando ? "Enviando…" : "Sincronizar"}
               </Button>
-              <Button onClick={openNovo}>
+              <Button onClick={openNovo} disabled={publicando}>
                 <Plus size={16} /> Lançamento
               </Button>
             </div>
           )
         }
       />
+      {feedbackCaixa && !modalOpen && <p role="status" className="rounded-lg border bg-white px-4 py-3 text-sm">{feedbackCaixa}</p>}
 
       <Card title="Período da visão">
         <div className="flex flex-col sm:flex-row sm:items-end gap-4">
@@ -985,6 +1023,7 @@ export default function LivroCaixaPage() {
         title={editing ? `Editar lançamento · nº ${formatNumeroSequenciaExibicao(editing.numeroSequencia)}` : "Novo lançamento"}
         size="md"
       >
+        {feedbackCaixa && <p role="status" className="mb-4 text-sm text-red-700">{feedbackCaixa}</p>}
         <div className="space-y-4">
           <FormField label="Tipo">
             <Select
@@ -1051,7 +1090,7 @@ export default function LivroCaixaPage() {
           >
             Cancelar
           </Button>
-          <Button onClick={salvarLancamento}>{editing ? "Salvar alterações" : "Salvar"}</Button>
+          <Button onClick={salvarLancamento} disabled={publicando}>{editing ? "Salvar alterações" : "Salvar"}</Button>
         </div>
       </Modal>
     </div>

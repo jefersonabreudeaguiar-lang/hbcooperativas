@@ -254,7 +254,12 @@ function ctxFromPagamentoExistente(data: AppData, pagamentoId: string): Sequenci
 }
 
 export function lancamentosLivroCaixa(data: AppData, cooperativaId: string, mesReferencia?: string): LivroCaixaLancamento[] {
-  let items = (data.livroCaixa ?? []).filter((l) => l.cooperativaId === cooperativaId);
+  const excluidos = new Set((data.livroCaixaExcluidos ?? [])
+    .filter(e => !e.cooperativaId || e.cooperativaId === cooperativaId)
+    .map(e => e.id));
+  let items = (data.livroCaixa ?? []).filter(l =>
+    l.cooperativaId === cooperativaId && !(excluidos.has(l.id) && isLancamentoManualEditavel(l))
+  );
   if (mesReferencia) {
     items = items.filter((l) => lancamentoVisivelNoMesReferencia(data, l, mesReferencia));
   }
@@ -277,10 +282,9 @@ export function findLancamentosPorSequencia(
 ): LivroCaixaLancamento[] {
   const controle = getControleAnualLivroCaixa(data, cooperativaId);
   const ano = anoSequencia ?? controle?.anoLivro ?? new Date().getFullYear();
-  return (data.livroCaixa ?? [])
+  return lancamentosLivroCaixa(data, cooperativaId)
     .filter(
       (l) =>
-        l.cooperativaId === cooperativaId &&
         l.numeroSequencia === numeroSequencia &&
         (l.anoSequencia == null || l.anoSequencia === ano)
     )
@@ -416,6 +420,7 @@ export function criarLancamentoManual(
   valor: number,
   historico: string,
   opts?: {
+    id?: string;
     data?: string;
     origem?: LivroCaixaOrigem;
     origemCadastroId?: string;
@@ -423,6 +428,11 @@ export function criarLancamentoManual(
     responsavel?: string;
   }
 ): AppData {
+  if (!Number.isFinite(valor) || valor <= 0 || !historico.trim()) return data;
+  if (opts?.id && (
+    (data.livroCaixa ?? []).some(l => l.cooperativaId === cooperativaId && l.id === opts.id) ||
+    (data.livroCaixaExcluidos ?? []).some(e => (!e.cooperativaId || e.cooperativaId === cooperativaId) && e.id === opts.id)
+  )) return data;
   const dataLanc = opts?.data ?? new Date().toISOString().split("T")[0];
   const origemCadastroId = opts?.origemCadastroId?.trim() || undefined;
   const origem =
@@ -430,6 +440,7 @@ export function criarLancamentoManual(
       ? "origem_cadastrada"
       : (opts?.origem ?? (tipo === "credito" ? "credito_avulso" : "debito_avulso"));
   return appendLivroCaixaLancamento(data, {
+    ...(opts?.id ? { id: opts.id } : {}),
     cooperativaId,
     data: dataLanc,
     mesReferencia: mesFromData(dataLanc),
@@ -1001,6 +1012,7 @@ export function atualizarLancamentoManual(
   const idx = (data.livroCaixa ?? []).findIndex((l) => l.id === lancamentoId && l.cooperativaId === cooperativaId);
   if (idx < 0) return data;
   const cur = data.livroCaixa![idx];
+  if (!Number.isFinite(patch.valor) || patch.valor <= 0 || !patch.historico.trim()) return data;
   if (!isLancamentoManualEditavel(cur)) return data;
 
   const dataLanc = patch.data ?? cur.data;
@@ -1036,9 +1048,9 @@ export function excluirLancamentoLivroCaixa(data: AppData, cooperativaId: string
   const excluidoEm = new Date().toISOString();
   return {
     ...data,
-    livroCaixa: (data.livroCaixa ?? []).filter((l) => l.id !== lancamentoId),
+    livroCaixa: (data.livroCaixa ?? []).filter((l) => l.id !== lancamentoId || l.cooperativaId !== cooperativaId),
     livroCaixaExcluidos: [
-      ...(data.livroCaixaExcluidos ?? []).filter((e) => e.id !== lancamentoId),
+      ...(data.livroCaixaExcluidos ?? []).filter((e) => e.id !== lancamentoId || (e.cooperativaId && e.cooperativaId !== cooperativaId)),
       { id: lancamentoId, cooperativaId, excluidoEm },
     ],
   };

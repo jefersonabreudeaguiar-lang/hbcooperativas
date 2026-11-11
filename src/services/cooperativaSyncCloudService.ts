@@ -443,6 +443,7 @@ function mergeLivroCaixaExcluidosFromCloud(
 }
 
 function mergeLivroCaixaFromCloud(
+  coopId: string,
   localCoop: LivroCaixaLancamento[],
   cloudItems: LivroCaixaLancamento[],
   cloudSyncTime: string | undefined,
@@ -451,9 +452,8 @@ function mergeLivroCaixaFromCloud(
 ): LivroCaixaLancamento[] {
   const cloudFiltered = cloudItems.filter((l) => !excluidosIds.has(l.id));
   const localFiltered = localCoop.filter((l) => !excluidosIds.has(l.id));
-  const coopId = localFiltered[0]?.cooperativaId ?? cloudFiltered[0]?.cooperativaId;
   const lastroCoop = (peekStaffGestaoLastGood()?.livroCaixa ?? []).filter(
-    (l) => (!coopId || l.cooperativaId === coopId) && !excluidosIds.has(l.id)
+    (l) => l.cooperativaId === coopId && !excluidosIds.has(l.id)
   );
   const localComLastro = (() => {
     const map = new Map<string, LivroCaixaLancamento>();
@@ -1785,6 +1785,7 @@ export function mergeOperacionalIntoData(
             !dominioFornecido("livroCaixa") && !replaceLivro
               ? (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId)
               : mergeLivroCaixaFromCloud(
+                  coopId,
                   (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
                   cloudLivro,
                   cloudSyncTime,
