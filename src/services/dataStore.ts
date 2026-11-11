@@ -508,19 +508,16 @@ function writeStoragePayload(serialized: string): boolean {
   return writeAppDataPersistRaw(serialized);
 }
 
-function buildPersistCandidates(data: AppData): AppData[] {
+function* buildPersistCandidates(data: AppData): Generator<AppData> {
   const role = persistRoleFromSession();
   const stripped = stripBinaryForPersist(data, { role });
+  yield stripped;
   const nivel1 = liberarEspacoArmazenamento(stripped, 1);
+  yield nivel1;
   const nivel2 = liberarEspacoArmazenamento(stripped, 2);
-  const emergencia = buildSnapshotEmergenciaPersistencia(data, role);
-  return [
-    stripped,
-    nivel1,
-    nivel2,
-    { ...nivel2, auditLog: nivel2.auditLog.slice(0, 15) },
-    emergencia,
-  ];
+  yield nivel2;
+  yield { ...nivel2, auditLog: nivel2.auditLog.slice(0, 15) };
+  yield buildSnapshotEmergenciaPersistencia(data, role);
 }
 
 function persistDataToStorage(
@@ -530,12 +527,12 @@ function persistDataToStorage(
   if (typeof window === "undefined") return { ok: true };
 
   const previousCache = memoryCache;
-  const candidates = buildPersistCandidates(data);
-
-  for (let i = 0; i < candidates.length; i++) {
-    const candidate = candidates[i];
+  let previousAttempt: string | undefined;
+  for (const candidate of buildPersistCandidates(data)) {
     try {
       const serialized = JSON.stringify(candidate);
+      if (serialized === previousAttempt) continue;
+      previousAttempt = serialized;
       if (serialized === lastPersistedSerialized) {
         memoryCache = candidate;
         return { ok: true };
