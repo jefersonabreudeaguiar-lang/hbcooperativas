@@ -15,5 +15,5 @@ export type CooperadoFinanceiroRemoto = {
   fetchedAt: string;
   paridade: LeituraFinanceiraParidadeCooperado;
   historicoPagamentos?: CooperadoHistoricoPagamentos;
-  entregasEmAberto?: (ReturnType<typeof agregarItensFichaMes> & { mes: string })[];
+  entregasPorMes?: (ReturnType<typeof agregarItensFichaMes> & { mes: string })[];
 };

@@ -23,9 +23,10 @@ export function CooperadoPagamentosResumo({ financeiro }: { financeiro: Cooperad
         <p className="mt-1 text-xs text-gray-600">Soma dos pagamentos confirmados</p>
       </div>
     </div>
-    {financeiro.entregasEmAberto?.map(({ mes, itens }) => (
-      <details key={mes} className="rounded-2xl border border-gray-200 bg-white p-4">
-        <summary className="cursor-pointer font-semibold text-gray-900">Itens das entregas em aberto · {formatMesReferencia(mes)}</summary>
+    {financeiro.entregasPorMes?.map(({ mes, itens }, mesIndex) => (
+      <details key={mes} open={mesIndex === 0 ? true : undefined} className="rounded-2xl border border-gray-200 bg-white p-4">
+        <summary className="cursor-pointer font-semibold text-gray-900">Itens entregues · {formatMesReferencia(mes)}</summary>
+        <p className="mt-2 text-xs text-gray-600">Inclui entregas conferidas em aberto e já pagas.</p>
         <ul className="mt-2 divide-y divide-gray-100 text-sm">
           {itens.map((item, index) => (
             <li key={index} className="flex justify-between gap-3 py-2">

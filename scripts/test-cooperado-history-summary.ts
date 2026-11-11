@@ -36,4 +36,18 @@ assert.match(html, /Nenhum valor pendente/);
 assert.doesNotMatch(html, /PRIVATE/);
 const pending = renderToStaticMarkup(React.createElement(CooperadoPagamentosResumo, { financeiro: { ...finance, paridade: { ...finance.paridade, valorLiquido: 40 } } }));
 assert.match(pending, /40,00/); assert.match(pending, /Saldo ainda pendente/); assert.match(pending, /325,00/);
+const comItens = renderToStaticMarkup(React.createElement(CooperadoPagamentosResumo, {
+  financeiro: {
+    ...finance,
+    entregasPorMes: [{
+      mes: '2026-10', entregas: 1, valorBruto: 100,
+      itens: [{ produtoInstituicaoId: 'item', produtoNome: 'Melancia', quantidade: 10.125,
+        unidade: 'kg', precoUnitario: 10, valorBruto: 100 }],
+    }],
+  },
+}));
+assert.match(comItens, /Itens entregues/);
+assert.match(comItens, /Melancia/);
+assert.match(comItens, /10,125 kg/);
+assert.match(comItens, /Nenhum valor pendente/);
 console.log('PASS: remote history stays separate from receivables; tenant/member boundaries, deduplication and paid-month rendering hold.');

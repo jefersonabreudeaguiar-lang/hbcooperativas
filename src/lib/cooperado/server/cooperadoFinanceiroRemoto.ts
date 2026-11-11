@@ -72,9 +72,9 @@ async function read(cnpj: string, cooperadoId: string): Promise<CloudViews> {
   return {
     finance: { cooperadoId: canon, cooperativaId: coop.id, fetchedAt: new Date().toISOString(), paridade,
       historicoPagamentos: buildCooperadoHistoricoPagamentos(data, canon, coop.id),
-      entregasEmAberto: meses.map((mes) => ({
+      entregasPorMes: meses.slice().reverse().map((mes) => ({
         mes,
-        ...agregarItensFichaMes(data, canon, mes, coop.id, { apenasPendentes: true }),
+        ...agregarItensFichaMes(data, canon, mes, coop.id),
       })).filter(({ itens }) => itens.length > 0) },
     coopNome: coop.nome,
     card: inicioCardMotorFromParidadeFinanceiro(data, canon, coop.id, paridade),
