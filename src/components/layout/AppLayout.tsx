@@ -644,8 +644,8 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           </CooperadoPostDeployGate>
         )
       : navUser && (staffPainelUi || navUser.role === "responsavel" || navUser.role === "tesoureiro" || navUser.role === "contador")
-        ? <StaffDadosAtuaisGate key={`${navUser.id}:${navUser.role}:${navUser.cooperativaCnpj ?? navUser.cooperativaId}`} user={navUser}>{routePanels}</StaffDadosAtuaisGate>
-        : navUser ? routePanels : <div role="status" className="p-8 text-sm text-gray-600">Preparando seu painel…</div>;
+        ? <StaffDadosAtuaisGate key={`${navUser.id}:${navUser.role}:${navUser.cooperativaCnpj ?? navUser.cooperativaId}`} user={navUser}><CobrancaSaasPainel />{routePanels}</StaffDadosAtuaisGate>
+        : navUser ? <><CobrancaSaasPainel />{routePanels}</> : <div role="status" className="p-8 text-sm text-gray-600">Preparando seu painel…</div>;
 
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden">
@@ -675,7 +675,6 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           )}
-          <CobrancaSaasPainel />
           {navUser && isCooperadoAppUser(navUser) && <CooperadoFinanceiroSyncBanner />}
           {navUser && isCooperadoAppUser(navUser) && <CooperadoPwaMessengerAppDataWarm />}
           {navUser && isCooperadoAppUser(navUser) && <CooperadoPwaResumeLifecycle />}

@@ -25,21 +25,22 @@ export const STAFF_MOBILE_PREFETCH_HREFS: readonly string[] = [
 
 /** PC: um prefetch leve das rotas do dia — sem dynamic import de abas inteiras. */
 export function scheduleStaffNavPrefetchDesktop(router: CooperadoNavPrefetchRouter): () => void {
-  let cancelled = false;
-  const t = window.setTimeout(() => {
-    if (cancelled) return;
-    for (const href of STAFF_NAV_PREFETCH_PRIORITY) {
+  let index = 0;
+  let timer: number;
+  const tick = () => {
+    if (document.visibilityState === "visible") {
+      const href = STAFF_NAV_PREFETCH_PRIORITY[index++];
+      if (!href) return;
       try {
         router.prefetch(href);
       } catch {
         /* ignore */
       }
     }
-  }, staffGestaoPerfilPrefetchNavDelayMs() || 12_000);
-  return () => {
-    cancelled = true;
-    window.clearTimeout(t);
+    if (index < STAFF_NAV_PREFETCH_PRIORITY.length) timer = window.setTimeout(tick, 2_000);
   };
+  timer = window.setTimeout(tick, staffGestaoPerfilPrefetchNavDelayMs() || 12_000);
+  return () => window.clearTimeout(timer);
 }
 
 const mobileSchedules = new WeakMap<CooperadoNavPrefetchRouter, { users: number; stop: () => void }>();
