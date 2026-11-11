@@ -213,9 +213,10 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
             <Link
               key={item.href}
               href={item.href}
-              prefetch={shouldPrefetchHbCreditNav(item.href)}
+              prefetch={staffUser ? false : shouldPrefetchHbCreditNav(item.href)}
               onClick={() => onClose?.()}
               scroll={false}
+              aria-current={active ? "page" : undefined}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                 active ? "bg-green-700 text-white" : "text-green-200 hover:bg-green-800 hover:text-white"
