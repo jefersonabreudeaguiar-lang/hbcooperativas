@@ -1,5 +1,6 @@
 import type { CooperadoFinanceiroRemoto } from '@/lib/cooperado/cooperadoFinanceiroRemotoTypes';
 import { formatCurrency, formatDate, formatMesReferencia } from '@/utils/format';
+import { ChevronDown, Package } from 'lucide-react';
 
 export function CooperadoItensEntregues({ financeiro }: { financeiro: CooperadoFinanceiroRemoto }) {
   return financeiro.entregasPorMes?.map(({ mes, itens }, mesIndex) => {
@@ -13,14 +14,21 @@ export function CooperadoItensEntregues({ financeiro }: { financeiro: CooperadoF
       else totais.set(chave, { produtoNome, unidade, quantidade: item.quantidade });
     }
     return (
-      <details key={mes} open={mesIndex === 0 ? true : undefined} className="rounded-2xl border border-gray-200 bg-white p-4">
-        <summary className="cursor-pointer font-semibold text-gray-900">Total de itens entregues · {formatMesReferencia(mes)}</summary>
-        <p className="mt-2 text-xs text-gray-600">Inclui entregas conferidas em aberto e já pagas.</p>
-        <ul className="mt-2 divide-y divide-gray-100 text-sm">
+      <details key={mes} open={mesIndex === 0 ? true : undefined} className="group overflow-hidden rounded-2xl border border-green-200 bg-white">
+        <summary className="flex cursor-pointer list-none items-center gap-3 bg-green-50 px-4 py-3 text-green-900 focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-green-700 [&::-webkit-details-marker]:hidden">
+          <Package size={20} aria-hidden="true" className="shrink-0" />
+          <span className="flex-1">
+            <span className="block font-semibold">Total de itens entregues</span>
+            <span className="block text-xs text-green-800">{formatMesReferencia(mes)}</span>
+          </span>
+          <ChevronDown size={18} aria-hidden="true" className="shrink-0 group-open:rotate-180" />
+        </summary>
+        <p className="border-t border-green-100 px-4 pt-3 text-xs text-gray-600">Inclui entregas conferidas em aberto e já pagas.</p>
+        <ul className="divide-y divide-gray-100 px-4 pb-2 text-sm">
           {[...totais].map(([chave, item]) => (
             <li key={chave} className="flex justify-between gap-3 py-2">
-              <span>{item.produtoNome}</span>
-              <span className="shrink-0 font-semibold">{item.quantidade.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} {item.unidade}</span>
+              <span className="min-w-0 break-words text-gray-900">{item.produtoNome}</span>
+              <span className="shrink-0 rounded-lg bg-green-50 px-2 py-0.5 font-semibold tabular-nums text-green-900">{item.quantidade.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} {item.unidade}</span>
             </li>
           ))}
         </ul>

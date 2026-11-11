@@ -6,6 +6,8 @@ import type { AppData, PagamentoCooperadoRegistro } from '../src/types';
 import { buildCooperadoHistoricoPagamentos } from '../src/lib/cooperado/cooperadoPagamentosHistorico';
 import { CooperadoPagamentosResumo } from '../src/components/cooperado/CooperadoPagamentosResumo';
 import type { CooperadoFinanceiroRemoto } from '../src/lib/cooperado/cooperadoFinanceiroRemotoTypes';
+import { cooperadoFinanceiroScopedData } from '../src/lib/cooperado/cooperadoFinanceiroScopedData';
+import { agregarItensFichaMes } from '../src/services/notaPedidoService';
 const payment = (id: string, value: number, overrides = {}) => ({ id, cooperadoId: 'member', cooperativaId: 'coop',
   status: 'confirmado', mesReferencia: '2026-10', valorBruto: value + 5, valorLiquido: value, descontoCooperativa: 5,
   descontosExtras: [], pagoEm: '2026-11-06', createdAt: '2026-11-06', updatedAt: '2026-11-06',
@@ -53,4 +55,33 @@ assert.match(comItens, /Melancia/);
 assert.match(comItens, /12,625 kg/);
 assert.doesNotMatch(comItens, /10,125 kg/);
 assert.match(comItens, /Nenhum valor pendente/);
+const duasCooperativas = {
+  ...data,
+  cooperados: [
+    { id: 'member', cooperativaId: 'coop', nomeCompleto: 'Cooperado A', status: 'ativo' },
+    { id: 'member-b', cooperativaId: 'other', nomeCompleto: 'Cooperado B', status: 'ativo' },
+  ],
+  fichaCorrida: [
+    { id: 'ficha-a', notaPedidoId: 'nota-a', cooperativaId: 'coop', cooperadoId: 'member',
+      status: 'pago', mesReferencia: '2026-10',
+      itens: [{ produtoNome: 'Banana', quantidade: 12, unidade: 'kg', precoUnitario: 5 }] },
+    { id: 'ficha-b', notaPedidoId: 'nota-b', cooperativaId: 'other', cooperadoId: 'member-b',
+      status: 'pago', mesReferencia: '2026-10',
+      itens: [{ produtoNome: 'Mamão', quantidade: 7, unidade: 'kg', precoUnitario: 5 }] },
+  ],
+} as AppData;
+for (const [cooperadoId, cooperativaId, esperado, outro, quantidade] of [
+  ['member', 'coop', 'Banana', 'Mamão', 12],
+  ['member-b', 'other', 'Mamão', 'Banana', 7],
+] as const) {
+  const scoped = cooperadoFinanceiroScopedData(duasCooperativas, cooperadoId, cooperativaId);
+  const entregas = agregarItensFichaMes(scoped, cooperadoId, '2026-10', cooperativaId);
+  assert.equal(entregas.itens.length, 1);
+  assert.equal(entregas.itens[0].quantidade, quantidade);
+  const markup = renderToStaticMarkup(React.createElement(CooperadoPagamentosResumo, {
+    financeiro: { ...finance, cooperadoId, cooperativaId, entregasPorMes: [{ mes: '2026-10', ...entregas }] },
+  }));
+  assert.ok(markup.includes(esperado) && markup.includes(`${quantidade} kg`));
+  assert.ok(!markup.includes(outro));
+}
 console.log('PASS: remote history stays separate from receivables; tenant/member boundaries, deduplication and paid-month rendering hold.');
