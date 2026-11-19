@@ -13,7 +13,7 @@ import { registrarCatalogoCloudLeitura } from "@/lib/staff/staffCatalogoCloudLei
 import { getData, getDataOperationalTruth, saveDataSafe, runWithBatchedSaveAsync } from "@/services/dataStore";
 import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
-import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
+import { fetchCooperativaProfileFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeArquivosMensaisFromCloud, overlayContaCoopDescontosLocalAposReplace, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas, idsNotasPedidoExcluidas } from "@/services/notaPedidoService";
 import { posProcessarIntegridadePagamentosCooperativa, cooperadoMesTemPagamentoNaLista, type RegistroPagamentoResponsavelPatch } from "@/services/pagamentoIntegridadeService";
 import {
@@ -2514,7 +2514,7 @@ export async function syncOperacionalFromCloud(
 }
 
 export async function syncCooperativaProfileFromCloud(cnpj: string): Promise<boolean> {
-  const cloud = await fetchCooperativaByCnpjFromCloud(cnpj);
+  const cloud = await fetchCooperativaProfileFromCloud(cnpj);
   if (!cloud) return false;
   const current = getData();
   const mergedCoops = mergeCooperativaIntoData(current.cooperativas, cloud);

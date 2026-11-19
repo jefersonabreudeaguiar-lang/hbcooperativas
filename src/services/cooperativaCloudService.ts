@@ -17,6 +17,20 @@ function mapCloudRow(row: Record<string, unknown>): Cooperativa {
 
 export type CloudStatus = "ok" | "not_configured" | "migration_pending" | "error";
 
+/** Configuração atual do CNPJ autenticado; lookup público serve apenas ao cadastro. */
+export async function fetchCooperativaProfileFromCloud(cnpj: string): Promise<Cooperativa | null> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return null;
+  try {
+    const res = await secureApiFetch(`/api/cooperativas/${digits}/perfil`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.found && json.cooperativa ? mapCloudRow(json.cooperativa) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchCloudStatus(): Promise<{ status: CloudStatus; message?: string }> {
   try {
     const res = await fetch("/api/cooperativas/status", { cache: "no-store" });
@@ -206,26 +220,26 @@ export function mergeMensalidadeConfig(
   if (!local) return cloud;
   if (!cloud) return local;
 
-  const tLocal = Math.max(
-    localUpdatedAt ? new Date(localUpdatedAt).getTime() : 0,
-    local.configSalvaEm ? new Date(local.configSalvaEm).getTime() : 0
-  );
-  const tCloud = Math.max(
-    cloudUpdatedAt ? new Date(cloudUpdatedAt).getTime() : 0,
-    cloud.configSalvaEm ? new Date(cloud.configSalvaEm).getTime() : 0
-  );
+  // Atualizações de endereço/acesso não tornam a configuração de cobrança mais nova.
+  const configLocalTs = Date.parse(local.configSalvaEm ?? "") || 0;
+  const configCloudTs = Date.parse(cloud.configSalvaEm ?? "") || 0;
+  const temVersaoConfig = configLocalTs > 0 || configCloudTs > 0;
+  const tLocal = temVersaoConfig ? configLocalTs : Date.parse(localUpdatedAt ?? "") || 0;
+  const tCloud = temVersaoConfig ? configCloudTs : Date.parse(cloudUpdatedAt ?? "") || 0;
   const sLocal = scoreMensalidadeConfig(local);
   const sCloud = scoreMensalidadeConfig(cloud);
 
   let base: MensalidadeConfig;
-  if (sLocal > sCloud) base = local;
+  if (temVersaoConfig && tCloud > tLocal) base = cloud;
+  else if (temVersaoConfig && tLocal > tCloud) base = local;
+  else if (sLocal > sCloud) base = local;
   else if (sCloud > sLocal) base = cloud;
   else if (tCloud > tLocal) base = cloud;
   else if (tLocal > tCloud) base = local;
   else base = (cloud.valorPadrao ?? 0) >= (local.valorPadrao ?? 0) ? cloud : local;
 
   const meses =
-    (base.mesesCobranca?.length ?? 0) > 0
+    base.mesesCobranca !== undefined
       ? base.mesesCobranca
       : (local.mesesCobranca?.length ?? 0) > 0
         ? local.mesesCobranca
