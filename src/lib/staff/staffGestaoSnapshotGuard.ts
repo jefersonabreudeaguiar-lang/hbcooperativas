@@ -9,6 +9,7 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 import { protectNotaAgainstStatusDowngrade } from "@/utils/notaStatus";
 import { compactPersisted, decodePersisted } from "@/lib/staff/appDataPersistIo";
 import { mergePagamentosCooperadoFromCloud } from "@/services/pagamentoRegistroMerge";
+import { isLancamentoManualEditavel } from "@/lib/livro-caixa/lancamentoManual";
 
 export type StaffGestaoRiqueza = {
   cooperados: number;
@@ -267,9 +268,14 @@ export function noteStaffGestaoLastGood(
   }
   const coopId = coopIdForCnpj(data, cnpj);
   const next = medirRiquezaStaffGestao(data, coopId);
-  if (staffGestaoRiquezaTotal(next) <= 0) return;
+  if (staffGestaoRiquezaTotal(next) <= 0 && !(data.livroCaixaExcluidos?.length)) return;
   const prev = lastGoodByCnpj.get(cnpj);
-  if (prev && staffGestaoSnapshotPoorer(next, medirRiquezaStaffGestao(prev, coopId))) return;
+  const prevSemExcluidos = prev ? {
+    ...prev,
+    livroCaixa: (prev.livroCaixa ?? []).filter((l) => !isLancamentoManualEditavel(l) ||
+      !(data.livroCaixaExcluidos ?? []).some((e) => e.id === l.id && (!e.cooperativaId || e.cooperativaId === l.cooperativaId))),
+  } : undefined;
+  if (prevSemExcluidos && staffGestaoSnapshotPoorer(next, medirRiquezaStaffGestao(prevSemExcluidos, coopId))) return;
   lastGoodByCnpj.set(cnpj, data);
   if (opts?.immediate) persistLastGoodToSessionNow(cnpj, data);
   else persistLastGoodToSession(cnpj, data);
@@ -424,11 +430,13 @@ export function preservarStaffGestaoContraWipe(
   }
 
   const coopId = incomingCnpj ? coopIdForCnpj(lastro, incomingCnpj) ?? coopIdForCnpj(incoming, incomingCnpj) : undefined;
-  const excluidosLivro = new Set(
-    [...(lastro.livroCaixaExcluidos ?? []), ...(incoming.livroCaixaExcluidos ?? [])].map((e) => e.id)
-  );
+  const exclusoesLivro = [...new Map(
+    [...(lastro.livroCaixaExcluidos ?? []), ...(incoming.livroCaixaExcluidos ?? [])]
+      .map((e) => [`${e.cooperativaId ?? ""}:${e.id}`, e])
+  ).values()];
   const livroUnido = uniaoPorId(incoming.livroCaixa ?? [], lastro.livroCaixa ?? []).filter(
-    (l) => !excluidosLivro.has(l.id)
+    (l) => !isLancamentoManualEditavel(l) || !exclusoesLivro.some((e) =>
+      e.id === l.id && (!e.cooperativaId || e.cooperativaId === l.cooperativaId))
   );
   const origensUnidas = uniaoPorId(
     incoming.livroCaixaOrigensCadastro ?? [],
@@ -437,6 +445,7 @@ export function preservarStaffGestaoContraWipe(
   const comLivroLastro: AppData = {
     ...incoming,
     livroCaixa: livroUnido,
+    livroCaixaExcluidos: exclusoesLivro,
     livroCaixaOrigensCadastro: origensUnidas,
   };
 

@@ -12,6 +12,8 @@ import type {
 import { CONTA_COOP_DESCONTO_SPLIT } from "@/config/contaCoopEconomia";
 import { round2 } from "@/utils/calculations";
 import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+import { isLancamentoManualEditavel, ORIGENS_LANCAMENTO_MANUAL } from "@/lib/livro-caixa/lancamentoManual";
+export { isLancamentoManualEditavel } from "@/lib/livro-caixa/lancamentoManual";
 
 export interface ResumoLivroCaixa {
   saldo: number;
@@ -439,6 +441,7 @@ export function criarLancamentoManual(
     origemCadastroId
       ? "origem_cadastrada"
       : (opts?.origem ?? (tipo === "credito" ? "credito_avulso" : "debito_avulso"));
+  if (!ORIGENS_LANCAMENTO_MANUAL.includes(origem)) return data;
   return appendLivroCaixaLancamento(data, {
     ...(opts?.id ? { id: opts.id } : {}),
     cooperativaId,
@@ -971,21 +974,6 @@ export function mesReferenciaInicialLivroCaixa(data: AppData, cooperativaId: str
     if (lancamentosLivroCaixa(data, cooperativaId, m).length > 0) return m;
   }
   return getCurrentMesReferencia();
-}
-
-const ORIGENS_LANCAMENTO_MANUAL: LivroCaixaOrigem[] = [
-  "manual",
-  "credito_avulso",
-  "debito_avulso",
-  "pnae",
-  "prestacao_contas",
-  "origem_cadastrada",
-  "outro",
-];
-
-export function isLancamentoManualEditavel(l: LivroCaixaLancamento): boolean {
-  if (l.origemId?.trim()) return false;
-  return ORIGENS_LANCAMENTO_MANUAL.includes(l.origem);
 }
 
 export function isLancamentoSemSequenciaLegado(l: LivroCaixaLancamento): boolean {

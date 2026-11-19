@@ -40,6 +40,7 @@ import {
   solicitarEncerramentoAnoLivroCaixa,
 } from "@/services/livroCaixaService";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { ORIGENS_LANCAMENTO_MANUAL } from "@/lib/livro-caixa/lancamentoManual";
 import {
   gerarRelatorioLivroCaixaPlanilhaHtml,
   type LivroCaixaRelatorioPlanilhaOpts,
@@ -109,6 +110,7 @@ export default function LivroCaixaPage() {
   const novoLancamentoId = useRef<string | null>(null);
   const [feedbackCaixa, setFeedbackCaixa] = useState("");
   const [editing, setEditing] = useState<LivroCaixaLancamento | null>(null);
+  const [exclusao, setExclusao] = useState<LivroCaixaLancamento | null>(null);
   const [buscaSequencia, setBuscaSequencia] = useState("");
   const [destaqueSeqId, setDestaqueSeqId] = useState<string | null>(null);
   const hojeIso = new Date().toISOString().split("T")[0];
@@ -251,6 +253,8 @@ export default function LivroCaixaPage() {
     [dataCaixa, coopId, lancamentosVisao]
   );
   const pastaAtiva = abaLivro !== "livro" && abaLivro !== "resumo-cooperado" ? abaLivro : null;
+  const pastaAceitaLancamentoManual = pastaAtiva?.startsWith("cad:") ||
+    ORIGENS_LANCAMENTO_MANUAL.some((origem) => pastaAtiva === `sys:${origem}`);
   const origensCadastro = useMemo(
     () => (dataCaixa && coopId ? listarOrigensCadastroCooperativa(dataCaixa, coopId) : []),
     [dataCaixa, coopId]
@@ -400,12 +404,16 @@ export default function LivroCaixaPage() {
   };
 
   const excluirLancamento = (l: LivroCaixaLancamento) => {
-    if (publicandoRef.current || !canDeleteLancamento || !podeExcluirLancamentoLivroCaixa(l)) return;
-    if (
-      !confirm(
-        `Apagar este lançamento avulso?\n\n${l.historico}\n${formatCurrency(l.valor)}\n\nMovimentos automáticos (PIX, pagamentos, retenções) não podem ser apagados aqui.`
-      )
-    ) {
+    if (!canDeleteLancamento || !podeExcluirLancamentoLivroCaixa(l)) return;
+    setFeedbackCaixa("");
+    setExclusao(l);
+  };
+
+  const confirmarExclusao = () => {
+    const l = exclusao;
+    if (!l || !canDeleteLancamento || !podeExcluirLancamentoLivroCaixa(l)) return;
+    if (publicandoRef.current) {
+      setFeedbackCaixa("Aguarde a sincronização terminar e tente excluir novamente.");
       return;
     }
     let excluido = false;
@@ -426,6 +434,7 @@ export default function LivroCaixaPage() {
       setFeedbackCaixa(saved.ok ? "O lançamento não está mais disponível para exclusão." : saved.error);
       return;
     }
+    setExclusao(null);
     flushStaffGestaoLastGoodNow(getDataOperationalTruth());
     void publicar({ alteracaoLocal: "Lançamento excluído neste aparelho." });
   };
@@ -506,7 +515,16 @@ export default function LivroCaixaPage() {
   };
 
   const imprimirRelatorio = () => {
-    const html = gerarRelatorioLivroCaixaPlanilhaHtml(data, coopId, coopNome, relatorioOptsAtual());
+    if (!dataCaixa) return;
+    const opts = pastaAtiva ? {
+      ...relatorioOptsAtual(),
+      modo: modoVisualizacao,
+      mesReferencia: mes,
+      dataDe: filtroDe,
+      dataAte: filtroAte,
+      somenteMesEmAberto: false,
+    } : relatorioOptsAtual();
+    const html = gerarRelatorioLivroCaixaPlanilhaHtml(dataCaixa, coopId, coopNome, opts);
     imprimirDocumentoHtml(html);
   };
 
@@ -757,14 +775,15 @@ export default function LivroCaixaPage() {
           </p>
           <div className="flex flex-wrap gap-2 mb-4">
             <Button type="button" variant="secondary" onClick={imprimirRelatorio}>
-              <FileText size={16} /> Emitir relatório desta origem
+              <FileText size={16} /> Imprimir esta pasta
             </Button>
-            {canEdit && (
+            {canEdit && pastaAceitaLancamentoManual && (
               <Button
                 type="button"
                 onClick={() => {
                   if (!pastaAtiva) return;
-                  resetForm();
+                  openNovo();
+                  if (pastaAtiva === "sys:debito_avulso") setTipo("debito");
                   if (pastaAtiva.startsWith("cad:")) setOrigem(pastaAtiva);
                   else setOrigem(pastaAtiva.slice(4));
                   setModalOpen(true);
@@ -1013,6 +1032,22 @@ export default function LivroCaixaPage() {
       </Card>
       </>
       )}
+
+      <Modal open={!!exclusao} onClose={() => setExclusao(null)} title="Excluir lançamento">
+        {exclusao && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700">{exclusao.historico}</p>
+            <p className="text-lg font-bold">{formatCurrency(exclusao.valor)}</p>
+            <p className="text-sm text-gray-600">Confirme a exclusão deste lançamento do livro e da pasta correspondente.</p>
+            {publicando && <p role="status" className="text-sm text-amber-700">Aguardando a sincronização atual terminar.</p>}
+            {feedbackCaixa && <p role="status" className="text-sm text-gray-700">{feedbackCaixa}</p>}
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setExclusao(null)}>Cancelar</Button>
+              <Button variant="danger" disabled={publicando} onClick={confirmarExclusao}>Excluir lançamento</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <Modal
         open={modalOpen}

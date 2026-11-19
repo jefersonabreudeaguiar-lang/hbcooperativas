@@ -222,6 +222,7 @@ export function gerarRelatorioLivroCaixaPlanilhaHtml(
 
   if (opts.pastaOrigem) {
     lancamentos = filtrarLancamentosPorPasta(lancamentos, opts.pastaOrigem);
+    saldoInicial = 0;
     tituloPeriodo += ` · pasta ${nomePastaLivroCaixa(data, cooperativaId, opts.pastaOrigem)}`;
   }
 
@@ -252,7 +253,7 @@ export function gerarRelatorioLivroCaixaPlanilhaHtml(
     <div class="resumo">
       <div>Créditos no período<strong class="credito">${formatCurrency(creditosPeriodo)}</strong></div>
       <div>Débitos no período<strong class="debito">${formatCurrency(debitosPeriodo)}</strong></div>
-      <div>Saldo ao final<strong>${formatCurrency(saldoFinal)}</strong></div>
+      <div>${opts.pastaOrigem ? "Resultado da pasta no período" : "Saldo ao final"}<strong>${formatCurrency(saldoFinal)}</strong></div>
     </div>
     <h2>Planilha</h2>
     ${planilha}

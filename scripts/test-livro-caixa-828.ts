@@ -1,0 +1,48 @@
+import assert from "node:assert/strict";
+import { emptyInitialData } from "../src/mock/data";
+import { criarLancamentoManual, atualizarLancamentoManual, excluirLancamentoLivroCaixa, resumoLivroCaixa } from "../src/services/livroCaixaService";
+import { noteStaffGestaoLastGood, peekStaffGestaoLastGood, preservarStaffGestaoContraWipe, resetStaffGestaoSnapshotGuardForTests } from "../src/lib/staff/staffGestaoSnapshotGuard";
+import { aplicarPreservacaoLivroCaixaPagamentosConfirmadosNoOperacional } from "../src/services/livroCaixaPagamentoGuard";
+import { gerarRelatorioLivroCaixaPlanilhaHtml } from "../src/utils/livroCaixaRelatorioHtml";
+import { formatCurrency } from "../src/utils/format";
+import type { AppData } from "../src/types";
+
+const cnpj = "62351750000165";
+const base: AppData = { ...structuredClone(emptyInitialData), cooperativas: [{ id: "coop", nome: "Teste", cnpj, status: "ativa" }] };
+assert.equal(criarLancamentoManual(base, "coop", "credito", 10, "Origem automática", { origem: "pagamento_cooperado" }), base);
+resetStaffGestaoSnapshotGuardForTests();
+const created = criarLancamentoManual(base, "coop", "credito", 125.30, "Receita", { id: "one", data: "2026-10-01" });
+assert.equal(criarLancamentoManual(created, "coop", "credito", 125.30, "Receita", { id: "one" }), created);
+const edited = atualizarLancamentoManual(created, "coop", "one", { tipo: "credito", valor: 150, historico: "Receita corrigida" });
+assert.equal(resumoLivroCaixa(edited, "coop").saldo, 150);
+noteStaffGestaoLastGood(edited, cnpj);
+const deleted = excluirLancamentoLivroCaixa(edited, "coop", "one");
+const saved = preservarStaffGestaoContraWipe(edited, deleted);
+assert.equal(saved.livroCaixa?.length, 0);
+assert.equal(peekStaffGestaoLastGood(cnpj)?.livroCaixa?.length, 0, "cópia de recuperação aceita a redução por exclusão explícita");
+const stale = preservarStaffGestaoContraWipe(saved, edited);
+assert.equal(stale.livroCaixa?.length, 0);
+assert.equal(stale.livroCaixaExcluidos?.[0].id, "one", "releitura antiga preserva a exclusão para as próximas gravações");
+assert.equal(preservarStaffGestaoContraWipe(stale, edited).livroCaixa?.length, 0);
+assert.equal(aplicarPreservacaoLivroCaixaPagamentosConfirmadosNoOperacional(edited, saved).payload.livroCaixa?.length, 0);
+const duplicate = criarLancamentoManual(saved, "coop", "credito", 150, "Receita", { id: "one" });
+assert.equal(duplicate, saved);
+const automatic = { ...edited, livroCaixa: [{ ...edited.livroCaixa![0], origem: "pagamento_cooperado" as const, origemId: "pg_caixa_pago" }] };
+assert.equal(excluirLancamentoLivroCaixa(automatic, "coop", "one"), automatic);
+assert.equal(preservarStaffGestaoContraWipe(automatic, { ...automatic, livroCaixaExcluidos: deleted.livroCaixaExcluidos }).livroCaixa?.length, 1);
+let ledger = criarLancamentoManual(base, "coop", "credito", 100, "Anterior", { id: "prev", data: "2026-10-01" });
+ledger = criarLancamentoManual(ledger, "coop", "credito", 50, "Receita no período", { id: "credit", data: "2026-11-03" });
+ledger = criarLancamentoManual(ledger, "coop", "debito", 20, "Despesa no período", { id: "debit", data: "2026-11-04" });
+const opts = { modo: "periodo" as const, dataDe: "2026-11-01", dataAte: "2026-11-19" };
+const full = gerarRelatorioLivroCaixaPlanilhaHtml(ledger, "coop", "Teste", opts);
+assert.ok(full.includes(`Saldo ao final<strong>${formatCurrency(130)}</strong>`));
+for (const [pasta, expected] of [["sys:credito_avulso", 50], ["sys:debito_avulso", -20]] as const) {
+  const html = gerarRelatorioLivroCaixaPlanilhaHtml(ledger, "coop", "Teste", { ...opts, pastaOrigem: pasta });
+  assert.ok(html.includes(`Resultado da pasta no período<strong>${formatCurrency(expected)}</strong>`));
+  assert.ok(!html.includes('class="saldo-ant"'));
+}
+ledger = criarLancamentoManual(ledger, "coop", "credito", 75, "Pasta cadastrada", { id: "custom", data: "2026-11-05", origemCadastroId: "origem-1" });
+const custom = gerarRelatorioLivroCaixaPlanilhaHtml(ledger, "coop", "Teste", { ...opts, pastaOrigem: "cad:origem-1" });
+assert.ok(custom.includes(`Resultado da pasta no período<strong>${formatCurrency(75)}</strong>`));
+resetStaffGestaoSnapshotGuardForTests();
+console.log("PASS: criação/edição manual, repetição, exclusão, cópia de recuperação, reenvio antigo e relatórios geral/pastas.");
