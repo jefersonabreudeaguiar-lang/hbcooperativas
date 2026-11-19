@@ -1030,8 +1030,16 @@ export function atualizarLancamentoManual(
   return { ...data, livroCaixa };
 }
 
-export function excluirLancamentoLivroCaixa(data: AppData, cooperativaId: string, lancamentoId: string): AppData {
-  const alvo = (data.livroCaixa ?? []).find((l) => l.id === lancamentoId && l.cooperativaId === cooperativaId);
+export function excluirLancamentoLivroCaixa(
+  data: AppData,
+  cooperativaId: string,
+  lancamentoId: string,
+  lancamentoExibido?: LivroCaixaLancamento
+): AppData {
+  // A UI pode estar lendo o lastro enquanto a memória já recebeu uma exclusão da nuvem.
+  const atual = (data.livroCaixa ?? []).find((l) => l.id === lancamentoId && l.cooperativaId === cooperativaId);
+  const alvo = atual ?? (lancamentoExibido?.id === lancamentoId && lancamentoExibido.cooperativaId === cooperativaId
+    ? lancamentoExibido : undefined);
   if (!alvo || !podeExcluirLancamentoLivroCaixa(alvo)) return data;
   const excluidoEm = new Date().toISOString();
   return {

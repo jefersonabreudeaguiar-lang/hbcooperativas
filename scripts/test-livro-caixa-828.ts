@@ -17,6 +17,9 @@ const edited = atualizarLancamentoManual(created, "coop", "one", { tipo: "credit
 assert.equal(resumoLivroCaixa(edited, "coop").saldo, 150);
 noteStaffGestaoLastGood(edited, cnpj);
 const deleted = excluirLancamentoLivroCaixa(edited, "coop", "one");
+const deletedFromFallback = excluirLancamentoLivroCaixa(base, "coop", "one", edited.livroCaixa![0]);
+assert.equal(deletedFromFallback.livroCaixaExcluidos?.[0].id, "one", "linha do lastro recebe exclusão mesmo ausente da memória");
+assert.equal(excluirLancamentoLivroCaixa(base, "outra-coop", "one", edited.livroCaixa![0]), base);
 const saved = preservarStaffGestaoContraWipe(edited, deleted);
 assert.equal(saved.livroCaixa?.length, 0);
 assert.equal(peekStaffGestaoLastGood(cnpj)?.livroCaixa?.length, 0, "cópia de recuperação aceita a redução por exclusão explícita");

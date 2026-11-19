@@ -418,7 +418,7 @@ export default function LivroCaixaPage() {
     }
     let excluido = false;
     const saved = updateDataSafe((d) => {
-      const next = excluirLancamentoLivroCaixa(d, coopId, l.id);
+      const next = excluirLancamentoLivroCaixa(d, coopId, l.id, l);
       if (next === d) return d;
       excluido = true;
       return addAuditEntry(next, {
