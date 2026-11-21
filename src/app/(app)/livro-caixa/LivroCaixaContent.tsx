@@ -16,7 +16,7 @@ import { Card } from "@/components/ui/Card";
 import { updateData, updateDataSafe, addAuditEntry, getData, getDataOperationalTruth, generateId } from "@/services/dataStore";
 import { flushStaffGestaoLastGoodNow } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
+import { pushLivroCaixaToCloud } from "@/services/cooperativaSyncCloudService";
 import { posProcessarIntegridadePagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
 import { useReconciliarLivroCaixaGestao } from "@/hooks/useReconciliarLivroCaixaGestao";
 import {
@@ -612,12 +612,7 @@ export default function LivroCaixaPage() {
       const d = getDataOperationalTruth();
       const cnpj = await resolveCooperativaCnpj(d, coopId, permUser);
       if (!cnpj) throw new Error("Não foi possível identificar a cooperativa.");
-      await pushOperacionalToCloud(cnpj, d, coopId, {
-        authoritative: true,
-        skipOperationalResetPush: true,
-        throwOnError: true,
-        skipBulkCooperadosCloudPush: true,
-      });
+      await pushLivroCaixaToCloud(cnpj, coopId);
       setFeedbackCaixa("Livro Caixa sincronizado.");
     } catch (error) {
       const detalhe = error instanceof Error ? error.message : "Falha de conexão.";

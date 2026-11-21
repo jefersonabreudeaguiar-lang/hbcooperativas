@@ -8,6 +8,7 @@ import {
 import { peekStaffGestaoLastGood, preservarStaffGestaoContraWipe } from "@/lib/staff/staffGestaoSnapshotGuard";
 import { staffGestaoPerfilReaplicarAbaLastGoodPermitido } from "@/lib/staff/staffGestaoPerfilDesktop";
 import { secureApiFetch } from "@/lib/security/clientSession";
+import { prepararLivroCaixaSync } from "@/services/livroCaixaSyncPayload";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
 import { registrarCatalogoCloudLeitura } from "@/lib/staff/staffCatalogoCloudLeitura";
 import { getData, getDataOperationalTruth, saveDataSafe, runWithBatchedSaveAsync } from "@/services/dataStore";
@@ -2018,6 +2019,31 @@ export async function pushContratosToCloud(
   } catch {
     /* offline */
   }
+}
+
+/** Caminho do caixa: uma consulta e uma gravação, sem reprocessar fichas e mensalidades. */
+export async function pushLivroCaixaToCloud(cnpj: string, coopId: string): Promise<void> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14 || !coopId) throw new Error("Cooperativa inválida para sincronizar o caixa.");
+  return enqueueOperacionalCoordination(digits, async () => {
+    const bundle = await fetchSyncBundle(digits);
+    if (!bundle?.operacional) throw new Error("Não foi possível consultar o Livro Caixa na nuvem.");
+    if (cloudOperacionalRestoreAtivo(bundle.operacional)) throw new Error("Restauração em andamento. Tente novamente em instantes.");
+    const local = getDataOperationalTruth();
+    if (!local.cooperativas.some((c) => c.id === coopId && normalizeCnpj(c.cnpj) === digits)) {
+      throw new Error("O vínculo da cooperativa mudou. Abra novamente o Livro Caixa.");
+    }
+    const payload = prepararLivroCaixaSync(bundle.operacional, local, coopId);
+    const res = await secureApiFetch("/api/cooperativa-sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cnpj: digits, section: "operacional", payload }),
+    });
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      throw new Error(json.error ?? "A nuvem não confirmou o lançamento. Tente novamente.");
+    }
+  });
 }
 
 export async function pushOperacionalToCloud(
