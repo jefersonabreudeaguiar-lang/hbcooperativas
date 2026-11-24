@@ -1041,17 +1041,29 @@ export default function NotasPedidoStaffMain() {
   const carregarItensParaFotoConferencia = useCallback(
     (fotoIdx: number) => {
       const d = getData() ?? data;
-      if (!d || !conferenciaInstId) return;
+      if (!d || !conferenciaInstId) {
+        conferenciaItensLiveRef.current = [];
+        setConferenciaItens([]);
+        setConferenciaTotaisUi({ liquido: 0, bruto: 0, desconto: 0 });
+        setConferenciaFotoSomenteLeitura(false);
+        return;
+      }
       if (fotosLancadasConferenciaRef.current.has(fotoIdx)) {
         const salvos = lancamentosFotoConferenciaRef.current.get(fotoIdx);
-        setConferenciaItens(loadItensFromInstituicao(d, conferenciaInstId, coopId, salvos));
+        const itens = loadItensFromInstituicao(d, conferenciaInstId, coopId, salvos);
+        conferenciaItensLiveRef.current = itens;
+        setConferenciaItens(itens);
+        setConferenciaTotaisUi(calcularTotaisConferenciaItens(itens, conferenciaDescontoPct));
         setConferenciaFotoSomenteLeitura(true);
         return;
       }
-      setConferenciaItens(loadItensFromInstituicao(d, conferenciaInstId, coopId));
+      const itens = loadItensFromInstituicao(d, conferenciaInstId, coopId);
+      conferenciaItensLiveRef.current = itens;
+      setConferenciaItens(itens);
+      setConferenciaTotaisUi(calcularTotaisConferenciaItens(itens, conferenciaDescontoPct));
       setConferenciaFotoSomenteLeitura(false);
     },
-    [data, conferenciaInstId, coopId]
+    [data, conferenciaInstId, coopId, conferenciaDescontoPct]
   );
 
   const sincronizarFotosLancadasComFicha = useCallback(
@@ -5982,6 +5994,7 @@ export default function NotasPedidoStaffMain() {
               </FormField>
 
               <NotasPedidoConferirItensTable
+                key={`${selectedNota.id}:${conferenciaFotoIdx}:${conferenciaInstId}`}
                 selectedNota={selectedNota}
                 conferenciaInstNome={conferenciaInstNome}
                 conferenciaFotoSomenteLeitura={conferenciaFotoSomenteLeitura}

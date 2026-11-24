@@ -152,6 +152,7 @@ export const NotasPedidoConferirItensTable = memo(function NotasPedidoConferirIt
 
   const applyQty = useCallback(
     (idx: number, qty: number) => {
+      if (draftKeyRef.current !== conferenciaDraftKey) return;
       const prev = draftRef.current;
       if (!prev[idx] || prev[idx].quantidade === qty) return;
       const next = prev.slice();
@@ -159,10 +160,11 @@ export const NotasPedidoConferirItensTable = memo(function NotasPedidoConferirIt
       draftRef.current = next;
       onDraftLiveChange(next);
       // O texto do input é urgente; cores e totais da tabela podem ceder ao foco.
-      startTransition(() => setDraft(next));
+      const owner = conferenciaDraftKey;
+      startTransition(() => setDraft(previous => draftKeyRef.current === owner ? next : previous));
       scheduleCommit(next);
     },
-    [onDraftLiveChange, scheduleCommit]
+    [conferenciaDraftKey, onDraftLiveChange, scheduleCommit]
   );
 
   const onLiveQty = useCallback(

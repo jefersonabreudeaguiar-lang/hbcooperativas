@@ -5776,13 +5776,14 @@ export default function NotasPedidoCooperadoMain() {
               </FormField>
 
               <NotasPedidoConferirItensTable
+                key={`${selectedNota.id}:${conferenciaFotoIdx}:${conferenciaInstId}`}
                 selectedNota={selectedNota}
                 conferenciaInstNome={conferenciaInstNome}
                 conferenciaFotoSomenteLeitura={conferenciaFotoSomenteLeitura}
                 conferenciaFotoIdx={conferenciaFotoIdx}
                 conferenciaDescontoPct={conferenciaDescontoPct}
                 conferenciaItens={conferenciaItens}
-                conferenciaDraftKey={`${selectedNota.id}:${conferenciaFotoIdx}`}
+                conferenciaDraftKey={`${selectedNota.id}:${conferenciaFotoIdx}:${conferenciaInstId}`}
                 conferirErrorsItens={conferirErrors.itens}
                 onDraftLiveChange={handleConferenciaDraftLive}
                 onDraftCommit={handleConferenciaDraftCommit}
