@@ -118,6 +118,7 @@ import {
   responsavelBloquearNavegacaoConferencia,
   responsavelPreservarAbaDuranteSync,
 } from "@/lib/conferencia/responsavelConferenciaNavigateGuard";
+import { conferenciaCheckpointKey, salvarConferenciaCheckpoint, lerConferenciaCheckpoint, removerConferenciaCheckpoint } from "@/lib/conferencia/conferenciaCheckpoint";
 import {
   clearConferenciaDraftMemoria,
   getConferenciaDraftMemoria,
@@ -1025,6 +1026,16 @@ export default function NotasPedidoStaffMain() {
         fotosLancadasConferenciaRef.current = merged.lancadas;
         lancamentosFotoConferenciaRef.current = merged.lancamentosPorFoto;
         setFotosLancadasUi(new Set(merged.lancadas));
+        const d = getData();
+        const nota = d?.notasPedido.find(n => n.id === notaId);
+        const count = nota ? contarFotosEnviadasNota(nota) : 0;
+        const idx = count > 0 ? (encontrarPrimeiraFotoPendente(count, merged.lancadas) ?? count - 1) : draft.fotoIdx;
+        setConferenciaFotoIdx(idx);
+        const itens = d ? loadItensFromInstituicao(d, draft.instId, nota?.cooperativaId, merged.lancamentosPorFoto.get(idx)) : [];
+        conferenciaItensLiveRef.current = itens;
+        setConferenciaItens(itens);
+        setConferenciaTotaisUi(calcularTotaisConferenciaItens(itens, draft.descontoPct));
+        setConferenciaFotoSomenteLeitura(merged.lancadas.has(idx));
         return;
       }
 
@@ -1159,52 +1170,6 @@ export default function NotasPedidoStaffMain() {
     [coopId, conferenciaDivisaoQtd, conferenciaDivisaoIds]
   );
 
-  const persistirFotoConferenciaNaFicha = useCallback(
-    (
-      fotoIdx: number,
-      totalFotos: number,
-      itensFoto: NotaPedidoItem[]
-    ): { ok: true } | { ok: false; error: string } => {
-      if (!user || !selectedNota) return { ok: false, error: "Entrega não selecionada." };
-      const aplicar = (d: AppData) =>
-        aplicarLancamentoFotoConferenciaEmDados(d, {
-          nota: selectedNota,
-          fotoIdx,
-          totalFotos,
-          itensFoto,
-          user,
-          conferenciaCooperadoId,
-          coopId,
-          conferenciaInstId,
-          conferenciaLocal,
-          conferenciaEscolaAvulsa,
-          conferenciaDescontoPct,
-          resolverDivisaoConferencia,
-        });
-      let saved = updateDataSafe((d) => aplicar(d));
-      if (!saved.ok) {
-        saved = updateDataSafe((d) => aplicar(liberarEspacoArmazenamento(d, 2)));
-      }
-      if (!saved.ok) {
-        saved = updateDataSafe((d) =>
-          aplicar(compactarFotosNoArmazenamento(liberarEspacoArmazenamento(d, 2)))
-        );
-      }
-      return saved.ok ? { ok: true } : { ok: false, error: saved.error };
-    },
-    [
-      user,
-      selectedNota,
-      conferenciaDescontoPct,
-      conferenciaCooperadoId,
-      coopId,
-      conferenciaInstId,
-      conferenciaLocal,
-      conferenciaEscolaAvulsa,
-      resolverDivisaoConferencia,
-    ]
-  );
-
   const lancarFotoConferenciaAtual = useCallback(
     (
       fotoIdx: number,
@@ -1243,39 +1208,25 @@ export default function NotasPedidoStaffMain() {
         return { ok: false, error: "Informe a quantidade de pelo menos um produto nesta foto." };
       }
 
-      const d0 = getDataOperationalTruth() ?? getData() ?? data;
-      if (!d0) return { ok: false, error: "Dados indisponíveis." };
-
-      const coopSel =
-        coopId && d0
-          ? listCooperadosDaCooperativa(d0, coopId).find((c) => c.id === conferenciaCooperadoId)
-          : undefined;
-      const nomeCoop =
-        coopSel?.nomeCompleto?.trim() ||
-        selectedNota.cooperadoNomeSnapshot?.trim() ||
-        getCooperadoNomeResolvido(d0, conferenciaCooperadoId, coopId);
-
-      const persistirNaFicha = (): { ok: boolean; error?: string } => {
-        const gravacao = persistirFotoConferenciaNaFicha(fotoIdx, totalFotos, r.itens);
-        if (!gravacao.ok) {
-          lancamentosFotoConferenciaRef.current.delete(fotoIdx);
-          fotosLancadasConferenciaRef.current.delete(fotoIdx);
-          setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
-          return {
-            ok: false,
-            error:
-              gravacao.error ||
-              "Não foi possível gravar esta foto na ficha. Libere espaço no aparelho e tente de novo.",
-          };
-        }
-        lancamentosFotoConferenciaRef.current.set(fotoIdx, r.itens);
-        fotosLancadasConferenciaRef.current.add(fotoIdx);
-        setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
+      // No AppData/ficha rebuilding or cloud sync between photos.
+      lancamentosFotoConferenciaRef.current.set(fotoIdx, r.itens);
+      fotosLancadasConferenciaRef.current.add(fotoIdx);
+      persistirDraftConferenciaEmMemoria();
+      const draft = getConferenciaDraftMemoria(selectedNota.id);
+      const gravacao = draft && coopId
+        ? salvarConferenciaCheckpoint(
+            conferenciaCheckpointKey(user.id, coopId, selectedNota.id, selectedNota.relancadaEm),
+            { ...draft, fotoIdx: Math.min(fotoIdx + 1, totalFotos - 1), itens: [] }
+          )
+        : { ok: false, error: "Não foi possível preparar o rascunho da conferência." };
+      if (!gravacao.ok) {
+        lancamentosFotoConferenciaRef.current.delete(fotoIdx);
+        fotosLancadasConferenciaRef.current.delete(fotoIdx);
         persistirDraftConferenciaEmMemoria();
-        return { ok: true };
-      };
-
-      return persistirNaFicha();
+        return { ok: false, error: gravacao.error };
+      }
+      setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
+      return { ok: true };
     },
     [
       user,
@@ -1292,7 +1243,6 @@ export default function NotasPedidoStaffMain() {
       conferenciaDivisaoIds,
       resolverDivisaoConferencia,
       persistirDraftConferenciaEmMemoria,
-      persistirFotoConferenciaNaFicha,
     ]
   );
 
@@ -1389,7 +1339,7 @@ export default function NotasPedidoStaffMain() {
             setConferirErrors({ itens: lanc.error });
             return;
           }
-          setLancadoMsg(`Foto ${atual + 1} lançada na ficha. Preencha a foto ${clamped + 1}.`);
+          setLancadoMsg(`Foto ${atual + 1} salva no rascunho. Preencha a foto ${clamped + 1}.`);
           setTimeout(() => setLancadoMsg(""), 3500);
         } else if (clamped > atual + 1) {
           setConferirErrors({
@@ -3291,6 +3241,13 @@ export default function NotasPedidoStaffMain() {
       notaComFoto = d.notasPedido.find((n) => n.id === nota.id) ?? nota;
     }
     const totalFotos = contarFotosEnviadasNota(notaComFoto);
+    if (!mesmaNota && user && coopId && notaComFoto.status === "aguardando_conferencia") {
+      const checkpoint = lerConferenciaCheckpoint(
+        conferenciaCheckpointKey(user.id, coopId, notaComFoto.id, notaComFoto.relancadaEm), notaComFoto.id
+      );
+      clearConferenciaDraftMemoria(notaComFoto.id);
+      if (checkpoint) setConferenciaDraftMemoria(checkpoint);
+    }
     if (!mesmaNota && totalFotos === 1) {
       const cnpj = notaComFoto.cooperativaCnpj ?? (d && coopId ? getCooperativaCnpj(d, coopId) : undefined);
       const emCache = cnpj ? getConferenciaFotoBlobCachedIfLoaded(cnpj, nota.id, 0) : undefined;
@@ -3672,7 +3629,7 @@ export default function NotasPedidoStaffMain() {
       }
       setConferirErrors({});
       const proxIdx = Math.min(fotoAtual + 1, qtdFotosAprovadas - 1);
-      setLancadoMsg(`Foto ${fotoAtual + 1} de ${qtdFotosAprovadas} registrada. Preencha a foto ${proxIdx + 1}.`);
+      setLancadoMsg(`Foto ${fotoAtual + 1} de ${qtdFotosAprovadas} salva no rascunho. Preencha a foto ${proxIdx + 1}.`);
       setTimeout(() => setLancadoMsg(""), 2800);
       avancarParaFotoConferencia(proxIdx);
       return;
@@ -3962,6 +3919,9 @@ export default function NotasPedidoStaffMain() {
       return;
     }
 
+    if (!persistAprovacaoErro && user && coopId) removerConferenciaCheckpoint(
+      conferenciaCheckpointKey(user.id, coopId, notaId, selectedNota.relancadaEm)
+    );
     clearConferenciaDraftMemoria(notaId);
     removerNotaDaFilaSticky(notaId);
     requestAppSyncLight();
@@ -4081,6 +4041,7 @@ export default function NotasPedidoStaffMain() {
     markNotaConferenciaDecididaLocalmente(notaId);
     removerNotaDaFilaSticky(notaId);
 
+    if (coopId) removerConferenciaCheckpoint(conferenciaCheckpointKey(user.id, coopId, notaId, selectedNota.relancadaEm));
     clearConferenciaDraftMemoria(notaId);
     const dAtual = getDataOperationalTruth() ?? data;
     const chaveAtual = getChaveGrupoConferencia(selectedNota, dAtual, coopId);
@@ -5817,7 +5778,7 @@ export default function NotasPedidoStaffMain() {
             <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 lg:p-6 space-y-4 bg-gray-50">
               {filaConferenciaTotal > 1 && (
                 <AlertBanner variant="info" title={`Fila: ${filaConferenciaPos} de ${filaConferenciaTotal} entregas`}>
-                  Ao aprovar, a próxima entrega abre aqui mesmo — sem fechar a tela — até lançar todas.
+                  Cada foto fica salva neste aparelho. Ao concluir a entrega, os valores entram na ficha e sincronizam em segundo plano; a próxima entrega abre aqui mesmo.
                 </AlertBanner>
               )}
               {(() => {
