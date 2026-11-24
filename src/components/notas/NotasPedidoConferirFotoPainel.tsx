@@ -32,6 +32,7 @@ export type NotasPedidoConferirFotoPainelProps = {
   conferenciaFotoErro: string;
   conferenciaTransicao: boolean;
   fotosLancadasUi: ReadonlySet<number>;
+  progressoEmRascunho?: boolean;
   onAmpliarFoto: () => void;
   onFotoImgError: (fotoIdx: number) => void;
   onRetryFotoAtual: (fotoIdx: number) => void;
@@ -50,6 +51,7 @@ export function NotasPedidoConferirFotoPainel({
   conferenciaFotoErro,
   conferenciaTransicao,
   fotosLancadasUi,
+  progressoEmRascunho = false,
   onAmpliarFoto,
   onFotoImgError,
   onRetryFotoAtual,
@@ -168,8 +170,8 @@ export function NotasPedidoConferirFotoPainel({
         {totalFotosNav > 1 ? (
           <div className="shrink-0 border-t border-white/10 px-2 py-2 space-y-2 bg-gray-900/95">
             <p className="text-center text-xs font-semibold text-green-300/95 tabular-nums">
-              {fotosLancadasUi.size} de {totalFotosNav} foto{fotosLancadasUi.size !== 1 ? "s" : ""} lançada
-              {fotosLancadasUi.size !== 1 ? "s" : ""} na ficha
+              {fotosLancadasUi.size} de {totalFotosNav} foto{fotosLancadasUi.size !== 1 ? "s" : ""} {progressoEmRascunho ? "salva" : "lançada"}
+              {fotosLancadasUi.size !== 1 ? "s" : ""} {progressoEmRascunho ? "neste aparelho" : "na ficha"}
               {fotosLancadasUi.size >= totalFotosNav ? " · pronta para aprovar" : ""}
             </p>
             <div className="flex flex-nowrap overflow-x-auto gap-2 pb-0.5 justify-start sm:justify-center max-w-full [scrollbar-width:thin]">

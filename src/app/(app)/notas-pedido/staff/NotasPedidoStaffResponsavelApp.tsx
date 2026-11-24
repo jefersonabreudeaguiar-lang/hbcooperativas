@@ -5735,6 +5735,7 @@ export default function NotasPedidoStaffMain() {
               conferenciaFotoErro={conferenciaFotoErro}
               conferenciaTransicao={conferenciaTransicao}
               fotosLancadasUi={fotosLancadasUi}
+              progressoEmRascunho
               onAmpliarFoto={() => setConferenciaFotoAmpliada(true)}
               onFotoImgError={(idx) => {
                 if (idx !== conferenciaFotoIdx) return;
