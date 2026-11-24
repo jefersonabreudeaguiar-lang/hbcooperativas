@@ -36,9 +36,11 @@ export async function atualizarEntradaStaff(user: Omit<User, "password">, ativa:
     await aguardarEscritasStaff(staffEntradaEscritaOcupada, ativa);
     const owner = user.cooperativaCnpj ? `${user.id}:${user.role}:${user.cooperativaCnpj}:${APP_BUILD_VERSION}` : '';
     let store: Storage | null = null;
+    let cadastrosConsulta: ReturnType<typeof fetchCooperadosFromCloud> | undefined;
     try { if (typeof window !== 'undefined') store = window.localStorage; } catch { /* optional accelerator */ }
     const existing = await conferirEntradaStaffExistente(owner, getData, async () => {
-      const [revision, cadastros] = await Promise.all([fetchCooperativaCloudRevision(user.cooperativaCnpj!), fetchCooperadosFromCloud(user.cooperativaCnpj!, { confirmarCompleta: true })]);
+      cadastrosConsulta = lerEntradaStaffComRetry("os cooperados", () => fetchCooperadosFromCloud(user.cooperativaCnpj!, { confirmarCompleta: true }), (r) => r.ok, ativa);
+      const [revision, cadastros] = await Promise.all([fetchCooperativaCloudRevision(user.cooperativaCnpj!), cadastrosConsulta]);
       if (!revision || !cadastros.ok) return null;
       const current = getData(), coopId = resolveGestaoCooperativaId(user, current);
       if (!coopId) return null;
@@ -47,13 +49,13 @@ export async function atualizarEntradaStaff(user: Omit<User, "password">, ativa:
     }, store);
     if (!ativa()) throw Error('Entrada cancelada.');
     if (existing) return existing;
-    const revision = await atualizarEntradaStaffLivre(user, ativa);
+    const revision = await atualizarEntradaStaffLivre(user, ativa, cadastrosConsulta);
     await registrarEntradaStaffConferida(owner, getData(), revision, store);
     return revision;
   } finally { release(); }
 }
 
-async function atualizarEntradaStaffLivre(user: Omit<User, "password">, ativa: () => boolean): Promise<CooperativaCloudRevision> {
+async function atualizarEntradaStaffLivre(user: Omit<User, "password">, ativa: () => boolean, cadastrosConsulta?: ReturnType<typeof fetchCooperadosFromCloud>): Promise<CooperativaCloudRevision> {
   const startedAt = Date.now();
   const current = getData();
   const cnpj = await resolveCooperativaCnpj(current, resolveGestaoCooperativaId(user, current), user);
@@ -61,7 +63,7 @@ async function atualizarEntradaStaffLivre(user: Omit<User, "password">, ativa: (
   const coopId = await ensureCooperativaLocalForCnpj(cnpj);
   if (!coopId || !ativa()) throw new Error("Não foi possível confirmar a cooperativa.");
   const [cadastros, entregas, response] = await Promise.all([
-    lerEntradaStaffComRetry("os cooperados", () => fetchCooperadosFromCloud(cnpj, { confirmarCompleta: true }), (r) => r.ok, ativa),
+    cadastrosConsulta ?? lerEntradaStaffComRetry("os cooperados", () => fetchCooperadosFromCloud(cnpj, { confirmarCompleta: true }), (r) => r.ok, ativa),
     lerEntradaStaffComRetry("as entregas", () => fetchNotasPedidoFromCloud(cnpj, { forceFull: true, repairFila: false, confirmarCompleta: true }), (r) => r.ok && !r.delta, ativa),
     lerEntradaStaffComRetry("o financeiro e os contratos", async () => {
       const res = await secureApiFetch(`/api/cooperativa-sync?cnpj=${cnpj}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) });

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { readVersionedNota } from "@/lib/supabase/versionedNotaReadCache";
 import type { NotaPedido } from "@/types";
 import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
 import { protectNotaAgainstStatusDowngrade, isNotaNaFilaConferenciaResponsavel, sanitizarNotaParaFilaConferencia } from "@/utils/notaStatus";
@@ -375,7 +376,7 @@ export async function uploadNotaToStorage(
 const NOTAS_STORAGE_DOWNLOAD_CONCURRENCY = 16;
 
 /** Lista só os `<notaId>.json` da pasta do CNPJ (pastas de fotos ficam de fora). */
-async function listNotaJsonFileNames(supabase: SupabaseClient, cnpj: string, strict = false): Promise<string[]> {
+async function listNotaJsonFileNames(supabase: SupabaseClient, cnpj: string, strict = false, versions?: Map<string, string>): Promise<string[]> {
   if (!strict) await ensureEntregasBucket(supabase);
   const names: string[] = [];
   let offset = 0;
@@ -387,7 +388,13 @@ async function listNotaJsonFileNames(supabase: SupabaseClient, cnpj: string, str
     if (error && strict) throw new Error('Não foi possível listar todas as entregas.');
     if (error || !page?.length) break;
     for (const file of page) {
-      if (file.name.endsWith(".json")) names.push(file.name);
+      if (file.name.endsWith(".json")) {
+        names.push(file.name);
+        const etag = file.metadata?.eTag;
+        if (typeof etag === "string" && etag && file.updated_at) {
+          versions?.set(file.name, `${file.id}:${file.updated_at}:${etag}`);
+        }
+      }
     }
     if (page.length < pageSize) break;
     offset += pageSize;
@@ -398,7 +405,7 @@ async function listNotaJsonFileNames(supabase: SupabaseClient, cnpj: string, str
 async function downloadNotasJsonParallel(
   supabase: SupabaseClient,
   cnpj: string,
-  fileNames: readonly string[], strict = false
+  fileNames: readonly string[], strict = false, versions?: Map<string, string>
 ): Promise<NotaPedido[]> {
   const notas: NotaPedido[] = [];
   let cursor = 0;
@@ -407,31 +414,39 @@ async function downloadNotasJsonParallel(
     while (!failed) {
       const idx = cursor++;
       if (idx >= fileNames.length) return;
-      const download = () => supabase.storage.from(BUCKET).download(
-        `${cnpj}/${fileNames[idx]}`, { cacheNonce: crypto.randomUUID() },
-        { cache: "no-store", ...(strict ? { signal: AbortSignal.timeout(8_000) } : {}) }
-      );
-      let { data: blob, error: dlErr } = await download();
-      if (strict && !failed && (dlErr || !blob)) {
-        ({ data: blob, error: dlErr } = await download());
-      }
-      if (dlErr || !blob) {
-        if (strict) {
-          failed = true;
-          throw new Error('Não foi possível ler todas as entregas.');
+      const read = async (): Promise<NotaPedido> => {
+        const download = () => supabase.storage.from(BUCKET).download(
+          `${cnpj}/${fileNames[idx]}`, { cacheNonce: crypto.randomUUID() },
+          { cache: "no-store", ...(strict ? { signal: AbortSignal.timeout(8_000) } : {}) }
+        );
+        let { data: blob, error: dlErr } = await download();
+        if (strict && !failed && (dlErr || !blob)) {
+          ({ data: blob, error: dlErr } = await download());
         }
-        continue;
-      }
+        if (dlErr || !blob) {
+          if (strict) {
+            failed = true;
+            throw new Error('Não foi possível ler todas as entregas.');
+          }
+          throw new Error('Não foi possível ler a entrega.');
+        }
+        try {
+          const parsed = JSON.parse(await blob.text()) as NotaPedido;
+          if (parsed?.id) return parsed;
+          else if (strict) throw new Error('Entrega inválida.');
+        } catch {
+          if (strict) {
+            failed = true;
+            throw new Error('Não foi possível validar todas as entregas.');
+          }
+          throw new Error('Entrega inválida.');
+        }
+        throw new Error('Entrega inválida.');
+      };
       try {
-        const parsed = JSON.parse(await blob.text()) as NotaPedido;
-        if (parsed?.id) notas.push(parsed);
-        else if (strict) throw new Error('Entrega inválida.');
-      } catch {
-        if (strict) {
-          failed = true;
-          throw new Error('Não foi possível validar todas as entregas.');
-        }
-        /* ignore corrupt file */
+        notas.push(await readVersionedNota(`${BUCKET}/${cnpj}/${fileNames[idx]}`, versions?.get(fileNames[idx]), read));
+      } catch (error) {
+        if (strict) { failed = true; throw error; }
       }
     }
   };
@@ -446,9 +461,10 @@ export async function fetchNotasFromStorage(
   supabase: SupabaseClient,
   cnpj: string, strict = false
 ): Promise<NotaPedido[]> {
-  const names = await listNotaJsonFileNames(supabase, cnpj, strict);
+  const versions = strict ? new Map<string, string>() : undefined;
+  const names = await listNotaJsonFileNames(supabase, cnpj, strict, versions);
   if (!names.length) return [];
-  return downloadNotasJsonParallel(supabase, cnpj, names, strict);
+  return downloadNotasJsonParallel(supabase, cnpj, names, strict, versions);
 }
 
 export async function fetchNotaFromStorage(
