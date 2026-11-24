@@ -1,6 +1,7 @@
 "use client";
 
 import { normalizeUserRole, resolveAppUserRole } from "@/permissions";
+import { conferenciaAfterPaint } from "@/lib/conferencia/conferenciaAfterPaint";
 import { resolveMobileCooperadoId } from "@/lib/mobileExperience";
 import type { AppData, AuditAction, User, Cooperado, Cooperativa, PrestacaoContas, UserRole } from "@/types";
 import { emptyInitialData, DEMO_ENTITY_IDS, DEMO_EMAILS, DEMO_CNPJ } from "@/mock/data";
@@ -113,6 +114,9 @@ let saveBatchPending: AppData | null = null;
 /** U2 — gravação em localStorage adiada durante conferência (evita JSON.stringify síncrono na aprovação). */
 let conferenciaDeferPersistDepth = 0;
 let conferenciaDeferPersistTimer: ReturnType<typeof setTimeout> | null = null;
+type ConferenciaPersistResult = { ok: true } | { ok: false; error: string };
+let conferenciaAfterPaintScheduled = false;
+let conferenciaPersistCallbacks: Array<(result: ConferenciaPersistResult) => void> = [];
 const CONFERENCIA_DEFER_PERSIST_FLUSH_MS = 360;
 let dataRevision = 0;
 let dataWarmScheduled = false;
@@ -436,8 +440,33 @@ function persistConferenciaModalSnapshotWithFallback(
   return saved.ok ? { ok: true } : { ok: false, error: saved.error };
 }
 
-export function endConferenciaModalSaveBatch(): { ok: true } | { ok: false; error: string } {
+export function endConferenciaModalSaveBatch(opts?: {
+  afterPaint?: boolean;
+  onPersist?: (result: { ok: true } | { ok: false; error: string }) => void;
+}): { ok: true } | { ok: false; error: string } {
   endSaveBatch();
+  if (opts?.afterPaint && memoryCache) {
+    // The caller already saved a small recovery checkpoint before mutating.
+    // This success acknowledges scheduling, not durable/cloud confirmation.
+    if (opts.onPersist) conferenciaPersistCallbacks.push(opts.onPersist);
+    if (!conferenciaAfterPaintScheduled) {
+      conferenciaAfterPaintScheduled = true;
+      conferenciaAfterPaint(() => {
+        conferenciaAfterPaintScheduled = false;
+        const callbacks = conferenciaPersistCallbacks;
+        conferenciaPersistCallbacks = [];
+        const snapshot = memoryCache;
+        const result: ConferenciaPersistResult = snapshot
+          ? persistConferenciaModalSnapshotWithFallback(snapshot)
+          : { ok: false, error: "Os dados ainda não estão disponíveis para gravar." };
+        notify();
+        for (const callback of callbacks) {
+          try { callback(result); } catch (error) { console.warn("[conferencia-persist]", error); }
+        }
+      });
+    }
+    return { ok: true };
+  }
   if (isConferenciaDeferLocalPersistActive()) {
     notifyImmediate();
     const flushed = flushConferenciaDeferredLocalPersistSync();

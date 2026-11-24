@@ -428,6 +428,7 @@ function aplicarLancamentoFotoConferenciaEmDados(
     conferenciaEscolaAvulsa: string;
     conferenciaDescontoPct: number;
     resolverDivisaoConferencia: ResolverDivisaoConferenciaFn;
+    finalizando?: boolean;
   }
 ): AppData {
   const {
@@ -516,6 +517,9 @@ function aplicarLancamentoFotoConferenciaEmDados(
     fotoIndex: fotoIdx,
     totalFotos,
   });
+  // Finalization below creates the monthly file and final audit once for the
+  // whole delivery; repeating both for every photo grows with the full history.
+  if (opts.finalizando) return { ...d, fichaCorrida: [...d.fichaCorrida, ficha] };
   const arquivosMensais = upsertArquivoMensal(d, base.cooperadoId, base.cooperativaId, base.mesReferencia, {
     notaPedidoIds: [nota.id],
   });
@@ -1031,7 +1035,9 @@ export default function NotasPedidoStaffMain() {
         const count = nota ? contarFotosEnviadasNota(nota) : 0;
         const idx = count > 0 ? (encontrarPrimeiraFotoPendente(count, merged.lancadas) ?? count - 1) : draft.fotoIdx;
         setConferenciaFotoIdx(idx);
-        const itens = d ? loadItensFromInstituicao(d, draft.instId, nota?.cooperativaId, merged.lancamentosPorFoto.get(idx)) : [];
+        const itens = idx === draft.fotoIdx && !merged.lancadas.has(idx) && draft.itens.length
+          ? draft.itens
+          : d ? loadItensFromInstituicao(d, draft.instId, nota?.cooperativaId, merged.lancamentosPorFoto.get(idx)) : [];
         conferenciaItensLiveRef.current = itens;
         setConferenciaItens(itens);
         setConferenciaTotaisUi(calcularTotaisConferenciaItens(itens, draft.descontoPct));
@@ -3718,6 +3724,7 @@ export default function NotasPedidoStaffMain() {
         : valorAprovado;
 
     let persistAprovacaoErro: string | undefined;
+    let persistAprovacaoPendente = false;
     let dadosAposAprovacao: AppData | null = null;
 
     beginConferenciaModalSaveBatch();
@@ -3807,6 +3814,7 @@ export default function NotasPedidoStaffMain() {
             conferenciaEscolaAvulsa,
             conferenciaDescontoPct,
             resolverDivisaoConferencia,
+            finalizando: true,
           });
         }
         const baseData = { ...state, notasPedido };
@@ -3883,7 +3891,20 @@ export default function NotasPedidoStaffMain() {
       setConferirErrors({ itens: error instanceof Error ? error.message : "Não foi possível validar as somas da entrega." });
       return;
     } finally {
-      const batchPersist = endConferenciaModalSaveBatch();
+      persistAprovacaoPendente = true;
+      const batchPersist = endConferenciaModalSaveBatch({
+        afterPaint: true,
+        onPersist: (result) => {
+          if (result.ok) {
+            const saved = getDataOperationalTruth().notasPedido.find(n => n.id === notaId);
+            if (coopId && saved?.status === "conferida" && saved.updatedAt === notaAtualizada?.updatedAt) {
+              removerConferenciaCheckpoint(conferenciaCheckpointKey(user.id, coopId, notaId, selectedNota.relancadaEm));
+            }
+          } else {
+            setSuccessMsg(`${result.error} O rascunho foi preservado neste aparelho. Aguarde a confirmação da nuvem antes de sair.`);
+          }
+        },
+      });
       if (!batchPersist.ok) persistAprovacaoErro = batchPersist.error;
     }
 
@@ -3919,7 +3940,7 @@ export default function NotasPedidoStaffMain() {
       return;
     }
 
-    if (!persistAprovacaoErro && user && coopId) removerConferenciaCheckpoint(
+    if (!persistAprovacaoPendente && !persistAprovacaoErro && user && coopId) removerConferenciaCheckpoint(
       conferenciaCheckpointKey(user.id, coopId, notaId, selectedNota.relancadaEm)
     );
     clearConferenciaDraftMemoria(notaId);
@@ -3989,6 +4010,22 @@ export default function NotasPedidoStaffMain() {
     }
     };
 
+    // Persist just this delivery's inputs first; a refresh can recover even if
+    // it happens before the full AppData snapshot or cloud confirmation.
+    persistirDraftConferenciaEmMemoria();
+    const draftFinal = getConferenciaDraftMemoria(selectedNota.id);
+    if (!draftFinal || !coopId) {
+      setConferirErrors({ itens: "Não foi possível salvar o rascunho desta entrega." });
+      return;
+    }
+    const checkpointFinal = salvarConferenciaCheckpoint(
+      conferenciaCheckpointKey(user.id, coopId, selectedNota.id, selectedNota.relancadaEm),
+      { ...draftFinal, itens: itensConferenciaAtivos, fotoIdx: fotoAtual }
+    );
+    if (!checkpointFinal.ok) {
+      setConferirErrors({ itens: checkpointFinal.error });
+      return;
+    }
     travarLancamentoConferencia();
     try {
       concluirGravacaoAprovacao();
