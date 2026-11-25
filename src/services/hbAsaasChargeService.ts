@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { CobrancaSaasCooperativa, Cooperado, LivroCaixaLancamento } from "@/types";
+import type { CobrancaSaasCooperativa, Cooperado } from "@/types";
 import type {
   HbChargeCooperadoLine,
   HbChargeLineItem,
@@ -23,7 +23,6 @@ import { cooperadosUnicosParaCobranca } from "@/utils/cooperadoDedupe";
 import { confirmAppRepasse } from "@/lib/supabase/contaCoopStorage";
 import {
   fetchOperacionalSync,
-  uploadOperacionalSync,
   type OperacionalSyncPayload,
 } from "@/lib/supabase/cooperativaSyncStorage";
 import {
@@ -62,10 +61,6 @@ function formatDueDate(isoDay: string): string {
 
 function buildChargeKey(cnpj: string, periodoId: string | null, mesReferencia: string): string {
   return `${cnpj}:saas:${periodoId ?? "none"}:repasse:${mesReferencia}`;
-}
-
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
 }
 
 type RepasseAllocRow = {
@@ -894,53 +889,6 @@ async function confirmSaasOnCloud(
   return { ok: true };
 }
 
-async function appendRepasseLivroCaixaCloud(
-  supabase: SupabaseClient,
-  breakdown: HbUnifiedChargeBreakdown,
-  origemId: string,
-  valorReais: number,
-  responsavelNome: string,
-  paidAt: string
-): Promise<void> {
-  const cnpj = breakdown.cooperativeCnpj;
-  const existing = (await fetchOperacionalSync(supabase, cnpj)) as OperacionalSyncPayload | null;
-  const payload: OperacionalSyncPayload = existing ?? {
-    updatedAt: new Date().toISOString(),
-    arquivosMensais: [],
-    pagamentosCooperado: [],
-    comunicados: [],
-    mensalidades: [],
-    descontos: [],
-    config: { descontoPadraoCooperativa: 5 },
-  };
-
-  const livro = [...(payload.livroCaixa ?? [])];
-  if (livro.some((l) => l.origemId === origemId)) return;
-
-  const [ano, mesNum] = breakdown.mesReferenciaContaCoop.split("-");
-  const mesCurto = mesNum && ano ? `${mesNum.padStart(2, "0")}/${ano}` : breakdown.mesReferenciaContaCoop;
-  const dataLanc = paidAt.split("T")[0];
-  const entry: LivroCaixaLancamento = {
-    id: generateId("lc"),
-    cooperativaId: breakdown.cooperativeId,
-    data: dataLanc,
-    mesReferencia: breakdown.mesReferenciaContaCoop,
-    tipo: "debito",
-    valor: round2(valorReais),
-    historico: `Repasse HB · taxa HB Créditos ${CONTA_COOP_DESCONTO_SPLIT.appPercent}% · ${mesCurto} · Asaas`,
-    origem: "hb_app_repasse",
-    origemId,
-    categoria: "HB Créditos",
-    responsavel: responsavelNome,
-    createdAt: paidAt,
-    updatedAt: paidAt,
-  };
-
-  payload.livroCaixa = [...livro, entry];
-  payload.updatedAt = new Date().toISOString();
-  await uploadOperacionalSync(supabase, cnpj, payload);
-}
-
 function asaasPaymentSettled(status: string | undefined | null): boolean {
   const s = (status ?? "").toUpperCase();
   return s === "RECEIVED" || s === "CONFIRMED" || s === "RECEIVED_IN_CASH";
@@ -983,7 +931,6 @@ async function applyConfirmedAsaasPaymentForCharge(
     if (!saas.ok) return saas;
   }
 
-  let livroCaixaOrigemId: string | undefined;
   if (breakdown.repasseDue && breakdown.repasseSubtotalCents > 0 && !charge.repasse_confirmed_at) {
     const repasse = await confirmAppRepasse(supabase, {
       cnpj: breakdown.cooperativeCnpj,
@@ -993,17 +940,6 @@ async function applyConfirmedAsaasPaymentForCharge(
       comprovanteMemo: `Asaas ${payment.id}`,
     });
     if (!repasse.ok) return repasse;
-    livroCaixaOrigemId = repasse.livroCaixaOrigemId ?? repasse.repasse?.livroCaixaOrigemId;
-    if (livroCaixaOrigemId) {
-      await appendRepasseLivroCaixaCloud(
-        supabase,
-        breakdown,
-        livroCaixaOrigemId,
-        breakdown.repasseSubtotalCents / 100,
-        charge.created_by_name ?? confirmedBy,
-        paidAt
-      );
-    }
   }
 
   await updateHbAsaasCharge(supabase, charge.id, {

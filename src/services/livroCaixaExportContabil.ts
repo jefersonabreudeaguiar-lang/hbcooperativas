@@ -473,16 +473,12 @@ export function buildLivroCaixaPacoteContabil(
       .filter((l) => l.origem === "desconto_ficha" && /hb|crédito|credito/i.test(l.historico))
       .reduce((s, l) => s + l.valor, 0)
   );
-  const hbRepasse = round2(
-    lancamentos.filter((l) => l.origem === "hb_app_repasse").reduce((s, l) => s + l.valor, 0)
-  );
   const retencoesCsv = sheetCsv(
     ["Tipo", "Valor período (R$)", "Destino contábil sugerido"],
     [
       ["Taxa cooperativa 5%", taxaMes.toFixed(2), "Receita operacional / taxa de gestão"],
       ["Mensalidade retida na ficha", mensMes.toFixed(2), "Receita de serviços associados"],
       ["HB retido na ficha (mercado)", hbRetido.toFixed(2), "Passivo / compensação HB"],
-      ["Repasse HB app (débito caixa)", hbRepasse.toFixed(2), "Despesa serviços de terceiros"],
     ]
   );
 

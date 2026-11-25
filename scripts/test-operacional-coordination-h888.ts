@@ -16,7 +16,10 @@ import {
   setOperacionalPushSingleFlightEnabledForTests,
 } from "../src/services/operacionalPushSingleFlight.ts";
 import { setSecureApiFetchTestOverrideForTests } from "../src/lib/security/clientSession.ts";
-import { saveDataSafe } from "../src/services/dataStore.ts";
+import { getDataOperationalTruth, saveDataSafe, updateData } from "../src/services/dataStore.ts";
+import { cadastrarOrigemLivroCaixa } from "../src/lib/livro-caixa/livroCaixaOrigemPastas.ts";
+import { criarLancamentoManual } from "../src/services/livroCaixaService.ts";
+import { dataIsoCooperativa } from "../src/utils/format.ts";
 import {
   pushOperacionalToCloud,
   syncCooperativaBidirectional,
@@ -36,6 +39,7 @@ let apiCalls: ApiCall[] = [];
 let operacionalGetPayload: Record<string, unknown> | null = null;
 let operacionalPostDelayMs = 0;
 let operacionalPostCount = 0;
+let onOperacionalGet: (() => void) | undefined;
 
 function parseBody(init?: RequestInit): Record<string, unknown> | null {
   if (!init?.body || typeof init.body !== "string") return null;
@@ -65,6 +69,7 @@ async function mockSecureApiFetch(input: RequestInfo | URL, init?: RequestInit):
   apiCalls.push({ url, init });
 
   if (url.includes("/api/cooperativa-sync?") && method === "GET") {
+    onOperacionalGet?.();
     return new Response(
       JSON.stringify({
         configured: true,
@@ -139,6 +144,7 @@ function ensureBrowserLikeEnvForDataStore(): void {
     },
     addEventListener: () => {},
     removeEventListener: () => {},
+    matchMedia: () => ({ matches: false }),
   } as unknown as Window;
   (globalThis as typeof globalThis & { localStorage: Storage }).localStorage = g.window.localStorage;
 }
@@ -193,6 +199,7 @@ function resetHarness() {
   operacionalPostCount = 0;
   operacionalPostDelayMs = 0;
   operacionalGetPayload = null;
+  onOperacionalGet = undefined;
   resetOperacionalPushSingleFlightForTests();
   setPushOperacionalInternalTestEnterHookForTests(null);
   setPushOperacionalPublicTestEnterHookForTests(null);
@@ -378,7 +385,44 @@ async function testJ_noNestedEnqueueAwaitDeadlock() {
   console.log("PASS — J reentrância enqueue sem await interno (H8.9.60 compat)");
 }
 
+async function testLancamentosDurantePublicacaoDaOrigem() {
+  assert.equal(dataIsoCooperativa(new Date("2026-11-25T00:01:23Z")), "2026-11-24");
+  resetHarness();
+  saveDataSafe(cadastrarOrigemLivroCaixa(appData(CNPJ_A, COOP_A, []), {
+    id: "origem-nova",
+    cooperativaId: COOP_A,
+    nome: "Combustível",
+  }));
+  let leituras = 0;
+  onOperacionalGet = () => {
+    if (++leituras !== 3) return;
+    updateData((d) => criarLancamentoManual(d, COOP_A, "debito", 125.50, "Diesel", {
+      data: "2026-08-01",
+      origemCadastroId: "origem-nova",
+    }));
+    updateData((d) => criarLancamentoManual(d, COOP_A, "credito", 50, "Recebimento", {
+      data: "2026-08-01",
+      origem: "credito_avulso",
+    }));
+  };
+  await pushOperacionalToCloud(CNPJ_A, undefined, COOP_A, {
+    authoritative: true,
+    forceOperacionalPush: true,
+    skipOperationalResetPush: true,
+  });
+  const post = apiCalls.map(({ init }) => parseBody(init)).find(isOperacionalPost);
+  const payload = post?.payload as Pick<AppData, "livroCaixa" | "livroCaixaOrigensCadastro"> | undefined;
+  assert.equal(payload?.livroCaixaOrigensCadastro?.[0]?.id, "origem-nova");
+  assert.deepEqual(payload?.livroCaixa?.map((l) => l.historico), ["Diesel", "Recebimento"]);
+  assert.deepEqual(getDataOperationalTruth().livroCaixa?.map((l) => l.historico), ["Diesel", "Recebimento"]);
+}
+
 async function main() {
+  if (process.argv.includes("--livro-caixa")) {
+    await testLancamentosDurantePublicacaoDaOrigem();
+    console.log("OK — lançamentos preservados durante a publicação da nova origem.");
+    return;
+  }
   await testA_pushPush();
   await testB_pushBidirectional();
   await testC_bidirectionalPush();
@@ -389,7 +433,8 @@ async function main() {
   await testH_twoCnpj();
   await testI_bidirectionalNoPublicPush();
   await testJ_noNestedEnqueueAwaitDeadlock();
-  console.log("\n10/10 testes OK (H8.9.88 coordenação offline).");
+  await testLancamentosDurantePublicacaoDaOrigem();
+  console.log("\n11/11 testes OK (coordenação offline).");
 }
 
 main().catch((e) => {

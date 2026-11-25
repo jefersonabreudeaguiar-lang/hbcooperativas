@@ -2176,24 +2176,16 @@ export async function pushOperacionalToCloudInternal(
 
   // Após awaits dos cooperados, reler de novo e remontar payload se o responsável
   // salvou algo nesse intervalo — evita last-write-wins com blob antigo.
+  if (bundle?.operacional) {
+    bundle = await fetchSyncBundle(digits);
+    if (bundle?.operacional && cloudCooperados.length === 0) {
+      cloudCooperados = (await fetchCooperadosFromCloud(digits)).cooperados;
+    }
+  }
   const afterPushCoop = aplicarPrestacoesContasExcluidas(readPushData());
   let dataForPayload = afterPushCoop;
   if (bundle?.operacional) {
-    bundle = await fetchSyncBundle(digits);
-    if (bundle?.operacional) {
-      if (cloudCooperados.length === 0) {
-        cloudCooperados = (await fetchCooperadosFromCloud(digits)).cooperados;
-      }
-      const voteMerged = mergeOperacionalIntoData(afterPushCoop, bundle.operacional, cid, cloudCooperados);
-      dataForPayload = {
-        ...afterPushCoop,
-        votacaoPautas: voteMerged.votacaoPautas,
-        votacaoVotos: voteMerged.votacaoVotos,
-      };
-      saveDataSafe(dataForPayload);
-    }
-  }
-  if (bundle?.operacional) {
+    const voteMerged = mergeOperacionalIntoData(afterPushCoop, bundle.operacional, cid, cloudCooperados);
     const cloudPag = (bundle.operacional.pagamentosCooperado ?? []).map((p) => ({
       ...p,
       cooperativaId: cid,
@@ -2201,6 +2193,8 @@ export async function pushOperacionalToCloudInternal(
     const localPag = dataForPayload.pagamentosCooperado.filter((p) => p.cooperativaId === cid);
     dataForPayload = {
       ...dataForPayload,
+      votacaoPautas: voteMerged.votacaoPautas,
+      votacaoVotos: voteMerged.votacaoVotos,
       pagamentosCooperado: [
         ...dataForPayload.pagamentosCooperado.filter((p) => p.cooperativaId !== cid),
         ...mergePagamentosCooperadoFromCloud(localPag, cloudPag),

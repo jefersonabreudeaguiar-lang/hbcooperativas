@@ -67,6 +67,7 @@ import {
   listarOrigensCadastroCooperativa,
   listarPastasLivroCaixa,
   nomePastaLivroCaixa,
+  pastaKeyDeLancamento,
   rotuloOrigemLancamento,
   type LivroCaixaPastaKey,
 } from "@/lib/livro-caixa/livroCaixaOrigemPastas";
@@ -76,7 +77,7 @@ import {
   nomeZipPacoteContabil,
 } from "@/services/livroCaixaExportContabil";
 import { downloadLivroCaixaPacoteContabilZip } from "@/utils/livroCaixaExportDownload";
-import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+import { dataIsoCooperativa, formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import type { LivroCaixaOrigem, LivroCaixaTipo, Action, Resource } from "@/types";
 
 const LIVRO_CAIXA_DATA_DOMAINS: AppDataNotifyDomain[] = ["financeiro", "operacional"];
@@ -101,7 +102,7 @@ export default function LivroCaixaPage() {
   const [tipo, setTipo] = useState<LivroCaixaTipo>("credito");
   const [valor, setValor] = useState("");
   const [historico, setHistorico] = useState("");
-  const [dataLanc, setDataLanc] = useState(new Date().toISOString().split("T")[0]);
+  const [dataLanc, setDataLanc] = useState(() => dataIsoCooperativa());
   const [origem, setOrigem] = useState<string>("credito_avulso");
   const [cadastroOrigemOpen, setCadastroOrigemOpen] = useState(false);
   const [novaOrigemNome, setNovaOrigemNome] = useState("");
@@ -112,8 +113,9 @@ export default function LivroCaixaPage() {
   const [editing, setEditing] = useState<LivroCaixaLancamento | null>(null);
   const [exclusao, setExclusao] = useState<LivroCaixaLancamento | null>(null);
   const [buscaSequencia, setBuscaSequencia] = useState("");
+  const lancamentoParaExibir = useRef<string | null>(null);
   const [destaqueSeqId, setDestaqueSeqId] = useState<string | null>(null);
-  const hojeIso = new Date().toISOString().split("T")[0];
+  const hojeIso = dataIsoCooperativa();
   const inicioMesIso = `${hojeIso.slice(0, 8)}01`;
   const [modoVisualizacao, setModoVisualizacao] = useState<"mes" | "periodo">("periodo");
   const [paginaPlanilha, setPaginaPlanilha] = useState(1);
@@ -137,7 +139,7 @@ export default function LivroCaixaPage() {
     setTipo("credito");
     setValor("");
     setHistorico("");
-    setDataLanc(new Date().toISOString().split("T")[0]);
+    setDataLanc(dataIsoCooperativa());
     setOrigem("credito_avulso");
     setEditing(null);
   };
@@ -147,11 +149,6 @@ export default function LivroCaixaPage() {
       return { origem: "origem_cadastrada", origemCadastroId: origem.slice(4) };
     }
     return { origem: origem as LivroCaixaOrigem };
-  };
-
-  const pastaDoFormulario = (): LivroCaixaPastaKey => {
-    const orig = resolverOrigemForm();
-    return orig.origemCadastroId ? `cad:${orig.origemCadastroId}` : `sys:${orig.origem}`;
   };
 
   const openNovo = () => {
@@ -268,6 +265,15 @@ export default function LivroCaixaPage() {
     [lancamentosPasta]
   );
 
+  useEffect(() => {
+    const id = lancamentoParaExibir.current;
+    if (!id) return;
+    const index = planilhaPasta.findIndex(({ lancamento }) => lancamento.id === id);
+    if (index < 0) return;
+    lancamentoParaExibir.current = null;
+    setPaginaPlanilha(Math.floor(index / LIVRO_CAIXA_LINHAS_POR_PAGINA) + 1);
+  }, [planilhaPasta]);
+
   const saldoFinalMes = useMemo(() => {
     if (planilhaLinhas.length) return saldoCorridoFinalPlanilha(planilhaLinhas, saldoInicialVisao);
     return modoVisualizacao === "periodo" ? saldoInicialVisao : saldoInicialMes;
@@ -308,8 +314,8 @@ export default function LivroCaixaPage() {
     const texto = valor.trim();
     const formatoValido = /^\d+(?:[.,]\d{1,2})?$/.test(texto) || /^\d{1,3}(?:\.\d{3})+,\d{1,2}$/.test(texto);
     const v = Number(texto.includes(",") ? texto.replace(/\./g, "").replace(",", ".") : texto);
-    if (!formatoValido || !Number.isSafeInteger(Math.round(v * 100)) || v <= 0 || !historico.trim()) {
-      setFeedbackCaixa("Informe um valor válido e preencha o histórico.");
+    if (!formatoValido || !Number.isSafeInteger(Math.round(v * 100)) || v <= 0 || !historico.trim() || !dataLanc) {
+      setFeedbackCaixa("Informe um valor válido, a data e o histórico.");
       return;
     }
 
@@ -358,13 +364,22 @@ export default function LivroCaixaPage() {
         });
       }
     });
-    if (!saved.ok || !alterado) {
+    const salvo = saved.ok && alterado ? saved.data.livroCaixa?.find((l) => l.id === id) : undefined;
+    if (!salvo) {
       setFeedbackCaixa(saved.ok ? "Este lançamento já foi registrado ou não está disponível para edição." : saved.error);
       return;
     }
 
     novoLancamentoId.current = null;
-    setAbaLivro(pastaDoFormulario());
+    lancamentoParaExibir.current = salvo.id;
+    setDestaqueSeqId(salvo.id);
+    setAbaLivro(pastaKeyDeLancamento(salvo));
+    if (modoVisualizacao === "mes") {
+      setMes(salvo.mesReferencia);
+    } else {
+      if (salvo.data < filtroDe) setFiltroDe(salvo.data);
+      if (salvo.data > filtroAte) setFiltroAte(salvo.data);
+    }
     setModalOpen(false);
     resetForm();
     flushStaffGestaoLastGoodNow(getDataOperationalTruth());
@@ -780,7 +795,11 @@ export default function LivroCaixaPage() {
                   openNovo();
                   if (pastaAtiva === "sys:debito_avulso") setTipo("debito");
                   if (pastaAtiva.startsWith("cad:")) setOrigem(pastaAtiva);
-                  else setOrigem(pastaAtiva.slice(4));
+                  else {
+                    const origemPasta = pastaAtiva.slice(4);
+                    setOrigem(origemPasta);
+                    if (origemPasta === "debito_avulso") setTipo("debito");
+                  }
                   setModalOpen(true);
                 }}
               >
@@ -1061,7 +1080,7 @@ export default function LivroCaixaPage() {
               onChange={(e) => {
                 const t = e.target.value as LivroCaixaTipo;
                 setTipo(t);
-                if (origem.startsWith("cad:")) return;
+                if (origem.startsWith("cad:") || origem === "prestacao_contas" || origem === "outro") return;
                 setOrigem(t === "credito" ? "credito_avulso" : "debito_avulso");
               }}
             >
@@ -1120,7 +1139,7 @@ export default function LivroCaixaPage() {
           >
             Cancelar
           </Button>
-          <Button onClick={salvarLancamento} disabled={publicando}>{editing ? "Salvar alterações" : "Salvar"}</Button>
+          <Button onClick={salvarLancamento} disabled={publicando}>{publicando ? "Sincronizando…" : editing ? "Salvar alterações" : "Salvar"}</Button>
         </div>
       </Modal>
     </div>

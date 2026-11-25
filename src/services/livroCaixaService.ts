@@ -9,7 +9,6 @@ import type {
   PagamentoCooperadoRegistro,
   User,
 } from "@/types";
-import { CONTA_COOP_DESCONTO_SPLIT } from "@/config/contaCoopEconomia";
 import { round2 } from "@/utils/calculations";
 import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { isLancamentoManualEditavel, ORIGENS_LANCAMENTO_MANUAL } from "@/lib/livro-caixa/lancamentoManual";
@@ -260,7 +259,8 @@ export function lancamentosLivroCaixa(data: AppData, cooperativaId: string, mesR
     .filter(e => !e.cooperativaId || e.cooperativaId === cooperativaId)
     .map(e => e.id));
   let items = (data.livroCaixa ?? []).filter(l =>
-    l.cooperativaId === cooperativaId && !(excluidos.has(l.id) && isLancamentoManualEditavel(l))
+    l.cooperativaId === cooperativaId && l.origem !== "hb_app_repasse" &&
+    !(excluidos.has(l.id) && isLancamentoManualEditavel(l))
   );
   if (mesReferencia) {
     items = items.filter((l) => lancamentoVisivelNoMesReferencia(data, l, mesReferencia));
@@ -726,34 +726,6 @@ export function lancarMensalidadeNoCaixa(data: AppData, mensalidade: Mensalidade
   });
 }
 
-export function lancarRepasseHbContaCoopNoCaixa(
-  data: AppData,
-  input: {
-    cooperativaId: string;
-    mesReferencia: string;
-    valorReais: number;
-    origemId: string;
-    responsavel?: string;
-    paidAt?: string;
-  }
-): AppData {
-  const dataLanc = (input.paidAt ?? new Date().toISOString()).split("T")[0];
-  const [ano, mesNum] = input.mesReferencia.split("-");
-  const mesCurto = mesNum && ano ? `${mesNum.padStart(2, "0")}/${ano}` : input.mesReferencia;
-  return appendLivroCaixaLancamento(data, {
-    cooperativaId: input.cooperativaId,
-    data: dataLanc,
-    mesReferencia: input.mesReferencia,
-    tipo: "debito",
-    valor: round2(input.valorReais),
-    historico: `Repasse HB · taxa HB Créditos ${CONTA_COOP_DESCONTO_SPLIT.appPercent}% · ${mesCurto}`,
-    origem: "hb_app_repasse",
-    origemId: input.origemId,
-    categoria: "HB Créditos",
-    responsavel: input.responsavel,
-  });
-}
-
 /** Remove lançamentos automáticos de pagamentos ainda não confirmados pelo responsável. */
 export function removerLancamentosCaixaPagamentoAguardando(
   data: AppData,
@@ -931,9 +903,9 @@ export function auditarLivroCaixaContabilCooperativa(data: AppData, cooperativaI
 
 export function mesesLivroCaixa(data: AppData, cooperativaId: string): string[] {
   const set = new Set(
-    (data.livroCaixa ?? []).filter((l) => l.cooperativaId === cooperativaId).map((l) => l.mesReferencia)
+    lancamentosLivroCaixa(data, cooperativaId).map((l) => l.mesReferencia)
   );
-  for (const l of (data.livroCaixa ?? []).filter((x) => x.cooperativaId === cooperativaId)) {
+  for (const l of lancamentosLivroCaixa(data, cooperativaId)) {
     if (l.data.length >= 7) set.add(l.data.slice(0, 7));
   }
   for (const p of data.pagamentosCooperado) {
@@ -950,7 +922,7 @@ export function mesesLivroCaixa(data: AppData, cooperativaId: string): string[] 
 /** Primeira data com movimento (lançamento ou PIX confirmado) — período padrão da planilha. */
 export function dataInicioMovimentoLivroCaixa(data: AppData, cooperativaId: string): string {
   const datas: string[] = [];
-  for (const l of (data.livroCaixa ?? []).filter((x) => x.cooperativaId === cooperativaId)) {
+  for (const l of lancamentosLivroCaixa(data, cooperativaId)) {
     if (l.data) datas.push(l.data);
   }
   for (const p of data.pagamentosCooperado) {
@@ -964,7 +936,7 @@ export function dataInicioMovimentoLivroCaixa(data: AppData, cooperativaId: stri
 
 /** null significa que o histórico ainda não chegou; não fixar um mês vazio no primeiro frame. */
 export function inicioPeriodoLivroCaixaComHistorico(data: AppData, cooperativaId: string): string | null {
-  const temMovimento = (data.livroCaixa ?? []).some((l) => l.cooperativaId === cooperativaId) ||
+  const temMovimento = lancamentosLivroCaixa(data, cooperativaId).length > 0 ||
     data.pagamentosCooperado.some((p) => p.cooperativaId === cooperativaId && p.status === "confirmado");
   return temMovimento ? dataInicioMovimentoLivroCaixa(data, cooperativaId) : null;
 }

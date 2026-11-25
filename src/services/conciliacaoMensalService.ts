@@ -114,10 +114,6 @@ export function calcularConciliacaoMensal(data: AppData, mesReferencia: string, 
   linhas.push({ id: 'conta_coop', label: 'HB Créditos retidos', descricao: 'Descontos HB efetivamente retidos nos pagamentos deste mês de caixa. O extrato de compras exige conferência própria no ledger HB.',
     valorA: hb, valorB: hb, labelA: 'Retido nos pagamentos', labelB: 'Referência de retenção', diferenca: 0, status: hb ? 'parcial' : 'ausente',
     detalhe: hb ? 'Informativo: este valor não comprova, sozinho, conciliação com o ledger de compras HB.' : 'Nenhuma retenção HB nos pagamentos deste mês.' });
-  const repasse = sumCash('hb_app_repasse', 'debito');
-  linhas.push({ id: 'hb_app_repasse_caixa', label: 'Repasses HB registrados', descricao: 'Pagamentos de repasse identificados no Livro Caixa; não substitui confirmação do recebedor na nuvem.',
-    valorA: repasse, valorB: repasse, labelA: 'Débito salvo no caixa', labelB: 'Referência de registro', diferenca: 0,
-    status: repasse || hb ? 'parcial' : 'ausente', detalhe: 'Conferir a liquidação na área HB Créditos. Esta linha é informativa.' });
   const alertas: AlertaConciliacao[] = [];
   for (const l of linhas.filter(l => l.status === 'divergencia')) alertas.push({ id: `div_${l.id}`, severidade: 'critico', titulo: `Divergência: ${l.label}`,
     descricao: l.detalhe ?? `Diferença de R$ ${Math.abs(l.diferenca).toFixed(2)} entre ${l.labelA} e ${l.labelB}.`, href: hrefRelatorio('conciliacao_mensal', { mes: mesReferencia }) });

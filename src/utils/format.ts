@@ -81,6 +81,15 @@ export function formatMesReferenciaCurto(mes: string): string {
 /** Calendário operacional da cooperativa (vendas, NF mercado, fechamento). */
 export const COOPERATIVA_TIME_ZONE = "America/Sao_Paulo";
 
+export function dataIsoCooperativa(date = new Date()): string {
+  return date.toLocaleDateString("en-CA", {
+    timeZone: COOPERATIVA_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+}
+
 export function mesReferenciaFromDate(date: Date): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: COOPERATIVA_TIME_ZONE,

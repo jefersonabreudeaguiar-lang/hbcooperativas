@@ -10,10 +10,8 @@ import { useAppDataSelector } from "@/hooks/useAppData";
 import { useStaffConferenciaModalOpen } from "@/hooks/useStaffConferenciaModalOpen";
 import { isStaffConferenciaModalOpen } from "@/lib/performance/staffConferenciaSyncTier";
 import { getUserCooperativaId } from "@/utils/cooperativa";
-import { updateData, getData } from "@/services/dataStore";
+import { updateData } from "@/services/dataStore";
 import { patchCobrancaSaas, sincronizarCicloCobrancaSaas } from "@/services/cobrancaSaasService";
-import { lancarRepasseHbContaCoopNoCaixa } from "@/services/livroCaixaService";
-import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { formatMesReferencia } from "@/utils/format";
 import { secureApiFetch } from "@/lib/security/clientSession";
@@ -104,13 +102,6 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
     const json = (await res.json()) as {
       ok?: boolean;
       cobrancaSaas?: CobrancaSaasCooperativa;
-      livroCaixaOrigemId?: string;
-      charge?: {
-        status?: string;
-        repasse_confirmed_at?: string | null;
-        repasse_subtotal_cents?: number;
-        breakdown?: HbUnifiedChargeBreakdown;
-      };
     };
     if (!json.ok) return;
 
@@ -121,32 +112,7 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
         return next;
       });
     }
-
-    const chargeBreakdown = json.charge?.breakdown as HbUnifiedChargeBreakdown | undefined;
-    const repasseCents =
-      json.charge?.repasse_subtotal_cents ?? chargeBreakdown?.repasseSubtotalCents ?? 0;
-    if (json.charge?.repasse_confirmed_at && repasseCents > 0 && chargeBreakdown) {
-      const origemId =
-        json.livroCaixaOrigemId ?? `hb_app_asaas_${chargeBreakdown.mesReferenciaContaCoop}`;
-      updateData((d) => {
-        const coop = d.cooperativas.find((c) => c.id === coopId);
-        if (!coop) return d;
-        return lancarRepasseHbContaCoopNoCaixa(d, {
-          cooperativaId: coopId,
-          mesReferencia: chargeBreakdown.mesReferenciaContaCoop,
-          valorReais: repasseCents / 100,
-          origemId,
-          responsavel: user?.name,
-          paidAt: json.charge?.repasse_confirmed_at ?? new Date().toISOString(),
-        });
-      });
-      const synced = getData();
-      const coopAfter = synced.cooperativas.find((c) => c.id === coopId);
-      if (coopAfter?.cnpj) {
-        await pushOperacionalToCloud(coopAfter.cnpj, synced, coopId, { authoritative: true });
-      }
-    }
-  }, [cnpj, coopId, user?.name]);
+  }, [cnpj, coopId]);
 
   const initialLoadKeyRef = useRef("");
 
