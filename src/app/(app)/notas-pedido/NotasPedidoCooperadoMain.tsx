@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select, FormField, Textarea } from "@/components/ui/Form";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { NotaStatusTimeline } from "@/components/notas/NotaStatusTimeline";
+import { CameraEntrega } from "@/components/notas/CameraEntrega";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { PromptDialog, ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
@@ -426,6 +427,7 @@ export default function NotasPedidoCooperadoMain() {
   const [statusFilter, setStatusFilter] = useState("");
   const filtroResponsavelIniciado = useRef(false);
   const [anexarModal, setAnexarModal] = useState(false);
+  const [cameraAnexar, setCameraAnexar] = useState(false);
   const [pwaPreparandoEnvio, setPwaPreparandoEnvio] = useState(false);
   const [pwaEntregasResumosSnap, setPwaEntregasResumosSnap] =
     useState<CooperadoPwaEntregasResumosSnapshot | null>(() => {
@@ -1435,6 +1437,7 @@ export default function NotasPedidoCooperadoMain() {
 
   const fecharAnexarModal = (force = false) => {
     if (!force && (enviando || processandoFoto)) return;
+    setCameraAnexar(false);
 
     if (force) {
       setAnexarModal(false);
@@ -1655,7 +1658,7 @@ export default function NotasPedidoCooperadoMain() {
   const abrirCameraAnexar = useCallback(() => {
     if (processandoFoto || enviando) return;
     if (fotosSessaoAtingiuLimite(fotosSessaoCount)) return;
-    fotoInputRef.current?.click();
+    setCameraAnexar(true);
   }, [enviando, fotosSessaoCount, processandoFoto]);
 
   const scheduleAbrirCameraAnexar = useCallback(() => {
@@ -4919,7 +4922,6 @@ export default function NotasPedidoCooperadoMain() {
         ref={fotoInputRef}
         type="file"
         accept="image/*"
-        capture="environment"
         className="hidden"
         onChange={(e) => void handleFoto(e)}
         disabled={processandoFoto || enviando || limiteFotosSessaoAtingido}
@@ -4932,7 +4934,7 @@ export default function NotasPedidoCooperadoMain() {
         title={anexarSucesso ? "Entrega enviada!" : reenviarNotaId ? "Enviar de novo" : "Enviar fotos da entrega"}
         size="md"
         footer={
-          anexarSucesso ? (
+          cameraAnexar ? undefined : anexarSucesso ? (
             <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
               <Button type="button" variant="secondary" onClick={enviarOutraFoto}>
                 Enviar outra entrega
@@ -4989,7 +4991,19 @@ export default function NotasPedidoCooperadoMain() {
         }
       >
         <div className="space-y-4">
-          {anexarSucesso ? (
+          {cameraAnexar ? (
+            <CameraEntrega
+              onFoto={(file) => {
+                setCameraAnexar(false);
+                void processarFotoArquivo(file);
+              }}
+              onGaleria={() => {
+                setCameraAnexar(false);
+                fotoInputRef.current?.click();
+              }}
+              onFechar={() => setCameraAnexar(false)}
+            />
+          ) : anexarSucesso ? (
             <AlertBanner variant="success" title="Entrega registrada">
               {successMsg || "Sua foto foi enviada para a cooperativa. Ela aparece na lista como Em análise."}
             </AlertBanner>
