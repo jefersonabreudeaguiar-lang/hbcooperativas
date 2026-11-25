@@ -31,6 +31,7 @@ import {
   getControleAnualLivroCaixa,
   isLancamentoManualEditavel,
   isLancamentoSemSequenciaLegado,
+  lancamentosLivroCaixa,
   mesesLivroCaixa,
   mesReferenciaInicialLivroCaixa,
   inicioPeriodoLivroCaixaComHistorico,
@@ -121,7 +122,7 @@ export default function LivroCaixaPage() {
   const [paginaPlanilha, setPaginaPlanilha] = useState(1);
   const periodoInicializadoRef = useRef(false);
   const [filtroDe, setFiltroDe] = useState(inicioMesIso);
-  const [filtroAte, setFiltroAte] = useState(hojeIso);
+  const [filtroAteManual, setFiltroAte] = useState<string | null>(null);
   const [relatorioModo, setRelatorioModo] = useState<LivroCaixaRelatorioPlanilhaOpts["modo"]>("periodo");
   const [dataRelatorio, setDataRelatorio] = useState(hojeIso);
   const [relatorioDe, setRelatorioDe] = useState(inicioMesIso);
@@ -185,6 +186,15 @@ export default function LivroCaixaPage() {
     dataCaixaLastroRef.current = next;
     return next;
   }, [data, coopId, tabActive]);
+
+  const fimPeriodoPadrao = useMemo(() => {
+    if (!dataCaixa || !coopId) return hojeIso;
+    return lancamentosLivroCaixa(dataCaixa, coopId).reduce(
+      (fim, lancamento) => lancamento.data > fim ? lancamento.data : fim,
+      hojeIso
+    );
+  }, [dataCaixa, coopId, hojeIso]);
+  const filtroAte = filtroAteManual ?? fimPeriodoPadrao;
 
   useEffect(() => {
     if (!dataCaixa || !coopId || periodoInicializadoRef.current) return;
