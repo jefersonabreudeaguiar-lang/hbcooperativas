@@ -1,8 +1,6 @@
 export interface WorkerCompressRequest {
   id: string;
-  /** Clonado para o worker — leitura ArrayBuffer fora da UI thread. */
   file: File;
-  mimeType: string;
   maxWidth: number;
   quality: number;
   thumbWidth: number;
@@ -13,8 +11,8 @@ export interface WorkerCompressRequest {
 export interface WorkerCompressSuccess {
   id: string;
   ok: true;
-  compressed: ArrayBuffer;
-  thumbnail: ArrayBuffer;
+  compressed: Blob;
+  thumbnail: Blob;
   width: number;
   height: number;
   outputMime: "image/jpeg" | "image/webp";

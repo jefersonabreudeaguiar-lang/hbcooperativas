@@ -2659,7 +2659,10 @@ export default function NotasPedidoCooperadoMain() {
       setFotoPipelineStep("compressing");
       const [cnpj, processed, fileFingerprint] = await Promise.all([
         cnpjPromise,
-        pipeline.processDeliveryImage(file, abort.signal, { fastEntrega: true }),
+        pipeline.processDeliveryImage(file, abort.signal, { fastEntrega: true }).then((image) => {
+          revokePreviewUrl(image.previewUrl);
+          return image;
+        }),
         skipDupCheck ? Promise.resolve("") : fingerprintFotoFile(file),
       ]);
       if (!cnpj) {
@@ -2751,7 +2754,6 @@ export default function NotasPedidoCooperadoMain() {
       setFotosConfirmadasNaSessao(totalCount);
       setFormErrors((err) => ({ ...err, foto: undefined }));
       setFotoPipelineStep("success");
-      revokePreviewUrl(processed.previewUrl);
       revokeFotoPreview();
       lastFotoFileRef.current = null;
       if (fotoInputRef.current) fotoInputRef.current.value = "";

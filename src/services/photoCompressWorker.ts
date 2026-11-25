@@ -100,7 +100,6 @@ export async function compressImageInWorker(
   const req: WorkerCompressRequest = {
     id,
     file,
-    mimeType: file.type || "image/jpeg",
     maxWidth: options.maxWidth,
     quality: options.quality,
     thumbWidth: options.thumbWidth,
@@ -132,8 +131,8 @@ export async function compressImageInWorker(
 
   return {
     ok: true,
-    compressed: new Blob([response.compressed], { type: response.outputMime }),
-    thumbnail: new Blob([response.thumbnail], { type: response.outputMime }),
+    compressed: response.compressed,
+    thumbnail: response.thumbnail,
     width: response.width,
     height: response.height,
     mimeType: response.outputMime,

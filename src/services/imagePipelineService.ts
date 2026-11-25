@@ -71,6 +71,7 @@ function devLog(label: string, data: Record<string, unknown>) {
   console.debug(`[image-pipeline] ${label}`, data);
 }
 
+import { encodePhotoCanvases } from "@/workers/photoCanvas";
 import { compressImageInWorker } from "@/services/photoCompressWorker";
 
 function throwIfAborted(signal?: AbortSignal) {
@@ -240,14 +241,6 @@ function createCanvas(width: number, height: number): HTMLCanvasElement | Offscr
   return canvas;
 }
 
-function clearCanvas(canvas: HTMLCanvasElement | OffscreenCanvas): void {
-  if ("width" in canvas && "height" in canvas && !(canvas instanceof OffscreenCanvas)) {
-    canvas.width = 0;
-    canvas.height = 0;
-  }
-}
-
-/** Uma decodificação → foto comprimida + miniatura (memória constante). */
 async function processImageSinglePass(
   file: File,
   settings: CompressSettings,
@@ -256,6 +249,8 @@ async function processImageSinglePass(
 ): Promise<{ compressed: Blob; thumbnail: Blob; width: number; height: number }> {
   throwIfAborted(signal);
   await yieldToBrowser();
+  const encode = (canvas: HTMLCanvasElement | OffscreenCanvas, quality: number) =>
+    canvasToBlob(canvas, mimeType, quality);
 
   if (typeof createImageBitmap === "function") {
     try {
@@ -263,111 +258,45 @@ async function processImageSinglePass(
         resizeWidth: settings.maxWidth,
         resizeQuality: "medium",
       });
-      throwIfAborted(signal);
-
-      const width = bitmap.width;
-      const height = bitmap.height;
-      const mainCanvas = createCanvas(width, height);
-      const mainCtx = mainCanvas.getContext("2d");
-      if (!mainCtx) {
+      if (signal?.aborted) {
         bitmap.close();
-        throw new Error("Canvas indisponível.");
+        throwIfAborted(signal);
       }
-      mainCtx.drawImage(bitmap, 0, 0, width, height);
-      bitmap.close();
-
-      const compressed = await canvasToBlob(mainCanvas, mimeType, settings.quality);
-      clearCanvas(mainCanvas);
+      const result = await encodePhotoCanvases(bitmap, bitmap, settings, createCanvas, encode, () => bitmap.close());
       throwIfAborted(signal);
-
-      const thumbBitmap = await createImageBitmap(compressed, {
-        resizeWidth: settings.thumbWidth,
-        resizeQuality: "low",
-      });
-      const thumbCanvas = createCanvas(thumbBitmap.width, thumbBitmap.height);
-      const thumbCtx = thumbCanvas.getContext("2d");
-      if (!thumbCtx) {
-        thumbBitmap.close();
-        throw new Error("Canvas indisponível.");
-      }
-      thumbCtx.drawImage(thumbBitmap, 0, 0);
-      thumbBitmap.close();
-
-      const thumbnail = await canvasToBlob(thumbCanvas, mimeType, settings.thumbQuality);
-      clearCanvas(thumbCanvas);
-      return { compressed, thumbnail, width, height };
+      return result;
     } catch {
-      /* fallback abaixo */
+      throwIfAborted(signal);
+      // Navegadores sem suporte completo a ImageBitmap usam a imagem local.
     }
   }
 
   const objectUrl = URL.createObjectURL(file);
+  const img = new Image();
   try {
-    const { width, height, draw, cleanup } = await new Promise<{
-      width: number;
-      height: number;
-      draw: (ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, w: number, h: number) => void;
-      cleanup: () => void;
-    }>((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        throwIfAborted(signal);
-        const scale = Math.min(1, settings.maxWidth / Math.max(img.width, 1));
-        const width = Math.max(1, Math.round(img.width * scale));
-        const height = Math.max(1, Math.round(img.height * scale));
-        resolve({
-          width,
-          height,
-          draw: (ctx, w, h) => ctx.drawImage(img, 0, 0, w, h),
-          cleanup: () => {
-            img.src = "";
-          },
-        });
-      };
-      img.onerror = () => {
-        img.src = "";
-        reject(new Error("Não foi possível ler a imagem."));
-      };
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("Não foi possível ler a imagem."));
       img.src = objectUrl;
     });
-
-    const mainCanvas = createCanvas(width, height);
-    const mainCtx = mainCanvas.getContext("2d");
-    if (!mainCtx) throw new Error("Canvas indisponível.");
-    draw(mainCtx, width, height);
-    cleanup();
-
-    const compressed = await canvasToBlob(mainCanvas, mimeType, settings.quality);
-    clearCanvas(mainCanvas);
     throwIfAborted(signal);
-
-    const thumbScale = Math.min(1, settings.thumbWidth / Math.max(width, 1));
-    const tw = Math.max(1, Math.round(width * thumbScale));
-    const th = Math.max(1, Math.round(height * thumbScale));
-    const thumbCanvas = createCanvas(tw, th);
-    const thumbCtx = thumbCanvas.getContext("2d");
-    if (!thumbCtx) throw new Error("Canvas indisponível.");
-
-    const tmpUrl = URL.createObjectURL(compressed);
-    await new Promise<void>((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        thumbCtx.drawImage(img, 0, 0, tw, th);
-        img.src = "";
-        URL.revokeObjectURL(tmpUrl);
-        resolve();
-      };
-      img.onerror = () => {
-        URL.revokeObjectURL(tmpUrl);
-        reject(new Error("Memória insuficiente para miniatura."));
-      };
-      img.src = tmpUrl;
-    });
-
-    const thumbnail = await canvasToBlob(thumbCanvas, mimeType, settings.thumbQuality);
-    clearCanvas(thumbCanvas);
-    return { compressed, thumbnail, width, height };
+    const reduced = { ...settings, maxWidth: Math.min(settings.maxWidth, 720) };
+    const result = await encodePhotoCanvases(
+      img, { width: img.naturalWidth, height: img.naturalHeight }, reduced,
+      (width, height) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        return canvas;
+      },
+      encode, () => img.removeAttribute("src"),
+    );
+    throwIfAborted(signal);
+    return result;
   } finally {
+    img.onload = null;
+    img.onerror = null;
+    img.removeAttribute("src");
     URL.revokeObjectURL(objectUrl);
   }
 }
@@ -408,6 +337,7 @@ export async function createThumbnail(
   options: { signal?: AbortSignal } = {}
 ): Promise<{ blob: Blob; mimeType: string; width: number; height: number }> {
   const full = await processDeliveryImage(file, options.signal);
+  revokePreviewUrl(full.previewUrl);
   return {
     blob: full.thumbnail,
     mimeType: full.mimeType,
