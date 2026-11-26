@@ -1,4 +1,5 @@
-import type { Cooperado, Instituicao, NotaPedido } from "@/types";
+import type { Cooperado, Instituicao, NotaPedido, PagamentoCooperadoRegistro } from "@/types";
+import { dataIsoCooperativa } from "@/utils/format";
 
 type EntregaAnual = Pick<NotaPedido, "id" | "numeroNota" | "dataEntrega" | "mesReferencia" | "localEntrega" |
   "status" | "valorBruto" | "valorDesconto" | "valorLiquido" | "itens"> & { contrato: string };
@@ -9,6 +10,7 @@ export interface ExtratoAnualCooperado {
   ano: number;
   ate: string;
   entregas: EntregaAnual[];
+  financeiro?: { recebido: number; descontosEfetivados: number };
 }
 
 export function montarExtratosAnuais(
@@ -17,9 +19,11 @@ export function montarExtratosAnuais(
   instituicoes: readonly Pick<Instituicao, "id" | "nome">[],
   ano: number,
   ate: string,
+  pagamentos: readonly PagamentoCooperadoRegistro[],
 ): ExtratoAnualCooperado[] {
   const porCooperado = new Map(cooperados.map(c => [c.id, {
     cooperadoId: c.id, nome: c.nomeCompleto, ano, ate, entregas: [] as EntregaAnual[],
+    financeiro: { recebido: 0, descontosEfetivados: 0 },
   }]));
   const contratos = new Map(instituicoes.map(i => [i.id, i.nome]));
   for (const nota of new Map(notas.map(n => [n.id, n])).values()) {
@@ -32,8 +36,24 @@ export function montarExtratosAnuais(
     extrato.entregas.push({ id, numeroNota, dataEntrega, mesReferencia, localEntrega, status,
       valorBruto, valorDesconto, valorLiquido, itens, contrato: contratos.get(nota.instituicaoId) ?? "" });
   }
+  for (const p of new Map(pagamentos.map(p => [p.id, p])).values()) {
+    const extrato = porCooperado.get(p.cooperadoId);
+    if (!extrato || p.status !== "confirmado") continue;
+    const data = new Date(p.pagoEm);
+    if (!Number.isFinite(data.getTime())) continue;
+    const dia = dataIsoCooperativa(data);
+    if (!dia.startsWith(`${ano}-`) || dia > ate) continue;
+    extrato.financeiro.recebido += Math.round((p.valorLiquido ?? 0) * 100);
+    extrato.financeiro.descontosEfetivados += Math.round((p.descontoCooperativa ?? 0) * 100);
+    for (const desconto of p.descontosExtras ?? []) {
+      if (desconto.tipo !== "credito_avulso") {
+        extrato.financeiro.descontosEfetivados += Math.round(desconto.valor * 100);
+      }
+    }
+  }
   return [...porCooperado.values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")).map(e => ({
-    ...e, entregas: e.entregas.sort((a, b) =>
+    ...e, financeiro: { recebido: e.financeiro.recebido / 100, descontosEfetivados: e.financeiro.descontosEfetivados / 100 },
+    entregas: e.entregas.sort((a, b) =>
       (a.dataEntrega || a.mesReferencia).localeCompare(b.dataEntrega || b.mesReferencia) || a.numeroNota.localeCompare(b.numeroNota)),
   }));
 }

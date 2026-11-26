@@ -26,7 +26,7 @@ export function ExtratoAnualCooperadoPanel({ data, coopId, role, podeExportar, v
   const extratos = useMemo(() => anoValido ? montarExtratosAnuais(
     data.cooperados.filter(c => c.cooperativaId === coopId),
     data.notasPedido.filter(n => n.cooperativaId === coopId),
-    data.instituicoes, ano, ate
+    data.instituicoes, ano, ate, data.pagamentosCooperado.filter(p => p.cooperativaId === coopId)
   ) : [], [data, coopId, ano, anoValido, ate]);
   const selecionado = extratos.find(e => e.cooperadoId === membro);
   const resumo = selecionado && resumoExtratoAnual(selecionado);
@@ -75,9 +75,10 @@ export function ExtratoAnualCooperadoPanel({ data, coopId, role, podeExportar, v
             </Select>
           </FormField>
         </div>
-        {selecionado && resumo && <p className="mt-4 text-sm">
-          {selecionado.entregas.length} entrega(s) registradas · Bruto {formatCurrency(resumo.bruto)} ·
-          Descontos {formatCurrency(resumo.descontos)} · Líquido {formatCurrency(resumo.liquido)}
+        {selecionado?.financeiro && resumo && <p className="mt-4 text-sm">
+          {resumo.itens.length} produto(s) · Bruto das entregas {formatCurrency(resumo.bruto)} ·
+          Total recebido {formatCurrency(selecionado.financeiro.recebido)} ·
+          Descontos efetivados {formatCurrency(selecionado.financeiro.descontosEfetivados)}
         </p>}
         <div className="mt-4 flex flex-wrap gap-2">
           <Button type="button" disabled={!podeExportar || !selecionado} onClick={() => selecionado && imprimir([selecionado])}>Imprimir selecionado</Button>

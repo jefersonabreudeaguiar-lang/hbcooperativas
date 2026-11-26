@@ -50,8 +50,10 @@ export async function POST(request: Request) {
     const excluidas = new Set((operacional.notasPedidoExcluidas ?? []).map((n) => n.id));
     const notas = mergeNotasSources(tabela.notas, arquivos).filter(n => !excluidas.has(n.id));
     const extratos = montarExtratosAnuais(cooperados.filter(c => c.status !== "desligado"),
-      notas, contratos?.instituicoes ?? [], ano, ano === anoAtual ? hoje : `${ano}-12-31`);
-    if (!extratos.length || !extratos.some(e => e.entregas.length)) return falha("Nenhuma entrega disponível para publicar neste ano.", 409);
+      notas, contratos?.instituicoes ?? [], ano, ano === anoAtual ? hoje : `${ano}-12-31`, operacional.pagamentosCooperado ?? []);
+    if (!extratos.some(e => e.entregas.length || e.financeiro?.recebido || e.financeiro?.descontosEfetivados)) {
+      return falha("Não há entregas ou pagamentos disponíveis para publicar neste ano.", 409);
+    }
     const nomeCooperativa = String(coop.data.nome);
     const revisao = createHash("sha256").update(JSON.stringify({ nomeCooperativa, extratos })).digest("hex");
     const edicao: Edicao = { revisao, nomeCooperativa, extratos };

@@ -1,13 +1,9 @@
 import { jsPDF } from "jspdf";
 import { resumoExtratoAnual, type ExtratoAnualCooperado } from "@/services/extratoAnualCooperado";
-import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
+import { formatCurrency, formatDate } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
 
 const qtd = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 4 });
-const situacoes: Record<string, string> = {
-  pago: "Paga", conferida: "Conferida", entregue: "Entregue",
-  aguardando_conferencia: "Em análise", rejeitada: "Rejeitada",
-};
 
 export function gerarExtratoAnualPdf(extrato: ExtratoAnualCooperado, nomeCooperativa: string) {
   const doc = new jsPDF({ format: "a4", unit: "mm" });
@@ -43,29 +39,38 @@ export function gerarExtratoAnualPdf(extrato: ExtratoAnualCooperado, nomeCoopera
   }
   cabecalho();
   const resumo = resumoExtratoAnual(extrato);
-  linha(`Bruto ${formatCurrency(resumo.bruto)} · Descontos ${formatCurrency(resumo.descontos)} · Líquido ${formatCurrency(resumo.liquido)}`, true);
-  linha("Totais das entregas conferidas, pagas e entregues. O líquido não representa o total de PIX recebidos.");
-  if (resumo.itens.length) {
-    y += 3;
-    linha("Resumo por produto", true);
-    for (const item of resumo.itens) {
-      linha(`${item.nome} · ${qtd.format(item.quantidade)} ${labelUnidade(item.unidade)} · ${formatCurrency(item.centavos / 100)}`);
-    }
-  }
+  linha(`Bruto das entregas: ${formatCurrency(resumo.bruto)}`, true);
+  linha(`Total recebido: ${extrato.financeiro ? formatCurrency(extrato.financeiro.recebido) : "Não apurado nesta edição"}`, true);
+  linha(`Descontos efetivados: ${extrato.financeiro ? formatCurrency(extrato.financeiro.descontosEfetivados) : "Não apurado nesta edição"}`, true);
+  linha("Os produtos somam entregas conferidas, pagas e entregues. Recebimentos e descontos usam a data dos pagamentos confirmados no app.");
   y += 4;
-  linha("Entregas do período", true);
-  if (!extrato.entregas.length) linha("Nenhuma entrega registrada neste período.");
-  for (const entrega of extrato.entregas) {
-    if (y > 260) { doc.addPage(); cabecalho(); }
-    y += 3;
-    const data = entrega.dataEntrega ? formatDate(entrega.dataEntrega) : formatMesReferencia(entrega.mesReferencia);
-    linha(`${data} · Nota ${entrega.numeroNota || "sem número"} · ${situacoes[entrega.status] ?? entrega.status}`, true);
-    const local = [entrega.contrato, entrega.localEntrega].filter(Boolean).join(" · ");
-    if (local) linha(local);
-    for (const item of entrega.itens ?? []) {
-      linha(`${item.produtoNome} · ${qtd.format(item.quantidade)} ${labelUnidade(item.unidade)} × ${formatCurrency(item.precoUnitario)} = ${formatCurrency(item.valorBruto)}`, false, 17);
+  function tituloTabela() {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setFillColor("#E7EFE9");
+    doc.rect(14, y - 3.5, 182, 6, "F");
+    doc.text("Produto", 16, y);
+    doc.text("Quantidade", 130, y);
+    doc.text("Valor", 194, y, { align: "right" });
+    y += 6;
+  }
+  if (!resumo.itens.length) linha("Nenhum produto de entrega aprovada registrado neste período.");
+  else tituloTabela();
+  for (const item of resumo.itens) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    const nome = doc.splitTextToSize(item.nome, 108) as string[];
+    const altura = Math.max(5, nome.length * 3.8 + 1.2);
+    if (y + altura > 278) {
+      doc.addPage();
+      cabecalho();
+      tituloTabela();
+      doc.setFont("helvetica", "normal");
     }
-    linha(`Bruto ${formatCurrency(entrega.valorBruto)} · Descontos ${formatCurrency(entrega.valorDesconto)} · Líquido ${formatCurrency(entrega.valorLiquido)}`);
+    doc.text(nome, 16, y);
+    doc.text(`${qtd.format(item.quantidade)} ${labelUnidade(item.unidade)}`, 130, y);
+    doc.text(formatCurrency(item.centavos / 100), 194, y, { align: "right" });
+    y += altura;
   }
   const paginas = doc.getNumberOfPages();
   for (let i = 1; i <= paginas; i++) {
