@@ -109,6 +109,7 @@ export default function LivroCaixaPage() {
   const [novaOrigemNome, setNovaOrigemNome] = useState("");
   const [publicando, setPublicando] = useState(false);
   const publicandoRef = useRef(false);
+  const publicacaoPendenteRef = useRef<{ alteracaoLocal?: string } | null>(null);
   const novoLancamentoId = useRef<string | null>(null);
   const [feedbackCaixa, setFeedbackCaixa] = useState("");
   const [editing, setEditing] = useState<LivroCaixaLancamento | null>(null);
@@ -320,7 +321,7 @@ export default function LivroCaixaPage() {
   const canDeleteLancamento = check("livro_caixa", "delete");
 
   const salvarLancamento = () => {
-    if (publicandoRef.current || (editing ? !canEditLancamento : !canEdit)) return;
+    if (editing ? !canEditLancamento : !canEdit) return;
     const texto = valor.trim();
     const formatoValido = /^\d+(?:[.,]\d{1,2})?$/.test(texto) || /^\d{1,3}(?:\.\d{3})+,\d{1,2}$/.test(texto);
     const v = Number(texto.includes(",") ? texto.replace(/\./g, "").replace(",", ".") : texto);
@@ -628,20 +629,27 @@ export default function LivroCaixaPage() {
     });
   };
 
-  const publicar = async (opts?: { alteracaoLocal?: string }) => {
+  const publicar = async (opts: { alteracaoLocal?: string } = {}) => {
+    publicacaoPendenteRef.current = opts;
+    setFeedbackCaixa(opts.alteracaoLocal ? `${opts.alteracaoLocal} Sincronizando…` : "Sincronizando Livro Caixa…");
     if (publicandoRef.current) return;
     publicandoRef.current = true;
     setPublicando(true);
-    setFeedbackCaixa(opts?.alteracaoLocal ? `${opts.alteracaoLocal} Sincronizando…` : "Sincronizando Livro Caixa…");
     try {
-      const d = getDataOperationalTruth();
-      const cnpj = await resolveCooperativaCnpj(d, coopId, permUser);
-      if (!cnpj) throw new Error("Não foi possível identificar a cooperativa.");
-      await pushLivroCaixaToCloud(cnpj, coopId);
-      setFeedbackCaixa("Livro Caixa sincronizado.");
-    } catch (error) {
-      const detalhe = error instanceof Error ? error.message : "Falha de conexão.";
-      setFeedbackCaixa(`${opts?.alteracaoLocal ? opts.alteracaoLocal + " " : ""}A nuvem não confirmou a atualização. Use Sincronizar. ${detalhe}`);
+      while (publicacaoPendenteRef.current) {
+        const pendente = publicacaoPendenteRef.current;
+        publicacaoPendenteRef.current = null;
+        try {
+          const cnpj = await resolveCooperativaCnpj(getDataOperationalTruth(), coopId, permUser);
+          if (!cnpj) throw new Error("Não foi possível identificar a cooperativa.");
+          await pushLivroCaixaToCloud(cnpj, coopId);
+          if (!publicacaoPendenteRef.current) setFeedbackCaixa("Livro Caixa sincronizado.");
+        } catch (error) {
+          if (publicacaoPendenteRef.current) continue;
+          const detalhe = error instanceof Error ? error.message : "Falha de conexão.";
+          setFeedbackCaixa(`${pendente.alteracaoLocal ? pendente.alteracaoLocal + " " : ""}A nuvem não confirmou a atualização. Use Sincronizar. ${detalhe}`);
+        }
+      }
     } finally {
       publicandoRef.current = false;
       setPublicando(false);
@@ -663,7 +671,7 @@ export default function LivroCaixaPage() {
               <Button variant="secondary" onClick={() => void publicar()} disabled={publicando}>
                 <Send size={16} /> {publicando ? "Enviando…" : "Sincronizar"}
               </Button>
-              <Button onClick={openNovo} disabled={publicando}>
+              <Button onClick={openNovo}>
                 <Plus size={16} /> Lançamento
               </Button>
             </div>
@@ -1149,7 +1157,7 @@ export default function LivroCaixaPage() {
           >
             Cancelar
           </Button>
-          <Button onClick={salvarLancamento} disabled={publicando}>{publicando ? "Sincronizando…" : editing ? "Salvar alterações" : "Salvar"}</Button>
+          <Button onClick={salvarLancamento}>{editing ? "Salvar alterações" : "Salvar"}</Button>
         </div>
       </Modal>
     </div>
