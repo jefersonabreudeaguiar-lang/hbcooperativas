@@ -2,6 +2,7 @@ import type { AppData, LivroCaixaLancamento, PagamentoCooperadoRegistro } from "
 import { round2 } from "@/utils/calculations";
 import {
   hidratarPagamentoParaLivroCaixa,
+  isOrigemRetencaoContabil,
   pagamentoIdFromOrigemId,
   resolverDataIsoLancamentoLivroCaixa,
 } from "@/services/livroCaixaService";
@@ -86,6 +87,47 @@ export function calcularResumoOperacionalLivroCaixa(
     totalCreditos,
     totalDebitos,
     saldo: round2(totalCreditos - totalDebitos),
+  };
+}
+
+export function calcularResumoLiquidoLivroCaixa(
+  pagamentos: readonly PagamentoCooperadoRegistro[],
+  lancamentos: readonly LivroCaixaLancamento[],
+  inicio: string,
+  fim: string,
+) {
+  const pagamentosPorId = new Map(pagamentos.map((p) => [p.id, p]));
+  let creditos = 0;
+  let debitos = 0;
+  let saldoAnterior = 0;
+  let pagamentosSemLiquido = 0;
+  for (const lancamento of lancamentos) {
+    if (lancamento.data > fim || !lancamento.data || isOrigemRetencaoContabil(lancamento.origem)) continue;
+    let valor = lancamento.valor;
+    if (lancamento.origem === "pagamento_cooperado" && lancamento.tipo === "debito") {
+      const id = pagamentoIdFromOrigemId(lancamento.origemId);
+      const pagamento = id ? pagamentosPorId.get(id) : undefined;
+      if (pagamento?.status === "confirmado" && pagamento.cooperativaId === lancamento.cooperativaId &&
+          Number.isFinite(pagamento.valorLiquido) && pagamento.valorLiquido >= 0) {
+        valor = pagamento.valorLiquido;
+      } else {
+        pagamentosSemLiquido++;
+      }
+    }
+    const centavos = Math.round(valor * 100);
+    if (lancamento.data < inicio) {
+      saldoAnterior += lancamento.tipo === "credito" ? centavos : -centavos;
+    } else if (lancamento.tipo === "credito") {
+      creditos += centavos;
+    } else {
+      debitos += centavos;
+    }
+  }
+  return {
+    totalCreditos: creditos / 100,
+    totalDebitos: debitos / 100,
+    saldo: (saldoAnterior + creditos - debitos) / 100,
+    pagamentosSemLiquido,
   };
 }
 

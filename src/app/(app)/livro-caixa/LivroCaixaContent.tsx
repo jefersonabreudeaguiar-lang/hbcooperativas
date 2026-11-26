@@ -57,6 +57,7 @@ import {
 import { LivroCaixaPlanilhaTable } from "@/components/livro-caixa/LivroCaixaPlanilhaTable";
 import { LivroCaixaResumoCooperadosTable } from "@/components/livro-caixa/LivroCaixaResumoCooperadosTable";
 import {
+  calcularResumoLiquidoLivroCaixa,
   calcularResumoOperacionalLivroCaixa,
   calcularResumoPorCooperadoLivroCaixaCompleto,
 } from "@/services/livroCaixaResumoCooperado";
@@ -124,6 +125,7 @@ export default function LivroCaixaPage() {
   const periodoInicializadoRef = useRef(false);
   const [filtroDe, setFiltroDe] = useState(inicioMesIso);
   const [filtroAteManual, setFiltroAte] = useState<string | null>(null);
+  const [saldoBancoTexto, setSaldoBancoTexto] = useState("");
   const [relatorioModo, setRelatorioModo] = useState<LivroCaixaRelatorioPlanilhaOpts["modo"]>("periodo");
   const [dataRelatorio, setDataRelatorio] = useState(hojeIso);
   const [relatorioDe, setRelatorioDe] = useState(inicioMesIso);
@@ -234,6 +236,20 @@ export default function LivroCaixaPage() {
     () => calcularResumoOperacionalLivroCaixa(lancamentosVisao),
     [lancamentosVisao]
   );
+  const inicioCaixa = modoVisualizacao === "mes" ? `${mes}-01` : filtroDe;
+  const fimCaixa = modoVisualizacao === "mes" ? `${mes}-31` : filtroAte;
+  const resumoLiquido = useMemo(() => {
+    if (!dataCaixa || !coopId) return calcularResumoLiquidoLivroCaixa([], [], inicioCaixa, fimCaixa);
+    return calcularResumoLiquidoLivroCaixa(
+      dataCaixa.pagamentosCooperado, lancamentosLivroCaixa(dataCaixa, coopId), inicioCaixa, fimCaixa
+    );
+  }, [dataCaixa, coopId, inicioCaixa, fimCaixa]);
+  const saldoBancoNormalizado = saldoBancoTexto.trim();
+  const saldoBanco = /^-?(?:\d+(?:[.,]\d{1,2})?|\d{1,3}(?:\.\d{3})+,\d{1,2})$/.test(saldoBancoNormalizado)
+    ? Number(saldoBancoNormalizado.includes(",") ? saldoBancoNormalizado.replace(/\./g, "").replace(",", ".") : saldoBancoNormalizado)
+    : NaN;
+  const temSaldoBanco = Number.isSafeInteger(Math.round(saldoBanco * 100));
+  const diferencaBanco = (Math.round(resumoLiquido.saldo * 100) - Math.round(saldoBanco * 100)) / 100;
 
   const resumoPorCooperado = useMemo(() => {
     if (!dataCaixa || !coopId) return [];
@@ -712,31 +728,60 @@ export default function LivroCaixaPage() {
           )}
         </div>
         <p className="text-xs text-gray-500 mt-3">
-          Os três totais acima somam todo o livro caixa no período escolhido (automáticos e avulsos). Saldo = créditos
-          − débitos. O detalhe por cooperado fica na aba Resumo por cooperado.
+          O resumo de caixa usa a data do movimento e o valor líquido dos pagamentos. Brutos e retenções aparecem no detalhamento contábil.
         </p>
       </Card>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="rounded-2xl border border-green-200 bg-green-50/90 p-5 shadow-sm">
           <TrendingUp size={22} className="text-green-700 mb-2" />
-          <p className="text-sm text-green-800 font-medium">Créditos (total do período)</p>
-          <p className="text-3xl font-bold text-green-900 mt-1">{formatCurrency(resumoOperacional.totalCreditos)}</p>
+          <p className="text-sm text-green-800 font-medium">Entradas de caixa no período</p>
+          <p className="text-3xl font-bold text-green-900 mt-1">{formatCurrency(resumoLiquido.totalCreditos)}</p>
         </div>
         <div className="rounded-2xl border border-red-200 bg-red-50/90 p-5 shadow-sm">
           <TrendingDown size={22} className="text-red-700 mb-2" />
-          <p className="text-sm text-red-800 font-medium">Débitos (total do período)</p>
-          <p className="text-3xl font-bold text-red-900 mt-1">{formatCurrency(resumoOperacional.totalDebitos)}</p>
+          <p className="text-sm text-red-800 font-medium">Saídas de caixa no período</p>
+          <p className="text-3xl font-bold text-red-900 mt-1">{formatCurrency(resumoLiquido.totalDebitos)}</p>
         </div>
         <div className="rounded-2xl bg-gradient-to-br from-slate-700 to-slate-900 text-white p-5 shadow-lg">
           <Wallet size={24} className="opacity-90 mb-2" />
-          <p className="text-slate-200 text-sm">Saldo (créditos − débitos)</p>
-          <p className="text-3xl font-bold mt-1">{formatCurrency(resumoOperacional.saldo)}</p>
+          <p className="text-slate-200 text-sm">Saldo líquido do Livro Caixa</p>
+          <p className="text-3xl font-bold mt-1">{formatCurrency(resumoLiquido.saldo)}</p>
           <p className="text-xs text-slate-300 mt-2">
-            Saldo corrido na planilha (com saldo anterior): {formatCurrency(saldoFinalMes)}
+            Saldo acumulado até o fim do período, incluindo o saldo anterior.
           </p>
         </div>
       </div>
+
+      <Card title="Comparar com o Sicredi">
+        <FormField label="Saldo do extrato no fim do período (R$)">
+          <Input inputMode="decimal" value={saldoBancoTexto} onChange={(e) => setSaldoBancoTexto(e.target.value)} placeholder="0,00" className="max-w-xs" />
+        </FormField>
+        {temSaldoBanco && (
+          <p className="mt-2 text-sm" role="status">
+            {diferencaBanco === 0
+              ? "O saldo líquido confere com o saldo informado."
+              : `Diferença a conciliar: ${formatCurrency(Math.abs(diferencaBanco))} ${diferencaBanco > 0 ? "acima" : "abaixo"} do saldo informado.`}
+          </p>
+        )}
+        {resumoLiquido.pagamentosSemLiquido > 0 && (
+          <p className="mt-2 text-sm text-amber-800">
+            Há {resumoLiquido.pagamentosSemLiquido} pagamento(s) sem valor líquido vinculado. O resumo usa o débito registrado para esses movimentos.
+          </p>
+        )}
+      </Card>
+
+      <details className="rounded-lg border bg-white px-4 py-3 text-sm">
+        <summary className="cursor-pointer font-semibold">Detalhamento contábil do período</summary>
+        <div className="mt-2 space-y-1">
+          <p>Créditos contábeis {formatCurrency(resumoOperacional.totalCreditos)}</p>
+          <p>Débitos contábeis {formatCurrency(resumoOperacional.totalDebitos)}</p>
+          <p>Saldo contábil acumulado {formatCurrency(saldoFinalMes)}</p>
+          {modoVisualizacao === "periodo" && (
+            <p>Diferença entre o saldo contábil e o líquido {formatCurrency(saldoFinalMes - resumoLiquido.saldo)}</p>
+          )}
+        </div>
+      </details>
 
       <div className="flex flex-wrap gap-2 border-b border-gray-200" role="tablist" aria-label="Seções do livro caixa">
         <button
