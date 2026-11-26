@@ -44,6 +44,7 @@ import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { ORIGENS_LANCAMENTO_MANUAL } from "@/lib/livro-caixa/lancamentoManual";
 import {
   gerarRelatorioLivroCaixaPlanilhaHtml,
+  gerarVolumeLivroCaixaHtml,
   type LivroCaixaRelatorioPlanilhaOpts,
 } from "@/utils/livroCaixaRelatorioHtml";
 import {
@@ -570,6 +571,17 @@ export default function LivroCaixaPage() {
     imprimirDocumentoHtml(html);
   };
 
+  const imprimirVolumeCompleto = () => {
+    if (!dataCaixa || !coopId) return;
+    const janela = window.open("", "_blank");
+    if (!janela) {
+      setFeedbackCaixa("Permita a abertura de uma nova janela para imprimir o volume completo.");
+      return;
+    }
+    janela.document.write(gerarVolumeLivroCaixaHtml(dataCaixa, coopId, coopNome));
+    janela.document.close();
+  };
+
   const exportarPacoteContabil = async () => {
     if (!dataCaixa || !coopId) return;
     setExportandoContabil(true);
@@ -1026,6 +1038,9 @@ export default function LivroCaixaPage() {
               Incluir valores em aberto (a pagar cooperados, todos os meses)
             </label>
             <div className="flex flex-wrap gap-2">
+              <Button type="button" onClick={imprimirVolumeCompleto}>
+                <FileText size={16} /> Imprimir volume completo
+              </Button>
               <Button type="button" variant="secondary" onClick={imprimirRelatorio}>
                 <FileText size={16} /> Gerar PDF / imprimir
               </Button>

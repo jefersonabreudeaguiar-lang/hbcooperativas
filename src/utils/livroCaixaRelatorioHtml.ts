@@ -1,11 +1,13 @@
 import type { AppData, LivroCaixaLancamento, LivroCaixaOrigem } from "@/types";
 import {
   filtrarLancamentosPorPasta,
+  pastaKeyDeLancamento,
   nomePastaLivroCaixa,
   rotuloOrigemLancamento,
   type LivroCaixaPastaKey,
 } from "@/lib/livro-caixa/livroCaixaOrigemPastas";
-import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+import { dataIsoCooperativa, formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+import { formatCnpj } from "@/utils/cooperativa";
 import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
 import {
   buildPlanilhaLinhas,
@@ -23,6 +25,7 @@ import {
   resolverDataIsoLancamentoLivroCaixa,
 } from "@/services/livroCaixaService";
 import { getRelatorioSobrasPerdas } from "@/services/sobrasPerdasService";
+import { calcularResumoLiquidoLivroCaixa } from "@/services/livroCaixaResumoCooperado";
 import { listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 
 const ORIGEM_LABELS: Record<LivroCaixaOrigem, string> = {
@@ -76,8 +79,9 @@ function linhaPlanilhaHtml(
   </tr>`;
 }
 
-function tabelaPlanilhaHtml(data: AppData, lancamentos: LivroCaixaLancamento[], saldoInicial: number): string {
+function tabelaPlanilhaHtml(data: AppData, lancamentos: LivroCaixaLancamento[], saldoInicial: number, cronologica = false): string {
   const linhas = buildPlanilhaLinhas(lancamentos, saldoInicial);
+  if (cronologica) linhas.reverse();
   const saldoAnt =
     Math.abs(saldoInicial) > 0.0001
       ? `<tr class="saldo-ant"><td colspan="3">Saldo anterior</td><td></td><td></td><td class="num"><strong>${formatCurrency(saldoInicial)}</strong></td></tr>`
@@ -92,6 +96,134 @@ function tabelaPlanilhaHtml(data: AppData, lancamentos: LivroCaixaLancamento[], 
     </tr></thead>
     <tbody>${saldoAnt}${linhas.map((row) => linhaPlanilhaHtml(row.credito, row.debito, row.saldoCorrido, row.lancamento, data)).join("")}</tbody>
   </table>`;
+}
+
+export function gerarVolumeLivroCaixaHtml(
+  data: AppData,
+  cooperativaId: string,
+  cooperativaNome: string,
+): string {
+  const lancamentos = lancamentosLivroCaixa(data, cooperativaId);
+  const hoje = dataIsoCooperativa();
+  const datas = lancamentos.map((l) => l.data).filter(Boolean).sort();
+  const periodo = `${formatDate(datas[0] ?? hoje)} a ${formatDate(datas.at(-1) ?? hoje)}`;
+  const saldoLiquido = calcularResumoLiquidoLivroCaixa(data.pagamentosCooperado, lancamentos, datas[0] ?? hoje, datas.at(-1) ?? hoje);
+  const nome = escapeHtml(cooperativaNome);
+  const cnpj = data.cooperativas.find((c) => c.id === cooperativaId)?.cnpj;
+  const identificacao = `${nome}${cnpj ? ` · CNPJ ${escapeHtml(formatCnpj(cnpj))}` : ""}`;
+  const porOrigem = new Map<LivroCaixaPastaKey, LivroCaixaLancamento[]>();
+  for (const l of lancamentos) {
+    const chave = pastaKeyDeLancamento(l);
+    const pasta = porOrigem.get(chave);
+    if (pasta) pasta.push(l);
+    else porOrigem.set(chave, [l]);
+  }
+  const anexos = [...porOrigem].map(([chave, linhas]) => ({
+    titulo: nomePastaLivroCaixa(data, cooperativaId, chave),
+    linhas,
+  })).sort((a, b) => a.titulo.localeCompare(b.titulo, "pt-BR"));
+  const secoes = [{ titulo: "Livro Caixa completo", linhas: lancamentos }, ...anexos];
+  const indice = secoes.map(({ titulo }, i) =>
+    `<li><a href="#parte-${i}">${i ? `Anexo ${i} · ` : ""}${escapeHtml(titulo)}</a><span data-index="${i}"></span></li>`);
+  const paginasIndice: string[] = [];
+  for (let i = 0; i < indice.length; i += 22) {
+    paginasIndice.push(`<section class="folha"><header><p>${nome}</p><h1>Índice</h1><p>${periodo}</p></header>
+      <p>Os anexos detalham os mesmos lançamentos do Livro Caixa completo. Seus valores já estão incluídos no livro.</p>
+      <ol class="indice">${indice.slice(i, i + 22).join("")}</ol><footer>Índice <span class="pagina"></span></footer></section>`);
+  }
+  const conteudo = secoes.map(({ titulo, linhas }, i) => {
+    const entradas = linhas.filter((l) => l.tipo === "credito").reduce((s, l) => s + l.valor, 0);
+    const saidas = linhas.filter((l) => l.tipo === "debito").reduce((s, l) => s + l.valor, 0);
+    return `<section class="folha secao" id="parte-${i}"><header><p>${identificacao}</p>
+      <h1>${escapeHtml(titulo)}</h1><p>${i ? `Anexo ${i} · ` : ""}${periodo}</p></header>
+      ${tabelaPlanilhaHtml(data, linhas, 0, true)}
+      <aside class="fechamento"><span>Entradas <strong>${formatCurrency(entradas)}</strong></span>
+        <span>Saídas <strong>${formatCurrency(saidas)}</strong></span>
+        <span>${i ? "Resultado da origem" : "Saldo contábil final"} <strong>${formatCurrency(entradas - saidas)}</strong></span>
+        ${i ? "" : `<span>Saldo líquido para conferência bancária <strong>${formatCurrency(saldoLiquido.saldo)}</strong>
+          ${saldoLiquido.pagamentosSemLiquido ? "<small>Inclui débitos registrados sem líquido vinculado.</small>" : ""}</span>`}</aside>
+      <footer>${escapeHtml(titulo)} · ${periodo}<span class="pagina"></span></footer></section>`;
+  }).join("");
+
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Livro Caixa · ${nome}</title>
+    <style>
+      ${REPORT_STYLES}
+      @page{size:A4;margin:11mm 12mm}
+      *{box-sizing:border-box}
+      body{margin:0;padding:0;max-width:none;font:11pt Arial,sans-serif;color:#17252b}
+      .folha{width:186mm;min-height:274mm;position:relative;margin:0 auto;padding:6mm 0 12mm}
+      .folha:not(:last-of-type){break-after:page}
+      header{text-align:center;border-bottom:1px solid #27554b;padding-bottom:3mm;margin-bottom:4mm;overflow-wrap:anywhere}
+      header p{margin:2mm 0;font-size:9pt}
+      h1{color:#17453a;font-size:18pt;margin:3mm 0}
+      .capa{padding-top:72mm;text-align:center}
+      .capa h1{font-size:28pt;margin:6mm 0}
+      .indice{list-style:none;padding:0;margin:0}
+      .indice li{display:flex;align-items:baseline;justify-content:space-between;gap:8mm;border-bottom:1px solid #dde3e2;padding:2mm 0}
+      .indice a{color:inherit;text-decoration:none;overflow-wrap:anywhere}
+      table{table-layout:fixed;font-size:9pt;margin:0}
+      th:nth-child(1){width:10mm}th:nth-child(2){width:24mm}th:nth-child(n+4){width:28mm}
+      th,td{padding:1.3mm;overflow-wrap:anywhere}td.num,th.num{text-align:right;white-space:nowrap}
+      td:nth-child(3){white-space:pre-line}
+      thead{display:table-header-group}tr{break-inside:avoid}
+      .fechamento{display:flex;justify-content:space-between;gap:5mm;padding:3mm 0;border-top:1px solid #27554b;margin-top:4mm;font-size:9pt;break-inside:avoid}
+      .fechamento strong{display:block;margin-top:1mm}
+      footer{position:absolute;bottom:3mm;left:0;right:0;display:flex;justify-content:space-between;gap:4mm;border-top:1px solid #dde3e2;padding-top:1.5mm;font-size:8pt}
+      .pagina{white-space:nowrap;margin-left:auto}
+      @media screen{body{background:#edf1f0}.folha{background:white;margin:8mm auto;padding-left:4mm;padding-right:4mm;width:194mm}.folha footer{left:4mm;right:4mm}}
+      @media print{.folha{margin:0}}
+    </style></head><body>
+    <section class="folha capa"><p>${identificacao}</p><h1>Livro Caixa</h1><p>Livro completo e anexos por origem</p>
+      <p>${periodo}</p><p>Emitido em ${formatDate(hoje)}</p><footer><span class="pagina"></span></footer></section>
+    ${paginasIndice.join("")}
+    ${conteudo}
+    <script>
+      function paginarVolume() {
+        for (const secao of Array.from(document.querySelectorAll(".secao"))) {
+          const tabela = secao.querySelector("table");
+          if (!tabela) continue;
+          const linhas = Array.from(tabela.tBodies[0].rows);
+          const fechamento = secao.querySelector(".fechamento");
+          fechamento.remove();
+          tabela.tBodies[0].replaceChildren();
+          let folha = secao;
+          let corpo = tabela.tBodies[0];
+          const cabe = () => folha.getBoundingClientRect().height <= 274 * 96 / 25.4 + 1;
+          const continuar = (comTabela) => {
+            const nova = secao.cloneNode(false);
+            nova.removeAttribute("id");
+            nova.append(secao.querySelector("header").cloneNode(true));
+            if (comTabela) {
+              const novaTabela = tabela.cloneNode(false);
+              novaTabela.append(tabela.tHead.cloneNode(true));
+              corpo = novaTabela.createTBody();
+              nova.append(novaTabela);
+            }
+            nova.append(secao.querySelector("footer").cloneNode(true));
+            folha.after(nova);
+            folha = nova;
+          };
+          for (const linha of linhas) {
+            corpo.append(linha);
+            if (!cabe() && corpo.rows.length > 1) {
+              continuar(true);
+              corpo.append(linha);
+            }
+          }
+          folha.append(fechamento);
+          if (!cabe()) {
+            continuar(false);
+            folha.append(fechamento);
+          }
+        }
+        const folhas = Array.from(document.querySelectorAll(".folha"));
+        folhas.forEach((folha, i) => {
+          folha.querySelector(".pagina").textContent = "Página " + (i + 1) + " de " + folhas.length;
+          if (folha.id) document.querySelector('[data-index="' + folha.id.slice(6) + '"]').textContent = i + 1;
+        });
+      }
+      window.addEventListener("load", () => { paginarVolume(); window.print(); });
+    </script></body></html>`;
 }
 
 function escapeHtml(s: string): string {
