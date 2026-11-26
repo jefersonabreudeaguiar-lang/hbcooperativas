@@ -18,9 +18,14 @@ rows(tree)[0].onLiveQty(0,9);tree=render();props={...props,conferenciaDraftKey:'
 const internal={}, external={};const root={contains:target=>target===internal};
 tree.props.onFocusCapture();
 for(const idx of [0,1,2,3,2,1,0]){
+  const exibida = rows(tree)[idx].item.quantidade;
   rows(tree)[idx].onLiveQty(idx,86+idx);
   tree=render();
+  assert.equal(rows(tree)[idx].item.quantidade,exibida,'typing keeps table rendering out of the focus interval');
+  assert.equal(live[idx].quantidade,86+idx,'live value is immediately available for approval');
   timers.flushTimers();timers.flushIdle();
+  tree=render();
+  assert.equal(rows(tree)[idx].item.quantidade,86+idx,'the visual table catches up after the pause');
   tree.props.onBlurCapture({currentTarget:root,relatedTarget:internal});
   tree.props.onFocusCapture();
   assert.equal(commits,1,'pausing and moving in either direction inside the table cannot update the parent');

@@ -99,11 +99,30 @@ export const NotasPedidoConferirItensTable = memo(function NotasPedidoConferirIt
 }: NotasPedidoConferirItensTableProps) {
   const [draft, setDraft] = useState(conferenciaItens);
   const draftRef = useRef(conferenciaItens);
+  const visualDraftRef = useRef(conferenciaItens);
+  const visualTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const committedDraftRef = useRef(conferenciaItens);
   const draftKeyRef = useRef(conferenciaDraftKey);
   const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const idleCommitRef = useRef<number | null>(null);
   const focusWithinRef = useRef(false);
+  const cancelVisualUpdate = useCallback(() => {
+    if (visualTimerRef.current !== null) clearTimeout(visualTimerRef.current);
+    visualTimerRef.current = null;
+  }, []);
+  const atualizarVisual = useCallback((items: ConferenciaItemRow[], adiar: boolean) => {
+    cancelVisualUpdate();
+    if (visualDraftRef.current === items) return;
+    const key = draftKeyRef.current;
+    const atualizar = () => {
+      visualTimerRef.current = null;
+      if (draftKeyRef.current !== key || draftRef.current !== items) return;
+      visualDraftRef.current = items;
+      startTransition(() => setDraft(previous => draftKeyRef.current === key ? items : previous));
+    };
+    if (adiar) visualTimerRef.current = setTimeout(atualizar, 140);
+    else atualizar();
+  }, [cancelVisualUpdate]);
   const cancelCommit = useCallback(() => {
     if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
     commitTimerRef.current = null;
@@ -114,12 +133,14 @@ export const NotasPedidoConferirItensTable = memo(function NotasPedidoConferirIt
   useEffect(() => {
     if (draftKeyRef.current === conferenciaDraftKey) return;
     cancelCommit();
+    cancelVisualUpdate();
     draftKeyRef.current = conferenciaDraftKey;
     draftRef.current = conferenciaItens;
+    visualDraftRef.current = conferenciaItens;
     committedDraftRef.current = conferenciaItens;
     setDraft(conferenciaItens);
     onDraftLiveChange(conferenciaItens);
-  }, [conferenciaDraftKey, conferenciaItens, onDraftLiveChange, cancelCommit]);
+  }, [conferenciaDraftKey, conferenciaItens, onDraftLiveChange, cancelCommit, cancelVisualUpdate]);
 
   const scheduleCommit = useCallback(
     (items: ConferenciaItemRow[]) => {
@@ -146,8 +167,9 @@ export const NotasPedidoConferirItensTable = memo(function NotasPedidoConferirIt
   useEffect(
     () => () => {
       cancelCommit();
+      cancelVisualUpdate();
     },
-    [cancelCommit]
+    [cancelCommit, cancelVisualUpdate]
   );
 
   const applyQty = useCallback(
@@ -159,12 +181,11 @@ export const NotasPedidoConferirItensTable = memo(function NotasPedidoConferirIt
       next[idx] = { ...prev[idx], quantidade: qty };
       draftRef.current = next;
       onDraftLiveChange(next);
-      // O texto do input é urgente; cores e totais da tabela podem ceder ao foco.
-      const owner = conferenciaDraftKey;
-      startTransition(() => setDraft(previous => draftKeyRef.current === owner ? next : previous));
+      // A digitação e o Tab têm prioridade sobre a atualização de linhas e totais.
+      atualizarVisual(next, focusWithinRef.current);
       scheduleCommit(next);
     },
-    [conferenciaDraftKey, onDraftLiveChange, scheduleCommit]
+    [conferenciaDraftKey, onDraftLiveChange, atualizarVisual, scheduleCommit]
   );
 
   const onLiveQty = useCallback(
@@ -205,10 +226,12 @@ export const NotasPedidoConferirItensTable = memo(function NotasPedidoConferirIt
       onFocusCapture={() => {
         focusWithinRef.current = true;
         cancelCommit();
+        atualizarVisual(draftRef.current, true);
       }}
       onBlurCapture={(event) => {
         if (event.currentTarget.contains(event.relatedTarget)) return;
         focusWithinRef.current = false;
+        atualizarVisual(draftRef.current, true);
         scheduleCommit(draftRef.current);
       }}
     >
