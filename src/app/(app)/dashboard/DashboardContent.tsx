@@ -40,6 +40,7 @@ import {
   staffGestaoPainelDataRevisionToken,
 } from "@/lib/staff/staffGestaoPainelLeitura";
 import { useAuth } from "@/modules/auth/AuthProvider";
+import { ExtratoAnualInicio } from "@/components/cooperado/ExtratoAnualInicio";
 import { evaluateResponsavelPainelAbertura } from "@/lib/responsavel/responsavelPainelContrato";
 import { cooperadoSessaoNuncaPainelGestaoMobile } from "@/lib/responsavel/responsavelIdentidade";
 import { canAccessPainelResponsavelSession } from "@/lib/security/responsavelPanelAccess";
@@ -222,9 +223,13 @@ function EnviarFotoEntregaInicioCard({ onEnviar }: { onEnviar: () => void }) {
 
 function CooperadoDashboard() {
   const { user } = useAuth();
+  const cnpj = normalizeCnpj(user?.cooperativaCnpj ?? "");
+  const avisoExtrato = user?.role === "cooperado" && cnpj.length === 14
+    ? <ExtratoAnualInicio key={`${cnpj}:${user.id}`} cnpj={cnpj} /> : null;
   if (user && shouldRenderCooperadoJefersonRebuildShell("inicio", user)) {
     return (
       <CooperadoInicioSafeRoot>
+        {avisoExtrato}
         <CooperadoJefersonRebuildTabCorpo tab="inicio" user={user} />
       </CooperadoInicioSafeRoot>
     );
@@ -232,11 +237,12 @@ function CooperadoDashboard() {
   if (user && isCooperadoJefersonRebuildInicioAtivo(user)) {
     return (
       <CooperadoInicioSafeRoot>
+        {avisoExtrato}
         <CooperadoJefersonRebuildInicioPage user={user} />
       </CooperadoInicioSafeRoot>
     );
   }
-  return <CooperadoDashboardMain />;
+  return <>{avisoExtrato}<CooperadoDashboardMain /></>;
 }
 
 function CooperadoDashboardMain() {

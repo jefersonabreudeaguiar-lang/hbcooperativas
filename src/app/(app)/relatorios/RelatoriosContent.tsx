@@ -65,6 +65,7 @@ import {
 } from "@/utils/relatorioHtml";
 import { ModalEmitirRelatorio, buildEmissorFromUser } from "@/components/relatorios/ModalEmitirRelatorio";
 import { EntregasPorItensPainel } from "@/components/relatorios/EntregasPorItensPainel";
+import { ExtratoAnualCooperadoPanel } from "@/components/relatorios/ExtratoAnualCooperadoPanel";
 import type { EmissorRelatorio } from "@/types";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getCooperadoNome } from "@/utils/calculations";
@@ -112,6 +113,7 @@ const RELATORIOS: ReportDef[] = [
   { id: "fechamento_mensal", label: "Fechamento Mensal", grupo: "Financeiro", audience: "ambos" },
   { id: "entregas_instituicao", label: "Entregas por Instituição (mês)", grupo: "Entregas e contratos", audience: "gestao" },
   { id: "entregas_por_itens", label: "Item por mês (em aberto)", grupo: "Entregas e contratos", audience: "ambos" },
+  { id: "extrato_anual", label: "Extrato anual por cooperado", grupo: "Entregas e contratos", audience: "ambos" },
   { id: "atingimento_cronograma", label: "Atingimento do Cronograma", grupo: "Entregas e contratos", audience: "gestao" },
   { id: "vendas_pnae", label: "Vendas ao PNAE (mês)", grupo: "Entregas e contratos", audience: "gestao" },
   { id: "descontos_aplicados", label: "Descontos Aplicados (mês)", grupo: "Transparência", audience: "ambos" },
@@ -951,6 +953,11 @@ export default function RelatoriosPage() {
 
   if (!data || !user) return <PageSkeleton />;
   if (!check("relatorios", "view")) return null;
+  if (tipo === "extrato_anual") {
+    return coopId ? <ExtratoAnualCooperadoPanel data={data} coopId={coopId} role={user.role}
+      podeExportar={check("relatorios", "export")} voltar={() => setTipo("resumo_financeiro")} />
+      : <p>Selecione a cooperativa para consultar o extrato anual.</p>;
+  }
 
   const renderRelatorio = () => {
     switch (tipo) {
