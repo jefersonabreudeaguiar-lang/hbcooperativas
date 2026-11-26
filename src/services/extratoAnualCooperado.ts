@@ -54,7 +54,7 @@ export function montarExtratosAnuais(
   return [...porCooperado.values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")).map(e => ({
     ...e, financeiro: { recebido: e.financeiro.recebido / 100, descontosEfetivados: e.financeiro.descontosEfetivados / 100 },
     entregas: e.entregas.sort((a, b) =>
-      (a.dataEntrega || a.mesReferencia).localeCompare(b.dataEntrega || b.mesReferencia) || a.numeroNota.localeCompare(b.numeroNota)),
+      (a.dataEntrega || a.mesReferencia).localeCompare(b.dataEntrega || b.mesReferencia) || a.id.localeCompare(b.id)),
   }));
 }
 
